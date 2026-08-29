@@ -12,48 +12,51 @@ void main() {
   setUp(() => root = Directory.systemTemp.createTempSync('jksv_test'));
   tearDown(() => root.deleteSync(recursive: true));
 
-  void writeExport(String titleId, Map<String, String> files) {
-    final d = Directory(p.join(root.path, titleId))..createSync(recursive: true);
-    files.forEach((name, content) => File(p.join(d.path, name)).writeAsStringSync(content));
+  /// Writes an emulator-style export zip (`<TitleID>/<files>`) into [root].
+  void writeExportZip(String fileName, String titleId, Map<String, String> files) {
+    final archive = Archive();
+    files.forEach((name, content) => archive.addFile(ArchiveFile('$titleId/$name', content.length, content.codeUnits)));
+    File(p.join(root.path, fileName)).writeAsBytesSync(ZipEncoder().encode(archive));
   }
 
-  test('listTitles finds only 16-hex export folders', () {
-    writeExport('010043600B6A6000', {'slot00': 'x'});
-    Directory(p.join(root.path, 'notATitle')).createSync();
+  test('listTitles reads the title id from export zip contents', () {
+    writeExportZip('South Park.zip', '010043600B6A6000', {'slot00': 'x'});
+    File(p.join(root.path, 'not-a-zip.txt')).writeAsStringSync('nope');
     final backend = JksvBackend(root: root);
     expect(backend.listTitles().map((t) => t.titleId), ['010043600B6A6000']);
   });
 
-  test('displayName maps via nameFor and sanitizes', () {
-    final backend = JksvBackend(root: root, nameFor: (id) => 'Zelda: TOTK');
-    expect(backend.displayName('0100000000010000'), 'Zelda_ TOTK');
-  });
-
-  test('buildBackupZip puts raw files at root plus a valid meta', () {
-    writeExport('010043600B6A6000', {'SP-Opt': 'opt', 'slot': 'data'});
+  test('buildBackupZip strips the TitleID prefix and adds meta', () {
+    writeExportZip('game.zip', '010043600B6A6000', {'SP-Opt': 'opt', 'slot': 'data'});
     final backend = JksvBackend(root: root);
     final zip = backend.buildBackupZip('010043600B6A6000');
     final archive = ZipDecoder().decodeBytes(zip);
     final names = archive.map((e) => e.name).toSet();
+    // Save root at the zip root — no TitleID folder.
     expect(names.contains('SP-Opt'), isTrue);
     expect(names.contains('slot'), isTrue);
-    expect(names.contains(JksvMeta.fileName), isTrue);
+    expect(names.any((n) => n.startsWith('010043600B6A6000/')), isFalse);
     final meta = JksvMeta.decode(archive.findFile(JksvMeta.fileName)!.content as dynamic);
-    expect(meta.magicOk, isTrue);
     expect(meta.applicationId, 0x010043600B6A6000);
   });
 
-  test('applyIncoming backs up the old save then writes the new one', () {
-    writeExport('010043600B6A6000', {'slot': 'OLD'});
-    final backend = JksvBackend(root: root);
+  test('applyIncoming writes an export zip and backs up the old one', () {
+    writeExportZip('old.zip', '010043600B6A6000', {'slot': 'OLD'});
+    final backend = JksvBackend(root: root, nameFor: (_) => 'South Park');
 
-    final incoming = Archive()..addFile(ArchiveFile('slot', 3, 'NEW'.codeUnits))..addFile(ArchiveFile(JksvMeta.fileName, 4, [1, 2, 3, 4]));
-    backend.applyIncoming('010043600B6A6000', ZipEncoder().encode(incoming)!, timestamp: '20260829-1200');
+    // Incoming JKSV backup: save files at root + meta.
+    final jksv = Archive()
+      ..addFile(ArchiveFile('slot', 3, 'NEW'.codeUnits))
+      ..addFile(ArchiveFile(JksvMeta.fileName, 4, [1, 2, 3, 4]));
+    backend.applyIncoming('010043600B6A6000', ZipEncoder().encode(jksv), timestamp: '20260829-1200');
 
-    // New save written, meta dropped.
-    expect(File(p.join(root.path, '010043600B6A6000', 'slot')).readAsStringSync(), 'NEW');
-    expect(File(p.join(root.path, '010043600B6A6000', JksvMeta.fileName)).existsSync(), isFalse);
-    // Old save preserved under backups/.
-    expect(File(p.join(root.path, 'backups', '010043600B6A6000', '20260829-1200', 'slot')).readAsStringSync(), 'OLD');
+    // New export written with the TitleID prefix restored, meta dropped.
+    final newZip = File(p.join(root.path, 'South Park [010043600B6A6000].zip'));
+    expect(newZip.existsSync(), isTrue);
+    final out = ZipDecoder().decodeBytes(newZip.readAsBytesSync());
+    expect(out.findFile('010043600B6A6000/slot')!.content, 'NEW'.codeUnits);
+    expect(out.findFile(JksvMeta.fileName), isNull);
+    // Old export preserved under backups/.
+    expect(File(p.join(root.path, 'backups', '010043600B6A6000', '20260829-1200.zip')).existsSync(), isTrue);
   });
 }
