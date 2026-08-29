@@ -49,6 +49,15 @@ class ToolsSetting extends ConsumerWidget {
             value: settings.nszToolEnabled,
             onChanged: settingsNotifier.setNszToolEnabled,
           ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.sync_alt),
+            title: const Text('JDKV Server tool'),
+            subtitle: const Text('Sync saves with JKSV on a Switch'),
+            value: settings.jdkvToolEnabled,
+            onChanged: settingsNotifier.setJdkvToolEnabled,
+          ),
         ],
         ListTile(
           contentPadding: EdgeInsets.zero,

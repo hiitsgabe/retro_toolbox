@@ -14,6 +14,7 @@ import 'package:roms_downloader/screens/about_screen.dart';
 import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
 import 'package:roms_downloader/screens/tinfoil_server_screen.dart';
 import 'package:roms_downloader/screens/nsz_decompress_screen.dart';
+import 'package:roms_downloader/screens/jdkv_server_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
@@ -230,6 +231,14 @@ class _HeaderState extends ConsumerState<Header> {
                 ),
               );
               break;
+            case 'jdkv':
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const JdkvServerScreen(),
+                ),
+              );
+              break;
             case 'about':
               Navigator.push(
                 context,
@@ -282,6 +291,17 @@ class _HeaderState extends ConsumerState<Header> {
                   Icon(Icons.compress, size: 18),
                   SizedBox(width: 12),
                   Text('NSZ Decompress'),
+                ],
+              ),
+            ),
+          if (ref.read(settingsProvider).jdkvToolEnabled)
+            PopupMenuItem(
+              value: 'jdkv',
+              child: Row(
+                children: [
+                  Icon(Icons.sync_alt, size: 18),
+                  SizedBox(width: 12),
+                  Text('JDKV Server'),
                 ],
               ),
             ),
