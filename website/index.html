@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retro Toolbox — Download / Extract / Play</title>
+<meta name="description" content="A Flutter app for browsing and downloading game collections from any HTTP/HTTPS file index. Parallel downloads, auto-extraction, NSZ decompression, boxart and favorites.">
+<meta name="theme-color" content="#0d0620">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Retro Toolbox">
+<meta property="og:description" content="Download / Extract / Play. A retro game library manager for Android, macOS, Windows and Linux.">
+<meta property="og:image" content="assets/banner.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --purple-light: #a56ce8;
+  --purple: #7c3fd4;
+  --purple-deep: #2e1687;
+  --lavender: #ddb9fc;
+  --cream: #f7f6f2;
+  --bg: #0d0620;
+  --bg-2: #150a2e;
+  --surface: rgba(255, 255, 255, 0.04);
+  --border: rgba(165, 108, 232, 0.22);
+  --text: #ece7f5;
+  --muted: #a99cc4;
+  --pixel: 'Press Start 2P', 'Courier New', monospace;
+  --sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.7;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- ambient background ---------- */
+
+.aurora {
+  position: fixed;
+  inset: -30vh -20vw;
+  z-index: -2;
+  background:
+    radial-gradient(42vw 42vw at 18% 12%, rgba(124, 63, 212, 0.42), transparent 62%),
+    radial-gradient(38vw 38vw at 82% 26%, rgba(46, 22, 135, 0.55), transparent 64%),
+    radial-gradient(46vw 46vw at 50% 92%, rgba(165, 108, 232, 0.24), transparent 66%);
+  filter: blur(28px);
+  animation: drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-3%, 2%, 0) scale(1.08); }
+  100% { transform: translate3d(3%, -2%, 0) scale(1.03); }
+}
+
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(165, 108, 232, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(165, 108, 232, 0.05) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(70% 60% at 50% 30%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 30%, #000 30%, transparent 100%);
+}
+
+.scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.16) 0px,
+    rgba(0, 0, 0, 0.16) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+}
+
+/* ---------- sparks ---------- */
+
+.sparks { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+
+.spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--lavender);
+  box-shadow: 0 0 8px 1px var(--purple-light);
+  opacity: 0;
+  animation: twinkle var(--dur, 5s) ease-in-out var(--delay, 0s) infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0; transform: translateY(0) scale(0.6); }
+  40%      { opacity: 0.9; transform: translateY(-10px) scale(1); }
+  70%      { opacity: 0.25; transform: translateY(-18px) scale(0.8); }
+}
+
+/* ---------- layout ---------- */
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+section { padding: 108px 0; position: relative; }
+
+.eyebrow {
+  font-family: var(--pixel);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--purple-light);
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+h2 {
+  font-family: var(--pixel);
+  font-size: clamp(17px, 3vw, 26px);
+  line-height: 1.6;
+  margin-bottom: 16px;
+  letter-spacing: 1px;
+}
+
+h3 { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+
+.lead { color: var(--muted); max-width: 62ch; margin-bottom: 44px; }
+
+.grad {
+  background: linear-gradient(96deg, var(--lavender), var(--purple-light) 45%, var(--purple) 90%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- nav ---------- */
+
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(13, 6, 32, 0.72);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9); }
+
+.nav-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.brand img { width: 30px; height: 30px; image-rendering: pixelated; }
+.brand span { font-family: var(--pixel); font-size: 11px; letter-spacing: 1px; }
+
+.nav-links { margin-left: auto; display: flex; gap: 26px; align-items: center; }
+
+.nav-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover { color: var(--lavender); }
+
+@media (max-width: 760px) { .nav-links a:not(.nav-cta) { display: none; } }
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 28px;
+  border-radius: 12px;
+  font-family: var(--pixel);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform 0.18s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s, background 0.25s;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--purple-light), var(--purple) 55%, var(--purple-deep));
+  color: #fff;
+  box-shadow: 0 8px 30px -10px rgba(124, 63, 212, 0.9);
+}
+
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.32) 50%, transparent 65%);
+  transform: translateX(-130%);
+}
+
+.btn-primary:hover::after { animation: sheen 0.75s ease; }
+
+@keyframes sheen { to { transform: translateX(130%); } }
+
+.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 16px 44px -12px rgba(165, 108, 232, 0.95); }
+
+.btn-ghost { border-color: var(--border); color: var(--lavender); background: var(--surface); }
+.btn-ghost:hover { transform: translateY(-3px); background: rgba(165, 108, 232, 0.12); border-color: var(--purple-light); }
+
+.nav-cta {
+  font-family: var(--pixel);
+  font-size: 10px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  color: var(--lavender) !important;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.nav-cta:hover { background: rgba(165, 108, 232, 0.14); border-color: var(--purple-light); }
+
+/* ---------- hero ---------- */
+
+.hero { padding: 92px 0 96px; text-align: center; }
+
+.hero-logo {
+  width: 190px;
+  height: 190px;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 0 34px rgba(165, 108, 232, 0.65));
+  animation: float 5.5s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50%      { transform: translateY(-16px) rotate(1.5deg); }
+}
+
+.hero h1 {
+  font-family: var(--pixel);
+  font-size: clamp(24px, 6.2vw, 52px);
+  line-height: 1.35;
+  letter-spacing: 2px;
+  margin: 34px 0 20px;
+}
+
+.tagline {
+  font-family: var(--pixel);
+  font-size: clamp(9px, 1.7vw, 12px);
+  letter-spacing: 4px;
+  color: var(--purple-light);
+  margin-bottom: 26px;
+}
+
+.hero p.sub { color: var(--muted); max-width: 58ch; margin: 0 auto 38px; font-size: 18px; }
+
+.hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+
+.badges {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 40px;
+}
+
+.badge {
+  font-family: var(--pixel);
+  font-size: 9px;
+  letter-spacing: 1px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.disclaimer {
+  margin: 52px auto 0;
+  max-width: 640px;
+  padding: 14px 20px;
+  border-left: 3px solid var(--purple);
+  background: rgba(124, 63, 212, 0.08);
+  border-radius: 0 10px 10px 0;
+  color: var(--muted);
+  font-size: 15px;
+  text-align: left;
+}
+
+/* ---------- cards ---------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.card {
+  padding: 30px 26px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015));
+  transition: transform 0.28s cubic-bezier(.2,.8,.2,1), border-color 0.28s, box-shadow 0.28s;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 0%), rgba(165, 108, 232, 0.16), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  border-color: var(--purple-light);
+  box-shadow: 0 22px 50px -26px rgba(165, 108, 232, 0.85);
+}
+
+.card:hover::before { opacity: 1; }
+
+.card .ico { font-size: 26px; margin-bottom: 14px; display: block; }
+.card p { color: var(--muted); font-size: 15.5px; }
+
+/* ---------- platform strip ---------- */
+
+.platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.plat {
+  text-align: center;
+  padding: 26px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: transform 0.25s, border-color 0.25s, background 0.25s;
+}
+
+.plat:hover { transform: translateY(-5px); border-color: var(--purple-light); background: rgba(165, 108, 232, 0.09); }
+.plat .ico { font-size: 30px; display: block; margin-bottom: 10px; }
+.plat strong { font-family: var(--pixel); font-size: 10px; letter-spacing: 1px; display: block; margin-bottom: 6px; }
+.plat span { color: var(--muted); font-size: 13.5px; }
+
+/* ---------- steps ---------- */
+
+.steps { display: grid; gap: 18px; counter-reset: step; }
+
+.step {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 24px 26px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  transition: border-color 0.25s, transform 0.25s;
+}
+
+.step:hover { border-color: var(--purple-light); transform: translateX(5px); }
+
+.step::before {
+  counter-increment: step;
+  content: counter(step, decimal-leading-zero);
+  font-family: var(--pixel);
+  font-size: 14px;
+  color: var(--purple-light);
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+
+.step p { color: var(--muted); font-size: 15.5px; }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: rgba(165, 108, 232, 0.14);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: var(--lavender);
+}
+
+pre {
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+pre code { background: none; border: none; padding: 0; color: var(--lavender); }
+
+/* ---------- legal ---------- */
+
+.legal-box {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 34px;
+  background: linear-gradient(160deg, rgba(124, 63, 212, 0.1), rgba(255,255,255,0.015));
+}
+
+.legal-box ul { list-style: none; display: grid; gap: 14px; }
+.legal-box li { color: var(--muted); font-size: 15.5px; padding-left: 26px; position: relative; }
+.legal-box li::before { content: '▸'; position: absolute; left: 0; color: var(--purple-light); }
+.legal-box strong { color: var(--text); }
+
+/* ---------- footer ---------- */
+
+footer {
+  border-top: 1px solid var(--border);
+  padding: 52px 0 62px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+footer img { width: 44px; height: 44px; image-rendering: pixelated; margin-bottom: 18px; opacity: 0.85; }
+footer a { color: var(--purple-light); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+.footer-links { display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; margin: 16px 0 22px; }
+
+/* ---------- scroll reveal ---------- */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.7s cubic-bezier(.2,.8,.2,1), transform 0.7s cubic-bezier(.2,.8,.2,1);
+}
+
+.reveal.in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .reveal { opacity: 1; transform: none; }
+  .scanlines { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="aurora"></div>
+<div class="grid-overlay"></div>
+<div class="sparks" id="sparks" aria-hidden="true"></div>
+<div class="scanlines" aria-hidden="true"></div>
+
+<nav id="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">
+      <img src="assets/logo.png" alt="">
+      <span>RETRO TOOLBOX</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#platforms">Platforms</a>
+      <a href="#setup">Setup</a>
+      <a href="#legal">Legal</a>
+      <a class="nav-cta" href="https://github.com/hiitsgabe/retro_toolbox/releases/latest">Download</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero wrap" id="top">
+  <img class="hero-logo" src="assets/logo.png" alt="Retro Toolbox logo — a pixel-art hammer with a lightning bolt">
+  <h1><span class="grad">RETRO TOOLBOX</span></h1>
+  <p class="tagline">DOWNLOAD / EXTRACT / PLAY</p>
+  <p class="sub">
+    A Flutter app that turns any HTTP file index into a browsable game library.
+    Parallel downloads, automatic extraction, NSZ decompression, box art and favorites — built Android-first.
+  </p>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="https://github.com/hiitsgabe/retro_toolbox/releases/latest">Get the latest release</a>
+    <a class="btn btn-ghost" href="https://github.com/hiitsgabe/retro_toolbox">View on GitHub</a>
+  </div>
+  <div class="badges">
+    <span class="badge">FLUTTER</span>
+    <span class="badge">ANDROID</span>
+    <span class="badge">MACOS</span>
+    <span class="badge">WINDOWS</span>
+    <span class="badge">LINUX</span>
+    <span class="badge">MIT</span>
+  </div>
+  <p class="disclaimer">
+    <strong>⚠️ Disclaimer:</strong> This application does not endorse piracy, and ships with no catalog and no content.
+    Only download files you legally own.
+  </p>
+</header>
+
+<section id="features" class="wrap">
+  <p class="eyebrow reveal">What it does</p>
+  <h2 class="reveal">Everything you need to <span class="grad">manage a library</span></h2>
+  <p class="lead reveal">Point it at a server you have the right to use. It handles the rest.</p>
+
+  <div class="cards">
+    <div class="card reveal">
+      <span class="ico">⚡</span>
+      <h3>Parallel downloads</h3>
+      <p>Queue as many titles as you want with configurable concurrency and live per-file progress.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">📲</span>
+      <h3>Keeps going in the background</h3>
+      <p>Downloads survive backgrounding via a real foreground service on Android — no babysitting the screen.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">📦</span>
+      <h3>Auto-extraction</h3>
+      <p>ZIP archives unpack automatically once they land, optionally into a subfolder per game.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🔧</span>
+      <h3>NSZ decompression</h3>
+      <p>Switch NSZ archives are decompressed by a bundled CPython runtime. No external tools, no desktop round-trip.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🖼️</span>
+      <h3>Box art &amp; grid view</h3>
+      <p>Browse a cover grid or a compact list, with cached art and a full-screen viewer.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🔍</span>
+      <h3>Search &amp; filters</h3>
+      <p>Fuzzy search, region filtering with per-system regex, and in-library detection so you never grab a dupe.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">⭐</span>
+      <h3>Favorites</h3>
+      <p>Star titles, filter down to them, and export or import the list between devices.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🔌</span>
+      <h3>Bring your own source</h3>
+      <p>HTML directory listings, JSON APIs, or the Internet Archive metadata API — with bearer, cookie and interactive auth.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🎛️</span>
+      <h3>Per-console settings</h3>
+      <p>Override the download directory, extraction behavior and filters independently for every system.</p>
+    </div>
+  </div>
+</section>
+
+<section id="platforms" class="wrap">
+  <p class="eyebrow reveal">Where it runs</p>
+  <h2 class="reveal">Android first, <span class="grad">desktop too</span></h2>
+  <p class="lead reveal">Signed APKs, universal builds and an App Bundle ship on every release, alongside desktop packages.</p>
+
+  <div class="platforms">
+    <div class="plat reveal"><span class="ico">🤖</span><strong>ANDROID</strong><span>arm64 · arm32 · universal · AAB</span></div>
+    <div class="plat reveal"><span class="ico">🍎</span><strong>MACOS</strong><span>Apple Silicon &amp; Intel DMG</span></div>
+    <div class="plat reveal"><span class="ico">🪟</span><strong>WINDOWS</strong><span>x64 portable ZIP</span></div>
+    <div class="plat reveal"><span class="ico">🐧</span><strong>LINUX</strong><span>build from source</span></div>
+  </div>
+</section>
+
+<section id="setup" class="wrap">
+  <p class="eyebrow reveal">Getting started</p>
+  <h2 class="reveal">Up and running in <span class="grad">four steps</span></h2>
+  <p class="lead reveal">No catalog ships with the app — you supply your own source.</p>
+
+  <div class="steps">
+    <div class="step reveal">
+      <div>
+        <h3>Install it</h3>
+        <p>Grab the APK or desktop package from the <a href="https://github.com/hiitsgabe/retro_toolbox/releases/latest" style="color:var(--purple-light)">latest release</a>. On Android you'll need to allow installs from your browser.</p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div>
+        <h3>Point it at a catalog</h3>
+        <p>Open <strong>General Settings → Catalog Source</strong> and import a JSON file or load one from a URL. The schema is documented in <code>docs/adding-a-system.md</code>.</p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div>
+        <h3>Pick your folders</h3>
+        <p>Set a download directory globally or per console, and choose whether archives extract into their own subfolder.</p>
+      </div>
+    </div>
+    <div class="step reveal">
+      <div>
+        <h3>Browse and queue</h3>
+        <p>Search, filter by region, star favorites, and queue as many downloads as your connection can take.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="reveal" style="margin-top:64px">Or <span class="grad">build from source</span></h2>
+  <pre class="reveal"><code>git clone https://github.com/hiitsgabe/retro_toolbox.git
+cd retro_toolbox
+flutter pub get
+
+# package the embedded Python runtime (once, and after bumping serious_python)
+dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
+
+flutter build apk --release</code></pre>
+</section>
+
+<section id="legal" class="wrap">
+  <p class="eyebrow reveal">The fine print</p>
+  <h2 class="reveal">Legal <span class="grad">notice</span></h2>
+
+  <div class="legal-box reveal">
+    <ul>
+      <li><strong>No content hosted.</strong> This app does not host, store or distribute ROMs, ISOs or any copyrighted content. It is a download manager.</li>
+      <li><strong>No game copies.</strong> No games or copyrighted gaming content are included in the app or this repository.</li>
+      <li><strong>Example configs only.</strong> Any configuration files included are examples demonstrating the schema. They do not endorse any specific source.</li>
+      <li><strong>Your responsibility.</strong> You are solely responsible for having the legal right to download any content, and for complying with copyright law in your jurisdiction.</li>
+      <li><strong>No liability.</strong> The developers and contributors assume no responsibility for misuse of this software.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="wrap" style="padding-top:0">
+  <div class="legal-box reveal" style="text-align:center">
+    <h3 style="font-family:var(--pixel);font-size:13px;letter-spacing:1px;line-height:1.7;margin-bottom:14px">AN EXPERIMENT IN VIBE CODING</h3>
+    <p style="color:var(--muted);max-width:62ch;margin:0 auto 26px">
+      This is an educational experiment in vibe coding and agentic AI — built to see how far AI agents can take a real,
+      useful app from scratch. Non-commercial, personal, and a genuine attempt to make something cool.
+      You'll never be asked to donate. Found a bug or have an idea? Open an issue — pull requests always welcome.
+    </p>
+    <a class="btn btn-ghost" href="https://github.com/hiitsgabe/retro_toolbox/issues">Open an issue</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <img src="assets/logo.png" alt="">
+    <div class="footer-links">
+      <a href="https://github.com/hiitsgabe/retro_toolbox">GitHub</a>
+      <a href="https://github.com/hiitsgabe/retro_toolbox/releases">Releases</a>
+      <a href="https://github.com/hiitsgabe/retro_toolbox/blob/main/docs/adding-a-system.md">Docs</a>
+      <a href="https://github.com/hiitsgabe/retro_toolbox/issues">Issues</a>
+    </div>
+    <p>
+      Built on the base by <a href="https://github.com/rafaismyname">rafaismyname</a> ·
+      NSZ support via <a href="https://github.com/nicoboss/nsz">nicoboss/nsz</a>
+    </p>
+    <p style="margin-top:10px;opacity:0.7">MIT licensed · Not affiliated with Nintendo, Sony, Sega, Microsoft or any other rights holder.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // sticky nav border
+  var nav = document.getElementById('nav');
+  var onScroll = function () { nav.classList.toggle('stuck', window.scrollY > 12); };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // scroll reveal
+  var items = document.querySelectorAll('.reveal');
+  if (reduced || !('IntersectionObserver' in window)) {
+    items.forEach(function (el) { el.classList.add('in'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var siblings = Array.prototype.slice.call(e.target.parentNode.children).filter(function (n) {
+          return n.classList.contains('reveal');
+        });
+        e.target.style.transitionDelay = Math.min(siblings.indexOf(e.target), 6) * 60 + 'ms';
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    items.forEach(function (el) { io.observe(el); });
+  }
+
+  // sparks
+  if (!reduced) {
+    var host = document.getElementById('sparks');
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < 34; i++) {
+      var s = document.createElement('div');
+      s.className = 'spark';
+      s.style.left = (Math.random() * 100).toFixed(2) + '%';
+      s.style.top = (Math.random() * 100).toFixed(2) + '%';
+      s.style.setProperty('--dur', (3.5 + Math.random() * 4).toFixed(2) + 's');
+      s.style.setProperty('--delay', (Math.random() * 6).toFixed(2) + 's');
+      frag.appendChild(s);
+    }
+    host.appendChild(frag);
+  }
+
+  // card spotlight follows the cursor
+  if (!reduced && window.matchMedia('(hover: hover)').matches) {
+    document.querySelectorAll('.card').forEach(function (card) {
+      card.addEventListener('pointermove', function (e) {
+        var r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', (e.clientX - r.left) + 'px');
+        card.style.setProperty('--my', (e.clientY - r.top) + 'px');
+      });
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

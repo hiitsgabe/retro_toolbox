@@ -4,6 +4,7 @@ A note on this project: this is an educational experiment in vibe coding and age
 
 <div align="center">
   <img src="branding/banner.png" alt="Retro Toolbox" width="720"/>
+  <p><a href="https://hiitsgabe.github.io/retro_toolbox/"><strong>🌐 Visit the website</strong></a></p>
 </div>
 
 <br>
