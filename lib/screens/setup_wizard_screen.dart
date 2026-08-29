@@ -36,6 +36,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   int _step = 0;
   bool _busy = false;
   bool _catalogReady = false;
+  bool _usingExample = false;
   String? _catalogSummary;
   String? _catalogError;
 
@@ -46,6 +47,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     final existing = ref.read(appStateProvider).consolesList.length;
     if (existing > 0) {
       _catalogReady = true;
+      _usingExample = true;
       _catalogSummary = '$existing console${existing == 1 ? '' : 's'} already available';
     }
     final savedUrl = ref.read(settingsProvider).catalogSourceUrl;
@@ -70,6 +72,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       final count = ref.read(appStateProvider).consolesList.length;
       setState(() {
         _catalogReady = count > 0;
+        _usingExample = false;
         _catalogSummary = '$count console${count == 1 ? '' : 's'} loaded';
       });
     } catch (e) {
@@ -213,6 +216,32 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       children: [
         _sectionTitle(theme, Icons.dataset_outlined, 'Catalog source',
             'Provide a console catalog. Import a JSON file, load one from a URL, or paste it directly.'),
+        if (_catalogReady && _usingExample) ...[
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: theme.colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Example catalog included — ${_catalogSummary ?? 'ready to use'}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: _busy ? null : () => setState(() => _step = 1),
+                    child: const Text('Use example data'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         Row(
           children: [
             Expanded(
@@ -263,7 +292,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
         ),
         const SizedBox(height: 16),
         if (_busy) const LinearProgressIndicator(),
-        if (_catalogReady)
+        if (_catalogReady && !_usingExample)
           _statusRow(theme, Icons.check_circle, Colors.green, _catalogSummary ?? 'Catalog loaded'),
         if (_catalogError != null)
           _statusRow(theme, Icons.error_outline, theme.colorScheme.error, _catalogError!),
