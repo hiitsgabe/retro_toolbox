@@ -20,9 +20,27 @@ class TinfoilServerService {
 
   static bool isSwitchConsole(Console c) => c.fileFormat?.any((f) => _switchFormats.contains(f.toLowerCase())) ?? false;
 
+  // Switch title IDs are 16 hex digits starting with 01 (retail); catalog
+  // titles omit them, but the download URL path usually carries one.
+  static final _titleIdPattern = RegExp(r'01[0-9A-Fa-f]{14}');
+
+  static String? titleIdFor(Game game) {
+    final m = _titleIdPattern.firstMatch(game.title) ?? _titleIdPattern.firstMatch(game.url);
+    return m?.group(0)?.toUpperCase();
+  }
+
+  /// Tinfoil lists a file under "New Games" with cover art only when it can
+  /// read the title ID from the filename as `[0100..]`. Titles here lack it, so
+  /// we inject the ID pulled from the URL before the extension.
   static String _fileName(Game game) {
-    final title = game.title.split('/').last;
-    return title.split('').map((ch) => RegExp(r"[a-zA-Z0-9 .\-_()\[\]']").hasMatch(ch) ? ch : '_').join();
+    final raw = game.title.split('/').last;
+    final safe = raw.split('').map((ch) => RegExp(r"[a-zA-Z0-9 .\-_()\[\]']").hasMatch(ch) ? ch : '_').join();
+    final tid = titleIdFor(game);
+    if (tid == null || safe.contains(tid)) return safe;
+    final dot = safe.lastIndexOf('.');
+    final base = dot > 0 ? safe.substring(0, dot) : safe;
+    final ext = dot > 0 ? safe.substring(dot) : '';
+    return '$base [$tid]$ext';
   }
 
   /// Builds the Tinfoil index JSON and the route map keyed `<consoleId>/<idx>`.
@@ -123,6 +141,10 @@ class TinfoilServerService {
     final headers = _authHeaders!(entry.console);
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
+    // A proxy must forward bytes verbatim: auto-decompressing while forwarding
+    // the upstream (compressed) Content-Length corrupts the file so Tinfoil
+    // reports "failed to open nsp".
+    client.autoUncompress = false;
     activeTransfers.value++;
     try {
       final upstreamUrl = await resolveRedirects(entry.game.url, headers);
@@ -132,12 +154,20 @@ class TinfoilServerService {
       if (range != null) upstreamReq.headers.set(HttpHeaders.rangeHeader, range);
 
       final upstreamRes = await upstreamReq.close();
+      // Never hand Tinfoil an auth/error page as if it were the game file.
+      if (upstreamRes.statusCode >= 400) {
+        await upstreamRes.drain<void>();
+        req.response.statusCode = HttpStatus.badGateway;
+        await req.response.close();
+        return;
+      }
       req.response.statusCode = upstreamRes.statusCode;
       for (final h in [
         HttpHeaders.contentLengthHeader,
         HttpHeaders.contentRangeHeader,
         HttpHeaders.acceptRangesHeader,
         HttpHeaders.contentTypeHeader,
+        HttpHeaders.contentEncodingHeader,
       ]) {
         final v = upstreamRes.headers.value(h);
         if (v != null) req.response.headers.set(h, v);
