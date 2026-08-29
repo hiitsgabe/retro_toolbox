@@ -71,6 +71,7 @@ class WebDavServerService {
   }
 
   Future<void> _handle(HttpRequest req) async {
+    debugPrint('[jdkv] ${req.method} ${req.uri.path} (depth=${req.headers.value('Depth')})');
     try {
       switch (req.method) {
         case 'OPTIONS':
@@ -162,9 +163,11 @@ class WebDavServerService {
     _rebuildListing();
     final segs = _segments(req);
     if (segs.length != 2 || !_nameToId.containsKey(segs[0])) {
+      debugPrint('[jdkv] GET 404 for ${segs.join('/')} (known: ${_nameToId.keys.toList()})');
       await _end(req, HttpStatus.notFound);
       return;
     }
+    debugPrint('[jdkv] GET zip for ${segs[0]} (${_nameToId[segs[0]]})');
     activeTransfers.value++;
     try {
       final zip = _backend!.buildBackupZip(_nameToId[segs[0]]!);
@@ -187,7 +190,9 @@ class WebDavServerService {
       await for (final chunk in req) {
         bytes.addAll(chunk);
       }
-      final titleId = _titleIdFromZip(bytes) ?? _titleIdFromPath(_segments(req));
+      final fromZip = _titleIdFromZip(bytes);
+      final titleId = fromZip ?? _titleIdFromPath(_segments(req));
+      debugPrint('[jdkv] PUT ${bytes.length}B → titleId=$titleId (fromZipMeta=${fromZip != null})');
       if (titleId == null) {
         await _end(req, HttpStatus.badRequest);
         return;
