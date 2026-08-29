@@ -108,12 +108,31 @@ jobs:
         with:
           python-version: '3.x'
 
+      # Only write key.properties when the keystore secrets are actually set.
+      # Previously this ran unconditionally: KEY_STORE_PATH was empty, so the
+      # redirect target became `android/` and the job died with
+      # "android/: Is a directory". Without key.properties,
+      # android/app/build.gradle.kts falls back to the debug signing config, so
+      # an installable APK still comes out.
       - name: Apply keystore
+        env:
+          KEYSTORE64: ${{ secrets.KEYSTORE64 }}
+          KEY_STORE_PATH: ${{ secrets.KEY_STORE_PATH }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          echo storeFile=\${{ secrets.KEY_STORE_PATH }} > ./android/key.properties
-          echo password=\${{ secrets.KEY_PASSWORD }} >> ./android/key.properties
-          echo keyAlias=\${{ secrets.KEY_ALIAS }} >> ./android/key.properties
-          echo "${{ secrets.KEYSTORE64 }}" | base64 --decode > android/${{ secrets.KEY_STORE_PATH }}
+          set -euo pipefail
+          if [ -z "$KEYSTORE64" ] || [ -z "$KEY_STORE_PATH" ]; then
+            echo "::warning::KEYSTORE64/KEY_STORE_PATH not set — building with debug signing."
+            exit 0
+          fi
+          {
+            echo "storeFile=$KEY_STORE_PATH"
+            echo "password=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > ./android/key.properties
+          echo "$KEYSTORE64" | base64 --decode > "android/$KEY_STORE_PATH"
+          echo "Release signing: using the configured keystore."
 
       - name: Download catalog
         uses: actions/download-artifact@v4
@@ -126,6 +145,27 @@ jobs:
 
       - name: Package Python app for Android
         run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
+
+      - name: Verify Python bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ -e "$1/$2" ]; then
+              echo "  ok    $2"
+            else
+              echo "::error::$2 is missing from $1 — the Python bundle did not build"
+              fail=1
+            fi
+          }
+          echo "App staging ($SERIOUS_PYTHON_APP):"
+          check "$SERIOUS_PYTHON_APP" main.py
+          check "$SERIOUS_PYTHON_APP" nsz
+          echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
+          exit $fail
 
       - name: Build Android APKs (split ABI)
         run: flutter build apk --release --split-per-abi
@@ -187,6 +227,27 @@ jobs:
       - name: Package Python app for macOS
         run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome
 
+      - name: Verify Python bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ -e "$1/$2" ]; then
+              echo "  ok    $2"
+            else
+              echo "::error::$2 is missing from $1 — the Python bundle did not build"
+              fail=1
+            fi
+          }
+          echo "App staging ($SERIOUS_PYTHON_APP):"
+          check "$SERIOUS_PYTHON_APP" main.py
+          check "$SERIOUS_PYTHON_APP" nsz
+          echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
+          exit $fail
+
       - name: Install CocoaPods
         run: cd macos && pod install
 
@@ -199,10 +260,21 @@ jobs:
             flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin-x64
           fi
 
+      # PRODUCT_NAME is $(TARGET_NAME) in the Xcode project, so the build emits
+      # Runner.app, not "Retro Toolbox.app". Resolve whatever was produced and
+      # give it the display name inside the DMG.
       - name: Create DMG (${{ matrix.arch }})
         run: |
+          set -euo pipefail
+          APP=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then
+            echo "::error::no .app was produced in build/macos/Build/Products/Release"
+            ls -la build/macos/Build/Products/Release || true
+            exit 1
+          fi
+          echo "Packaging $APP"
           mkdir -p dmg_contents
-          cp -R "build/macos/Build/Products/Release/Retro Toolbox.app" dmg_contents/
+          cp -R "$APP" "dmg_contents/Retro Toolbox.app"
           hdiutil create -volname "Retro Toolbox ${{ matrix.arch }}" \
             -srcfolder dmg_contents \
             -ov -format UDZO \
@@ -217,7 +289,12 @@ jobs:
 
   build-windows:
     needs: [resolve-version, download-catalog]
-    runs-on: windows-latest
+    # windows-latest now resolves to windows-2025-vs2026, which ships Visual
+    # Studio 2026. Flutter 3.35.7 only knows VS 16/17, fails to detect it, and
+    # falls back to the "Visual Studio 16 2019" CMake generator — which then
+    # errors with "could not find any instance of Visual Studio". Pin to the
+    # VS 2022 image until the pinned Flutter version understands VS 2026.
+    runs-on: windows-2022
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -245,8 +322,34 @@ jobs:
       - name: Package Python app for Windows
         run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome
 
+      - name: Verify Python bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail=0
+          check() {
+            if [ -e "$1/$2" ]; then
+              echo "  ok    $2"
+            else
+              echo "::error::$2 is missing from $1 — the Python bundle did not build"
+              fail=1
+            fi
+          }
+          echo "App staging ($SERIOUS_PYTHON_APP):"
+          check "$SERIOUS_PYTHON_APP" main.py
+          check "$SERIOUS_PYTHON_APP" nsz
+          echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
+          check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
+          exit $fail
+
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
+
+      # Surfaces the detected Visual Studio install, so a future runner-image
+      # change shows up here instead of as an opaque CMake generator error.
+      - name: Check Windows toolchain
+        run: flutter doctor -v
 
       - name: Build Windows (x64)
         run: flutter build windows --release
@@ -381,7 +484,7 @@ jobs:
 
             ### Windows Installation
             1. Download and extract `retro_toolbox_windows_x64.zip`
-            2. Run `retro_toolbox.exe`
+            2. Run `roms_downloader.exe`
           files: |
             dist/retro_toolbox_arm64.apk
             dist/retro_toolbox_arm32.apk
