@@ -93,12 +93,15 @@ class _AboutScreenState extends State<AboutScreen> {
               onTap: () => _copyToClipboard(context, 'https://github.com/rafaismyname/roms_downloader'),
             ),
             SizedBox(height: 16),
-            InfoCard(
+            ExpandableInfoCard(
               icon: Icons.person_rounded,
-              title: 'Author',
-              subtitle: 'rafaismyname',
-              url: 'https://rafaismy.name',
-              onTap: () => _copyToClipboard(context, 'https://rafaismy.name'),
+              initExpanded: true,
+              title: 'Authors',
+              items: [
+                InfoItem('rafaismyname', 'rafaismy.name', 'https://rafaismy.name'),
+                InfoItem('moterani', 'github.com/moterani', 'https://github.com/moterani'),
+              ],
+              onItemTap: (url) => _copyToClipboard(context, url),
             ),
             SizedBox(height: 16),
             ExpandableInfoCard(
@@ -106,9 +109,13 @@ class _AboutScreenState extends State<AboutScreen> {
               title: 'Built with',
                 items: [
                 InfoItem('flutter', 'flutter.dev', 'https://flutter.dev'),
+                InfoItem('serious_python', 'pub.dev/packages/serious_python', 'https://pub.dev/packages/serious_python'),
                 InfoItem('file_picker', 'pub.dev/packages/file_picker', 'https://pub.dev/packages/file_picker'),
                 InfoItem('background_downloader', 'pub.dev/packages/background_downloader', 'https://pub.dev/packages/background_downloader'),
                 InfoItem('flutter_riverpod', 'pub.dev/packages/flutter_riverpod', 'https://pub.dev/packages/flutter_riverpod'),
+                InfoItem('shared_preferences', 'pub.dev/packages/shared_preferences', 'https://pub.dev/packages/shared_preferences'),
+                InfoItem('url_launcher', 'pub.dev/packages/url_launcher', 'https://pub.dev/packages/url_launcher'),
+                InfoItem('path_provider', 'pub.dev/packages/path_provider', 'https://pub.dev/packages/path_provider'),
                 InfoItem('permission_handler', 'pub.dev/packages/permission_handler', 'https://pub.dev/packages/permission_handler'),
                 InfoItem('archive', 'pub.dev/packages/archive', 'https://pub.dev/packages/archive'),
                 InfoItem('flutter_archive', 'pub.dev/packages/flutter_archive', 'https://pub.dev/packages/flutter_archive'),
@@ -127,7 +134,7 @@ class _AboutScreenState extends State<AboutScreen> {
               initExpanded: true,
               title: 'Special Thanks',
               items: [
-                InfoItem('Myrient', 'ROM Archive - myrient.erista.me', 'https://myrient.erista.me'),
+                InfoItem('nsz', 'NSZ decompression by nicoboss - github.com/nicoboss/nsz', 'https://github.com/nicoboss/nsz'),
                 InfoItem('0x0', 'Ephemeral storage - 0x0.st', 'https://0x0.st'),
               ],
               onItemTap: (url) => _copyToClipboard(context, url),
