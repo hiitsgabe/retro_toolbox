@@ -23,6 +23,7 @@ class AppSettings {
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
   final bool steamToolEnabled;
   final bool tinfoilToolEnabled;
+  final bool nszToolEnabled;
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -35,6 +36,7 @@ class AppSettings {
     this.catalogSourceUrl,
     this.steamToolEnabled = false,
     this.tinfoilToolEnabled = false,
+    this.nszToolEnabled = false,
   });
 
   bool get hasIaCredentials =>
@@ -57,6 +59,7 @@ class AppSettings {
     bool clearCatalogSourceUrl = false,
     bool? steamToolEnabled,
     bool? tinfoilToolEnabled,
+    bool? nszToolEnabled,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -69,6 +72,7 @@ class AppSettings {
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
       steamToolEnabled: steamToolEnabled ?? this.steamToolEnabled,
       tinfoilToolEnabled: tinfoilToolEnabled ?? this.tinfoilToolEnabled,
+      nszToolEnabled: nszToolEnabled ?? this.nszToolEnabled,
     );
   }
 
@@ -84,6 +88,7 @@ class AppSettings {
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
       'steamToolEnabled': steamToolEnabled,
       'tinfoilToolEnabled': tinfoilToolEnabled,
+      'nszToolEnabled': nszToolEnabled,
     };
   }
 
@@ -99,6 +104,7 @@ class AppSettings {
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
       steamToolEnabled: json['steamToolEnabled'] as bool? ?? false,
       tinfoilToolEnabled: json['tinfoilToolEnabled'] as bool? ?? false,
+      nszToolEnabled: json['nszToolEnabled'] as bool? ?? false,
     );
   }
 }
