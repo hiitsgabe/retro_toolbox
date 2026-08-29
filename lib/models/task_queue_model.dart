@@ -1,4 +1,4 @@
-enum TaskType { download, extraction }
+enum TaskType { download, extraction, nszDecompression }
 
 enum TaskQueueStatus { waiting, running, completed, failed, cancelled }
 

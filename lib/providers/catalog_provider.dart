@@ -49,7 +49,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     );
 
     try {
-      final games = await catalogService.loadCatalog(console.id);
+      final settings = _ref.read(settingsProvider);
+      final games = await catalogService.loadCatalog(
+        console.id,
+        iaAccessKey: settings.iaAccessKey,
+        iaSecretKey: settings.iaSecretKey,
+        authToken: settings.consoleSettings[console.id]?.authToken,
+      );
 
       Set<String> regions = <String>{};
       Set<String> languages = <String>{};

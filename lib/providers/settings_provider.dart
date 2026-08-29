@@ -100,4 +100,51 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<String?> selectDownloadDirectory() async {
     return await _settingsService.selectDownloadDirectory();
   }
+
+  Future<void> setConsoleAuthToken(String consoleId, String token) async {
+    final current = state.consoleSettings[consoleId] ?? const BaseSettings();
+    final updated = token.isEmpty
+        ? current.copyWith(clearAuthToken: true)
+        : current.copyWith(authToken: token);
+    final newState = state.copyWith(
+      consoleSettings: {...state.consoleSettings, consoleId: updated},
+    );
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
+  String? getConsoleAuthToken(String consoleId) {
+    return state.consoleSettings[consoleId]?.authToken;
+  }
+
+  Future<void> setIaCredentials(String accessKey, String secretKey) async {
+    final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey);
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
+  Future<void> clearIaCredentials() async {
+    final newState = state.copyWith(clearIaCredentials: true);
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
+  bool getNszDecompressEnabled() => state.nszDecompressEnabled;
+
+  String? getNszKeysPath() => state.nszKeysPath;
+
+  Future<void> setNszDecompressEnabled(bool enabled) async {
+    final newState = state.copyWith(nszDecompressEnabled: enabled);
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
+  Future<void> setNszKeysPath(String keysPath) async {
+    final newState = state.copyWith(
+      nszKeysPath: keysPath.isEmpty ? null : keysPath,
+      clearNszKeysPath: keysPath.isEmpty,
+    );
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
 }

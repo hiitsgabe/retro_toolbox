@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:background_downloader/background_downloader.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/download_model.dart';
@@ -140,6 +141,23 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
+
+    // NSZ files require Python decompression — not ZIP extraction.
+    if (game.filename.toLowerCase().endsWith('.nsz')) {
+      if (settingsNotifier.getNszDecompressEnabled()) {
+        final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+        final keysPath = settingsNotifier.getNszKeysPath() ?? '';
+        final queueNotifier = _ref.read(taskQueueProvider.notifier);
+        debugPrint('Auto-decompressing NSZ for task: $taskId');
+        Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.nszDecompression, {
+          'taskId': taskId,
+          'nszFilePath': p.join(downloadDir, game.filename),
+          'outputDir': downloadDir,
+          'keysPath': keysPath,
+        }));
+      }
+      return; // Never ZIP-extract a .nsz file
+    }
 
     final autoExtract = settingsNotifier.getAutoExtract(game.consoleId);
     if (!autoExtract) return;

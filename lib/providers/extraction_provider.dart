@@ -10,6 +10,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/extraction_service.dart';
+import 'package:roms_downloader/services/nsz_service.dart';
 
 final extractionProvider = StateNotifierProvider<ExtractionNotifier, ExtractionState>((ref) {
   final gameStateManager = ref.read(gameStateManagerProvider.notifier);
@@ -76,6 +77,82 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       debugPrint('Extraction error: $e');
       _updateError(taskId, e.toString(), extractionDir);
     }
+  }
+
+  Future<void> nszDecompress({
+    required String taskId,
+    required String nszFilePath,
+    required String outputDir,
+    required String keysPath,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(
+      taskId: taskId,
+      status: ExtractionStatus.extracting,
+      progress: 0.0,
+    );
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    try {
+      await NszService.decompressNsz(
+        nszFilePath: nszFilePath,
+        outputDir: outputDir,
+        keysPath: keysPath.isNotEmpty ? keysPath : null,
+        onProgress: (progress) => _updateProgress(taskId, progress),
+      );
+      await _onNszCompleted(taskId, nszFilePath, outputDir);
+    } catch (e) {
+      debugPrint('NSZ decompression error: $e');
+      _onNszError(taskId, e.toString());
+    }
+  }
+
+  Future<void> _onNszCompleted(String taskId, String nszFilePath, String outputDir) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    final currentTask = tasks[taskId];
+    if (currentTask != null) {
+      tasks[taskId] = currentTask.copyWith(status: ExtractionStatus.completed, progress: 1.0);
+      state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    }
+
+    final queueNotifier = _ref.read(taskQueueProvider.notifier);
+    queueNotifier.updateTaskStatus(taskId, TaskQueueStatus.completed);
+
+    // Delete the source .nsz file
+    try {
+      final nszFile = File(nszFilePath);
+      if (await nszFile.exists()) {
+        await nszFile.delete();
+        debugPrint('Deleted NSZ source: $nszFilePath');
+      }
+    } catch (e) {
+      debugPrint('Failed to delete NSZ source: $e');
+    }
+
+    final game = gameStateManager.state[taskId]?.game;
+    if (game != null) {
+      final dir = _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+      if (dir.isNotEmpty) {
+        _ref.read(librarySnapshotProvider(dir).notifier).markFileRemoved(game.filename);
+      }
+    }
+
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
+  }
+
+  void _onNszError(String taskId, String error) {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    final currentTask = tasks[taskId];
+    if (currentTask != null) {
+      tasks[taskId] = currentTask.copyWith(status: ExtractionStatus.failed, error: error);
+      state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    }
+
+    final queueNotifier = _ref.read(taskQueueProvider.notifier);
+    queueNotifier.updateTaskStatus(taskId, TaskQueueStatus.failed, error: error);
+
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.failed, 0.0);
   }
 
   void retryExtraction(String taskId) {

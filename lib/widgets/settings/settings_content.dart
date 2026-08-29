@@ -8,6 +8,9 @@ import 'package:roms_downloader/widgets/settings/number_setting.dart';
 import 'package:roms_downloader/widgets/settings/permissions_setting.dart';
 import 'package:roms_downloader/widgets/settings/tools_setting.dart';
 import 'package:roms_downloader/widgets/settings/favorites_settings.dart';
+import 'package:roms_downloader/widgets/settings/ia_credentials_setting.dart';
+import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
+import 'package:roms_downloader/widgets/settings/nsz_setting.dart';
 
 class SettingsContent extends StatelessWidget {
   final Console? selectedConsole;
@@ -92,6 +95,31 @@ class SettingsContent extends StatelessWidget {
             const SizedBox(height: 8),
             const PermissionsSetting(),
           ],
+          if (selectedConsole != null && selectedConsole!.hasTokenAuth) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.lock_outline),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Authentication',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ConsoleAuthSetting(console: selectedConsole!),
+                  ],
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Card(
             child: Padding(
@@ -116,7 +144,63 @@ class SettingsContent extends StatelessWidget {
             ),
           ),
           if (selectedConsole == null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.archive_outlined),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Internet Archive',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Log in to access restricted or private collections.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    const IaCredentialsSetting(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.compress),
+                        const SizedBox(width: 12),
+                        Text(
+                          'NSZ Decompression',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Decompress Nintendo Switch NSZ files after download.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    const NszSetting(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
