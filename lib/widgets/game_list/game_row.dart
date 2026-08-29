@@ -117,14 +117,17 @@ class _GameRowState extends ConsumerState<GameRow> {
                         ),
                       SizedBox(
                         width: widget.statusColumnWidth,
-                        child: Text(
-                          gameState.statusText,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: getStatusColor(context, gameState.status),
-                            fontWeight: FontWeight.w500,
+                        child: Tooltip(
+                          message: gameState.errorMessage ?? '',
+                          child: Text(
+                            gameState.statusText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: getStatusColor(context, gameState.status),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ),
                       SizedBox(

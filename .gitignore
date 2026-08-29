@@ -345,3 +345,5 @@ pubspec_overrides.yaml
 portmaster/package/
 portmaster/*.zip
 portmaster/*.AppImage
+# Local catalog (never commit real ROM sources)
+assets/catalog/consoles.json

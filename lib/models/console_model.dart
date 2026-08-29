@@ -3,7 +3,9 @@ class Console {
   final String name;
   final List<String> urls;
   final String? regex;
-  final String? boxarts;
+  /// Boxart source: either an HTML-listing URL (String) or a JSON-map
+  /// descriptor ({url, list?, name, image}). See README.
+  final Object? boxarts;
   final List<String>? fileFormat;
   final String? romsFolder;
   final bool shouldUnzip;
@@ -60,6 +62,10 @@ class Console {
   /// Whether the token is sent as a cookie (true) or a Bearer header (false).
   bool get authUsesCookies => auth?['cookies'] == true;
 
+  /// Optional username/password sign-in config (auth.signin) that exchanges
+  /// credentials for a token via the console's login API.
+  Map<String, dynamic>? get authSignin => auth?['signin'] as Map<String, dynamic>?;
+
   /// Cookie name used when [authUsesCookies] is true.
   String get authCookieName => auth?['cookie_name'] as String? ?? 'auth_token';
 
@@ -79,7 +85,7 @@ class Console {
       name: json['name'] as String,
       urls: urls,
       regex: json['regex'] as String?,
-      boxarts: json['boxarts'] as String?,
+      boxarts: json['boxarts'],
       fileFormat: json['file_format'] != null ? List<String>.from(json['file_format'] as List) : null,
       romsFolder: json['roms_folder'] as String?,
       shouldUnzip: json['should_unzip'] as bool? ?? false,

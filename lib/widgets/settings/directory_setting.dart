@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:roms_downloader/models/console_model.dart';
+import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 
 class DirectorySetting extends StatelessWidget {
@@ -22,10 +23,18 @@ class DirectorySetting extends StatelessWidget {
   Widget build(BuildContext context) {
     final generalDir = settingsNotifier.getGeneralSetting<String>(settingKey) ?? '';
     final consoleSpecificDir = console != null ? settingsNotifier.getConsoleSetting<String>(console!.id, settingKey) : null;
+    final hasConsoleSpecific = console != null && (consoleSpecificDir?.isNotEmpty ?? false);
 
-    final currentDir = consoleSpecificDir ?? generalDir;
-    final isUsingGeneral = console != null && consoleSpecificDir == null && generalDir.isNotEmpty;
-    final hasConsoleSpecific = console != null && consoleSpecificDir != null;
+    // With no override, show the real resolved path (general dir + roms_folder).
+    final String currentDir;
+    if (hasConsoleSpecific) {
+      currentDir = consoleSpecificDir!;
+    } else if (console != null && settingKey == AppSettings.downloadDir && generalDir.isNotEmpty) {
+      currentDir = settingsNotifier.getDownloadDir(console!.id);
+    } else {
+      currentDir = generalDir;
+    }
+    final isUsingGeneral = console != null && !hasConsoleSpecific && generalDir.isNotEmpty;
 
     return ListTile(
       leading: Icon(icon),

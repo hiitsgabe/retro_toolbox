@@ -172,7 +172,7 @@ class _HeaderState extends ConsumerState<Header> {
         onPressed: canDownload
             ? () {
                 final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-                TaskQueueService.startDownloads(ref, selectedGames, widget.selectedConsole?.id);
+                TaskQueueService.startDownloads(ref, context, selectedGames, widget.selectedConsole?.id);
               }
             : null,
         tooltip: 'Download Selected',

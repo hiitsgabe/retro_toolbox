@@ -56,11 +56,17 @@ class _IaCredentialsSettingState extends ConsumerState<IaCredentialsSetting> {
       final data = jsonDecode(responseBody) as Map<String, dynamic>;
 
       if (data['success'] == true) {
-        final s3 = (data['values'] as Map<String, dynamic>?)?['s3'] as Map<String, dynamic>?;
+        final values = data['values'] as Map<String, dynamic>?;
+        final s3 = values?['s3'] as Map<String, dynamic>?;
         final accessKey = s3?['access'] as String?;
         final secretKey = s3?['secret'] as String?;
+        // Session cookies unlock downloads from "loggedin"-restricted items.
+        final cookies = (values?['cookies'] as Map<String, dynamic>?)
+            ?.entries
+            .map((e) => '${e.key}=${e.value}')
+            .join('; ');
         if (accessKey != null && secretKey != null) {
-          await ref.read(settingsProvider.notifier).setIaCredentials(accessKey, secretKey);
+          await ref.read(settingsProvider.notifier).setIaCredentials(accessKey, secretKey, cookies: cookies);
           if (mounted) {
             _emailController.clear();
             _passwordController.clear();

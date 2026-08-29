@@ -48,6 +48,10 @@ class ConsoleDropdown extends StatelessWidget {
               child: DropdownButton<String>(
                 isExpanded: true,
                 value: selectedConsole?.id,
+                hint: Text(
+                  'No catalog',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
+                ),
                 style: TextStyle(
                   color: Theme.of(context).colorScheme.onSurface,
                   fontWeight: FontWeight.w500,

@@ -1,4 +1,79 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
+
+/// Follows redirects manually, re-sending [headers] on every hop, and returns
+/// the final URL. HTTP clients strip Authorization/Cookie on cross-host
+/// redirects (e.g. archive.org -> its data nodes), so authenticated downloads
+/// must be enqueued against the resolved URL.
+Future<String> resolveRedirects(String url, Map<String, String> headers, {int maxHops = 5}) async {
+  final client = HttpClient();
+  client.connectionTimeout = const Duration(seconds: 30);
+  try {
+    var current = url;
+    for (var i = 0; i < maxHops; i++) {
+      final request = await client.getUrl(Uri.parse(current));
+      request.followRedirects = false;
+      headers.forEach(request.headers.set);
+      request.headers.set(HttpHeaders.rangeHeader, 'bytes=0-0');
+      final response = await request.close();
+      final location = response.headers.value(HttpHeaders.locationHeader);
+      await response.drain<void>();
+      if (response.isRedirect && location != null) {
+        current = Uri.parse(current).resolve(location).toString();
+        continue;
+      }
+      break;
+    }
+    return current;
+  } finally {
+    client.close();
+  }
+}
+
+/// Builds request headers for a console's token auth config (`auth`).
+/// Cookie-based when `cookies: true`, otherwise a Bearer header.
+/// IA S3 auth is handled separately.
+Map<String, String> buildConsoleAuthHeaders(Map<String, dynamic>? auth, {String? tokenOverride}) {
+  if (auth == null) return {};
+  if (auth['type'] == 'ia_s3') return {};
+
+  final token = tokenOverride ?? auth['token'] as String?;
+  if (token == null || token.isEmpty) return {};
+
+  if (auth['cookies'] == true) {
+    final cookieName = auth['cookie_name'] as String? ?? 'auth_token';
+    return {'Cookie': '$cookieName=$token'};
+  }
+  return {'Authorization': 'Bearer $token'};
+}
+
+/// Signs in against a console's `auth.signin` config and returns the token
+/// extracted from the response via `token_regex` (group 1, or the whole match).
+Future<String> signinForToken(Map<String, dynamic> signin, Map<String, String> fields) async {
+  final url = signin['url'] as String;
+  final method = (signin['method'] as String? ?? 'POST').toUpperCase();
+  final client = HttpClient();
+  try {
+    final request = await client.openUrl(method, Uri.parse(url));
+    request.headers.contentType = ContentType('application', 'x-www-form-urlencoded');
+    final body = fields.entries.map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}').join('&');
+    request.write(body);
+    final response = await request.close();
+    final text = await response.transform(utf8.decoder).join();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Sign in failed (HTTP ${response.statusCode})');
+    }
+    final match = RegExp(signin['token_regex'] as String).firstMatch(text);
+    final token = match == null ? null : (match.groupCount >= 1 ? match.group(1) : match.group(0));
+    if (token == null || token.isEmpty) {
+      throw Exception('Sign in succeeded but no token matched token_regex');
+    }
+    return token;
+  } finally {
+    client.close();
+  }
+}
 
 Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra]) {
   final rand = Random();
@@ -52,12 +127,15 @@ Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra
     'User-Agent': uaForHost(),
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
     'Accept-Language': languages[rand.nextInt(languages.length)],
-    'Accept-Encoding': 'gzip, deflate, br, zstd',
+    // Only gzip: Dart's HttpClient auto-decompresses gzip only; advertising
+    // br/zstd makes servers send bodies utf8.decoder can't read.
+    'Accept-Encoding': 'gzip',
     'Connection': 'keep-alive',
     'Pragma': 'no-cache',
     'Cache-Control': 'no-cache',
     // 'Host': Uri.tryParse(url)?.host ?? 'localhost', // Dont set 'Host', it can lead to 404 errors in Android
-    'Referer': url.substring(0, url.lastIndexOf('/') + 1),
+    // No 'Referer': redirect targets (e.g. Yandex storage behind ultranx) reject
+    // requests carrying one ("Invalid Referer"); downloaders forward it on redirect.
     'sec-ch-ua': randomSecChUa(),
     'sec-ch-ua-mobile': randomSecChUaMobile(),
     'sec-ch-ua-platform': randomSecChUaPlatform(),

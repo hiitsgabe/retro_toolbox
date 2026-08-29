@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 
 class NszSetting extends ConsumerWidget {
@@ -12,9 +16,15 @@ class NszSetting extends ConsumerWidget {
       type: FileType.any,
       allowMultiple: false,
     );
-    if (result != null && result.files.single.path != null) {
-      await ref.read(settingsProvider.notifier).setNszKeysPath(result.files.single.path!);
-    }
+    final src = result?.files.single.path;
+    if (src == null) return;
+    // Copy into app support: on Android the picker hands out a temp cache copy
+    // that gets cleaned up; a stable path is also required by the Python process.
+    final supportDir = await getApplicationSupportDirectory();
+    final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
+    await dest.parent.create(recursive: true);
+    await File(src).copy(dest.path);
+    await ref.read(settingsProvider.notifier).setNszKeysPath(dest.path);
   }
 
   Future<void> _clearKeysFile(WidgetRef ref) async {

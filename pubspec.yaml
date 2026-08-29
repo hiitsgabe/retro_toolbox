@@ -37,5 +37,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/consoles.json
+    - assets/catalog/
     - assets/icon.png
+    - assets/boxarts/

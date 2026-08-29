@@ -76,7 +76,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Download',
               child: IconButton(
                 icon: Icon(Icons.download, size: buttonSize),
-                onPressed: () => TaskQueueService.startDownloads(ref, [game], game.consoleId),
+                onPressed: () => TaskQueueService.startDownloads(ref, context, [game], game.consoleId),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -146,7 +146,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Retry Download',
               child: IconButton(
                 icon: Icon(Icons.refresh, size: buttonSize),
-                onPressed: () => TaskQueueService.startDownloads(ref, [game], game.consoleId),
+                onPressed: () => TaskQueueService.startDownloads(ref, context, [game], game.consoleId),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,

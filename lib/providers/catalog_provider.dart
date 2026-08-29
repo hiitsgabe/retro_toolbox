@@ -30,6 +30,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Timer? _filterDebounce;
   bool _loadingMore = false;
+  // Incremented per loadCatalog call; awaited results from an older
+  // generation are discarded so switching consoles mid-load takes effect.
+  int _loadGeneration = 0;
 
   CatalogNotifier(this._ref, this.catalogService) : super(const CatalogState()) {
     _ref.listen<Favorites>(favoritesProvider, (previous, current) {
@@ -40,10 +43,12 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> loadCatalog(Console console) async {
-    if (state.loading) return;
+    final gen = ++_loadGeneration;
 
     state = state.copyWith(
       loading: true,
+      loadingStatus: '',
+      errorMessage: '',
       games: [],
       selectedGames: {},
     );
@@ -55,7 +60,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         iaAccessKey: settings.iaAccessKey,
         iaSecretKey: settings.iaSecretKey,
         authToken: settings.consoleSettings[console.id]?.authToken,
+        onProgress: (done, total) {
+          if (mounted && gen == _loadGeneration && total > 1) {
+            state = state.copyWith(loadingStatus: 'Reading page $done of $total');
+          }
+        },
       );
+
+      if (gen != _loadGeneration || !mounted) return;
 
       Set<String> regions = <String>{};
       Set<String> languages = <String>{};
@@ -90,11 +102,17 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
       await updateFilteredGames(immediate: true);
 
-      state = state.copyWith(loading: false);
+      if (gen != _loadGeneration || !mounted) return;
+      state = state.copyWith(loading: false, loadingStatus: '');
     } catch (e) {
       debugPrint('Error loading catalog: $e');
+      if (gen != _loadGeneration || !mounted) return;
+      final authMessage = console.auth?['auth_message'] as String?;
+      final needsAuth = authMessage != null && RegExp(r'HTTP (401|403|422)').hasMatch(e.toString());
       state = state.copyWith(
         loading: false,
+        loadingStatus: '',
+        errorMessage: needsAuth ? authMessage : 'Failed to load catalog: $e',
         games: [],
       );
     }

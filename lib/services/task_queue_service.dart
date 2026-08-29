@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/task_queue_model.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
@@ -7,9 +7,43 @@ import 'package:roms_downloader/providers/extraction_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
+import 'package:roms_downloader/services/catalog_service.dart';
 
 class TaskQueueService {
-  static void startDownloads(WidgetRef ref, List<Game> games, String? consoleId) {
+  /// Returns a human-readable reason downloads can't start, or null when OK.
+  static Future<String?> _downloadBlockReason(WidgetRef ref, List<Game> games, String? consoleId) async {
+    final console = (await CatalogService().getConsoles())[consoleId];
+    if (console == null) return null;
+
+    if (console.hasTokenAuth) {
+      final settings = ref.read(settingsProvider);
+      final token = settings.consoleSettings[console.id]?.authToken ?? console.auth?['token'] as String? ?? '';
+      if (token.isEmpty) {
+        return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
+      }
+    }
+
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    if (settingsNotifier.getNszDecompressEnabled() &&
+        (settingsNotifier.getNszKeysPath() ?? '').isEmpty &&
+        games.any((g) => g.filename.toLowerCase().endsWith('.nsz'))) {
+      return 'NSZ decompression is enabled but no keys file is set. Add prod.keys in the system settings (or disable NSZ decompression).';
+    }
+
+    return null;
+  }
+
+  static Future<void> startDownloads(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId) async {
+    final blockReason = await _downloadBlockReason(ref, games, consoleId);
+    if (blockReason != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(blockReason), duration: const Duration(seconds: 5)),
+        );
+      }
+      return;
+    }
+
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final downloadDir = settingsNotifier.getDownloadDir(consoleId);
     final queueNotifier = ref.read(taskQueueProvider.notifier);
