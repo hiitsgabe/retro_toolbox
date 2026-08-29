@@ -92,6 +92,26 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
     final saved = ref.watch(settingsProvider).consoleSettings[widget.console.id]?.authToken ?? '';
     final hasToken = saved.isNotEmpty;
 
+    // Once a token is saved, show a compact "signed in" state (like the IA
+    // login) instead of the sign-in form. Log out clears it to reveal inputs.
+    if (hasToken && !_dirty) {
+      return Row(
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text('Signed in', style: TextStyle(fontWeight: FontWeight.w500)),
+          ),
+          TextButton.icon(
+            onPressed: _clear,
+            icon: const Icon(Icons.logout, size: 16),
+            label: const Text('Log out'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -195,14 +215,6 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
             ),
           ],
         ),
-        if (hasToken && !_dirty)
-          Row(
-            children: const [
-              Icon(Icons.check_circle, color: Colors.green, size: 14),
-              SizedBox(width: 4),
-              Text('Token saved', style: TextStyle(fontSize: 12, color: Colors.green)),
-            ],
-          ),
       ],
     );
   }
