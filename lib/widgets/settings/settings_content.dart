@@ -23,28 +23,45 @@ class SettingsContent extends StatelessWidget {
     required this.settingsNotifier,
   });
 
+  /// Consistent card wrapper: icon + title, optional subtitle, then content.
+  Widget _section(BuildContext context, {required IconData icon, required String title, String? subtitle, required Widget child}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 12),
+                Text(title, style: Theme.of(context).textTheme.titleMedium),
+              ],
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: Column(
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(selectedConsole == null ? Icons.settings : Icons.videogame_asset),
-                      const SizedBox(width: 12),
-                      Text(
-                        selectedConsole == null ? 'General Settings' : '${selectedConsole!.name} Settings',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+          _section(
+            context,
+            icon: selectedConsole == null ? Icons.settings : Icons.videogame_asset,
+            title: selectedConsole == null ? 'General Settings' : '${selectedConsole!.name} Settings',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                   DirectorySetting(
                     settingKey: AppSettings.downloadDir,
                     title: 'Download Directory',
@@ -101,32 +118,14 @@ class SettingsContent extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-           if (selectedConsole == null) ...[
+          if (selectedConsole == null) ...[
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.dataset_outlined),
-                        const SizedBox(width: 12),
-                        Text('Catalog Source', style: Theme.of(context).textTheme.titleMedium),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Import a console catalog JSON file or load one from a URL.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 12),
-                    const CatalogSourceSetting(),
-                  ],
-                ),
-              ),
+            _section(
+              context,
+              icon: Icons.dataset_outlined,
+              title: 'Catalog Source',
+              subtitle: 'Import a console catalog JSON file or load one from a URL.',
+              child: const CatalogSourceSetting(),
             ),
             const SizedBox(height: 8),
             const PermissionsSetting(),
@@ -142,103 +141,35 @@ class SettingsContent extends StatelessWidget {
           ],
           if (selectedConsole != null && selectedConsole!.hasTokenAuth) ...[
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.lock_outline),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Authentication',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ConsoleAuthSetting(console: selectedConsole!),
-                  ],
-                ),
-              ),
+            _section(
+              context,
+              icon: Icons.lock_outline,
+              title: 'Authentication',
+              child: ConsoleAuthSetting(console: selectedConsole!),
             ),
           ],
           const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.build),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Tools',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ToolsSetting(console: selectedConsole),
-                ],
-              ),
-            ),
+          _section(
+            context,
+            icon: Icons.build,
+            title: 'Tools',
+            child: ToolsSetting(console: selectedConsole),
           ),
           if (selectedConsole == null) ...[
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.manage_accounts_outlined),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Accounts',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Connect accounts for restricted or private collections.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 4),
-                    const AccountsSetting(),
-                  ],
-                ),
-              ),
+            _section(
+              context,
+              icon: Icons.manage_accounts_outlined,
+              title: 'Accounts',
+              subtitle: 'Connect accounts for restricted or private collections.',
+              child: const AccountsSetting(),
             ),
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.favorite),
-                        const SizedBox(width: 12),
-                        Text(
-                          'Favorites',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const FavoritesSettings(),
-                  ],
-                ),
-              ),
+            _section(
+              context,
+              icon: Icons.favorite,
+              title: 'Favorites',
+              child: const FavoritesSettings(),
             ),
           ],
         ],

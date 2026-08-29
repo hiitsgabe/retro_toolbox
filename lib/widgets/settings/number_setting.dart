@@ -35,6 +35,7 @@ class NumberSetting extends ConsumerWidget {
     final currentValue = ref.watch(settingProvider((key: settingKey, consoleId: console?.id))) ?? defaultValue;
 
     return ListTile(
+      contentPadding: EdgeInsets.zero,
       leading: Icon(icon),
       title: Text(title),
       subtitle: subtitle != null ? Text(subtitle!) : null,
