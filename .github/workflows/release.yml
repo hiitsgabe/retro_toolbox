@@ -162,9 +162,15 @@ jobs:
           echo "App staging ($SERIOUS_PYTHON_APP):"
           check "$SERIOUS_PYTHON_APP" main.py
           check "$SERIOUS_PYTHON_APP" nsz
-          echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
-          check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
-          check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
+          # Unlike the desktop targets, the Android packager pip-installs once
+          # per ABI into $SERIOUS_PYTHON_SITE_PACKAGES/<abi> (see the `Android`
+          # entry in serious_python's package_command.dart `platforms` map), so
+          # there is nothing at the site-packages root to check.
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            echo "Site packages ($abi):"
+            check "$SERIOUS_PYTHON_SITE_PACKAGES/$abi" zstandard
+            check "$SERIOUS_PYTHON_SITE_PACKAGES/$abi" Crypto
+          done
           exit $fail
 
       - name: Build Android APKs (split ABI)
