@@ -347,3 +347,5 @@ portmaster/*.zip
 portmaster/*.AppImage
 # Local catalog (never commit real ROM sources)
 assets/catalog/consoles.json
+
+docs/superpowers/
