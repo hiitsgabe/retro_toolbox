@@ -62,56 +62,61 @@ class NszSetting extends ConsumerWidget {
             ),
           ],
         ),
-        // Keys are only needed when decompression is on.
+        // Keys are only needed when decompression is on. Indent under the
+        // header to read as a nested sub-item.
         if (enabled) ...[
           const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.key, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Keys File', style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text(
-                      hasKeys ? keysPath : 'No file selected (prod.keys / title.keys)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: hasKeys ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ],
-                ),
+          Padding(
+            padding: const EdgeInsets.only(left: 36),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(width: 8),
-              if (hasKeys)
-                IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  tooltip: 'Remove keys file',
-                  onPressed: () => _clearKeysFile(ref),
-                ),
-              OutlinedButton.icon(
-                onPressed: () => _pickKeysFile(ref),
-                icon: const Icon(Icons.folder_open, size: 16),
-                label: const Text('Browse'),
-                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-              ),
-            ],
-          ),
-          if (hasKeys)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 14),
-                  SizedBox(width: 4),
-                  Text('Keys file set', style: TextStyle(fontSize: 12, color: Colors.green)),
+                  Icon(
+                    hasKeys ? Icons.check_circle : Icons.vpn_key_outlined,
+                    size: 20,
+                    color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Keys file', style: TextStyle(fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasKeys ? p.basename(keysPath) : 'prod.keys / title.keys required',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (hasKeys)
+                    IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'Remove keys file',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _clearKeysFile(ref),
+                    ),
+                  OutlinedButton(
+                    onPressed: () => _pickKeysFile(ref),
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                    child: Text(hasKeys ? 'Change' : 'Browse'),
+                  ),
                 ],
               ),
             ),
+          ),
         ],
       ],
     );
