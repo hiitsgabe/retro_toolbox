@@ -51,8 +51,7 @@ class NszSetting extends ConsumerWidget {
                 children: [
                   Text('NSZ Decompression', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 2),
-                  const Text('Decompress .nsz files to .nsp after download.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Text('Decompress .nsz files to .nsp after download.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),
@@ -68,53 +67,46 @@ class NszSetting extends ConsumerWidget {
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.only(left: 36),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    hasKeys ? Icons.check_circle : Icons.vpn_key_outlined,
-                    size: 20,
-                    color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Keys file', style: TextStyle(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 2),
-                        Text(
-                          hasKeys ? p.basename(keysPath) : 'prod.keys / title.keys required',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+            child: Row(
+              children: [
+                Icon(
+                  hasKeys ? Icons.check_circle : Icons.vpn_key_outlined,
+                  size: 20,
+                  color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Keys file', style: TextStyle(fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 2),
+                      Text(
+                        hasKeys ? p.basename(keysPath) : 'prod.keys / title.keys required',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hasKeys ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                      ],
-                    ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  if (hasKeys)
-                    IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      tooltip: 'Remove keys file',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _clearKeysFile(ref),
-                    ),
-                  OutlinedButton(
-                    onPressed: () => _pickKeysFile(ref),
-                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                    child: Text(hasKeys ? 'Change' : 'Browse'),
+                ),
+                const SizedBox(width: 8),
+                if (hasKeys)
+                  IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    tooltip: 'Remove keys file',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _clearKeysFile(ref),
                   ),
-                ],
-              ),
+                OutlinedButton(
+                  onPressed: () => _pickKeysFile(ref),
+                  style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                  child: Text(hasKeys ? 'Change' : 'Browse'),
+                ),
+              ],
             ),
           ),
         ],
