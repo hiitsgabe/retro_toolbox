@@ -43,13 +43,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   @override
   void initState() {
     super.initState();
-    // A catalog may already be bundled — allow proceeding without re-importing.
-    final existing = ref.read(appStateProvider).consolesList.length;
-    if (existing > 0) {
-      _catalogReady = true;
-      _usingExample = true;
-      _catalogSummary = '$existing console${existing == 1 ? '' : 's'} already available';
-    }
     final savedUrl = ref.read(settingsProvider).catalogSourceUrl;
     if (savedUrl != null) _urlController.text = savedUrl;
   }
@@ -118,6 +111,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // A bundled catalog loads asynchronously at startup and may only arrive
+    // after this screen is pushed — detect it reactively, not in initState.
+    final bundledCount = ref.watch(appStateProvider).consolesList.length;
+    if (!_catalogReady && !_busy && _catalogError == null && bundledCount > 0) {
+      _catalogReady = true;
+      _usingExample = true;
+      _catalogSummary = '$bundledCount console${bundledCount == 1 ? '' : 's'} already available';
+    }
     final theme = Theme.of(context);
     return Scaffold(
       body: SafeArea(
