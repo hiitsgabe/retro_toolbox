@@ -28,7 +28,7 @@ class AppSettings {
     this.iaAccessKey,
     this.iaSecretKey,
     this.iaCookies,
-    this.nszDecompressEnabled = false,
+    this.nszDecompressEnabled = true,
     this.nszKeysPath,
     this.catalogSourceUrl,
   });
@@ -84,7 +84,7 @@ class AppSettings {
       iaAccessKey: json['iaAccessKey'] as String?,
       iaSecretKey: json['iaSecretKey'] as String?,
       iaCookies: json['iaCookies'] as String?,
-      nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? false,
+      nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? true,
       nszKeysPath: json['nszKeysPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
     );
