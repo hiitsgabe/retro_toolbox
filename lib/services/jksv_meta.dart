@@ -40,14 +40,21 @@ class JksvMeta {
     return b.buffer.asUint8List();
   }
 
+  // magic(4) + revision(1) + applicationID(8): the only fields we read, all at
+  // the start, so real JKSV metas (85 bytes on-console) parse fine even though
+  // our zero-filled encode is 86.
+  static const int _minRead = 13;
+
   static JksvMeta decode(Uint8List bytes) {
-    if (bytes.length < size) {
+    if (bytes.length < _minRead) {
       return const JksvMeta(magicOk: false, applicationId: 0, timestamp: 0);
     }
     final b = ByteData.sublistView(bytes);
     final m = b.getUint32(0, Endian.little);
     final appId = b.getUint64(5, Endian.little);
-    final ts = b.getUint64(5 + 8 + 16 + 8 + 1 + 1 + 2 + 8, Endian.little); // timestamp offset
+    // Timestamp lives further in; only read it when the buffer is our own size.
+    const tsOffset = 5 + 8 + 16 + 8 + 1 + 1 + 2 + 8;
+    final ts = bytes.length >= tsOffset + 8 ? b.getUint64(tsOffset, Endian.little) : 0;
     return JksvMeta(magicOk: m == magic, applicationId: appId, timestamp: ts);
   }
 }
