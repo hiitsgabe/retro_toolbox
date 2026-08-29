@@ -66,7 +66,18 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
       if (mounted) state = state.copyWith(activeTransfers: _server.activeTransfers.value);
     });
     _server.incoming.addListener(() {
-      if (mounted) state = state.copyWith(incoming: _server.incoming.value);
+      if (!mounted) return;
+      final list = _server.incoming.value;
+      state = state.copyWith(incoming: list);
+      // Surface arrivals while the user is elsewhere (foreground notification).
+      if (Platform.isAndroid && state.running) {
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'JDKV server running',
+          notificationText: list.isEmpty
+              ? 'Sharing saves on port ${_server.port}'
+              : '${list.length} save${list.length == 1 ? '' : 's'} received from Switch — tap to review',
+        );
+      }
     });
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;

@@ -45,8 +45,13 @@ class WebDavServerService {
     _server = null;
   }
 
-  /// Consume a staged upload (after the user confirms the pull).
-  List<int>? takeStaged(String titleId) => _staged.remove(titleId);
+  /// Consume a staged upload (after the user confirms the pull) and drop it
+  /// from the incoming list.
+  List<int>? takeStaged(String titleId) {
+    final bytes = _staged.remove(titleId);
+    _refreshIncoming();
+    return bytes;
+  }
 
   void _refreshIncoming() {
     incoming.value = _staged.keys
