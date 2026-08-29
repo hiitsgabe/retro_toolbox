@@ -90,6 +90,22 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
 
   @override
   Widget build(BuildContext context) {
+    // Collapsed state once a catalog is set: one tidy row, options on demand.
+    if (_hasUserCatalog && !_showOptions) {
+      return Row(
+        children: [
+          const Icon(Icons.check_circle, size: 18, color: Colors.green),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Using your imported catalog', style: TextStyle(fontWeight: FontWeight.w500))),
+          TextButton.icon(
+            onPressed: _busy ? null : () => setState(() => _showOptions = true),
+            icon: const Icon(Icons.sync, size: 16),
+            label: const Text('Load new source'),
+          ),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -110,17 +126,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
           ],
         ),
         const SizedBox(height: 12),
-        // Collapse the inputs once a catalog is set; reveal on request.
-        if (_hasUserCatalog && !_showOptions)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _busy ? null : () => setState(() => _showOptions = true),
-              icon: const Icon(Icons.sync, size: 16),
-              label: const Text('Load new source'),
-            ),
-          )
-        else ...[
+        ...[
           Row(
             children: [
               Expanded(
