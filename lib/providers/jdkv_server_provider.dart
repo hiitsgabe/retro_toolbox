@@ -134,6 +134,17 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
       final addresses = await WebDavServerService.localAddresses();
       state = state.copyWith(running: true, port: _server.port, addresses: addresses, clearError: true);
       if (Platform.isAndroid) {
+        // HIGH-importance channel so incoming-save updates peek (heads-up).
+        FlutterForegroundTask.init(
+          androidNotificationOptions: AndroidNotificationOptions(
+            channelId: 'jdkv_server',
+            channelName: 'JDKV Server',
+            channelImportance: NotificationChannelImportance.HIGH,
+            priority: NotificationPriority.HIGH,
+          ),
+          iosNotificationOptions: const IOSNotificationOptions(),
+          foregroundTaskOptions: ForegroundTaskOptions(eventAction: ForegroundTaskEventAction.nothing()),
+        );
         await FlutterForegroundTask.startService(
           serviceId: 3,
           notificationTitle: 'JDKV server running',
@@ -187,4 +198,11 @@ class _JdkvKeepAliveHandler extends TaskHandler {
   void onRepeatEvent(DateTime timestamp) {}
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+
+  // Tapping the notification opens the app on the JDKV screen to review pulls.
+  @override
+  void onNotificationPressed() {
+    FlutterForegroundTask.launchApp();
+    FlutterForegroundTask.sendDataToMain({'action': 'open_jdkv'});
+  }
 }
