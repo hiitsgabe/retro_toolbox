@@ -10,7 +10,7 @@ class RomsDownloaderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
-      title: 'ROMs Downloader',
+      title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
