@@ -190,6 +190,16 @@ class WebDavServerService {
       await for (final chunk in req) {
         bytes.addAll(chunk);
       }
+      // Diagnostic dump of exactly what JKSV uploads.
+      try {
+        final dump = File('${Directory.systemTemp.path}/jdkv_last_put.zip');
+        dump.writeAsBytesSync(bytes);
+        debugPrint('[jdkv] dumped PUT body to ${dump.path}');
+        final names = ZipDecoder().decodeBytes(bytes).map((e) => e.name).toList();
+        debugPrint('[jdkv] PUT zip entries: $names');
+      } catch (e) {
+        debugPrint('[jdkv] PUT body not a readable zip: $e');
+      }
       final fromZip = _titleIdFromZip(bytes);
       final titleId = fromZip ?? _titleIdFromPath(_segments(req));
       debugPrint('[jdkv] PUT ${bytes.length}B → titleId=$titleId (fromZipMeta=${fromZip != null})');
