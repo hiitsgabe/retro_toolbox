@@ -64,6 +64,9 @@ class TaskQueueService {
         case TaskType.extraction:
           await _executeExtractionTask(ref, task, notifier);
           break;
+        case TaskType.nszDecompression:
+          await _executeNszDecompressionTask(ref, task, notifier);
+          break;
       }
     } catch (e) {
       debugPrint('Task execution error for ${task.id}: $e');
@@ -85,5 +88,17 @@ class TaskQueueService {
     final taskId = task.params['taskId'] as String;
 
     extractionNotifier.extractFile(taskId);
+  }
+
+  static Future<void> _executeNszDecompressionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
+    final extractionNotifier = ref.read(extractionProvider.notifier);
+
+    // Fire and forget — nszDecompress manages its own queue-status updates.
+    extractionNotifier.nszDecompress(
+      taskId: task.params['taskId'] as String,
+      nszFilePath: task.params['nszFilePath'] as String,
+      outputDir: task.params['outputDir'] as String,
+      keysPath: task.params['keysPath'] as String? ?? '',
+    );
   }
 }

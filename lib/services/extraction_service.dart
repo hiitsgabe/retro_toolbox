@@ -178,11 +178,31 @@ class ExtractionService {
         final progress = (0.1 + (++extractedFiles / 4) * 0.85).clamp(0.1, 0.95);
         sendPort.send({'type': 'progress', 'value': progress});
       });
+      await _flattenSingleTopLevelDir(params['extractionDir']);
       sendPort.send({'type': 'complete'});
     } catch (e) {
       debugPrint('Extraction error: $e');
       sendPort.send({'type': 'error', 'message': 'Failed to extract: $e'});
     }
+  }
+}
+
+/// If the extraction produced exactly one top-level directory (a common ZIP
+/// wrapper like `GameName/`), moves its contents directly into [extractionDir]
+/// and removes the wrapper. Files already at the root are left untouched.
+Future<void> _flattenSingleTopLevelDir(String extractionDir) async {
+  try {
+    final dir = Directory(extractionDir);
+    final contents = await dir.list().toList();
+    if (contents.length != 1 || contents.first is! Directory) return;
+
+    final wrapper = contents.first as Directory;
+    await for (final entity in wrapper.list()) {
+      await entity.rename(path.join(extractionDir, path.basename(entity.path)));
+    }
+    await wrapper.delete();
+  } catch (e) {
+    debugPrint('Warning: could not flatten extraction dir: $e');
   }
 }
 
@@ -220,7 +240,7 @@ class ExtractionTaskHandler extends TaskHandler {
         zipFile: File(filePath),
         destinationDir: Directory(extractionDir),
         onExtracting: (zipEntry, progress) => ZipFileOperation.includeItem,
-      ).then((_) {
+      ).then((_) => _flattenSingleTopLevelDir(extractionDir)).then((_) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
           'type': ExtractionService.completionDataType,

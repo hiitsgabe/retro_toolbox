@@ -45,8 +45,16 @@ jobs:
 
       - run: echo "${{ secrets.KEYSTORE64 }}" | base64 --decode > android/${{ secrets.KEY_STORE_PATH }}
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Package Python app for Android
+        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
 
       - name: Build Android APK (${{ matrix.arch }})
         run: |
@@ -95,8 +103,16 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Package Python app for macOS
+        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome
 
       - name: Install CocoaPods
         run: |
@@ -144,8 +160,16 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Package Python app for Windows
+        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop

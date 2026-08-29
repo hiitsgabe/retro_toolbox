@@ -1,121 +1,399 @@
-{
-  "ps1": {
+[
+   {
     "name": "PlayStation 1",
-    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/",
-    "regex": "<tr><td class=\"link\"><a href=\"(?<href>[^\"]+)\" title=\"(?<title>[^\"]+)\">(?<text>[^<]+)</a></td><td class=\"size\">(?<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
-    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/"
+    "url": [
+      "https://archive.org/download/sony_playstation_part1/",
+      "https://archive.org/download/sony_playstation_part2/",
+      "https://archive.org/download/sony_playstation_part3/",
+      "https://archive.org/download/sony_playstation_part4/",
+      "https://archive.org/download/sony_playstation_part5/"
+    ],
+    "file_format": [".bin", ".cue"],
+    "roms_folder": "psx",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation/Named_Boxarts/",
+    "should_unzip": true
   },
-  "ps2": {
+  {
     "name": "PlayStation 2",
-    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%202/",
-    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%202/Named_Boxarts/"
+    "url": [
+      "https://archive.org/download/sony_playstation2_numberssymbols/",
+      "https://archive.org/download/sony_playstation2_a/",
+      "https://archive.org/download/sony_playstation2_b/",
+      "https://archive.org/download/sony_playstation2_c/",
+      "https://archive.org/download/sony_playstation2_d_part1/",
+      "https://archive.org/download/sony_playstation2_d_part2/",
+      "https://archive.org/download/sony_playstation2_e/",
+      "https://archive.org/download/sony_playstation2_f/",
+      "https://archive.org/download/sony_playstation2_g/",
+      "https://archive.org/download/sony_playstation2_h/",
+      "https://archive.org/download/sony_playstation2_i/",
+      "https://archive.org/download/sony_playstation2_j/",
+      "https://archive.org/download/sony_playstation2_k/",
+      "https://archive.org/download/sony_playstation2_l/",
+      "https://archive.org/download/sony_playstation2_m_part1/",
+      "https://archive.org/download/sony_playstation2_m_part2/",
+      "https://archive.org/download/sony_playstation2_n/",
+      "https://archive.org/download/sony_playstation2_o_part1/",
+      "https://archive.org/download/sony_playstation2_o_part2/",
+      "https://archive.org/download/sony_playstation2_p/",
+      "https://archive.org/download/sony_playstation2_q/",
+      "https://archive.org/download/sony_playstation2_r/",
+      "https://archive.org/download/sony_playstation2_s_part1/",
+      "https://archive.org/download/sony_playstation2_s_part2/",
+      "https://archive.org/download/sony_playstation2_s_part3/",
+      "https://archive.org/download/sony_playstation2_s_part4/",
+      "https://archive.org/download/sony_playstation2_t/",
+      "https://archive.org/download/sony_playstation2_u/",
+      "https://archive.org/download/sony_playstation2_v/",
+      "https://archive.org/download/sony_playstation2_w/",
+      "https://archive.org/download/sony_playstation2_x/",
+      "https://archive.org/download/sony_playstation2_z/"
+    ],
+    "file_format": [".iso"],
+    "roms_folder": "ps2",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%202/Named_Boxarts/",
+    "should_unzip": true
   },
-  "ps3": {
+  {
     "name": "PlayStation 3",
-    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%203/"
+    "url": [
+      "https://archive.org/download/sony_playstation3_numberssymbols/",
+      "https://archive.org/download/sony_playstation3_a_part1/",
+      "https://archive.org/download/sony_playstation3_a_part2/",
+      "https://archive.org/download/sony_playstation3_a_part3/",
+      "https://archive.org/download/sony_playstation3_b_part1/",
+      "https://archive.org/download/sony_playstation3_b_part2/",
+      "https://archive.org/download/sony_playstation3_b_part3/",
+      "https://archive.org/download/sony_playstation3_c_part1/",
+      "https://archive.org/download/sony_playstation3_c_part2/",
+      "https://archive.org/download/sony_playstation3_c_part3/",
+      "https://archive.org/download/sony_playstation3_d_part1/",
+      "https://archive.org/download/sony_playstation3_d_part2/",
+      "https://archive.org/download/sony_playstation3_d_part3/",
+      "https://archive.org/download/sony_playstation3_d_part4/",
+      "https://archive.org/download/sony_playstation3_d_part5/",
+      "https://archive.org/download/sony_playstation3_e/",
+      "https://archive.org/download/sony_playstation3_f_part1/",
+      "https://archive.org/download/sony_playstation3_f_part2/",
+      "https://archive.org/download/sony_playstation3_f_part3/",
+      "https://archive.org/download/sony_playstation3_g_part1/",
+      "https://archive.org/download/sony_playstation3_g_part2/",
+      "https://archive.org/download/sony_playstation3_g_part3/",
+      "https://archive.org/download/sony_playstation3_h_part1/",
+      "https://archive.org/download/sony_playstation3_h_part2/",
+      "https://archive.org/download/sony_playstation3_i/",
+      "https://archive.org/download/sony_playstation3_j/",
+      "https://archive.org/download/sony_playstation3_k/",
+      "https://archive.org/download/sony_playstation3_l_part1/",
+      "https://archive.org/download/sony_playstation3_l_part2/",
+      "https://archive.org/download/sony_playstation3_l_part3/",
+      "https://archive.org/download/sony_playstation3_m_part1/",
+      "https://archive.org/download/sony_playstation3_m_part2/",
+      "https://archive.org/download/sony_playstation3_m_part3/",
+      "https://archive.org/download/sony_playstation3_m_part4/",
+      "https://archive.org/download/sony_playstation3_m_part5/",
+      "https://archive.org/download/sony_playstation3_n_part1/",
+      "https://archive.org/download/sony_playstation3_n_part2/",
+      "https://archive.org/download/sony_playstation3_n_part3/",
+      "https://archive.org/download/sony_playstation3_o_part1/",
+      "https://archive.org/download/sony_playstation3_o_part2/",
+      "https://archive.org/download/sony_playstation3_o_part3/",
+      "https://archive.org/download/sony_playstation3_p_part1/",
+      "https://archive.org/download/sony_playstation3_p_part2/",
+      "https://archive.org/download/sony_playstation3_q/",
+      "https://archive.org/download/sony_playstation3_r_part1/",
+      "https://archive.org/download/sony_playstation3_r_part2/",
+      "https://archive.org/download/sony_playstation3_r_part3/",
+      "https://archive.org/download/sony_playstation3_r_part4/",
+      "https://archive.org/download/sony_playstation3_s_part1/",
+      "https://archive.org/download/sony_playstation3_s_part2/",
+      "https://archive.org/download/sony_playstation3_s_part3/",
+      "https://archive.org/download/sony_playstation3_s_part4/",
+      "https://archive.org/download/sony_playstation3_s_part5/",
+      "https://archive.org/download/sony_playstation3_s_part6/",
+      "https://archive.org/download/sony_playstation3_t_part1/",
+      "https://archive.org/download/sony_playstation3_t_part2/",
+      "https://archive.org/download/sony_playstation3_t_part3/",
+      "https://archive.org/download/sony_playstation3_t_part4/",
+      "https://archive.org/download/sony_playstation3_u_part1/",
+      "https://archive.org/download/sony_playstation3_u_part2/",
+      "https://archive.org/download/sony_playstation3_v/",
+      "https://archive.org/download/sony_playstation3_w_part1/",
+      "https://archive.org/download/sony_playstation3_w_part2/",
+      "https://archive.org/download/sony_playstation3_x/",
+      "https://archive.org/download/sony_playstation3_y/",
+      "https://archive.org/download/sony_playstation3_z/"
+    ],
+    "file_format": [".iso"],
+    "roms_folder": "ps3",
+    "should_unzip": false
   },
-  "psp": {
+  {
     "name": "PlayStation Portable",
-    "url": "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%20Portable/",
-    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/Named_Boxarts/"
+    "url": [
+      "https://archive.org/download/sony_playstation_portable_part1/",
+      "https://archive.org/download/sony_playstation_portable_part2/",
+      "https://archive.org/download/sony_playstation_portable_part3/",
+      "https://archive.org/download/sony_playstation_portable_part4/"
+    ],
+    "file_format": [".iso", ".cso"],
+    "roms_folder": "psp",
+    "boxarts": "https://thumbnails.libretro.com/Sony%20-%20PlayStation%20Portable/Named_Boxarts/",
+    "should_unzip": true
   },
-  "gb": {
+  {
     "name": "Game Boy",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_Nintendo_Gameboy_No-Intro_2024-04-23/",
+    "file_format": [".gb"],
+    "roms_folder": "gb",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy/Named_Boxarts/",
+    "should_unzip": true
   },
-  "gbc": {
+  {
     "name": "Game Boy Color",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Color/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Color/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_GBC_No-Intro/",
+    "file_format": [".gbc"],
+    "roms_folder": "gbc",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Color/Named_Boxarts/",
+    "should_unzip": true
   },
-  "gba": {
+  {
     "name": "Game Boy Advance",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_gba_no-intro_2024-02-21/",
+    "file_format": [".gba"],
+    "roms_folder": "gba",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/",
+    "should_unzip": true
   },
-  "nds": {
+  {
     "name": "Nintendo DS",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20DS%20%28Decrypted%29/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/"
+    "url": "https://archive.org/download/nds-collection/",
+    "file_format": [".nds"],
+    "roms_folder": "nds",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20DS/Named_Boxarts/",
+    "should_unzip": true
   },
-  "n3ds": {
+  {
     "name": "Nintendo 3DS",
     "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%203DS%20%28Decrypted%29/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%203DS/Named_Boxarts/"
+    "file_format": [".3ds", ".cia"],
+    "roms_folder": "n3ds",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%203DS/Named_Boxarts/",
+    "should_unzip": true
   },
-  "nes": {
+  {
     "name": "Nintendo Entertainment System",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20Entertainment%20System%20%28Headered%29/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_nintendo_entertainment_-system_-no-intro_2024-04-23/",
+    "file_format": [".nes"],
+    "roms_folder": "nes",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/",
+    "should_unzip": true
   },
-  "snes": {
+  {
     "name": "Super Nintendo",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_nintendo_snes_no-intro_2024-04-20/",
+    "file_format": [".sfc", ".smc"],
+    "roms_folder": "snes",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Boxarts/",
+    "should_unzip": true
   },
-  "n64": {
+  {
     "name": "Nintendo 64",
-    "url": "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%2064%20%28BigEndian%29/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_nintendo_64_no-intro_2024-02-10/",
+    "file_format": [".n64", ".z64", ".v64"],
+    "roms_folder": "n64",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/",
+    "should_unzip": true
   },
-  "ngc": {
+  {
     "name": "Nintendo Game Cube",
-    "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20GameCube%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20GameCube/Named_Boxarts/"
+    "url": "https://archive.org/download/GamecubeCollectionByGhostware/",
+    "file_format": [".iso"],
+    "roms_folder": "gc",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20GameCube/Named_Boxarts/",
+    "should_unzip": false
   },
-  "wii": {
+  {
     "name": "Nintendo Wii",
     "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii/Named_Boxarts/"
+    "file_format": [".rvz", ".iso"],
+    "roms_folder": "wii",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii/Named_Boxarts/",
+    "should_unzip": true
   },
-  "wiiu": {
+  {
     "name": "Nintendo Wii U",
     "url": "https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20U%20-%20WUX/",
-    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii%20U/Named_Boxarts/"
+    "file_format": [".wux"],
+    "roms_folder": "wiiu",
+    "boxarts": "https://thumbnails.libretro.com/Nintendo%20-%20Wii%20U/Named_Boxarts/",
+    "should_unzip": true
   },
-  "xbox": {
+  {
     "name": "Xbox",
-    "url": "https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox/",
-    "boxarts": "https://thumbnails.libretro.com/Microsoft%20-%20Xbox/Named_Boxarts/"
+    "url": [
+      "https://archive.org/download/microsoft_xbox_numberssymbols/",
+      "https://archive.org/download/microsoft_xbox_a/",
+      "https://archive.org/download/microsoft_xbox_b/",
+      "https://archive.org/download/microsoft_xbox_c_part1/",
+      "https://archive.org/download/microsoft_xbox_c_part2/",
+      "https://archive.org/download/microsoft_xbox_d_part1/",
+      "https://archive.org/download/microsoft_xbox_d_part2/",
+      "https://archive.org/download/microsoft_xbox_e/",
+      "https://archive.org/download/microsoft_xbox_f/",
+      "https://archive.org/download/microsoft_xbox_g/",
+      "https://archive.org/download/microsoft_xbox_h/",
+      "https://archive.org/download/microsoft_xbox_i/",
+      "https://archive.org/download/microsoft_xbox_j/",
+      "https://archive.org/download/microsoft_xbox_k/",
+      "https://archive.org/download/microsoft_xbox_l/",
+      "https://archive.org/download/microsoft_xbox_m_part1/",
+      "https://archive.org/download/microsoft_xbox_m_part2/",
+      "https://archive.org/download/microsoft_xbox_n_part1/",
+      "https://archive.org/download/microsoft_xbox_n_part2/",
+      "https://archive.org/download/microsoft_xbox_o_part1/",
+      "https://archive.org/download/microsoft_xbox_o_part2/",
+      "https://archive.org/download/microsoft_xbox_p/",
+      "https://archive.org/download/microsoft_xbox_q/",
+      "https://archive.org/download/microsoft_xbox_r/",
+      "https://archive.org/download/microsoft_xbox_s_part1/",
+      "https://archive.org/download/microsoft_xbox_s_part2/",
+      "https://archive.org/download/microsoft_xbox_t_part1/",
+      "https://archive.org/download/microsoft_xbox_t_part2/",
+      "https://archive.org/download/microsoft_xbox_u/",
+      "https://archive.org/download/microsoft_xbox_v/",
+      "https://archive.org/download/microsoft_xbox_w/",
+      "https://archive.org/download/microsoft_xbox_x/",
+      "https://archive.org/download/microsoft_xbox_y/",
+      "https://archive.org/download/microsoft_xbox_z/"
+    ],
+    "file_format": [".iso"],
+    "roms_folder": "xbox",
+    "boxarts": "https://thumbnails.libretro.com/Microsoft%20-%20Xbox/Named_Boxarts/",
+    "should_unzip": true
   },
-  "xbox360": {
+  {
     "name": "Xbox 360",
-    "url": "https://myrient.erista.me/files/Redump/Microsoft%20-%20Xbox%20360/"
+    "url": [
+      "https://archive.org/download/microsoft_xbox360_numberssymbols/",
+      "https://archive.org/download/microsoft_xbox360_a_part1/",
+      "https://archive.org/download/microsoft_xbox360_a_part2/",
+      "https://archive.org/download/microsoft_xbox360_b_part1/",
+      "https://archive.org/download/microsoft_xbox360_b_part2/",
+      "https://archive.org/download/microsoft_xbox360_c_part1/",
+      "https://archive.org/download/microsoft_xbox360_c_part2/",
+      "https://archive.org/download/microsoft_xbox360_d_part1/",
+      "https://archive.org/download/microsoft_xbox360_d_part2/",
+      "https://archive.org/download/microsoft_xbox360_d_part3/",
+      "https://archive.org/download/microsoft_xbox360_e/",
+      "https://archive.org/download/microsoft_xbox360_f_part1/",
+      "https://archive.org/download/microsoft_xbox360_f_part2/",
+      "https://archive.org/download/microsoft_xbox360_g/",
+      "https://archive.org/download/microsoft_xbox360_h/",
+      "https://archive.org/download/microsoft_xbox360_i/",
+      "https://archive.org/download/microsoft_xbox360_j/",
+      "https://archive.org/download/microsoft_xbox360_k/",
+      "https://archive.org/download/microsoft_xbox360_l/",
+      "https://archive.org/download/microsoft_xbox360_m_part1/",
+      "https://archive.org/download/microsoft_xbox360_m_part2/",
+      "https://archive.org/download/microsoft_xbox360_n_part1/",
+      "https://archive.org/download/microsoft_xbox360_n_part2/",
+      "https://archive.org/download/microsoft_xbox360_o/",
+      "https://archive.org/download/microsoft_xbox360_p/",
+      "https://archive.org/download/microsoft_xbox360_q/",
+      "https://archive.org/download/microsoft_xbox360_r/",
+      "https://archive.org/download/microsoft_xbox360_r_part1/",
+      "https://archive.org/download/microsoft_xbox360_s_part1/",
+      "https://archive.org/download/microsoft_xbox360_s_part2/",
+      "https://archive.org/download/microsoft_xbox360_t_part1/",
+      "https://archive.org/download/microsoft_xbox360_t_part2/",
+      "https://archive.org/download/microsoft_xbox360_u/",
+      "https://archive.org/download/microsoft_xbox360_v/",
+      "https://archive.org/download/microsoft_xbox360_w/",
+      "https://archive.org/download/microsoft_xbox360_x_part1/",
+      "https://archive.org/download/microsoft_xbox360_x_part2/",
+      "https://archive.org/download/microsoft_xbox360_y/",
+      "https://archive.org/download/microsoft_xbox360_z/"
+    ],
+    "file_format": [".iso"],
+    "roms_folder": "xbox360",
+    "should_unzip": true
   },
-  "sg": {
+  {
     "name": "Sega Genesis",
-    "url": "https://myrient.erista.me/files/No-Intro/Sega%20-%20Mega%20Drive%20-%20Genesis/",
-    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Mega%20Drive%20-%20Genesis/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_mega_genesis_no-intro_2024-04-21/",
+    "file_format": [".md", ".bin", ".gen"],
+    "roms_folder": "genesis",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Mega%20Drive%20-%20Genesis/Named_Boxarts/",
+    "should_unzip": true
   },
-  "gg": {
+  {
     "name": "Game Gear",
-    "url": "https://myrient.erista.me/files/No-Intro/Sega%20-%20Game%20Gear/",
-    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Game%20Gear/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_sega_game_gear_no-intro_2024-02-21/",
+    "file_format": [".gg"],
+    "roms_folder": "gamegear",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Game%20Gear/Named_Boxarts/",
+    "should_unzip": true
   },
-  "ss": {
+  {
     "name": "Sega Saturn",
-    "url": "https://myrient.erista.me/files/Redump/Sega%20-%20Saturn/",
-    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Saturn/Named_Boxarts/"
+    "url": "https://archive.org/download/sega-saturn-redump/",
+    "file_format": [".bin", ".cue", ".iso"],
+    "roms_folder": "saturn",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Saturn/Named_Boxarts/",
+    "should_unzip": true
   },
-  "dreamcast": {
+  {
     "name": "Sega Dreamcast",
-    "url": "https://myrient.erista.me/files/Redump/Sega%20-%20Dreamcast/",
-    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Dreamcast/Named_Boxarts/"
+    "url": "https://archive.org/download/sega-dreamcast-redump/",
+    "file_format": [".gdi", ".cdi", ".bin", ".cue"],
+    "roms_folder": "dreamcast",
+    "boxarts": "https://thumbnails.libretro.com/Sega%20-%20Dreamcast/Named_Boxarts/",
+    "should_unzip": true
   },
-  "3do": {
+  {
     "name": "Panasonic 3DO",
-    "url": "https://myrient.erista.me/files/Redump/Panasonic%20-%203DO%20Interactive%20Multiplayer/",
-    "boxarts": "https://thumbnails.libretro.com/The%203DO%20Company%20-%203DO/Named_Boxarts/"
+    "url": "https://archive.org/download/panasonic-3do-redump/",
+    "file_format": [".bin", ".cue", ".iso"],
+    "roms_folder": "3do",
+    "boxarts": "https://thumbnails.libretro.com/The%203DO%20Company%20-%203DO/Named_Boxarts/",
+    "should_unzip": true
   },
-  "colecoVision": {
+  {
     "name": "ColecoVision",
-    "url": "https://myrient.erista.me/files/No-Intro/Coleco%20-%20ColecoVision/",
-    "boxarts": "https://thumbnails.libretro.com/Coleco%20-%20ColecoVision/Named_Boxarts/"
+    "url": "https://archive.org/download/ef_coleco_no-intro_2024-03-17/",
+    "file_format": [".col"],
+    "roms_folder": "colecovision",
+    "boxarts": "https://thumbnails.libretro.com/Coleco%20-%20ColecoVision/Named_Boxarts/",
+    "should_unzip": true
   },
-  "intellivision": {
+  {
     "name": "Intellivision",
-    "url": "https://myrient.erista.me/files/No-Intro/Mattel%20-%20Intellivision/",
-    "boxarts": "https://thumbnails.libretro.com/Mattel%20-%20Intellivision/Named_Boxarts/"
-  }
-}
+    "url": "https://archive.org/download/intellivision-roms-usa/",
+    "file_format": [".int"],
+    "roms_folder": "intellivision",
+    "boxarts": "https://thumbnails.libretro.com/Mattel%20-%20Intellivision/Named_Boxarts/",
+    "should_unzip": false
+  },
+  {
+    "name": "Nintendo Switch",
+    "url": "https://api.ultranx.ru/games/?limit=100000",
+    "regex": "\"(?P<id>[A-F0-9]{16})\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\\{.*?\"en\"\\s*:\\s*\"(?P<text>[^\"]+)\".*?\"icon_url\"\\s*:\\s*\"(?P<banner_url>[^\"]+)\"",
+    "file_format": [
+      ".nsz"
+    ],
+    "roms_folder": "switch",
+    "download_url": "https://api.ultranx.ru/games/download/<id>/base",
+    "usa_regex": "(USA)",
+    "ignore_extension_filtering": true,
+    "should_filter_usa": false,
+    "should_unzip": true,
+    "should_decompress_nsz": true,
+    "auth": {
+      "cookies": true,
+      "cookie_name": "auth_token",
+      "token": "",
+      "auth_message": "You need an auth token from not.ultranx.ru. Create account and get the auth_token from the cookies"
+    }
+  }  
+]
