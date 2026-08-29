@@ -43,7 +43,8 @@ class SettingsContent extends StatelessWidget {
               Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
             ],
             const SizedBox(height: 12),
-            child,
+            // Indent sub-items so they read as nested under the section header.
+            Padding(padding: const EdgeInsets.only(left: 16), child: child),
           ],
         ),
       ),
