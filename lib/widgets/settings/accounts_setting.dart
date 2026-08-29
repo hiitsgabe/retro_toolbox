@@ -14,13 +14,14 @@ class AccountsSetting extends ConsumerWidget {
     final loggedIn = ref.watch(settingsProvider).hasIaCredentials;
 
     return ExpansionTile(
-      // Rebuild so it collapses right after a successful login.
+      // Rebuild so the status subtitle updates after login/logout.
       key: ValueKey('ia_$loggedIn'),
-      initiallyExpanded: !loggedIn,
+      initiallyExpanded: false,
       shape: const Border(),
       collapsedShape: const Border(),
       tilePadding: EdgeInsets.zero,
-      leading: const Icon(Icons.archive_outlined),
+      // account_balance is the columned-building glyph — matches the IA logo.
+      leading: const Icon(Icons.account_balance),
       title: const Text('Internet Archive'),
       subtitle: Text(loggedIn ? 'Connected' : 'Not connected'),
       childrenPadding: const EdgeInsets.only(bottom: 8),

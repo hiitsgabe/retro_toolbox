@@ -168,34 +168,41 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          const Divider(),
-          const SizedBox(height: 4),
-          const Text('Or paste a token manually:', style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 8),
-        ],
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _tokenController,
-                obscureText: _obscure,
-                onChanged: (_) => setState(() => _dirty = true),
-                decoration: InputDecoration(
-                  labelText: widget.console.authUsesCookies
-                      ? 'Cookie token (${widget.console.authCookieName})'
-                      : 'Bearer token',
-                  prefixIcon: const Icon(Icons.vpn_key_outlined),
-                  isDense: true,
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                  ),
-                ),
-              ),
+          // Pasting a raw token is the fallback — tuck it under Advanced.
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            shape: const Border(),
+            collapsedShape: const Border(),
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('Advanced', style: TextStyle(fontSize: 13)),
+            children: [_tokenSection(context, hasToken)],
+          ),
+        ] else
+          _tokenSection(context, hasToken),
+      ],
+    );
+  }
+
+  Widget _tokenSection(BuildContext context, bool hasToken) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _tokenController,
+          obscureText: _obscure,
+          onChanged: (_) => setState(() => _dirty = true),
+          decoration: InputDecoration(
+            labelText: widget.console.authUsesCookies
+                ? 'Cookie token (${widget.console.authCookieName})'
+                : 'Bearer token',
+            prefixIcon: const Icon(Icons.vpn_key_outlined),
+            isDense: true,
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+              onPressed: () => setState(() => _obscure = !_obscure),
             ),
-          ],
+          ),
         ),
         const SizedBox(height: 8),
         Row(
