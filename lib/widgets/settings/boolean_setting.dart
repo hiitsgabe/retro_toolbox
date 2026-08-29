@@ -29,6 +29,7 @@ class BooleanSetting extends ConsumerWidget {
     final isEnabled = settingValue ?? false;
 
     return ListTile(
+      contentPadding: EdgeInsets.zero,
       leading: Icon(icon),
       title: Text(title),
       subtitle: subtitle != null ? Text(subtitle!) : null,

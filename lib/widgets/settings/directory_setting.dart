@@ -37,6 +37,7 @@ class DirectorySetting extends StatelessWidget {
     final isUsingGeneral = console != null && !hasConsoleSpecific && generalDir.isNotEmpty;
 
     return ListTile(
+      contentPadding: EdgeInsets.zero,
       leading: Icon(icon),
       title: Text(title),
       subtitle: Column(
