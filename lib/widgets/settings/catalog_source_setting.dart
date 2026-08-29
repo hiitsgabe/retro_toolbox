@@ -19,6 +19,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
   final _urlController = TextEditingController();
   bool _busy = false;
   bool _hasUserCatalog = false;
+  bool _showOptions = false;
 
   @override
   void initState() {
@@ -45,6 +46,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
       await action();
       await ref.read(appStateProvider.notifier).reloadConsoles();
       await _refreshState();
+      if (mounted) setState(() => _showOptions = false);
       _snack(successMsg);
     } catch (e) {
       _snack('$e');
@@ -108,48 +110,60 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _urlController,
-                enabled: !_busy,
-                decoration: const InputDecoration(
-                  labelText: 'Catalog URL',
-                  hintText: 'https://…/consoles.json',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.link),
+        // Collapse the inputs once a catalog is set; reveal on request.
+        if (_hasUserCatalog && !_showOptions)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : () => setState(() => _showOptions = true),
+              icon: const Icon(Icons.sync, size: 16),
+              label: const Text('Load new source'),
+            ),
+          )
+        else ...[
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _urlController,
+                  enabled: !_busy,
+                  decoration: const InputDecoration(
+                    labelText: 'Catalog URL',
+                    hintText: 'https://…/consoles.json',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.link),
+                  ),
+                  onSubmitted: (_) => _loadUrl(),
                 ),
-                onSubmitted: (_) => _loadUrl(),
               ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: _busy ? null : _loadUrl,
-              child: _busy
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Load'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _importFile,
-              icon: const Icon(Icons.upload_file, size: 16),
-              label: const Text('Import file'),
-            ),
-            const Spacer(),
-            if (_hasUserCatalog)
-              TextButton.icon(
-                onPressed: _busy ? null : _reset,
-                icon: const Icon(Icons.restore, size: 16),
-                label: const Text('Reset'),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _busy ? null : _loadUrl,
+                child: _busy
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Load'),
               ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _importFile,
+                icon: const Icon(Icons.upload_file, size: 16),
+                label: const Text('Import file'),
+              ),
+              const Spacer(),
+              if (_hasUserCatalog)
+                TextButton.icon(
+                  onPressed: _busy ? null : _reset,
+                  icon: const Icon(Icons.restore, size: 16),
+                  label: const Text('Reset'),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }
