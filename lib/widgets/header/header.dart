@@ -10,6 +10,7 @@ import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
+import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
@@ -202,6 +203,14 @@ class _HeaderState extends ConsumerState<Header> {
                 ),
               );
               break;
+            case 'steam':
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SteamShortcutScreen(),
+                ),
+              );
+              break;
             case 'about':
               Navigator.push(
                 context,
@@ -221,6 +230,16 @@ class _HeaderState extends ConsumerState<Header> {
                 Icon(Icons.settings, size: 18),
                 SizedBox(width: 12),
                 Text('Settings'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'steam',
+            child: Row(
+              children: [
+                Icon(Icons.sports_esports_outlined, size: 18),
+                SizedBox(width: 12),
+                Text('Steam Shortcuts'),
               ],
             ),
           ),
