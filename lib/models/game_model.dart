@@ -58,7 +58,13 @@ class Game {
     };
   }
 
-  String get filename => Uri.parse(url).pathSegments.last;
+  String get filename {
+    final segments = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
+    final last = segments.isEmpty ? '' : segments.last;
+    // API-style URLs (e.g. .../download/<id>/base) carry no real filename —
+    // fall back to the title so ids stay unique and files get proper names.
+    return last.contains('.') ? last : title.replaceAll('/', '-');
+  }
 
   String get gameId => '$consoleId/$filename';
 

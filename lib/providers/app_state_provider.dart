@@ -47,7 +47,31 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
     _listenToLoadingNotifications();
 
-    catalogNotifier.loadCatalog(state.selectedConsole!);
+    // No catalog configured yet (fresh install without a bundled catalog).
+    if (state.selectedConsole != null) {
+      catalogNotifier.loadCatalog(state.selectedConsole!);
+    }
+  }
+
+  /// Re-reads the console list after the catalog source changes.
+  Future<void> reloadConsoles() async {
+    final consoles = await catalogService.getConsoles();
+    final prefs = await SharedPreferences.getInstance();
+    final savedConsoleId = prefs.getString(_selectedConsoleKey);
+    final selectedConsole = (savedConsoleId != null && consoles.containsKey(savedConsoleId))
+        ? consoles[savedConsoleId]
+        : consoles.isNotEmpty
+            ? consoles.values.first
+            : null;
+
+    state = state.copyWith(
+      consoles: consoles,
+      selectedConsole: selectedConsole,
+      clearSelectedConsole: selectedConsole == null,
+    );
+    if (selectedConsole != null) {
+      catalogNotifier.loadCatalog(selectedConsole);
+    }
   }
 
   void _listenToLoadingNotifications() {

@@ -24,43 +24,21 @@ class CatalogService {
 
     String jsonStr = '';
     try {
+      // Precedence: user-provided config (imported file / URL) → optional
+      // bundled catalog (assets/catalog/, git-ignored) → none.
       final supportDir = await getApplicationSupportDirectory();
       final consolesFile = File(path.join(supportDir.path, 'config', consolesFilePath));
       if (await consolesFile.exists()) {
         jsonStr = await consolesFile.readAsString();
       } else {
-        jsonStr = await rootBundle.loadString('assets/$consolesFilePath');
+        jsonStr = await rootBundle.loadString('assets/catalog/$consolesFilePath');
       }
     } catch (e) {
-      debugPrint('Error reading consoles file: $e');
+      debugPrint('No catalog source configured yet: $e');
       return {};
     }
 
-    final decoded = jsonDecode(jsonStr);
-    Map<String, Console> consoles;
-
-    if (decoded is List) {
-      // PyGame-compatible array format: each item is a system object with a "name" field.
-      // Entries with "list_systems: true" are discovery endpoints — skip them here.
-      consoles = {};
-      for (final item in decoded) {
-        if (item is! Map<String, dynamic>) continue;
-        if (item['list_systems'] == true) continue;
-        final name = item['name'] as String? ?? '';
-        if (name.isEmpty) continue;
-        final id = _nameToId(name);
-        final consoleData = {'id': id, ...item};
-        consoles[id] = Console.fromJson(consoleData);
-      }
-    } else if (decoded is Map<String, dynamic>) {
-      // Legacy map format: top-level keys are console IDs.
-      consoles = decoded.map((key, value) {
-        final consoleData = {'id': key, ...Map<String, dynamic>.from(value)};
-        return MapEntry(key, Console.fromJson(consoleData));
-      });
-    } else {
-      consoles = {};
-    }
+    final consoles = _parseConsoles(jsonStr);
 
     if (consoles.isNotEmpty) {
       _consolesCache[consolesFilePath] = consoles;
@@ -69,11 +47,90 @@ class CatalogService {
     return consoles;
   }
 
+  /// Synchronous lookup from the in-memory consoles cache (populated on the
+  /// first getConsoles call at startup). Null before that or for unknown ids.
+  static Console? consoleByIdSync(String? id) {
+    if (id == null) return null;
+    for (final consoles in _consolesCache.values) {
+      final console = consoles[id];
+      if (console != null) return console;
+    }
+    return null;
+  }
+
   static String _nameToId(String name) {
     return name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
   }
 
-  Future<List<Game>> loadCatalog(String consoleId, {String? iaAccessKey, String? iaSecretKey, String? authToken}) async {
+  static Map<String, Console> _parseConsoles(String jsonStr) {
+    final decoded = jsonDecode(jsonStr);
+    final consoles = <String, Console>{};
+    if (decoded is List) {
+      // PyGame-compatible array format: each item is a system object with a "name".
+      // Entries with "list_systems: true" are discovery endpoints — skip them here.
+      for (final item in decoded) {
+        if (item is! Map<String, dynamic>) continue;
+        if (item['list_systems'] == true) continue;
+        final name = item['name'] as String? ?? '';
+        if (name.isEmpty) continue;
+        final id = _nameToId(name);
+        consoles[id] = Console.fromJson({'id': id, ...item});
+      }
+    } else if (decoded is Map<String, dynamic>) {
+      // Legacy map format: top-level keys are console IDs.
+      decoded.forEach((key, value) {
+        consoles[key] = Console.fromJson({'id': key, ...Map<String, dynamic>.from(value)});
+      });
+    }
+    return consoles;
+  }
+
+  Future<File> _userConsolesFile([String consolesFilePath = 'consoles.json']) async {
+    final supportDir = await getApplicationSupportDirectory();
+    return File(path.join(supportDir.path, 'config', consolesFilePath));
+  }
+
+  /// Validates [jsonStr] parses into at least one console, saves it as the
+  /// active catalog source, and clears caches. Throws on invalid content.
+  Future<void> setCatalogFromJson(String jsonStr) async {
+    final consoles = _parseConsoles(jsonStr);
+    if (consoles.isEmpty) {
+      throw const FormatException('No consoles found in the provided catalog.');
+    }
+    final file = await _userConsolesFile();
+    await file.parent.create(recursive: true);
+    await file.writeAsString(jsonStr);
+    _consolesCache.clear();
+  }
+
+  /// Fetches a catalog from [url] and installs it. Throws on network/format error.
+  Future<void> setCatalogFromUrl(String url) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 30);
+    try {
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw HttpException('HTTP ${response.statusCode} fetching catalog');
+      }
+      final body = await response.transform(utf8.decoder).join();
+      await setCatalogFromJson(body);
+    } finally {
+      client.close();
+    }
+  }
+
+  /// Removes the user catalog, reverting to the bundled example (if any).
+  Future<void> resetCatalog() async {
+    final file = await _userConsolesFile();
+    if (await file.exists()) await file.delete();
+    _consolesCache.clear();
+  }
+
+  Future<bool> hasUserCatalog() async => (await _userConsolesFile()).exists();
+
+  Future<List<Game>> loadCatalog(String consoleId,
+      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
     final consoles = await getConsoles();
 
     if (!consoles.containsKey(consoleId)) {
@@ -104,19 +161,37 @@ class CatalogService {
       }
     }
 
-    return _fetchCatalog(console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken);
+    return _fetchCatalog(console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken, onProgress: onProgress);
   }
 
-  Future<List<Game>> _fetchCatalog(Console console, {String? iaAccessKey, String? iaSecretKey, String? authToken}) async {
+  Future<List<Game>> _fetchCatalog(Console console,
+      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
 
     List<Game> catalog = [];
 
     try {
+      final total = console.urls.length;
+      var done = 0;
+      Object? firstError;
+      onProgress?.call(0, total);
       final results = await Future.wait(
-        console.urls.map((url) => _fetchFromUrl(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken)),
+        console.urls.map((url) =>
+            _fetchFromUrl(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken).then((games) {
+          onProgress?.call(++done, total);
+          return games;
+        }).catchError((Object e) {
+          // Keep partial results when only some pages fail; surface the
+          // error only when every page failed (e.g. auth required).
+          firstError ??= e;
+          onProgress?.call(++done, total);
+          return <Game>[];
+        })),
       );
+      if (firstError != null && results.every((r) => r.isEmpty)) {
+        throw firstError!;
+      }
 
       // Merge all results, sort alphabetically by title.
       catalog = results.expand((games) => games).toList()
@@ -127,6 +202,7 @@ class CatalogService {
       await cacheFile.writeAsString(jsonEncode(catalog.map((g) => g.toJson()).toList()));
     } catch (e) {
       debugPrint('Error fetching catalog: $e');
+      rethrow;
     } finally {
       client.close();
     }
@@ -140,7 +216,7 @@ class CatalogService {
     }
 
     final request = await client.getUrl(Uri.parse(url));
-    final headers = buildDownloadHeaders(url, _buildAuthHeaders(console.auth, tokenOverride: authToken));
+    final headers = buildDownloadHeaders(url, buildConsoleAuthHeaders(console.auth, tokenOverride: authToken));
     headers.forEach(request.headers.set);
 
     final response = await request.close();
@@ -173,6 +249,7 @@ class CatalogService {
 
     final body = await response.transform(utf8.decoder).join();
     final parsed = await compute(_parseIAMetadataIsolate, [body, console.toJson(), itemId]);
+    debugPrint('IA $itemId: body=${body.length}b parsed=${parsed.length} shouldUnzip=${console.shouldUnzip} fmts=${console.fileFormat}');
     return parsed.map((entry) => Game.fromJson(entry)).toList();
   }
 
@@ -181,21 +258,6 @@ class CatalogService {
   static String? _extractIAItemId(String url) {
     final match = RegExp(r'archive\.org/download/([^/]+)').firstMatch(url);
     return match?.group(1);
-  }
-
-  static Map<String, String> _buildAuthHeaders(Map<String, dynamic>? auth, {String? tokenOverride}) {
-    if (auth == null) return {};
-    // IA S3 auth is handled separately in _fetchFromUrlIA.
-    if (auth['type'] == 'ia_s3') return {};
-
-    final token = tokenOverride ?? auth['token'] as String?;
-    if (token == null || token.isEmpty) return {};
-
-    if (auth['cookies'] == true) {
-      final cookieName = auth['cookie_name'] as String? ?? 'auth_token';
-      return {'Cookie': '$cookieName=$token'};
-    }
-    return {'Authorization': 'Bearer $token'};
   }
 
   Future<File> _getCacheFile(String cacheFile) async {
@@ -240,6 +302,9 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
   final fileFormats = console['file_format'] != null
       ? List<String>.from(console['file_format'] as List).map((e) => e.toLowerCase()).toList()
       : <String>[];
+  // Zipped sets (should_unzip) are stored as .zip on IA; the ROM formats
+  // in file_format only exist inside the archives.
+  final shouldUnzip = console['should_unzip'] as bool? ?? false;
 
   final out = <Map<String, dynamic>>[];
 
@@ -254,16 +319,18 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
     // Filter by file_format if specified.
     if (fileFormats.isNotEmpty) {
       final ext = name.contains('.') ? '.${name.split('.').last.toLowerCase()}' : '';
-      if (!fileFormats.contains(ext)) continue;
+      if (!fileFormats.contains(ext) && !(shouldUnzip && ext == '.zip')) continue;
     }
 
     final sizeRaw = file['size'];
     final size = int.tryParse(sizeRaw?.toString() ?? '') ?? 0;
     final downloadUrl = '$_iaDownloadBase$itemId/${Uri.encodeComponent(name)}';
-    final metadata = TitleMetadataParser.parseRomTitle(name).toJson();
+    // Items may nest files in subdirectories — the title is the basename.
+    final title = name.split('/').last;
+    final metadata = TitleMetadataParser.parseRomTitle(title).toJson();
 
     out.add({
-      'title': name,
+      'title': title,
       'url': downloadUrl,
       'size': size,
       'consoleId': console['id'],
@@ -293,7 +360,8 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       : <String>[];
 
   final regExp = RegExp(
-    (console['regex'] as String?) ?? Console.fromJson(console).defaultRegex,
+    // Configs use Python-flavor named groups ((?P<name>...)); Dart wants (?<name>...).
+    ((console['regex'] as String?) ?? Console.fromJson(console).defaultRegex).replaceAll('(?P<', '(?<'),
     multiLine: true,
     dotAll: true,
   );
@@ -317,8 +385,17 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     // Resolve the display title.
     final text = _tryNamedGroup(match, 'text');
     final titleRaw = _tryNamedGroup(match, 'title');
-    final title = text ?? titleRaw ?? hrefGroup ?? idGroup ?? fullUrl;
+    String title = text ?? titleRaw ?? hrefGroup ?? idGroup ?? fullUrl;
     if (title == '.' || title == '..') continue;
+
+    // Template-based downloads (id + download_url) have no filename in the URL;
+    // give the title the console's extension so filenames/ids derive cleanly.
+    if (idGroup != null && downloadUrlTemplate != null && fileFormats.isNotEmpty) {
+      final lower = title.toLowerCase();
+      if (!fileFormats.any((ext) => lower.endsWith(ext))) {
+        title = '$title${fileFormats.first}';
+      }
+    }
 
     // File format filter (skip when ignore_extension_filtering is set).
     if (!ignoreExtFilter && fileFormats.isNotEmpty) {
@@ -330,12 +407,16 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     final size = sizeStr != null ? _parseSizeBytesIsolate(sizeStr) : 0;
 
     final metadata = TitleMetadataParser.parseRomTitle(title).toJson();
+    // Some configs (e.g. ultranx) capture a banner_url group — use it as the
+    // boxart, resolving relative paths against the catalog host.
+    final banner = _tryNamedGroup(match, 'banner_url');
     out.add({
       'title': title,
       'url': fullUrl,
       'size': size,
       'consoleId': console['id'],
       'metadata': metadata,
+      if (banner != null && banner.isNotEmpty) 'details': {'boxart': Uri.parse(baseUrl).resolve(banner).toString()},
     });
   }
 

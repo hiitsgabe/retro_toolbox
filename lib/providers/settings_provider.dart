@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:roms_downloader/models/settings_model.dart';
+import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
@@ -82,11 +84,28 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   }
 
   String getDownloadDir(String? consoleId) {
-    return getSetting(AppSettings.downloadDir, consoleId) ?? '';
+    // A console-specific directory override is used exactly as chosen;
+    // roms_folder only nests under the general download directory.
+    final override = consoleId != null ? getConsoleSetting<String>(consoleId, AppSettings.downloadDir) : null;
+    if (override != null && override.isNotEmpty) return override;
+
+    final base = getSetting(AppSettings.downloadDir, consoleId) ?? '';
+    final romsFolder = CatalogService.consoleByIdSync(consoleId)?.romsFolder;
+    if (base.isEmpty || romsFolder == null || romsFolder.isEmpty) return base;
+    return p.join(base, romsFolder);
   }
 
   bool getAutoExtract(String? consoleId) {
     return getSetting(AppSettings.autoExtract, consoleId) ?? true;
+  }
+
+  /// When true, archives extract into a per-game subfolder. Defaults to the
+  /// console config's extract_contents (true = extract into the download
+  /// directory root, matching console_utils semantics).
+  bool getExtractToFolder(String? consoleId) {
+    final explicit = getSetting<bool>(AppSettings.extractToFolder, consoleId);
+    if (explicit != null) return explicit;
+    return !(CatalogService.consoleByIdSync(consoleId)?.extractContents ?? true);
   }
 
   int getMaxParallelDownloads() {
@@ -117,14 +136,22 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return state.consoleSettings[consoleId]?.authToken;
   }
 
-  Future<void> setIaCredentials(String accessKey, String secretKey) async {
-    final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey);
+  Future<void> setIaCredentials(String accessKey, String secretKey, {String? cookies}) async {
+    final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey, iaCookies: cookies);
     state = newState;
     await _settingsService.saveSettings(newState);
   }
 
   Future<void> clearIaCredentials() async {
     final newState = state.copyWith(clearIaCredentials: true);
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
+  Future<void> setCatalogSourceUrl(String? url) async {
+    final newState = url == null || url.isEmpty
+        ? state.copyWith(clearCatalogSourceUrl: true)
+        : state.copyWith(catalogSourceUrl: url);
     state = newState;
     await _settingsService.saveSettings(newState);
   }

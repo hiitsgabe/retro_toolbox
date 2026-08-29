@@ -11,6 +11,7 @@ import 'package:roms_downloader/widgets/settings/favorites_settings.dart';
 import 'package:roms_downloader/widgets/settings/ia_credentials_setting.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/settings/nsz_setting.dart';
+import 'package:roms_downloader/widgets/settings/catalog_source_setting.dart';
 
 class SettingsContent extends StatelessWidget {
   final Console? selectedConsole;
@@ -61,6 +62,16 @@ class SettingsContent extends StatelessWidget {
                     console: selectedConsole,
                     settingsNotifier: settingsNotifier,
                   ),
+                  const SizedBox(height: 8),
+                  BooleanSetting(
+                    settingKey: AppSettings.extractToFolder,
+                    defaultValue: false,
+                    title: 'Extract Into Subfolder',
+                    subtitle: 'Extract each archive into its own folder instead of the download directory',
+                    icon: Icons.create_new_folder_outlined,
+                    console: selectedConsole,
+                    settingsNotifier: settingsNotifier,
+                  ),
                   if (selectedConsole == null) ...[
                     const SizedBox(height: 8),
                     NumberSetting(
@@ -93,7 +104,62 @@ class SettingsContent extends StatelessWidget {
           ),
            if (selectedConsole == null) ...[
             const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.dataset_outlined),
+                        const SizedBox(width: 12),
+                        Text('Catalog Source', style: Theme.of(context).textTheme.titleMedium),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Import a console catalog JSON file or load one from a URL.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    const CatalogSourceSetting(),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             const PermissionsSetting(),
+          ],
+          if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.compress),
+                        const SizedBox(width: 12),
+                        Text(
+                          'NSZ Decompression',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Decompress NS NSZ files after download.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 12),
+                    const NszSetting(),
+                  ],
+                ),
+              ),
+            ),
           ],
           if (selectedConsole != null && selectedConsole!.hasTokenAuth) ...[
             const SizedBox(height: 8),
@@ -168,34 +234,6 @@ class SettingsContent extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     const IaCredentialsSetting(),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.compress),
-                        const SizedBox(width: 12),
-                        Text(
-                          'NSZ Decompression',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Decompress Nintendo Switch NSZ files after download.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 12),
-                    const NszSetting(),
                   ],
                 ),
               ),

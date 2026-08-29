@@ -34,7 +34,9 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     final settingsNotifier = _ref.read(settingsProvider.notifier);
     final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
     final filePath = path.join(downloadDir, game.filename);
-    final extractionDir = path.join(path.dirname(filePath), path.basenameWithoutExtension(filePath));
+    final extractionDir = settingsNotifier.getExtractToFolder(game.consoleId)
+        ? path.join(path.dirname(filePath), path.basenameWithoutExtension(filePath))
+        : path.dirname(filePath);
 
     if (!DirectoryService.isCompressedFile(filePath)) {
       debugPrint('File is not compressed: $filePath');
@@ -205,7 +207,21 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       if (dir.isNotEmpty) {
         final snap = _ref.read(librarySnapshotProvider(dir).notifier);
         snap.markFileRemoved(game.filename);
-        snap.markDirAdded(path.basenameWithoutExtension(game.filename));
+        final baseNoExt = path.basenameWithoutExtension(game.filename);
+        if (_ref.read(settingsProvider.notifier).getExtractToFolder(game.consoleId)) {
+          snap.markDirAdded(baseNoExt);
+        } else {
+          // Root extraction: register the extracted sibling files.
+          try {
+            await for (final entity in Directory(dir).list(followLinks: false)) {
+              if (entity is File && path.basenameWithoutExtension(entity.path) == baseNoExt) {
+                snap.markFileAdded(path.basename(entity.path));
+              }
+            }
+          } catch (e) {
+            debugPrint('Error indexing extracted files: $e');
+          }
+        }
       }
     }
 
@@ -246,18 +262,16 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     queueNotifier.updateTaskStatus(taskId, TaskQueueStatus.failed, error: error);
 
     try {
+      // Only clean up per-game subfolders. In root-extraction mode the
+      // extraction dir IS the console download folder — never delete it.
+      final game = gameStateManager.state[taskId]?.game;
+      final downloadDir = game != null ? _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId) : '';
+      final isSubfolder = downloadDir.isNotEmpty && path.normalize(extractionDir) != path.normalize(downloadDir);
       final dir = Directory(extractionDir);
-      if (dir.existsSync()) {
+      if (isSubfolder && dir.existsSync()) {
         dir.deleteSync(recursive: true);
-
-        final game = gameStateManager.state[taskId]?.game;
-        if (game != null) {
-          final dir = _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
-          if (dir.isNotEmpty) {
-            final snap = _ref.read(librarySnapshotProvider(dir).notifier);
-            snap.markDirRemoved(path.basename(extractionDir));
-          }
-        }
+        final snap = _ref.read(librarySnapshotProvider(downloadDir).notifier);
+        snap.markDirRemoved(path.basename(extractionDir));
       }
     } catch (_) {}
 

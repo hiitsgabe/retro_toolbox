@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -13,6 +14,8 @@ import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
+import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/utils/network.dart';
 
 final downloadProvider = StateNotifierProvider<DownloadNotifier, DownloadState>((ref) {
   final catalogNotifier = ref.read(catalogProvider.notifier);
@@ -77,7 +80,8 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
       _triggerAutoExtraction(update.task.taskId);
     } else if (update.status == TaskStatus.failed) {
-      queueNotifier.updateTaskStatus(update.task.taskId, TaskQueueStatus.failed, error: error);
+      debugPrint('Download failed for ${update.task.taskId}: ${update.exception?.description ?? error ?? 'unknown'}');
+      queueNotifier.updateTaskStatus(update.task.taskId, TaskQueueStatus.failed, error: error ?? update.exception?.description);
     } else if (update.status == TaskStatus.canceled) {
       queueNotifier.updateTaskStatus(update.task.taskId, TaskQueueStatus.cancelled);
     }
@@ -92,6 +96,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       update.status,
       state.taskProgress[update.task.taskId],
       update.status == TaskStatus.complete,
+      error: error ?? update.exception?.description,
     );
 
     _updateDownloadingState();
@@ -343,6 +348,9 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     if (!isTaskDownloadable(taskId)) return;
 
+    // Create the target dir first — free-space checks on a missing dir read 0.
+    await Directory(downloadDir).create(recursive: true);
+
     // Check for sufficient disk space before downloading
     final freeSpace = await DirectoryService.getFreeSpace(downloadDir);
     if (freeSpace < game.size) {
@@ -355,12 +363,38 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     debugPrint('Executing download task for: $taskId -> $downloadDir/$fileName');
 
+    // Same auth as catalog fetches: console token (cookie/bearer) or IA S3 keys.
+    final settings = _ref.read(settingsProvider);
+    final console = (await CatalogService().getConsoles())[game.consoleId];
+    final isIaUrl = game.url.contains('archive.org/download/');
+    final headers = <String, String>{
+      ...buildConsoleAuthHeaders(console?.auth, tokenOverride: settings.consoleSettings[game.consoleId]?.authToken),
+      // Restricted ("loggedin") IA items only accept session cookies; S3 keys
+      // are kept as a fallback for older flows.
+      if (isIaUrl && (settings.iaCookies?.isNotEmpty ?? false))
+        'Cookie': settings.iaCookies!
+      else if (isIaUrl && (settings.iaAccessKey?.isNotEmpty ?? false) && (settings.iaSecretKey?.isNotEmpty ?? false))
+        'Authorization': 'LOW ${settings.iaAccessKey}:${settings.iaSecretKey}',
+    };
+
+    // Authenticated downloads: enqueue against the final URL — the downloader
+    // drops auth headers on cross-host redirects (archive.org data nodes).
+    var url = game.url;
+    if (headers.isNotEmpty) {
+      try {
+        url = await resolveRedirects(game.url, headers);
+      } catch (e) {
+        debugPrint('Redirect resolution failed for $taskId, using original URL: $e');
+      }
+    }
+
     final downloadTask = downloadService.createDownloadTask(
       taskId: taskId,
-      url: game.url,
+      url: url,
       fileName: fileName,
       directory: downloadDir,
       group: group,
+      headers: headers.isEmpty ? null : headers,
     );
 
     _tasks[taskId] = downloadTask;

@@ -179,6 +179,10 @@ class ExtractionService {
         sendPort.send({'type': 'progress', 'value': progress});
       });
       await _flattenSingleTopLevelDir(params['extractionDir']);
+      // Zips can carry mode-000 entries; make extracted files readable.
+      if (!Platform.isWindows) {
+        await Process.run('chmod', ['-R', 'u+rwX,go+rX', params['extractionDir']]);
+      }
       sendPort.send({'type': 'complete'});
     } catch (e) {
       debugPrint('Extraction error: $e');

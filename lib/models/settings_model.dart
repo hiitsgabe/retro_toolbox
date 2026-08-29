@@ -3,28 +3,34 @@ class AppSettings {
   static const String autoExtract = 'autoExtract';
   static const String maxParallelDownloads = 'maxParallelDownloads';
   static const String maxParallelExtractions = 'maxParallelExtractions';
+  static const String extractToFolder = 'extractToFolder';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
     autoExtract: bool,
     maxParallelDownloads: int,
     maxParallelExtractions: int,
+    extractToFolder: bool,
   };
 
   final Map<String, BaseSettings> consoleSettings;
   final BaseSettings generalSettings;
   final String? iaAccessKey;
   final String? iaSecretKey;
+  final String? iaCookies; // "logged-in-user=..; logged-in-sig=.." for restricted downloads
   final bool nszDecompressEnabled;
   final String? nszKeysPath;
+  final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
 
   const AppSettings({
     this.consoleSettings = const {},
     this.generalSettings = const BaseSettings(),
     this.iaAccessKey,
     this.iaSecretKey,
+    this.iaCookies,
     this.nszDecompressEnabled = false,
     this.nszKeysPath,
+    this.catalogSourceUrl,
   });
 
   bool get hasIaCredentials =>
@@ -38,18 +44,23 @@ class AppSettings {
     BaseSettings? generalSettings,
     String? iaAccessKey,
     String? iaSecretKey,
+    String? iaCookies,
     bool clearIaCredentials = false,
     bool? nszDecompressEnabled,
     String? nszKeysPath,
     bool clearNszKeysPath = false,
+    String? catalogSourceUrl,
+    bool clearCatalogSourceUrl = false,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
       generalSettings: generalSettings ?? this.generalSettings,
       iaAccessKey: clearIaCredentials ? null : (iaAccessKey ?? this.iaAccessKey),
       iaSecretKey: clearIaCredentials ? null : (iaSecretKey ?? this.iaSecretKey),
+      iaCookies: clearIaCredentials ? null : (iaCookies ?? this.iaCookies),
       nszDecompressEnabled: nszDecompressEnabled ?? this.nszDecompressEnabled,
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
+      catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
     );
   }
 
@@ -59,8 +70,10 @@ class AppSettings {
       'generalSettings': generalSettings.toJson(),
       if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
       if (iaSecretKey != null) 'iaSecretKey': iaSecretKey,
+      if (iaCookies != null) 'iaCookies': iaCookies,
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
+      if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
     };
   }
 
@@ -70,8 +83,10 @@ class AppSettings {
       generalSettings: BaseSettings.fromJson(json['generalSettings'] ?? {}),
       iaAccessKey: json['iaAccessKey'] as String?,
       iaSecretKey: json['iaSecretKey'] as String?,
+      iaCookies: json['iaCookies'] as String?,
       nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? false,
       nszKeysPath: json['nszKeysPath'] as String?,
+      catalogSourceUrl: json['catalogSourceUrl'] as String?,
     );
   }
 }
@@ -81,6 +96,7 @@ class BaseSettings {
   final bool? autoExtract;
   final int? maxParallelDownloads;
   final int? maxParallelExtractions;
+  final bool? extractToFolder;
   final String? authToken;
 
   const BaseSettings({
@@ -88,6 +104,7 @@ class BaseSettings {
     this.autoExtract,
     this.maxParallelDownloads,
     this.maxParallelExtractions,
+    this.extractToFolder,
     this.authToken,
   });
 
@@ -96,6 +113,7 @@ class BaseSettings {
     bool? autoExtract,
     int? maxParallelDownloads,
     int? maxParallelExtractions,
+    bool? extractToFolder,
     String? authToken,
     bool clearAuthToken = false,
   }) {
@@ -104,6 +122,7 @@ class BaseSettings {
       autoExtract: autoExtract ?? this.autoExtract ?? true,
       maxParallelDownloads: maxParallelDownloads ?? this.maxParallelDownloads ?? 5,
       maxParallelExtractions: maxParallelExtractions ?? this.maxParallelExtractions ?? 2,
+      extractToFolder: extractToFolder ?? this.extractToFolder,
       authToken: clearAuthToken ? null : (authToken ?? this.authToken),
     );
   }
@@ -114,6 +133,7 @@ class BaseSettings {
       AppSettings.autoExtract: autoExtract,
       AppSettings.maxParallelDownloads: maxParallelDownloads,
       AppSettings.maxParallelExtractions: maxParallelExtractions,
+      if (extractToFolder != null) AppSettings.extractToFolder: extractToFolder,
       if (authToken != null) 'authToken': authToken,
     };
   }
@@ -128,6 +148,8 @@ class BaseSettings {
         return maxParallelDownloads as T?;
       case AppSettings.maxParallelExtractions:
         return maxParallelExtractions as T?;
+      case AppSettings.extractToFolder:
+        return extractToFolder as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -143,6 +165,8 @@ class BaseSettings {
         return copyWith(maxParallelDownloads: value as int?);
       case AppSettings.maxParallelExtractions:
         return copyWith(maxParallelExtractions: value as int?);
+      case AppSettings.extractToFolder:
+        return copyWith(extractToFolder: value as bool?);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -154,6 +178,7 @@ class BaseSettings {
       autoExtract: json[AppSettings.autoExtract] as bool?,
       maxParallelDownloads: json[AppSettings.maxParallelDownloads] as int?,
       maxParallelExtractions: json[AppSettings.maxParallelExtractions] as int?,
+      extractToFolder: json[AppSettings.extractToFolder] as bool?,
       authToken: json['authToken'] as String?,
     );
   }

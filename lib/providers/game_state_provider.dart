@@ -43,7 +43,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     });
   }
 
-  void updateDownloadState(String gameId, TaskStatus? status, TaskProgressUpdate? progress, bool isCompleted) {
+  void updateDownloadState(String gameId, TaskStatus? status, TaskProgressUpdate? progress, bool isCompleted, {String? error}) {
     final current = state[gameId];
     if (current == null || current.status == GameStatus.extracting) return;
 
@@ -81,6 +81,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     } else if (status == TaskStatus.failed) {
       updated = current.copyWith(
         status: GameStatus.downloadFailed,
+        errorMessage: error,
         isInteractable: true,
         showProgressBar: false,
         availableActions: {GameAction.retryDownload, GameAction.cancel},

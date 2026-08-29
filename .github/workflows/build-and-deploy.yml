@@ -9,6 +9,9 @@ env:
   FLUTTER_VERSION: "3.35.7"
   FLUTTER_CHANNEL: "stable"
   PROPERTIES_PATH: "./android/key.properties"
+  # serious_python packaging staging dirs (consumed by the native builds)
+  SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/serious_python_app
+  SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
 
 jobs:
   build-android:
@@ -121,6 +124,8 @@ jobs:
 
       - name: Build macOS (${{ matrix.arch }})
         run: |
+          # SwiftPM cache-bust key from the packaging step (restaged natives)
+          export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
           if [ "${{ matrix.arch }}" == "arm64" ]; then
             flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin-arm64
           else
