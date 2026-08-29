@@ -20,24 +20,27 @@ class ToolsSetting extends ConsumerWidget {
 
     return Column(
       children: [
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          secondary: const Icon(Icons.sports_esports_outlined),
-          title: const Text('Steam Shortcut tool'),
-          subtitle: const Text('Show in the top-right menu'),
-          value: settings.steamToolEnabled,
-          onChanged: settingsNotifier.setSteamToolEnabled,
-        ),
-        SwitchListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          secondary: const Icon(Icons.videogame_asset_outlined),
-          title: const Text('Tinfoil Server tool'),
-          subtitle: const Text('Show in the top-right menu'),
-          value: settings.tinfoilToolEnabled,
-          onChanged: settingsNotifier.setTinfoilToolEnabled,
-        ),
+        // App-global tool toggles belong on the General tab, not per-console.
+        if (console == null) ...[
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.sports_esports_outlined),
+            title: const Text('Steam Shortcut tool'),
+            subtitle: const Text('Show in the top-right menu'),
+            value: settings.steamToolEnabled,
+            onChanged: settingsNotifier.setSteamToolEnabled,
+          ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.videogame_asset_outlined),
+            title: const Text('Tinfoil Server tool'),
+            subtitle: const Text('Show in the top-right menu'),
+            value: settings.tinfoilToolEnabled,
+            onChanged: settingsNotifier.setTinfoilToolEnabled,
+          ),
+        ],
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.delete_sweep),
