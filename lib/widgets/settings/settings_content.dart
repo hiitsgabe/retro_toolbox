@@ -8,7 +8,7 @@ import 'package:roms_downloader/widgets/settings/number_setting.dart';
 import 'package:roms_downloader/widgets/settings/permissions_setting.dart';
 import 'package:roms_downloader/widgets/settings/tools_setting.dart';
 import 'package:roms_downloader/widgets/settings/favorites_settings.dart';
-import 'package:roms_downloader/widgets/settings/ia_credentials_setting.dart';
+import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/settings/nsz_setting.dart';
 import 'package:roms_downloader/widgets/settings/catalog_source_setting.dart';
@@ -133,31 +133,10 @@ class SettingsContent extends StatelessWidget {
           ],
           if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
             const SizedBox(height: 8),
-            Card(
+            const Card(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.compress),
-                        const SizedBox(width: 12),
-                        Text(
-                          'NSZ Decompression',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Decompress NS NSZ files after download.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 12),
-                    const NszSetting(),
-                  ],
-                ),
+                padding: EdgeInsets.all(16.0),
+                child: NszSetting(),
               ),
             ),
           ],
@@ -219,21 +198,21 @@ class SettingsContent extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.archive_outlined),
+                        const Icon(Icons.manage_accounts_outlined),
                         const SizedBox(width: 12),
                         Text(
-                          'Internet Archive',
+                          'Accounts',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Log in to access restricted or private collections.',
+                      'Connect accounts for restricted or private collections.',
                       style: TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                    const SizedBox(height: 12),
-                    const IaCredentialsSetting(),
+                    const SizedBox(height: 4),
+                    const AccountsSetting(),
                   ],
                 ),
               ),

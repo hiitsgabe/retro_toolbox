@@ -8,7 +8,7 @@ import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/widgets/settings/ia_credentials_setting.dart';
+import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
 
 /// First-run onboarding: catalog source → download directory & defaults →
 /// optional Internet Archive connection.
@@ -359,15 +359,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             'Connect accounts for restricted sources. You can do this later in Settings.'),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [const Icon(Icons.archive_outlined), const SizedBox(width: 10), Text('Internet Archive', style: theme.textTheme.titleMedium)]),
-                const SizedBox(height: 12),
-                const IaCredentialsSetting(),
-              ],
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: const AccountsSetting(),
           ),
         ),
       ],
