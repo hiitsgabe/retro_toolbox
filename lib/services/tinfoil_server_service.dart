@@ -149,11 +149,19 @@ class TinfoilServerService {
     }
   }
 
-  static Future<List<String>> localAddresses(int port) async {
+  /// Local IPv4 addresses, home-LAN ones first (192.168.x is where a Switch
+  /// usually sits; Tailscale/CGNAT 100.64-127.x and docker nets are demoted).
+  static Future<List<String>> localAddresses() async {
     final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4, includeLoopback: false);
-    return [
-      for (final i in interfaces)
-        for (final a in i.addresses) 'http://${a.address}:$port'
-    ];
+    final ips = [for (final i in interfaces) for (final a in i.addresses) a.address];
+    int rank(String ip) {
+      if (ip.startsWith('192.168.')) return 0;
+      if (ip.startsWith('172.')) return 1;
+      if (ip.startsWith('10.') && !ip.startsWith('10.88.')) return 2;
+      return 3; // Tailscale CGNAT, docker bridges, etc.
+    }
+
+    ips.sort((a, b) => rank(a).compareTo(rank(b)));
+    return ips;
   }
 }
