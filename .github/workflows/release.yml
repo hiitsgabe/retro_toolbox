@@ -88,8 +88,12 @@ jobs:
     needs: [resolve-version, download-catalog]
     runs-on: ubuntu-latest
     steps:
+      # Check out the tag created by resolve-version — the plain github.sha is
+      # the pre-bump commit, which would build with the previous version.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -207,8 +211,12 @@ jobs:
       matrix:
         arch: [x64, arm64]
     steps:
+      # Check out the tag created by resolve-version — the plain github.sha is
+      # the pre-bump commit, which would build with the previous version.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -297,8 +305,12 @@ jobs:
     needs: [resolve-version, download-catalog]
     runs-on: ubuntu-latest
     steps:
+      # Check out the tag created by resolve-version — the plain github.sha is
+      # the pre-bump commit, which would build with the previous version.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -388,8 +400,12 @@ jobs:
     # VS 2022 image until the pinned Flutter version understands VS 2026.
     runs-on: windows-2022
     steps:
+      # Check out the tag created by resolve-version — the plain github.sha is
+      # the pre-bump commit, which would build with the previous version.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
