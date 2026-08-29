@@ -36,6 +36,13 @@ A Flutter app for browsing and downloading game collections from any HTTP/HTTPS 
 - **Multiple Source Types** — HTML directory listings, JSON APIs, Internet Archive metadata API
 - **Authentication** — Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
 
+### 🧰 Extra Tools
+Optional utilities, each toggled on under **Settings → Tools** and then shown in the top-right menu:
+- **Steam Shortcut Creator** — Search the Steam store and write `.steam` shortcut files into any folder
+- **Tinfoil Server** — Serve your Switch catalog to Tinfoil over the LAN; the app streams from the source and injects auth, so games install straight to the console
+- **NSZ Decompress** — Standalone NSZ→NSP decompression: pick a file and an output folder (prompts for `prod.keys` if unset)
+- **JDKV Server** — An embedded WebDAV server that syncs emulator save exports with JKSV on a Switch, both directions — the current save is backed up before any replace, and Switch→device pulls are confirmed per game
+
 ### 🖥️ Platforms
 - Android (primary), macOS, Windows, Linux
 

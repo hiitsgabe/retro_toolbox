@@ -126,7 +126,18 @@ body {
 
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
-section { padding: 108px 0; position: relative; }
+section { padding: 84px 0; position: relative; }
+
+/* Hairline between stacked sections gives rhythm instead of equal floating gaps. */
+section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+}
 
 .eyebrow {
   font-family: var(--pixel);
@@ -578,7 +589,26 @@ footer a:hover { text-decoration: underline; }
       <h3>Per-console settings</h3>
       <p>Override the download directory, extraction behavior and filters independently for every system.</p>
     </div>
+    <div class="card reveal">
+      <span class="ico">🎮</span>
+      <h3>Steam shortcut creator</h3>
+      <p>Search the Steam store and drop ready-to-scan <code>.steam</code> shortcut files into any folder.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🎯</span>
+      <h3>Tinfoil server</h3>
+      <p>Serve your Switch catalog to Tinfoil over the LAN — it streams and installs straight from the source, auth injected for you.</p>
+    </div>
+    <div class="card reveal">
+      <span class="ico">🔁</span>
+      <h3>Save sync with JKSV</h3>
+      <p>An embedded WebDAV server syncs emulator save exports with JKSV on a Switch, both directions — backed up before every replace.</p>
+    </div>
   </div>
+
+  <p class="lead reveal" style="margin-top:36px;margin-bottom:0">
+    Extra tools live behind a toggle in <strong>Settings → Tools</strong>, so the menu stays clean until you want them.
+  </p>
 </section>
 
 <section id="platforms" class="wrap">
@@ -652,7 +682,7 @@ flutter build apk --release</code></pre>
   </div>
 </section>
 
-<section class="wrap" style="padding-top:0">
+<section class="wrap">
   <div class="legal-box reveal" style="text-align:center">
     <h3 style="font-family:var(--pixel);font-size:13px;letter-spacing:1px;line-height:1.7;margin-bottom:14px">AN EXPERIMENT IN VIBE CODING</h3>
     <p style="color:var(--muted);max-width:62ch;margin:0 auto 26px">
