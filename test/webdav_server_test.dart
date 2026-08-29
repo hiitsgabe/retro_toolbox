@@ -23,8 +23,8 @@ void main() {
 
   setUp(() async {
     root = Directory.systemTemp.createTempSync('webdav_test');
-    final d = Directory(p.join(root.path, '010043600B6A6000'))..createSync();
-    File(p.join(d.path, 'slot00')).writeAsStringSync('savedata');
+    final export = Archive()..addFile(ArchiveFile('010043600B6A6000/slot00', 8, 'savedata'.codeUnits));
+    File(p.join(root.path, 'My Game.zip')).writeAsBytesSync(ZipEncoder().encode(export));
     server = WebDavServerService();
     await server.start(port: 0, backend: JksvBackend(root: root, nameFor: (_) => 'My Game'));
   });
