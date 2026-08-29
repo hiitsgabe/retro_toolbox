@@ -7,6 +7,7 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
@@ -242,26 +243,28 @@ class _HeaderState extends ConsumerState<Header> {
               ],
             ),
           ),
-          PopupMenuItem(
-            value: 'steam',
-            child: Row(
-              children: [
-                Icon(Icons.sports_esports_outlined, size: 18),
-                SizedBox(width: 12),
-                Text('Steam Shortcuts'),
-              ],
+          if (ref.read(settingsProvider).steamToolEnabled)
+            PopupMenuItem(
+              value: 'steam',
+              child: Row(
+                children: [
+                  Icon(Icons.sports_esports_outlined, size: 18),
+                  SizedBox(width: 12),
+                  Text('Steam Shortcuts'),
+                ],
+              ),
             ),
-          ),
-          PopupMenuItem(
-            value: 'tinfoil',
-            child: Row(
-              children: [
-                Icon(Icons.videogame_asset_outlined, size: 18),
-                SizedBox(width: 12),
-                Text('Tinfoil Server'),
-              ],
+          if (ref.read(settingsProvider).tinfoilToolEnabled)
+            PopupMenuItem(
+              value: 'tinfoil',
+              child: Row(
+                children: [
+                  Icon(Icons.videogame_asset_outlined, size: 18),
+                  SizedBox(width: 12),
+                  Text('Tinfoil Server'),
+                ],
+              ),
             ),
-          ),
           PopupMenuItem(
             value: 'about',
             child: Row(
