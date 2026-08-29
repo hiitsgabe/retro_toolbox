@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roms_downloader/models/console_model.dart';
+import 'package:roms_downloader/providers/app_state_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
+import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.
@@ -20,6 +25,7 @@ class TinfoilServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          ..._authSections(context, ref),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
@@ -68,6 +74,44 @@ class TinfoilServerScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Switch sources need a login token to download. Show each such console's
+  /// auth UI in an accordion — open when it still needs sign-in, collapsed once
+  /// authenticated so it stays out of the way.
+  List<Widget> _authSections(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final theme = Theme.of(context);
+    final consoles = ref.watch(appStateProvider).consolesList.where(
+          (c) => TinfoilServerService.isSwitchConsole(c) && c.hasTokenAuth,
+        );
+    if (consoles.isEmpty) return const [];
+
+    bool authed(Console c) =>
+        (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
+
+    return [
+      for (final c in consoles) ...[
+        Card(
+          margin: EdgeInsets.zero,
+          child: ExpansionTile(
+            // Rebuild the tile when auth flips so it collapses on sign-in.
+            key: ValueKey('auth_${c.id}_${authed(c)}'),
+            initiallyExpanded: !authed(c),
+            shape: const Border(),
+            leading: Icon(
+              authed(c) ? Icons.check_circle : Icons.lock_outline,
+              color: authed(c) ? Colors.green : theme.colorScheme.error,
+            ),
+            title: Text('${c.name} sign-in'),
+            subtitle: Text(authed(c) ? 'Authenticated' : 'Required to download'),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [ConsoleAuthSetting(console: c)],
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+    ];
   }
 
   Widget _connectionCard(BuildContext context, String host, int port) {
