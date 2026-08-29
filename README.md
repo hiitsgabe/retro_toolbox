@@ -2,6 +2,12 @@ A note on this project: this is an educational experiment in vibe coding and age
 
 # 🎮 Retro Toolbox
 
+<div align="center">
+  <img src="branding/banner.png" alt="Retro Toolbox" width="720"/>
+</div>
+
+<br>
+
 > ⚠️ **Disclaimer:** This application does not endorse piracy. Only download files you legally own.
 
 A Flutter app for browsing and downloading game collections from any HTTP/HTTPS file index. Parallel downloads, auto-extraction, NSZ decompression, boxart, favorites — with Android as the primary target.
