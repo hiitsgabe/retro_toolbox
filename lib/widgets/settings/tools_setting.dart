@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
 
 class ToolsSetting extends ConsumerWidget {
   final Console? console;
@@ -14,17 +15,42 @@ class ToolsSetting extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogNotifier = ref.read(catalogProvider.notifier);
+    final settings = ref.watch(settingsProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
 
-    return ListTile(
-      leading: const Icon(Icons.delete_sweep),
-      title: const Text('Clear Catalog Cache'),
-      subtitle: console != null
-          ? const Text('Clear cache for this console')
-          : const Text('Clear cache for all consoles'),
-      trailing: IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () => _showClearCacheDialog(context, catalogNotifier),
-      ),
+    return Column(
+      children: [
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.sports_esports_outlined),
+          title: const Text('Steam Shortcut tool'),
+          subtitle: const Text('Show in the top-right menu'),
+          value: settings.steamToolEnabled,
+          onChanged: settingsNotifier.setSteamToolEnabled,
+        ),
+        SwitchListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.videogame_asset_outlined),
+          title: const Text('Tinfoil Server tool'),
+          subtitle: const Text('Show in the top-right menu'),
+          value: settings.tinfoilToolEnabled,
+          onChanged: settingsNotifier.setTinfoilToolEnabled,
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.delete_sweep),
+          title: const Text('Clear Catalog Cache'),
+          subtitle: console != null
+              ? const Text('Clear cache for this console')
+              : const Text('Clear cache for all consoles'),
+          trailing: IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () => _showClearCacheDialog(context, catalogNotifier),
+          ),
+        ),
+      ],
     );
   }
 

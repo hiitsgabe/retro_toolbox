@@ -21,6 +21,8 @@ class AppSettings {
   final bool nszDecompressEnabled;
   final String? nszKeysPath;
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
+  final bool steamToolEnabled;
+  final bool tinfoilToolEnabled;
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -31,6 +33,8 @@ class AppSettings {
     this.nszDecompressEnabled = true,
     this.nszKeysPath,
     this.catalogSourceUrl,
+    this.steamToolEnabled = false,
+    this.tinfoilToolEnabled = false,
   });
 
   bool get hasIaCredentials =>
@@ -51,6 +55,8 @@ class AppSettings {
     bool clearNszKeysPath = false,
     String? catalogSourceUrl,
     bool clearCatalogSourceUrl = false,
+    bool? steamToolEnabled,
+    bool? tinfoilToolEnabled,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -61,6 +67,8 @@ class AppSettings {
       nszDecompressEnabled: nszDecompressEnabled ?? this.nszDecompressEnabled,
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
+      steamToolEnabled: steamToolEnabled ?? this.steamToolEnabled,
+      tinfoilToolEnabled: tinfoilToolEnabled ?? this.tinfoilToolEnabled,
     );
   }
 
@@ -74,6 +82,8 @@ class AppSettings {
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
+      'steamToolEnabled': steamToolEnabled,
+      'tinfoilToolEnabled': tinfoilToolEnabled,
     };
   }
 
@@ -87,6 +97,8 @@ class AppSettings {
       nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? true,
       nszKeysPath: json['nszKeysPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
+      steamToolEnabled: json['steamToolEnabled'] as bool? ?? false,
+      tinfoilToolEnabled: json['tinfoilToolEnabled'] as bool? ?? false,
     );
   }
 }
