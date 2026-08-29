@@ -16,19 +16,28 @@ void main() {
   test('buildIndex produces tinfoil file list and route map', () {
     final sw = makeConsole('switch', ['.nsz']);
     final games = [
-      const Game(title: 'Zelda TOTK.nsz', url: 'https://x/z.nsz', size: 123, consoleId: 'switch'),
-      const Game(title: 'Mario: Odyssey.nsz', url: 'https://x/m.nsz', size: 456, consoleId: 'switch'),
+      const Game(title: 'Alpha Title.nsz', url: 'https://host.example/a.nsz', size: 123, consoleId: 'switch'),
+      const Game(title: 'Beta: Title.nsz', url: 'https://host.example/b.nsz', size: 456, consoleId: 'switch'),
     ];
     final (index, routes) = TinfoilServerService.buildIndex({sw: games}, '192.168.1.5:8000');
 
     final files = index['files'] as List;
     expect(files.length, 2);
-    expect(files[0]['url'], 'http://192.168.1.5:8000/dl/switch/0/Zelda%20TOTK.nsz');
+    expect(files[0]['url'], 'http://192.168.1.5:8000/dl/switch/0/Alpha%20Title.nsz');
     expect(files[0]['size'], 123);
     expect(index['success'], contains('2'));
 
-    expect(routes['switch/0']!.game.title, 'Zelda TOTK.nsz');
+    expect(routes['switch/0']!.game.title, 'Alpha Title.nsz');
     // Filename is sanitized for the URL path but keeps a readable title.
-    expect(routes['switch/1']!.fileName, 'Mario_ Odyssey.nsz');
+    expect(routes['switch/1']!.fileName, 'Beta_ Title.nsz');
+  });
+
+  test('filename embeds the title ID from the URL for Tinfoil metadata', () {
+    final sw = makeConsole('switch', ['.nsz']);
+    final games = [
+      const Game(title: 'Sample Game.nsz', url: 'https://host.example/download/0100000000ABC000/base', size: 1, consoleId: 'switch'),
+    ];
+    final (_, routes) = TinfoilServerService.buildIndex({sw: games}, 'h:8000');
+    expect(routes['switch/0']!.fileName, 'Sample Game [0100000000ABC000].nsz');
   });
 }
