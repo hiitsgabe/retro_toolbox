@@ -90,8 +90,8 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
   Future<void> enable() async {
     try {
       await _service.start(port: state.port, loadGames: _loadGames, authHeaders: _authHeaders);
-      final addresses = await TinfoilServerService.localAddresses(_service.port);
-      state = state.copyWith(running: true, addresses: addresses, clearError: true);
+      final addresses = await TinfoilServerService.localAddresses();
+      state = state.copyWith(running: true, addresses: addresses, port: _service.port, clearError: true);
       if (Platform.isAndroid) {
         await FlutterForegroundTask.startService(
           serviceId: 2,
