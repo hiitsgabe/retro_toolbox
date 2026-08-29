@@ -16,7 +16,6 @@ class JdkvServerScreen extends ConsumerWidget {
     final state = ref.watch(jdkvServerProvider);
     final notifier = ref.read(jdkvServerProvider.notifier);
     final theme = Theme.of(context);
-    final host = state.addresses.isNotEmpty ? state.addresses.first : null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('JDKV Server')),
@@ -55,9 +54,9 @@ class JdkvServerScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
           ],
-          if (state.running && host != null) ...[
+          if (state.running && state.addresses.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _connectionCard(context, host, state.port),
+            _connectionCard(context, state.addresses, state.port),
             const SizedBox(height: 16),
             _instructions(theme),
           ],
@@ -120,9 +119,8 @@ class JdkvServerScreen extends ConsumerWidget {
     );
   }
 
-  Widget _connectionCard(BuildContext context, String host, int port) {
+  Widget _connectionCard(BuildContext context, List<String> addresses, int port) {
     final theme = Theme.of(context);
-    final json = '{\n  "origin": "http://$host:$port"\n}';
     return Card(
       margin: EdgeInsets.zero,
       color: theme.colorScheme.primaryContainer,
@@ -133,31 +131,44 @@ class JdkvServerScreen extends ConsumerWidget {
           children: [
             Text('On the Switch: sdmc:/config/JKSV/webdav.json',
                 style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+            const SizedBox(height: 4),
+            Text('Use the address on your LAN (copy the matching webdav.json).',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surface.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SelectableText(json,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    tooltip: 'Copy',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: json));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('webdav.json copied'), duration: Duration(seconds: 1)),
-                      );
-                    },
-                  ),
-                ],
-              ),
+            for (final ip in addresses) _addressRow(context, ip, port),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _addressRow(BuildContext context, String ip, int port) {
+    final theme = Theme.of(context);
+    final json = '{\n  "origin": "http://$ip:$port"\n}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: SelectableText('http://$ip:$port',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.copy, size: 18),
+              tooltip: 'Copy webdav.json for this address',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: json));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('webdav.json for $ip copied'), duration: const Duration(seconds: 1)),
+                );
+              },
             ),
           ],
         ),
