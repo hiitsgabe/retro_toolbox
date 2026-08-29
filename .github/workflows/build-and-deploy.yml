@@ -1,4 +1,4 @@
-name: Build and Deploy ROMs Downloader
+name: Build and Deploy Retro Toolbox
 
 on:
   push:
@@ -136,10 +136,10 @@ jobs:
         run: |
           # Create a temporary directory for DMG contents
           mkdir -p dmg_contents
-          cp -R "build/macos/Build/Products/Release/ROMs Downloader.app" dmg_contents/
+          cp -R "build/macos/Build/Products/Release/Retro Toolbox.app" dmg_contents/
           
           # Create DMG
-          hdiutil create -volname "ROMs Downloader ${{ matrix.arch }}" \
+          hdiutil create -volname "Retro Toolbox ${{ matrix.arch }}" \
             -srcfolder dmg_contents \
             -ov -format UDZO \
             "ROMs_Downloader_macOS_${{ matrix.arch }}.dmg"
@@ -209,7 +209,7 @@ jobs:
 
       - name: Generate download links summary
         run: |
-          echo "# 🚀 ROMs Downloader - Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "# 🚀 Retro Toolbox - Build Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Build completed successfully! Download links for all platforms and architectures:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

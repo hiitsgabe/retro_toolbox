@@ -1,110 +1,172 @@
-# ROMs Downloader
-A tool to download files from an index page.
+A note on this project: this is an educational experiment in vibe coding and agentic AI — built to see how far AI agents can take a real, useful app from scratch. Non-commercial, personal, and a genuine attempt to create something cool. I'll never ask you to donate because of this. If you find a bug or have an idea, open an issue. Pull requests are always welcome!
 
-Coincidentally, it can be used for downloading ROM collections in cases where you **legally** own those ROMs.
+# 🎮 Retro Toolbox
 
-I plan to add more utilities that I often need for my voluntary work at my church and dog shelter, like described below in the [Features/Future](#featuresfuture) section.
+> ⚠️ **Disclaimer:** This application does not endorse piracy. Only download files you legally own.
 
-## Data
+A Flutter app for browsing and downloading game collections from any HTTP/HTTPS file index. Parallel downloads, auto-extraction, NSZ decompression, boxart, favorites — with Android as the primary target.
 
-No catalog ships with the app. A **fictional** example is provided at
-[`docs/consoles.example.json`](docs/consoles.example.json) to document the schema — it points at
-`example.com` placeholders only. Bring your own index URLs; the maintainers do not own nor recommend any source.
+---
+
+## ✨ Features
+
+### 📥 Download Management
+- **Parallel Downloads** — Queue multiple downloads at once with configurable concurrency and real-time progress
+- **Background Service** — Downloads keep running when the app is backgrounded (foreground service on Android)
+- **Auto-Extraction** — ZIP archives extracted automatically after download, optionally into per-game subfolders
+- **NSZ Decompression** — Decompress Nintendo Switch NSZ archives using a bundled Python runtime — no external tools needed
+
+### 🔍 Browsing & Search
+- **Grid & List Views** — Switch between grid layout with box art or a compact list view
+- **Search** — Filter games by name in real time
+- **Region Filtering** — USA-only filter with configurable regex per system
+- **In-Library Detection** — See which titles you already have downloaded
+- **Favorites** — Mark games as favorites, filter by them, export and import your list
+
+### ⚙️ System Management
+- **Custom Catalogs** — Bring your own JSON catalog or load one from a URL in-app. No catalog is bundled
+- **Per-Console Settings** — Override download directory, extraction behavior, and more per system
+- **Multiple Source Types** — HTML directory listings, JSON APIs, Internet Archive metadata API
+- **Authentication** — Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
+
+### 🖥️ Platforms
+- Android (primary), macOS, Windows, Linux
+
+---
+
+## 📊 Data
+
+No catalog ships with the app. A fictional example is at [`docs/consoles.example.json`](docs/consoles.example.json) — it points at `example.com` placeholders only. The maintainers do not own or recommend any source.
 
 Provide a catalog in either of these ways:
 
-- **In the app** — General Settings → *Catalog Source* → import a JSON file or load one from a URL. It's saved to the app's config directory and used on the next load.
-- **At build time** (optional) — drop your catalog at `assets/catalog/consoles.json` before building. That path is git-ignored, so it bundles into your build without being committed.
+- **In-app** — General Settings → *Catalog Source* → import a JSON file or load from a URL
+- **At build time** — drop your catalog at `assets/catalog/consoles.json` before building (git-ignored, so it bundles without being committed)
 
-### Auth config
+See [`docs/adding-a-system.md`](docs/adding-a-system.md) for the full schema reference.
 
-Systems that require authentication can declare an `auth` object:
+---
 
-```json
-"auth": {
-  "cookies": true,
-  "cookie_name": "auth_token",
-  "token": "",
-  "auth_message": "Instructions shown to the user in settings and on catalog load failures.",
-  "signin": {
-    "register_url": "https://example.com",
-    "url": "https://api.example.com/auth/login",
-    "method": "POST",
-    "params": ["username", "password"],
-    "token_regex": "\"access_token\"\\s*:\\s*\"([^\"]+)\""
-  }
-}
+## 🚀 Building
+
+### Prerequisites
+
+- Flutter SDK (`>=3.35.7`)
+- Dart SDK (`>=3.0.0`)
+- Python 3.x (for packaging the embedded Python runtime)
+
+### Steps
+
+```bash
+flutter pub get
+
+# Package the embedded Python app — run once, and again after changing python_app/ or bumping serious_python
+dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
+# Use -p Darwin for macOS, -p Windows for Windows
+
+# macOS only: export the SPM cache key before every build/run
+export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
+
+flutter build apk --release        # Android
+flutter build macos --release      # macOS
+flutter build windows --release    # Windows
 ```
 
-Two ways for the user to provide a token (both available when `signin` is present):
+### CI / Builds
 
-- **Manual token** — the user pastes a token in the system's settings. Sent as `Authorization: Bearer <token>`, or as a `<cookie_name>=<token>` cookie when `cookies` is `true`. A default can be shipped in `token`.
-- **Sign in** (`signin` object) — settings render one input per name in `params`, plus a *Create account* link opening `register_url`. Submitting calls `url` with the given `method` and a form-encoded body of the params; the token is extracted from the response body by `token_regex` (capture group 1) and saved as the manual token would be. Credentials are not stored.
+GitHub Actions builds Android (arm64-v8a, armeabi-v7a, x86_64), macOS (x64, arm64), and Windows (x64, arm64). The workflow runs `dart run serious_python:main package` per platform before building.
 
-For Internet Archive sources use `"type": "ia_s3"` with the IA access/secret keys configured in the general settings instead.
+Latest builds are on the [workflow runs page](../../actions/workflows/build-and-deploy.yml) (GitHub login required).
 
-## Downloading builds
+---
 
-I'm currently not relying on releases **JUST BECAUSE**. Meanwhile you can access the latest builds in the [build workflow page](https://github.com/rafaismyname/roms_downloader/actions/workflows/build-and-deploy.yml).
-*Note: You must be logged in to GitHub to access the workflow page and download the build.*
+## 📁 Project Structure
 
-## Instructions
+```
+lib/
+  models/          # Data models (console, settings, task queue, download)
+  providers/       # Riverpod state providers
+  services/        # Business logic (download, extraction, NSZ, catalog, auth)
+  widgets/         # UI widgets
+    settings/      # Settings screens and cards
+    game_list/     # Game browsing, grid and list views
+python_app/        # Bundled Python runtime for NSZ decompression
+  main.py          # Entry point (called by serious_python)
+  nsz/             # Embedded NSZ library
+  requirements.txt
+docs/              # Configuration guides
+assets/
+  catalog/         # Drop consoles.json here for bundled catalog (git-ignored)
+  boxarts/         # Cached boxart (git-ignored)
+```
 
-- Clone.
-- Provide a catalog: import one in-app (General Settings → Catalog Source) or drop it at `assets/catalog/consoles.json` before building. See the [Data](#data) section.
-- For NSZ decompression support, package the embedded Python app once before building (repeat after changing `python_app/` or bumping `serious_python`):
+---
 
-  ```sh
-  export SERIOUS_PYTHON_APP="$PWD/build/serious_python_app"
-  export SERIOUS_PYTHON_SITE_PACKAGES="$PWD/build/site-packages"
-  dart run serious_python:main package python_app -p <Darwin|Android|Windows> -r zstandard -r pycryptodome
-  # macOS/SwiftPM: export the cache key before EVERY build/run — without it the
-  # build drops the Python native frameworks (symbol not found at runtime)
-  export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
-  ```
-- Build, run, be happy.
-- Treat others as you would like to be treated.
+## 📦 Dependencies
 
-## Features/Future
-- [x] Async loading and display of multiple console indexes/catalogs
-- [x] Parallel, independent downloads with background support and tasks queue
-- [x] Search and filter titles (by country/language, type, extension, etc.)
-- [x] Change and customize download destination folder and settings per console
-- [x] Unzip and auto-extract downloaded files (background unzip, in-library detection (extracted/similar-named files))
-- [x] Allow custom consoles and settings via JSON
-- [x] Navigate/search other consoles while downloads/extractions are in progress
-- [ ] Collections/Lists
-- [x] Permissions control
-- [x] Boxart fetching
-- [x] Favorites, filter favorites and favorite list export/import
-- [x] Filter by in-library
-- [ ] Settings for file cache folder
-- [x] Grid viewer
-- [ ] Game metadata (rating, description, etc.)
-- [ ] List sorting
-- [x] Info/About page
-- [x] Android, Mac, and Windows support
-- [ ] Linux and handheld Linux support (untested)
-- [ ] ~~iOS support~~ No iOS support for now, *cry about it*.
+| Package | Purpose |
+|---|---|
+| `flutter_riverpod` | State management |
+| `background_downloader` | Parallel downloads with background service |
+| `serious_python` | Bundled CPython runtime for NSZ decompression |
+| `archive` / `flutter_archive` | ZIP extraction |
+| `file_picker` | File/directory selection |
+| `path_provider` | Platform-specific directories |
+| `shared_preferences` | Settings persistence |
+| `cached_network_image` | Boxart display with caching |
+| `flutter_foreground_task` | Foreground service on Android |
+| `rapidfuzz` | Fuzzy search |
+| `photo_view` | Full-screen image viewer |
+| `permission_handler` | Storage and notification permissions |
 
-## Technologies
+---
 
-- Flutter
-- Serotonin
+## 📖 Documentation
 
-## Tests
+- 📄 [Adding a System](docs/adding-a-system.md) — catalog JSON schema, source types, auth, boxart
+- 📄 [Server Response Format](docs/server-response-format.md) — how your server should respond for the app to parse files
+- 📝 [Example Catalog](docs/consoles.example.json) — annotated JSON example
 
-Not yet! Feel free to add tests.
+---
 
-## Stable?
+## ⚖️ Legal Notice
 
-**Heck no!** I will still bring a lot of breaking changes to this.
+⚠️ **IMPORTANT:**
 
-## License
+- **No Content Hosted** — This app does not host, store, or distribute ROM files, ISOs, or any copyrighted content. It is a download manager.
+- **No Game Copies** — No games, ROMs, or copyrighted gaming content are included.
+- **Example Configs Only** — Any included configuration files are examples demonstrating the schema. They do not endorse any specific download source.
+- **Your Responsibility** — You are solely responsible for ensuring you have the legal right to download any content, and for complying with copyright laws in your jurisdiction.
+- **No Liability** — The developers and contributors assume no responsibility for misuse of this software.
+
+**By using this software, you acknowledge these responsibilities and agree to use it only for lawful purposes.**
+
+---
+
+## 🙏 Credits
+
+- **[rafaismyname](https://github.com/rafaismyname)** — original project base this is built on
+- **[nicoboss/nsz](https://github.com/nicoboss/nsz)** — NSZ/NSP decompression library (embedded in `python_app/nsz/`)
+
+---
+
+## 🐛 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| No games showing | Verify the system `url` is reachable and `file_format` matches actual files |
+| Downloads failing | Check available disk space and storage permissions |
+| Thumbnails not loading | Verify the `boxarts` base URL is correct and accessible |
+| NSZ decompression failing | Make sure `python_app/` was packaged with `dart run serious_python:main package` before building |
+
+---
+
+## 📜 License
 
 MIT
 
-## Author(s)
+---
 
-- [rafaismyname](https://github.com/rafaismyname)
-- Your name here? open a PR!
+## 🤝 Contributing
+
+Pull requests are welcome — from humans and AI agents alike! For major changes, open an issue first. Let's build something cool together.

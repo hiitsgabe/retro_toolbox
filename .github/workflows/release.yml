@@ -1,0 +1,406 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    branches:
+      - main
+
+env:
+  FLUTTER_VERSION: "3.35.7"
+  FLUTTER_CHANNEL: "stable"
+  SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/serious_python_app
+  SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.resolve.outputs.VERSION }}
+      version_name: ${{ steps.resolve.outputs.VERSION_NAME }}
+      build_number: ${{ steps.resolve.outputs.BUILD_NUMBER }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and bump version
+        id: resolve
+        run: |
+          CURRENT=$(grep '^version:' pubspec.yaml | sed 's/version: //')
+          VERSION_NAME=$(echo "$CURRENT" | cut -d'+' -f1)
+          BUILD_NUMBER=$(echo "$CURRENT" | cut -d'+' -f2)
+
+          IFS='.' read -r VMAJOR VMINOR VPATCH <<< "$VERSION_NAME"
+          VPATCH=$((VPATCH + 1))
+          if [ "$VPATCH" -gt 9 ]; then
+            VPATCH=0
+            VMINOR=$((VMINOR + 1))
+            if [ "$VMINOR" -gt 9 ]; then
+              VMINOR=0
+              VMAJOR=$((VMAJOR + 1))
+            fi
+          fi
+
+          NEW_VERSION_NAME="${VMAJOR}.${VMINOR}.${VPATCH}"
+          NEW_BUILD_NUMBER=$((BUILD_NUMBER + 1))
+          NEW_VERSION="${NEW_VERSION_NAME}+${NEW_BUILD_NUMBER}"
+          TAG="v${NEW_VERSION_NAME}"
+
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" pubspec.yaml
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add pubspec.yaml
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git push origin main
+          git tag "$TAG"
+          git push origin "$TAG"
+
+          echo "VERSION=$TAG" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$NEW_VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "BUILD_NUMBER=$NEW_BUILD_NUMBER" >> $GITHUB_OUTPUT
+
+  download-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download catalog
+        run: |
+          mkdir -p assets/catalog
+          if [ -n "${{ secrets.EXAMPLE_DATA_URL }}" ]; then
+            curl -L -o assets/catalog/consoles.json "${{ secrets.EXAMPLE_DATA_URL }}"
+            echo "Catalog downloaded successfully"
+          else
+            echo "No EXAMPLE_DATA_URL secret set — skipping catalog bundle"
+            echo '[]' > assets/catalog/consoles.json
+          fi
+
+      - name: Upload catalog artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog
+          path: assets/catalog/consoles.json
+          retention-days: 1
+
+  build-android:
+    needs: [resolve-version, download-catalog]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Apply keystore
+        run: |
+          echo storeFile=\${{ secrets.KEY_STORE_PATH }} > ./android/key.properties
+          echo password=\${{ secrets.KEY_PASSWORD }} >> ./android/key.properties
+          echo keyAlias=\${{ secrets.KEY_ALIAS }} >> ./android/key.properties
+          echo "${{ secrets.KEYSTORE64 }}" | base64 --decode > android/${{ secrets.KEY_STORE_PATH }}
+
+      - name: Download catalog
+        uses: actions/download-artifact@v4
+        with:
+          name: catalog
+          path: assets/catalog/
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Package Python app for Android
+        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
+
+      - name: Build Android APKs (split ABI)
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build Android universal APK
+        run: flutter build apk --release
+
+      - name: Build Android App Bundle
+        run: flutter build appbundle --release
+
+      - name: Rename artifacts
+        run: |
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk retro_toolbox_arm64.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk retro_toolbox_arm32.apk
+          cp build/app/outputs/flutter-apk/app-release.apk retro_toolbox_universal.apk
+          cp build/app/outputs/bundle/release/app-release.aab retro_toolbox.aab
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: |
+            retro_toolbox_arm64.apk
+            retro_toolbox_arm32.apk
+            retro_toolbox_universal.apk
+            retro_toolbox.aab
+          retention-days: 30
+
+  build-macos:
+    needs: [resolve-version, download-catalog]
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Download catalog
+        uses: actions/download-artifact@v4
+        with:
+          name: catalog
+          path: assets/catalog/
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Package Python app for macOS
+        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome
+
+      - name: Install CocoaPods
+        run: cd macos && pod install
+
+      - name: Build macOS (${{ matrix.arch }})
+        run: |
+          export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin-arm64
+          else
+            flutter build macos --release --dart-define=FLUTTER_TARGET_PLATFORM=darwin-x64
+          fi
+
+      - name: Create DMG (${{ matrix.arch }})
+        run: |
+          mkdir -p dmg_contents
+          cp -R "build/macos/Build/Products/Release/Retro Toolbox.app" dmg_contents/
+          hdiutil create -volname "Retro Toolbox ${{ matrix.arch }}" \
+            -srcfolder dmg_contents \
+            -ov -format UDZO \
+            "retro_toolbox_macos_${{ matrix.arch }}.dmg"
+
+      - name: Upload DMG (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg-${{ matrix.arch }}
+          path: retro_toolbox_macos_${{ matrix.arch }}.dmg
+          retention-days: 30
+
+  build-windows:
+    needs: [resolve-version, download-catalog]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Download catalog
+        uses: actions/download-artifact@v4
+        with:
+          name: catalog
+          path: assets/catalog/
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Package Python app for Windows
+        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows (x64)
+        run: flutter build windows --release
+
+      - name: Create ZIP
+        run: Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath retro_toolbox_windows_x64.zip
+
+      - name: Upload Windows ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: retro_toolbox_windows_x64.zip
+          retention-days: 30
+
+  release:
+    needs: [resolve-version, build-android, build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Android APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apks
+          path: dist/
+
+      - name: Download macOS DMG (x64)
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg-x64
+          path: dist/
+
+      - name: Download macOS DMG (arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg-arm64
+          path: dist/
+
+      - name: Download Windows ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-zip
+          path: dist/
+
+      - name: Generate release notes with AI
+        id: ai_notes
+        run: |
+          TAG=${{ needs.resolve-version.outputs.version }}
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1)
+
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
+            COMMITS=$(git log "$PREV_TAG".."$TAG" --pretty=format:"- %s" --no-merges 2>/dev/null || git log --pretty=format:"- %s" --no-merges -20)
+          else
+            COMMITS=$(git log --pretty=format:"- %s" --no-merges -20)
+          fi
+
+          echo "Commits since $PREV_TAG:"
+          echo "$COMMITS"
+
+          RESPONSE=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${{ secrets.OPENROUTER_API_KEY }}" \
+            -d "$(jq -n \
+              --arg commits "$COMMITS" \
+              --arg version "$TAG" \
+              '{
+                "model": "minimax/minimax-m1",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": ("Generate concise release notes for " + $version + " of Retro Toolbox (a Flutter app for downloading and managing game collections). Group changes by category (New Features, Improvements, Bug Fixes). Use markdown with emoji prefixes. Be brief — one line per change, no fluff. Only include what the commits describe, do not invent features. Ignore commits that only change CI/CD pipelines, GitHub Actions workflows, README, docs, CLAUDE.md, or other non-functional changes — only include user-facing changes.\n\nCommits:\n" + $commits)
+                  }
+                ],
+                "max_tokens": 1024
+              }')")
+
+          AI_NOTES=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$AI_NOTES" ]; then
+            echo "AI generation failed, using commit list as fallback"
+            AI_NOTES=$(printf "### Changes\n\n%s" "$COMMITS")
+          fi
+
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          echo "notes<<${EOF_MARKER}" >> $GITHUB_OUTPUT
+          echo "$AI_NOTES" >> $GITHUB_OUTPUT
+          echo "${EOF_MARKER}" >> $GITHUB_OUTPUT
+
+          echo "Generated release notes:"
+          echo "$AI_NOTES"
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.version }}
+          name: Retro Toolbox ${{ needs.resolve-version.outputs.version }}
+          body: |
+            ## Retro Toolbox ${{ needs.resolve-version.outputs.version }}
+
+            ${{ steps.ai_notes.outputs.notes || '' }}
+
+            ---
+
+            ### Downloads
+
+            | Platform | File | Description |
+            |----------|------|-------------|
+            | 🤖 Android (arm64) | `retro_toolbox_arm64.apk` | Modern Android devices |
+            | 🤖 Android (arm32) | `retro_toolbox_arm32.apk` | Older Android devices |
+            | 🤖 Android (universal) | `retro_toolbox_universal.apk` | All architectures |
+            | 🤖 Android (Play Store) | `retro_toolbox.aab` | App Bundle for Play Store |
+            | 🍎 macOS (Apple Silicon) | `retro_toolbox_macos_arm64.dmg` | M1/M2/M3 Macs |
+            | 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |
+            | 🪟 Windows | `retro_toolbox_windows_x64.zip` | Windows x64 |
+
+            ### Android Installation
+            1. Download the APK for your device (`arm64` for most modern phones)
+            2. Enable "Install from unknown sources" in your settings if needed
+            3. Install the APK
+
+            ### macOS Installation
+            1. Download the DMG for your Mac
+            2. Open the DMG and drag **Retro Toolbox.app** to Applications
+            3. Right-click → Open on first launch to bypass Gatekeeper
+
+            ### Windows Installation
+            1. Download and extract `retro_toolbox_windows_x64.zip`
+            2. Run `retro_toolbox.exe`
+          files: |
+            dist/retro_toolbox_arm64.apk
+            dist/retro_toolbox_arm32.apk
+            dist/retro_toolbox_universal.apk
+            dist/retro_toolbox.aab
+            dist/retro_toolbox_macos_x64.dmg
+            dist/retro_toolbox_macos_arm64.dmg
+            dist/retro_toolbox_windows_x64.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old releases (keep last 2)
+        run: |
+          gh release list --json tagName --limit 100 -q '.[].tagName' | tail -n +3 | while read tag; do
+            echo "Deleting release: $tag"
+            gh release delete "$tag" --yes
+            git push --delete origin "$tag" 2>/dev/null || true
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
