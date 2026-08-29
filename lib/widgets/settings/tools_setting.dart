@@ -40,6 +40,15 @@ class ToolsSetting extends ConsumerWidget {
             value: settings.tinfoilToolEnabled,
             onChanged: settingsNotifier.setTinfoilToolEnabled,
           ),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.compress),
+            title: const Text('NSZ Decompress tool'),
+            subtitle: const Text('Show in the top-right menu'),
+            value: settings.nszToolEnabled,
+            onChanged: settingsNotifier.setNszToolEnabled,
+          ),
         ],
         ListTile(
           contentPadding: EdgeInsets.zero,

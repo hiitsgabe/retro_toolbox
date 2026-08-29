@@ -178,6 +178,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
+  Future<void> setNszToolEnabled(bool enabled) async {
+    final newState = state.copyWith(nszToolEnabled: enabled);
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
   Future<void> setNszKeysPath(String keysPath) async {
     final newState = state.copyWith(
       nszKeysPath: keysPath.isEmpty ? null : keysPath,
