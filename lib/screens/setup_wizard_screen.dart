@@ -379,7 +379,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ExpansionTile(
                 key: ValueKey('signin_${c.id}_${authed(c)}'),
-                initiallyExpanded: !authed(c),
+                initiallyExpanded: false,
                 shape: const Border(),
                 collapsedShape: const Border(),
                 tilePadding: EdgeInsets.zero,
