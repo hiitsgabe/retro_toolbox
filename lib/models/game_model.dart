@@ -63,7 +63,24 @@ class Game {
     final last = segments.isEmpty ? '' : segments.last;
     // API-style URLs (e.g. .../download/<id>/base) carry no real filename —
     // fall back to the title so ids stay unique and files get proper names.
-    return last.contains('.') ? last : title.replaceAll('/', '-');
+    return sanitizeForFat(last.contains('.') ? last : title);
+  }
+
+  // FAT/exFAT-illegal filename chars. Handheld ROM SD cards are almost always
+  // exFAT; creating a file whose name contains one of these fails with EPERM on
+  // the FUSE mount — a title like "...Prime 4: Beyond" (colon) silently fails to
+  // download/extract while a legal-named title in the same folder works. Every
+  // on-disk path derives from this getter, so sanitizing here keeps download,
+  // extraction and library-snapshot all agreeing on one safe name.
+  static final _exfatIllegal = RegExp(r'[<>:"/\\|?*\x00-\x1f]');
+
+  static String sanitizeForFat(String name) {
+    final cleaned = name
+        .replaceAll(_exfatIllegal, ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim()
+        .replaceFirst(RegExp(r'[. ]+$'), ''); // trailing dot/space also illegal
+    return cleaned.isEmpty ? 'output' : cleaned;
   }
 
   String get gameId => '$consoleId/$filename';
