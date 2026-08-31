@@ -51,6 +51,54 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     await fileDownloader.resumeFromBackground();
 
     await _syncWithBackgroundTasks();
+
+    await _resumeInterruptedNsz();
+  }
+
+  /// A crash/kill mid-batch (e.g. the app dying during decompression) leaves a
+  /// downloaded `.nsz` on disk that never got processed. background_downloader
+  /// resumes the downloads themselves, but nothing re-drives decompression, so
+  /// on startup we scan the download dirs and re-queue any leftover `.nsz`.
+  Future<void> _resumeInterruptedNsz() async {
+    try {
+      final settings = _ref.read(settingsProvider.notifier);
+      if (!settings.getNszDecompressEnabled()) return;
+      final keysPath = settings.getNszKeysPath() ?? '';
+      if (keysPath.isEmpty) return; // can't decompress without keys
+
+      final consoles = await CatalogService().getConsoles();
+      final queueNotifier = _ref.read(taskQueueProvider.notifier);
+      final scanned = <String>{};
+
+      for (final consoleId in consoles.keys) {
+        final dir = settings.getDownloadDir(consoleId);
+        if (dir.isEmpty || !scanned.add(dir)) continue;
+        final directory = Directory(dir);
+        if (!await directory.exists()) continue;
+
+        await for (final entity in directory.list()) {
+          if (entity is! File || !entity.path.toLowerCase().endsWith('.nsz')) continue;
+
+          final filename = p.basename(entity.path);
+          final taskId = '$consoleId/$filename';
+
+          // Skip anything still downloading or already queued.
+          final status = state.taskStatus[taskId];
+          if (status == TaskStatus.running || status == TaskStatus.enqueued) continue;
+          if (_ref.read(taskQueueProvider).tasks.any((t) => t.id == taskId)) continue;
+
+          debugPrint('Resuming interrupted NSZ decompression: ${entity.path}');
+          queueNotifier.enqueue(taskId, TaskType.nszDecompression, {
+            'taskId': taskId,
+            'nszFilePath': entity.path,
+            'outputDir': dir,
+            'keysPath': keysPath,
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Resume interrupted NSZ scan failed: $e');
+    }
   }
 
   void _handleStatusUpdate(TaskStatusUpdate update, [String? error]) {
