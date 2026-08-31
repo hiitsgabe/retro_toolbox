@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 /// Plain `dart:io` filesystem browser.
 ///
@@ -17,13 +18,11 @@ class PathBrowser extends StatefulWidget {
     super.key,
     required this.title,
     required this.initialDir,
-    this.directoriesOnly = false,
     this.allowedExtensions,
   });
 
   final String title;
   final String initialDir;
-  final bool directoriesOnly;
 
   /// Lowercase, no leading dot. Null shows every file.
   final List<String>? allowedExtensions;
@@ -32,7 +31,6 @@ class PathBrowser extends StatefulWidget {
     BuildContext context, {
     required String title,
     required String initialDir,
-    bool directoriesOnly = false,
     List<String>? allowedExtensions,
   }) {
     return showDialog<String>(
@@ -40,7 +38,6 @@ class PathBrowser extends StatefulWidget {
       builder: (_) => PathBrowser(
         title: title,
         initialDir: initialDir,
-        directoriesOnly: directoriesOnly,
         allowedExtensions: allowedExtensions,
       ),
     );
@@ -54,6 +51,7 @@ class _PathBrowserState extends State<PathBrowser> {
   late String _dir;
   List<Directory> _dirs = [];
   List<File> _files = [];
+  Map<String, String> _volumes = const {};
   bool _loading = true;
   String? _error;
 
@@ -62,6 +60,31 @@ class _PathBrowserState extends State<PathBrowser> {
     super.initState();
     _dir = widget.initialDir;
     _load(_dir);
+    _loadVolumes();
+  }
+
+  /// Internal storage and any SD card, as `root path -> label`.
+  ///
+  /// `/storage` itself usually can't be listed, so walking up from
+  /// `/storage/emulated/0` is a dead end and there is no other way to reach a
+  /// removable card. `getExternalStorageDirectories` reports one app-specific
+  /// dir per mounted volume — trimming `/Android/...` off each gives the roots.
+  Future<void> _loadVolumes() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final dirs = await getExternalStorageDirectories() ?? const <Directory>[];
+      final volumes = <String, String>{};
+      for (final d in dirs) {
+        final marker = d.path.indexOf('/Android/');
+        if (marker <= 0) continue;
+        final root = d.path.substring(0, marker);
+        volumes[root] = root == '/storage/emulated/0' ? 'Internal storage' : 'SD card (${p.basename(root)})';
+      }
+      if (!mounted || volumes.length < 2) return;
+      setState(() => _volumes = volumes);
+    } catch (_) {
+      // Volume shortcuts are a convenience; browsing still works without them.
+    }
   }
 
   bool _allowed(File f) {
@@ -79,7 +102,7 @@ class _PathBrowserState extends State<PathBrowser> {
     try {
       final entries = await Directory(path).list(followLinks: false).toList();
       final dirs = entries.whereType<Directory>().toList();
-      final files = widget.directoriesOnly ? <File>[] : entries.whereType<File>().where(_allowed).toList();
+      final files = entries.whereType<File>().where(_allowed).toList();
       int byName(FileSystemEntity a, FileSystemEntity b) => p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
       dirs.sort(byName);
       files.sort(byName);
@@ -128,6 +151,27 @@ class _PathBrowserState extends State<PathBrowser> {
                 ],
               ),
             ),
+            if (_volumes.isNotEmpty)
+              SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    for (final entry in _volumes.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Center(
+                          child: ChoiceChip(
+                            label: Text(entry.value),
+                            selected: _dir == entry.key || p.isWithin(entry.key, _dir),
+                            onSelected: (_) => _load(entry.key),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             const Divider(height: 1),
             Flexible(child: _body(theme, canGoUp, parent)),
             const Divider(height: 1),
@@ -137,13 +181,6 @@ class _PathBrowserState extends State<PathBrowser> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                  if (widget.directoriesOnly) ...[
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context, _dir),
-                      child: const Text('Use this folder'),
-                    ),
-                  ],
                 ],
               ),
             ),
