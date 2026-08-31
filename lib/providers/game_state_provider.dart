@@ -162,6 +162,12 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     try {
       final snap = _ref.read(librarySnapshotProvider(downloadDir).notifier);
       final presence = await snap.getStatus(game.filename);
+      // A follow-up task (auto-extract, NSZ decompress) is enqueued in a
+      // microtask as soon as the download completes, so it can claim the game
+      // while this presence lookup is still in flight. Whoever moved the status
+      // off `loading` owns it now — overwriting with a disk-derived status here
+      // would show the game as done until the next extraction progress tick.
+      if (state[gameId]?.status != GameStatus.loading) return;
       final status = presence.toGameStatus();
 
       _updateState(
@@ -174,6 +180,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
                 hasJustCompleted: hasJustCompleted,
               ));
     } catch (_) {
+      if (state[gameId]?.status != GameStatus.loading) return;
       _updateState(
           gameId,
           (s) => s.copyWith(
