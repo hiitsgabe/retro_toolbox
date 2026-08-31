@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Retro Toolbox — Download / Extract / Play</title>
-<meta name="description" content="A Flutter app for browsing and downloading game collections from any HTTP/HTTPS file index. Parallel downloads, auto-extraction, NSZ decompression, boxart and favorites.">
+<title>Retro Toolbox | Download, Extract, Play</title>
+<meta name="description" content="Turn any HTTP file index into a browsable game library. Parallel downloads, automatic extraction, NSZ decompression, box art and favorites.">
 <meta name="theme-color" content="#0d0620">
 
 <meta property="og:type" content="website">
@@ -126,7 +126,14 @@ body {
 
 .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
-section { padding: 84px 0; position: relative; }
+section { padding: 64px 0; position: relative; }
+
+/* Lucide replaces each <i data-lucide> with an <svg>, carrying its class over,
+   so target both the element and a child svg to be version-agnostic. */
+.ico, .ico svg { color: var(--purple-light); stroke-width: 1.75; }
+.card .ico, .card .ico svg { width: 26px; height: 26px; }
+.plat .ico, .plat .ico svg { width: 28px; height: 28px; }
+.disclaimer svg, .disclaimer .ico { width: 1em; height: 1em; vertical-align: -2px; }
 
 /* Hairline between stacked sections gives rhythm instead of equal floating gaps. */
 section::before {
@@ -264,7 +271,7 @@ nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9)
 
 /* ---------- hero ---------- */
 
-.hero { padding: 92px 0 96px; text-align: center; }
+.hero { padding: 80px 0 64px; text-align: center; }
 
 .hero-logo {
   width: 190px;
@@ -298,25 +305,6 @@ nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9)
 .hero p.sub { color: var(--muted); max-width: 58ch; margin: 0 auto 38px; font-size: 18px; }
 
 .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-
-.badges {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 40px;
-}
-
-.badge {
-  font-family: var(--pixel);
-  font-size: 9px;
-  letter-spacing: 1px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  background: var(--surface);
-}
 
 .disclaimer {
   margin: 52px auto 0;
@@ -366,7 +354,7 @@ nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9)
 
 .card:hover::before { opacity: 1; }
 
-.card .ico { font-size: 26px; margin-bottom: 14px; display: block; }
+.card .ico { margin-bottom: 14px; display: block; }
 .card p { color: var(--muted); font-size: 15.5px; }
 
 /* ---------- platform strip ---------- */
@@ -387,7 +375,7 @@ nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9)
 }
 
 .plat:hover { transform: translateY(-5px); border-color: var(--purple-light); background: rgba(165, 108, 232, 0.09); }
-.plat .ico { font-size: 30px; display: block; margin-bottom: 10px; }
+.plat .ico { display: block; margin: 0 auto 10px; color: var(--purple-light); }
 .plat strong { font-family: var(--pixel); font-size: 10px; letter-spacing: 1px; display: block; margin-bottom: 6px; }
 .plat span { color: var(--muted); font-size: 13.5px; }
 
@@ -513,27 +501,19 @@ footer a:hover { text-decoration: underline; }
 </nav>
 
 <header class="hero wrap" id="top">
-  <img class="hero-logo" src="assets/logo.png" alt="Retro Toolbox logo — a pixel-art hammer with a lightning bolt">
+  <img class="hero-logo" src="assets/logo.png" alt="Retro Toolbox logo">
   <h1><span class="grad">RETRO TOOLBOX</span></h1>
   <p class="tagline">DOWNLOAD / EXTRACT / PLAY</p>
   <p class="sub">
-    A Flutter app that turns any HTTP file index into a browsable game library.
-    Parallel downloads, automatic extraction, NSZ decompression, box art and favorites — built Android-first.
+    Turn any HTTP file index into a browsable game library. Queue parallel downloads, extract
+    archives automatically, decompress Switch NSZ files, and browse it all with box art and favorites.
   </p>
   <div class="hero-actions">
     <a class="btn btn-primary" href="https://github.com/hiitsgabe/retro_toolbox/releases/latest">Get the latest release</a>
     <a class="btn btn-ghost" href="https://github.com/hiitsgabe/retro_toolbox">View on GitHub</a>
   </div>
-  <div class="badges">
-    <span class="badge">FLUTTER</span>
-    <span class="badge">ANDROID</span>
-    <span class="badge">MACOS</span>
-    <span class="badge">WINDOWS</span>
-    <span class="badge">LINUX</span>
-    <span class="badge">MIT</span>
-  </div>
   <p class="disclaimer">
-    <strong>⚠️ Disclaimer:</strong> This application does not endorse piracy, and ships with no catalog and no content.
+    <strong><i data-lucide="triangle-alert"></i> Disclaimer:</strong> This application does not endorse piracy, and ships with no catalog and no content.
     Only download files you legally own.
   </p>
 </header>
@@ -545,68 +525,68 @@ footer a:hover { text-decoration: underline; }
 
   <div class="cards">
     <div class="card reveal">
-      <span class="ico">⚡</span>
+      <i data-lucide="zap" class="ico"></i>
       <h3>Parallel downloads</h3>
       <p>Queue as many titles as you want with configurable concurrency and live per-file progress.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">📲</span>
+      <i data-lucide="smartphone" class="ico"></i>
       <h3>Keeps going in the background</h3>
-      <p>Downloads survive backgrounding via a real foreground service on Android — no babysitting the screen.</p>
+      <p>Downloads survive backgrounding through a real foreground service on Android.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">📦</span>
+      <i data-lucide="archive" class="ico"></i>
       <h3>Auto-extraction</h3>
       <p>ZIP archives unpack automatically once they land, optionally into a subfolder per game.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🔧</span>
+      <i data-lucide="package-open" class="ico"></i>
       <h3>NSZ decompression</h3>
-      <p>Switch NSZ archives are decompressed by a bundled CPython runtime. No external tools, no desktop round-trip.</p>
+      <p>Switch NSZ archives decompress on device with a bundled Python runtime. No external tools, no desktop round-trip.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🖼️</span>
+      <i data-lucide="layout-grid" class="ico"></i>
       <h3>Box art &amp; grid view</h3>
       <p>Browse a cover grid or a compact list, with cached art and a full-screen viewer.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🔍</span>
+      <i data-lucide="search" class="ico"></i>
       <h3>Search &amp; filters</h3>
-      <p>Fuzzy search, region filtering with per-system regex, and in-library detection so you never grab a dupe.</p>
+      <p>Search by name, filter by region with per-system regex, and see which titles you already have.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">⭐</span>
+      <i data-lucide="star" class="ico"></i>
       <h3>Favorites</h3>
       <p>Star titles, filter down to them, and export or import the list between devices.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🔌</span>
+      <i data-lucide="server" class="ico"></i>
       <h3>Bring your own source</h3>
-      <p>HTML directory listings, JSON APIs, or the Internet Archive metadata API — with bearer, cookie and interactive auth.</p>
+      <p>HTML directory listings, JSON APIs, or the Internet Archive metadata API, with bearer, cookie and interactive auth.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🎛️</span>
+      <i data-lucide="sliders-horizontal" class="ico"></i>
       <h3>Per-console settings</h3>
       <p>Override the download directory, extraction behavior and filters independently for every system.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🎮</span>
+      <i data-lucide="gamepad-2" class="ico"></i>
       <h3>Steam shortcut creator</h3>
       <p>Search the Steam store and drop ready-to-scan <code>.steam</code> shortcut files into any folder.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🎯</span>
+      <i data-lucide="cast" class="ico"></i>
       <h3>Tinfoil server</h3>
-      <p>Serve your Switch catalog to Tinfoil over the LAN — it streams and installs straight from the source, auth injected for you.</p>
+      <p>Serve your Switch catalog to Tinfoil over the LAN. It streams and installs straight from the source, with auth injected for you.</p>
     </div>
     <div class="card reveal">
-      <span class="ico">🔁</span>
+      <i data-lucide="refresh-cw" class="ico"></i>
       <h3>Save sync with JKSV</h3>
-      <p>An embedded WebDAV server syncs emulator save exports with JKSV on a Switch, both directions — backed up before every replace.</p>
+      <p>An embedded WebDAV server syncs emulator save exports with JKSV on a Switch, both directions, backed up before every replace.</p>
     </div>
   </div>
 
-  <p class="lead reveal" style="margin-top:36px;margin-bottom:0">
+  <p class="lead reveal" style="margin-top:32px;margin-bottom:0">
     Extra tools live behind a toggle in <strong>Settings → Tools</strong>, so the menu stays clean until you want them.
   </p>
 </section>
@@ -617,17 +597,17 @@ footer a:hover { text-decoration: underline; }
   <p class="lead reveal">Signed APKs, universal builds and an App Bundle ship on every release, alongside desktop packages.</p>
 
   <div class="platforms">
-    <div class="plat reveal"><span class="ico">🤖</span><strong>ANDROID</strong><span>arm64 · arm32 · universal · AAB</span></div>
-    <div class="plat reveal"><span class="ico">🍎</span><strong>MACOS</strong><span>Apple Silicon &amp; Intel DMG</span></div>
-    <div class="plat reveal"><span class="ico">🪟</span><strong>WINDOWS</strong><span>x64 portable ZIP</span></div>
-    <div class="plat reveal"><span class="ico">🐧</span><strong>LINUX</strong><span>build from source</span></div>
+    <div class="plat reveal"><i data-lucide="smartphone" class="ico"></i><strong>ANDROID</strong><span>arm64 · arm32 · universal · AAB</span></div>
+    <div class="plat reveal"><i data-lucide="laptop" class="ico"></i><strong>MACOS</strong><span>Apple Silicon &amp; Intel DMG</span></div>
+    <div class="plat reveal"><i data-lucide="monitor" class="ico"></i><strong>WINDOWS</strong><span>x64 portable ZIP</span></div>
+    <div class="plat reveal"><i data-lucide="terminal" class="ico"></i><strong>LINUX</strong><span>build from source</span></div>
   </div>
 </section>
 
 <section id="setup" class="wrap">
   <p class="eyebrow reveal">Getting started</p>
   <h2 class="reveal">Up and running in <span class="grad">four steps</span></h2>
-  <p class="lead reveal">No catalog ships with the app — you supply your own source.</p>
+  <p class="lead reveal">No catalog ships with the app. You supply your own source.</p>
 
   <div class="steps">
     <div class="step reveal">
@@ -682,18 +662,6 @@ flutter build apk --release</code></pre>
   </div>
 </section>
 
-<section class="wrap">
-  <div class="legal-box reveal" style="text-align:center">
-    <h3 style="font-family:var(--pixel);font-size:13px;letter-spacing:1px;line-height:1.7;margin-bottom:14px">AN EXPERIMENT IN VIBE CODING</h3>
-    <p style="color:var(--muted);max-width:62ch;margin:0 auto 26px">
-      This is an educational experiment in vibe coding and agentic AI — built to see how far AI agents can take a real,
-      useful app from scratch. Non-commercial, personal, and a genuine attempt to make something cool.
-      You'll never be asked to donate. Found a bug or have an idea? Open an issue — pull requests always welcome.
-    </p>
-    <a class="btn btn-ghost" href="https://github.com/hiitsgabe/retro_toolbox/issues">Open an issue</a>
-  </div>
-</section>
-
 <footer>
   <div class="wrap">
     <img src="assets/logo.png" alt="">
@@ -711,9 +679,13 @@ flutter build apk --release</code></pre>
   </div>
 </footer>
 
+<script src="https://unpkg.com/lucide@latest"></script>
 <script>
 (function () {
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Replace <i data-lucide> placeholders with inline SVG icons.
+  if (window.lucide) lucide.createIcons();
 
   // sticky nav border
   var nav = document.getElementById('nav');

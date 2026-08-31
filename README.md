@@ -1,67 +1,65 @@
-A note on this project: this is an educational experiment in vibe coding and agentic AI — built to see how far AI agents can take a real, useful app from scratch. Non-commercial, personal, and a genuine attempt to create something cool. I'll never ask you to donate because of this. If you find a bug or have an idea, open an issue. Pull requests are always welcome!
-
-# 🎮 Retro Toolbox
+# Retro Toolbox
 
 <div align="center">
   <img src="branding/banner.png" alt="Retro Toolbox" width="720"/>
-  <p><a href="https://hiitsgabe.github.io/retro_toolbox/"><strong>🌐 Visit the website</strong></a></p>
+  <p><a href="https://hiitsgabe.github.io/retro_toolbox/"><strong>Visit the website</strong></a></p>
 </div>
 
 <br>
 
-> ⚠️ **Disclaimer:** This application does not endorse piracy. Only download files you legally own.
+> **Disclaimer:** This application does not endorse piracy. Only download files you legally own.
 
-A Flutter app for browsing and downloading game collections from any HTTP/HTTPS file index. Parallel downloads, auto-extraction, NSZ decompression, boxart, favorites — with Android as the primary target.
+A cross-platform app for browsing and downloading game collections from any HTTP or HTTPS file index. Parallel downloads, automatic extraction, NSZ decompression, box art and favorites, with Android as the primary target.
 
 ---
 
-## ✨ Features
+## Features
 
-### 📥 Download Management
-- **Parallel Downloads** — Queue multiple downloads at once with configurable concurrency and real-time progress
-- **Background Service** — Downloads keep running when the app is backgrounded (foreground service on Android)
-- **Auto-Extraction** — ZIP archives extracted automatically after download, optionally into per-game subfolders
-- **NSZ Decompression** — Decompress Nintendo Switch NSZ archives using a bundled Python runtime — no external tools needed
+### Download Management
+- **Parallel Downloads:** Queue multiple downloads at once with configurable concurrency and real-time progress
+- **Background Service:** Downloads keep running when the app is backgrounded (foreground service on Android)
+- **Auto-Extraction:** ZIP archives extracted automatically after download, optionally into per-game subfolders
+- **NSZ Decompression:** Decompress Nintendo Switch NSZ archives with a bundled Python runtime, no external tools needed
 
-### 🔍 Browsing & Search
-- **Grid & List Views** — Switch between grid layout with box art or a compact list view
-- **Search** — Filter games by name in real time
-- **Region Filtering** — USA-only filter with configurable regex per system
-- **In-Library Detection** — See which titles you already have downloaded
-- **Favorites** — Mark games as favorites, filter by them, export and import your list
+### Browsing & Search
+- **Grid & List Views:** Switch between a grid layout with box art or a compact list view
+- **Search:** Filter games by name in real time
+- **Region Filtering:** Region filter with configurable regex per system
+- **In-Library Detection:** See which titles you already have downloaded
+- **Favorites:** Mark games as favorites, filter by them, export and import your list
 
-### ⚙️ System Management
-- **Custom Catalogs** — Bring your own JSON catalog or load one from a URL in-app. No catalog is bundled
-- **Per-Console Settings** — Override download directory, extraction behavior, and more per system
-- **Multiple Source Types** — HTML directory listings, JSON APIs, Internet Archive metadata API
-- **Authentication** — Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
+### System Management
+- **Custom Catalogs:** Bring your own JSON catalog or load one from a URL in-app. No catalog is bundled
+- **Per-Console Settings:** Override download directory, extraction behavior, and more per system
+- **Multiple Source Types:** HTML directory listings, JSON APIs, Internet Archive metadata API
+- **Authentication:** Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
 
-### 🧰 Extra Tools
-Optional utilities, each toggled on under **Settings → Tools** and then shown in the top-right menu:
-- **Steam Shortcut Creator** — Search the Steam store and write `.steam` shortcut files into any folder
-- **Tinfoil Server** — Serve your Switch catalog to Tinfoil over the LAN; the app streams from the source and injects auth, so games install straight to the console
-- **NSZ Decompress** — Standalone NSZ→NSP decompression: pick a file and an output folder (prompts for `prod.keys` if unset)
-- **JDKV Server** — An embedded WebDAV server that syncs emulator save exports with JKSV on a Switch, both directions — the current save is backed up before any replace, and Switch→device pulls are confirmed per game
+### Extra Tools
+Optional utilities, each toggled on under **Settings > Tools** and then shown in the top-right menu:
+- **Steam Shortcut Creator:** Search the Steam store and write `.steam` shortcut files into any folder
+- **Tinfoil Server:** Serve your Switch catalog to Tinfoil over the LAN. The app streams from the source and injects auth, so games install straight to the console
+- **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
+- **JDKV Server:** An embedded WebDAV server that syncs emulator save exports with JKSV on a Switch, both directions. The current save is backed up before any replace, and pulls back to the device are confirmed per game
 
-### 🖥️ Platforms
+### Platforms
 - Android (primary), macOS, Windows, Linux
 
 ---
 
-## 📊 Data
+## Data
 
-No catalog ships with the app. A fictional example is at [`docs/consoles.example.json`](docs/consoles.example.json) — it points at `example.com` placeholders only. The maintainers do not own or recommend any source.
+No catalog ships with the app. A fictional example is at [`docs/consoles.example.json`](docs/consoles.example.json). It points at `example.com` placeholders only. The maintainers do not own or recommend any source.
 
 Provide a catalog in either of these ways:
 
-- **In-app** — General Settings → *Catalog Source* → import a JSON file or load from a URL
-- **At build time** — drop your catalog at `assets/catalog/consoles.json` before building (git-ignored, so it bundles without being committed)
+- **In-app:** General Settings > *Catalog Source* > import a JSON file or load from a URL
+- **At build time:** drop your catalog at `assets/catalog/consoles.json` before building (git-ignored, so it bundles without being committed)
 
 See [`docs/adding-a-system.md`](docs/adding-a-system.md) for the full schema reference.
 
 ---
 
-## 🚀 Building
+## Building
 
 ### Prerequisites
 
@@ -74,7 +72,7 @@ See [`docs/adding-a-system.md`](docs/adding-a-system.md) for the full schema ref
 ```bash
 flutter pub get
 
-# Package the embedded Python app — run once, and again after changing python_app/ or bumping serious_python
+# Package the embedded Python app. Run once, and again after changing python_app/ or bumping serious_python
 dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
 # Use -p Darwin for macOS, -p Windows for Windows
 
@@ -90,11 +88,11 @@ flutter build windows --release    # Windows
 
 GitHub Actions builds Android (arm64-v8a, armeabi-v7a, x86_64), macOS (x64, arm64), and Windows (x64, arm64). The workflow runs `dart run serious_python:main package` per platform before building.
 
-Latest builds are on the [workflow runs page](../../actions/workflows/build-and-deploy.yml) (GitHub login required).
+Latest builds are on the [Actions page](../../actions) (GitHub login required).
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 lib/
@@ -116,7 +114,7 @@ assets/
 
 ---
 
-## 📦 Dependencies
+## Dependencies
 
 | Package | Purpose |
 |---|---|
@@ -135,36 +133,36 @@ assets/
 
 ---
 
-## 📖 Documentation
+## Documentation
 
-- 📄 [Adding a System](docs/adding-a-system.md) — catalog JSON schema, source types, auth, boxart
-- 📄 [Server Response Format](docs/server-response-format.md) — how your server should respond for the app to parse files
-- 📝 [Example Catalog](docs/consoles.example.json) — annotated JSON example
+- [Adding a System](docs/adding-a-system.md): catalog JSON schema, source types, auth, boxart
+- [Server Response Format](docs/server-response-format.md): how your server should respond for the app to parse files
+- [Example Catalog](docs/consoles.example.json): annotated JSON example
 
 ---
 
-## ⚖️ Legal Notice
+## Legal Notice
 
-⚠️ **IMPORTANT:**
+**IMPORTANT:**
 
-- **No Content Hosted** — This app does not host, store, or distribute ROM files, ISOs, or any copyrighted content. It is a download manager.
-- **No Game Copies** — No games, ROMs, or copyrighted gaming content are included.
-- **Example Configs Only** — Any included configuration files are examples demonstrating the schema. They do not endorse any specific download source.
-- **Your Responsibility** — You are solely responsible for ensuring you have the legal right to download any content, and for complying with copyright laws in your jurisdiction.
-- **No Liability** — The developers and contributors assume no responsibility for misuse of this software.
+- **No Content Hosted:** This app does not host, store, or distribute ROM files, ISOs, or any copyrighted content. It is a download manager.
+- **No Game Copies:** No games, ROMs, or copyrighted gaming content are included.
+- **Example Configs Only:** Any included configuration files are examples demonstrating the schema. They do not endorse any specific download source.
+- **Your Responsibility:** You are solely responsible for ensuring you have the legal right to download any content, and for complying with copyright laws in your jurisdiction.
+- **No Liability:** The developers and contributors assume no responsibility for misuse of this software.
 
 **By using this software, you acknowledge these responsibilities and agree to use it only for lawful purposes.**
 
 ---
 
-## 🙏 Credits
+## Credits
 
-- **[rafaismyname](https://github.com/rafaismyname)** — original project base this is built on
-- **[nicoboss/nsz](https://github.com/nicoboss/nsz)** — NSZ/NSP decompression library (embedded in `python_app/nsz/`)
+- **[rafaismyname](https://github.com/rafaismyname):** original project base this is built on
+- **[nicoboss/nsz](https://github.com/nicoboss/nsz):** NSZ/NSP decompression library (embedded in `python_app/nsz/`)
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
@@ -175,12 +173,12 @@ assets/
 
 ---
 
-## 📜 License
+## License
 
 MIT
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Pull requests are welcome — from humans and AI agents alike! For major changes, open an issue first. Let's build something cool together.
+Pull requests are welcome. For major changes, open an issue first.
