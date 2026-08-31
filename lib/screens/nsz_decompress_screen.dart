@@ -101,19 +101,10 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
 
   Future<void> _pickOutput() async {
     try {
-      String? dir;
-      if (Platform.isAndroid) {
-        final root = await _browseRoot();
-        if (!mounted) return;
-        dir = await PathBrowser.show(
-          context,
-          title: 'Select output folder',
-          initialDir: root,
-          directoriesOnly: true,
-        );
-      } else {
-        dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
-      }
+      // The SAF directory picker is fine on Android: it resolves the tree URI to
+      // a real path without copying anything, and MANAGE_EXTERNAL_STORAGE makes
+      // that path writable. Only the *file* picker has to be avoided.
+      final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
       if (dir == null || !mounted) return;
       setState(() {
         _outputDir = dir;
