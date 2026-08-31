@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
+import 'package:roms_downloader/widgets/common/path_browser.dart';
 
 /// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
 /// Requires prod.keys — the UI blocks with a keys picker until one is set.
@@ -25,35 +27,102 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
   String? _result;
   bool _failed = false;
 
+  /// Where the in-app browser opens. Prefers whatever the user already chose,
+  /// then the download dir, so the .nsz sitting next to the ROMs is one tap away.
+  Future<String> _browseRoot() async {
+    if (_outputDir != null) return _outputDir!;
+    if (_nszPath != null) return p.dirname(_nszPath!);
+    return DirectoryService().getDownloadDir();
+  }
+
+  void _showPickError(Object e) {
+    if (!mounted) return;
+    setState(() {
+      _failed = true;
+      _result = '$e';
+    });
+  }
+
   Future<void> _pickKeys() async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select prod.keys or title.keys',
-      type: FileType.any,
-    );
-    final src = result?.files.single.path;
-    if (src == null) return;
-    // Copy into app support: the picker's temp copy can be cleaned up, and the
-    // Python process needs a stable path.
-    final supportDir = await getApplicationSupportDirectory();
-    final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
-    await dest.parent.create(recursive: true);
-    await File(src).copy(dest.path);
-    await ref.read(settingsProvider.notifier).setNszKeysPath(dest.path);
+    try {
+      // Keys files are a few hundred KB, so the SAF picker's cache copy is
+      // harmless here — unlike for the .nsz below.
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Select prod.keys or title.keys',
+        type: FileType.any,
+      );
+      final src = result?.files.firstOrNull?.path;
+      if (src == null) return;
+      // Copy into app support: the picker's temp copy can be cleaned up, and the
+      // Python process needs a stable path.
+      final supportDir = await getApplicationSupportDirectory();
+      final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
+      await dest.parent.create(recursive: true);
+      await File(src).copy(dest.path);
+      await ref.read(settingsProvider.notifier).setNszKeysPath(dest.path);
+    } catch (e) {
+      _showPickError(e);
+    }
   }
 
   Future<void> _pickNsz() async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select an NSZ file',
-      type: FileType.custom,
-      allowedExtensions: ['nsz'],
-    );
-    final path = result?.files.single.path;
-    if (path != null) setState(() => _nszPath = path);
+    try {
+      String? path;
+      if (Platform.isAndroid) {
+        final root = await _browseRoot();
+        if (!mounted) return;
+        path = await PathBrowser.show(
+          context,
+          title: 'Select an NSZ file',
+          initialDir: root,
+          allowedExtensions: const ['nsz'],
+        );
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          dialogTitle: 'Select an NSZ file',
+          type: FileType.custom,
+          allowedExtensions: ['nsz'],
+        );
+        path = result?.files.firstOrNull?.path;
+      }
+      if (path == null || !mounted) return;
+      setState(() {
+        _nszPath = path;
+        // Decompressing next to the source is almost always what's wanted, and
+        // it saves a second pick.
+        _outputDir ??= p.dirname(path!);
+        _result = null;
+        _failed = false;
+      });
+    } catch (e) {
+      _showPickError(e);
+    }
   }
 
   Future<void> _pickOutput() async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
-    if (dir != null) setState(() => _outputDir = dir);
+    try {
+      String? dir;
+      if (Platform.isAndroid) {
+        final root = await _browseRoot();
+        if (!mounted) return;
+        dir = await PathBrowser.show(
+          context,
+          title: 'Select output folder',
+          initialDir: root,
+          directoriesOnly: true,
+        );
+      } else {
+        dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
+      }
+      if (dir == null || !mounted) return;
+      setState(() {
+        _outputDir = dir;
+        _result = null;
+        _failed = false;
+      });
+    } catch (e) {
+      _showPickError(e);
+    }
   }
 
   Future<void> _decompress() async {
