@@ -39,6 +39,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   bool _busy = false;
   bool _catalogReady = false;
   bool _usingExample = false;
+  bool _changingCatalog = false;
   String? _catalogSummary;
   String? _catalogError;
 
@@ -68,6 +69,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       setState(() {
         _catalogReady = count > 0;
         _usingExample = false;
+        _changingCatalog = false;
         _catalogSummary = '$count console${count == 1 ? '' : 's'} loaded';
       });
     } catch (e) {
@@ -116,7 +118,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     // A bundled catalog loads asynchronously at startup and may only arrive
     // after this screen is pushed — detect it reactively, not in initState.
     final bundledCount = ref.watch(appStateProvider).consolesList.length;
-    if (!_catalogReady && !_busy && _catalogError == null && bundledCount > 0) {
+    if (!_catalogReady && !_changingCatalog && !_busy && _catalogError == null && bundledCount > 0) {
       _catalogReady = true;
       _usingExample = true;
       _catalogSummary = '$bundledCount console${bundledCount == 1 ? '' : 's'} already available';
@@ -214,6 +216,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   }
 
   Widget _catalogStep(ThemeData theme) {
+    // Inputs collapse once a catalog is loaded; the loaded card summarises it
+    // and offers a Change button to bring the inputs back.
+    final showInputs = !_catalogReady || _usingExample || _changingCatalog;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -245,60 +251,84 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           ),
           const SizedBox(height: 16),
         ],
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _urlController,
-                enabled: !_busy,
-                decoration: const InputDecoration(
-                  labelText: 'Catalog URL',
-                  hintText: 'https://…/consoles.json',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.link),
+        if (_catalogReady && !_usingExample && !_changingCatalog)
+          Card(
+            color: theme.colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: theme.colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _catalogSummary ?? 'Catalog loaded',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  TextButton(
+                    onPressed: _busy ? null : () => setState(() => _changingCatalog = true),
+                    child: const Text('Change'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (showInputs) ...[
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _urlController,
+                  enabled: !_busy,
+                  decoration: const InputDecoration(
+                    labelText: 'Catalog URL',
+                    hintText: 'https://…/consoles.json',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.link),
+                  ),
+                  onSubmitted: (_) => _loadUrl(),
                 ),
-                onSubmitted: (_) => _loadUrl(),
               ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(onPressed: _busy ? null : _loadUrl, child: const Text('Load')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _importFile,
-          icon: const Icon(Icons.upload_file, size: 18),
-          label: const Text('Import from file'),
-        ),
-        const SizedBox(height: 16),
-        ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(top: 8),
-          title: Text('Paste JSON', style: theme.textTheme.bodyMedium),
-          children: [
-            TextField(
-              controller: _pasteController,
-              enabled: !_busy,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                hintText: '[ { "name": "…", "url": "…" } ]',
-                border: OutlineInputBorder(),
+              const SizedBox(width: 8),
+              FilledButton(onPressed: _busy ? null : _loadUrl, child: const Text('Load')),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _importFile,
+            icon: const Icon(Icons.upload_file, size: 18),
+            label: const Text('Import from file'),
+          ),
+          const SizedBox(height: 16),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(top: 8),
+            title: Text('Paste JSON', style: theme.textTheme.bodyMedium),
+            children: [
+              TextField(
+                controller: _pasteController,
+                enabled: !_busy,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  hintText: '[ { "name": "…", "url": "…" } ]',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton.tonal(onPressed: _busy ? null : _loadPaste, child: const Text('Use pasted JSON')),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (_busy) const LinearProgressIndicator(),
-        if (_catalogReady && !_usingExample)
-          _statusRow(theme, Icons.check_circle, Colors.green, _catalogSummary ?? 'Catalog loaded'),
-        if (_catalogError != null)
-          _statusRow(theme, Icons.error_outline, theme.colorScheme.error, _catalogError!),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.tonal(onPressed: _busy ? null : _loadPaste, child: const Text('Use pasted JSON')),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_busy) const LinearProgressIndicator(),
+          if (_catalogError != null)
+            _statusRow(theme, Icons.error_outline, theme.colorScheme.error, _catalogError!),
+        ],
       ],
     );
   }
@@ -420,6 +450,11 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           if (_step > 0)
             TextButton(onPressed: _busy ? null : () => setState(() => _step -= 1), child: const Text('Back')),
           const Spacer(),
+          // No catalog yet? Let the user move on and add one later in Settings.
+          if (_step == 0 && !_catalogReady) ...[
+            TextButton(onPressed: _busy ? null : () => setState(() => _step += 1), child: const Text('Skip for now')),
+            const SizedBox(width: 8),
+          ],
           if (!isLast)
             FilledButton(
               onPressed: canNext && !_busy ? () => setState(() => _step += 1) : null,
