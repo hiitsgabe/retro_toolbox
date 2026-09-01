@@ -82,6 +82,10 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
           final filename = p.basename(entity.path);
           final taskId = '$consoleId/$filename';
 
+          // Already decompressed (the .nsp sits next to it)? Nothing to resume.
+          final nspPath = p.join(dir, '${p.basenameWithoutExtension(entity.path)}.nsp');
+          if (await File(nspPath).exists()) continue;
+
           // Skip anything still downloading or already queued.
           final status = state.taskStatus[taskId];
           if (status == TaskStatus.running || status == TaskStatus.enqueued) continue;
