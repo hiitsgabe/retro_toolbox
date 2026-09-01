@@ -52,22 +52,16 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     await _syncWithBackgroundTasks();
 
-    await _resumeInterruptedNsz();
+    await _cleanupInterruptedNsz();
   }
 
-  /// A crash/kill mid-batch (e.g. the app dying during decompression) leaves a
-  /// downloaded `.nsz` on disk that never got processed. background_downloader
-  /// resumes the downloads themselves, but nothing re-drives decompression, so
-  /// on startup we scan the download dirs and re-queue any leftover `.nsz`.
-  Future<void> _resumeInterruptedNsz() async {
+  /// On startup, clean up after a decompression a crash/kill interrupted: drop
+  /// the incomplete `.nsp` but keep the `.nsz`. Never auto-starts a retry — the
+  /// user decides when to decompress again (from the game or the NSZ tool).
+  Future<void> _cleanupInterruptedNsz() async {
     try {
       final settings = _ref.read(settingsProvider.notifier);
-      if (!settings.getNszDecompressEnabled()) return;
-      final keysPath = settings.getNszKeysPath() ?? '';
-      if (keysPath.isEmpty) return; // can't decompress without keys
-
       final consoles = await CatalogService().getConsoles();
-      final queueNotifier = _ref.read(taskQueueProvider.notifier);
       final scanned = <String>{};
 
       for (final consoleId in consoles.keys) {
@@ -79,29 +73,23 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         await for (final entity in directory.list()) {
           if (entity is! File || !entity.path.toLowerCase().endsWith('.nsz')) continue;
 
-          final filename = p.basename(entity.path);
-          final taskId = '$consoleId/$filename';
-
-          // Already decompressed (the .nsp sits next to it)? Nothing to resume.
+          // A finished decompression deletes its own .nsz, so a .nsz sitting
+          // next to a .nsp means that .nsp is a partial from an interrupted
+          // run. Remove the partial; leave the .nsz for a manual retry.
           final nspPath = p.join(dir, '${p.basenameWithoutExtension(entity.path)}.nsp');
-          if (await File(nspPath).exists()) continue;
-
-          // Skip anything still downloading or already queued.
-          final status = state.taskStatus[taskId];
-          if (status == TaskStatus.running || status == TaskStatus.enqueued) continue;
-          if (_ref.read(taskQueueProvider).tasks.any((t) => t.id == taskId)) continue;
-
-          debugPrint('Resuming interrupted NSZ decompression: ${entity.path}');
-          queueNotifier.enqueue(taskId, TaskType.nszDecompression, {
-            'taskId': taskId,
-            'nszFilePath': entity.path,
-            'outputDir': dir,
-            'keysPath': keysPath,
-          });
+          final nsp = File(nspPath);
+          if (await nsp.exists()) {
+            debugPrint('Removing incomplete NSZ output from interrupted run: $nspPath');
+            try {
+              await nsp.delete();
+            } catch (e) {
+              debugPrint('Could not delete partial nsp: $e');
+            }
+          }
         }
       }
     } catch (e) {
-      debugPrint('Resume interrupted NSZ scan failed: $e');
+      debugPrint('Interrupted NSZ cleanup failed: $e');
     }
   }
 

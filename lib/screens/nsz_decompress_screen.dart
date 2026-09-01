@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:roms_downloader/models/task_queue_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
-import 'package:roms_downloader/services/nsz_service.dart';
 import 'package:roms_downloader/widgets/common/path_browser.dart';
 
 /// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
@@ -22,8 +23,6 @@ class NszDecompressScreen extends ConsumerStatefulWidget {
 class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
   String? _nszPath;
   String? _outputDir;
-  bool _busy = false;
-  double _progress = 0;
   String? _result;
   bool _failed = false;
 
@@ -116,35 +115,23 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
     }
   }
 
-  Future<void> _decompress() async {
+  /// Hand the decompression to the task queue so it runs in the background and
+  /// shows in the task list — the user can leave this screen and keep browsing.
+  void _enqueueDecompress() {
     final keysPath = ref.read(settingsProvider).nszKeysPath;
     if (_nszPath == null || _outputDir == null || keysPath == null) return;
-    setState(() {
-      _busy = true;
-      _progress = 0;
-      _result = null;
-      _failed = false;
+    final taskId = 'manual/${p.basename(_nszPath!)}';
+    ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.nszDecompression, {
+      'taskId': taskId,
+      'nszFilePath': _nszPath!,
+      'outputDir': _outputDir!,
+      'keysPath': keysPath,
     });
-    try {
-      await NszService.decompressNsz(
-        nszFilePath: _nszPath!,
-        outputDir: _outputDir!,
-        keysPath: keysPath,
-        onProgress: (p) {
-          if (mounted) setState(() => _progress = p);
-        },
-      );
-      if (mounted) setState(() => _result = 'Decompressed to $_outputDir');
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _failed = true;
-          _result = '$e';
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Decompression added to the task list')),
+    );
+    Navigator.of(context).pop();
   }
 
   @override
@@ -194,32 +181,24 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
 
   Widget _decompressUi(BuildContext context) {
     final theme = Theme.of(context);
-    final canRun = _nszPath != null && _outputDir != null && !_busy;
+    final canRun = _nszPath != null && _outputDir != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _fileRow(context, Icons.insert_drive_file_outlined, 'NSZ file',
-            _nszPath != null ? p.basename(_nszPath!) : 'No file selected', _busy ? null : _pickNsz),
+            _nszPath != null ? p.basename(_nszPath!) : 'No file selected', _pickNsz),
         const SizedBox(height: 12),
         _fileRow(context, Icons.folder_outlined, 'Output folder',
-            _outputDir ?? 'No folder selected', _busy ? null : _pickOutput),
+            _outputDir ?? 'No folder selected', _pickOutput),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: canRun ? _decompress : null,
-            icon: _busy
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.compress, size: 18),
-            label: Text(_busy ? 'Decompressing…' : 'Decompress'),
+            onPressed: canRun ? _enqueueDecompress : null,
+            icon: const Icon(Icons.compress, size: 18),
+            label: const Text('Add to task list'),
           ),
         ),
-        if (_busy) ...[
-          const SizedBox(height: 16),
-          LinearProgressIndicator(value: _progress == 0 ? null : _progress),
-          const SizedBox(height: 4),
-          Text('${(_progress * 100).toStringAsFixed(0)}%', style: theme.textTheme.bodySmall),
-        ],
         if (_result != null) ...[
           const SizedBox(height: 16),
           Row(
