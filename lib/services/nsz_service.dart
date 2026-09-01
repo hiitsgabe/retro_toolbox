@@ -56,6 +56,8 @@ class NszService {
     final completer = Completer<void>();
     int readPosition = 0;
     Timer? pollTimer;
+    Timer? watchdog;
+    var lastActivity = DateTime.now();
 
     Future<void> checkFile() async {
       if (completer.isCompleted) return;
@@ -66,6 +68,7 @@ class NszService {
 
         final newContent = content.substring(readPosition);
         readPosition = content.length;
+        lastActivity = DateTime.now();
 
         for (final line in newContent.split('\n').where((l) => l.isNotEmpty)) {
           if (completer.isCompleted) break;
@@ -102,12 +105,24 @@ class NszService {
         'progress_file': progressFile.path,
       }));
 
-      await completer.future.timeout(
-        const Duration(minutes: 30),
-        onTimeout: () => throw Exception('NSZ decompression timed out after 30 minutes'),
-      );
+      // No fixed total timeout: a big NSZ on a slow SD legitimately runs for
+      // hours. Fail only if the worker goes silent (no new progress) for a
+      // while, which catches a genuine hang without killing a slow-but-working
+      // decompression.
+      const inactivityLimit = Duration(minutes: 15);
+      watchdog = Timer.periodic(const Duration(seconds: 30), (_) {
+        if (completer.isCompleted) return;
+        if (DateTime.now().difference(lastActivity) > inactivityLimit) {
+          watchdog?.cancel();
+          completer.completeError(Exception(
+              'NSZ decompression stalled: no progress for ${inactivityLimit.inMinutes} minutes'));
+        }
+      });
+
+      await completer.future;
     } finally {
       pollTimer.cancel();
+      watchdog?.cancel();
       try {
         if (await progressFile.exists()) await progressFile.delete();
       } catch (_) {}
