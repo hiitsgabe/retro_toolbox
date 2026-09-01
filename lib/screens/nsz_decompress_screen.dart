@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/task_queue_model.dart';
+import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
@@ -120,7 +122,19 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
   void _enqueueDecompress() {
     final keysPath = ref.read(settingsProvider).nszKeysPath;
     if (_nszPath == null || _outputDir == null || keysPath == null) return;
-    final taskId = 'manual/${p.basename(_nszPath!)}';
+
+    // Register a transient game so the task shows in the task manager. The
+    // gameId (not the raw path) is the task key, and nszFilePath carries the
+    // real path, so the two never disagree.
+    final name = p.basename(_nszPath!);
+    int size = 0;
+    try {
+      size = File(_nszPath!).lengthSync();
+    } catch (_) {}
+    final game = Game(title: name, url: 'https://manual/${Uri.encodeComponent(name)}', size: size, consoleId: 'manual');
+    final taskId = game.gameId;
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
+
     ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.nszDecompression, {
       'taskId': taskId,
       'nszFilePath': _nszPath!,
