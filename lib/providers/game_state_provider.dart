@@ -194,6 +194,13 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     }
   }
 
+  /// Register a state for a one-off task (e.g. a manual NSZ decompression) that
+  /// isn't part of the loaded catalog, so it shows up in the task manager.
+  void registerTransientGame(Game game) {
+    if (state.containsKey(game.gameId)) return;
+    state = {...state, game.gameId: GameState(game: game)};
+  }
+
   void _initGames(List<Game> games) {
     final updates = <String, GameState>{};
     for (final game in games) {
