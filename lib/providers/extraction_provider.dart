@@ -96,17 +96,25 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
 
+    final fileName = path.basename(nszFilePath);
+    await ExtractionService.startNotification(taskId, 'Decompressing', 'Decompressing $fileName...');
+
     try {
       await NszService.decompressNsz(
         nszFilePath: nszFilePath,
         outputDir: outputDir,
         keysPath: keysPath.isNotEmpty ? keysPath : null,
-        onProgress: (progress) => _updateProgress(taskId, progress),
+        onProgress: (progress) {
+          _updateProgress(taskId, progress);
+          ExtractionService.updateNotification('Decompressing $fileName... ${(progress * 100).round()}%');
+        },
       );
       await _onNszCompleted(taskId, nszFilePath, outputDir);
     } catch (e) {
       debugPrint('NSZ decompression error: $e');
       _onNszError(taskId, e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
     }
   }
 

@@ -139,6 +139,37 @@ class ExtractionService {
     });
   }
 
+  // NSZ decompression runs in the main isolate (serious_python worker), not the
+  // extraction foreground task. These drive the same foreground-service
+  // notification so it shows live progress AND keeps the process alive in the
+  // background during a long decompression.
+  static Future<void> startNotification(String taskId, String title, String text) async {
+    if (!Platform.isAndroid) return;
+    _activeTasks.add(taskId);
+    _serviceStopTimer?.cancel();
+    if (_activeTasks.length == 1) {
+      await FlutterForegroundTask.startService(
+        serviceId: 1,
+        notificationTitle: title,
+        notificationText: text,
+        notificationIcon: const NotificationIcon(metaDataName: 'ic_notification'),
+        callback: extractionTaskCallback,
+      );
+    } else {
+      FlutterForegroundTask.updateService(notificationText: text);
+    }
+  }
+
+  static void updateNotification(String text) {
+    if (!Platform.isAndroid) return;
+    FlutterForegroundTask.updateService(notificationText: text);
+  }
+
+  static void endNotification(String taskId) {
+    if (!Platform.isAndroid) return;
+    _cleanup(taskId);
+  }
+
   static Future<void> extractInIsolate(
     String taskId,
     String filePath,
@@ -240,10 +271,24 @@ class ExtractionTaskHandler extends TaskHandler {
         'value': 0.1,
       });
 
+      final fileName = path.basename(filePath);
+      int lastPct = -1;
       ZipFile.extractToDirectory(
         zipFile: File(filePath),
         destinationDir: Directory(extractionDir),
-        onExtracting: (zipEntry, progress) => ZipFileOperation.includeItem,
+        onExtracting: (zipEntry, progress) {
+          final pct = progress.round();
+          if (pct != lastPct) {
+            lastPct = pct;
+            FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName... $pct%');
+            FlutterForegroundTask.sendDataToMain({
+              'type': ExtractionService.progressDataType,
+              'taskId': taskId,
+              'value': (progress / 100.0).clamp(0.0, 1.0),
+            });
+          }
+          return ZipFileOperation.includeItem;
+        },
       ).then((_) => _flattenSingleTopLevelDir(extractionDir)).then((_) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
