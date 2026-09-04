@@ -127,7 +127,7 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
             padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: ToolDescription(
               icon: Icons.videogame_asset_rounded,
-              text: 'Search the store, pick your games, and write shortcut files so they show up as launchable entries with box art. Choose an output folder before saving.',
+              text: 'Some launchers can run steam games using Gamehub or other emulators, but they require a .steam shortcut file. This tool creates .steam shortcut files that can be used with these launchers.',
             ),
           ),
           Padding(
