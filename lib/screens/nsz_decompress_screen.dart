@@ -173,30 +173,69 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
 
   Widget _keysWarning(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Center(
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.warning_amber_rounded, size: 40, color: theme.colorScheme.error),
-              const SizedBox(height: 12),
-              Text('prod.keys required', style: theme.textTheme.titleMedium),
-              const SizedBox(height: 8),
-              const Text(
-                'NSZ decompression needs your console keys (prod.keys or title.keys). '
-                'Select the file to continue.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13),
+      child: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Column(
+                      children: [
+                        Icon(Icons.vpn_key_rounded, size: 40, color: scheme.primary),
+                        const SizedBox(height: 12),
+                        Text('prod.keys required', style: theme.textTheme.titleMedium),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'An .nsz is a compressed and encrypted game file. To unpack it, '
+                    'the app needs the encryption keys (a prod.keys file, sometimes alongside '
+                    'title.keys) dumped from a modded console.',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: scheme.error.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.shield_outlined, size: 20, color: scheme.error),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Only use keys and games from a console you personally own. This tool is '
+                            'for managing your own legally-owned backups; we do not support or '
+                            'condone piracy.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Center(
+                    child: FilledButton.icon(
+                      onPressed: _pickKeys,
+                      icon: const Icon(Icons.folder_open, size: 18),
+                      label: const Text('Select keys file'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _pickKeys,
-                icon: const Icon(Icons.folder_open, size: 18),
-                label: const Text('Select keys file'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
