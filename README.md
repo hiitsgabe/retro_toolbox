@@ -173,6 +173,21 @@ assets/
 
 ---
 
+## Credits
+
+Console logo artwork is bundled from EmulationStation themes, pre-mapped to
+platforms in-app:
+
+- **[EmulationStation Carbon](https://github.com/RetroPie/es-theme-carbon)** by Rookervik — retro console logos.
+- **[Art Book Next](https://github.com/anthonycaccese/es-theme-art-book-next)** by Anthony Caccese (CC-BY-NC-SA) — Switch, Wii U, 3DS, PS3, Xbox and Xbox 360 logos.
+
+UI font: **[Chakra Petch](https://fonts.google.com/specimen/Chakra+Petch)** by Cadson Demak (SIL Open Font License).
+
+These are third-party, trademarked marks bundled for personal use; review the
+respective licenses before any commercial distribution.
+
+---
+
 ## License
 
 MIT

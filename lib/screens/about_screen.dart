@@ -74,40 +74,68 @@ class _AboutScreenState extends State<AboutScreen> {
                 fontSize: 10,
               ),
             ),
-            SizedBox(height: 8),
+            SizedBox(height: 6),
             Text(
               'Version ${_packageInfo?.version ?? '-'}',
-              style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
             ),
-            SizedBox(height: 4),
-            Text(
-              'Build ${_packageInfo?.buildNumber ?? '-'}',
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            SizedBox(height: 28),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.verified_user_rounded, color: theme.colorScheme.primary, size: 28),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Play fair',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Retro Toolbox is a utility, not a source of games. Neither the app nor its developers endorse piracy. It stands for easy access to a library you already own. Stick to trusted sources and download only titles you own.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
-            SizedBox(height: 32),
+            SizedBox(height: 24),
             InfoCard(
               icon: Icons.code_rounded,
-              title: 'Source Code',
-              subtitle: 'rafaismyname/roms_downloader',
-              url: 'https://github.com/rafaismyname/roms_downloader',
-              onTap: () => _copyToClipboard(context, 'https://github.com/rafaismyname/roms_downloader'),
+              title: 'Open Source',
+              subtitle: 'This app is open source. Contributions welcome at hiitsgabe/retro_toolbox',
+              url: 'https://github.com/hiitsgabe/retro_toolbox',
+              onTap: () => _copyToClipboard(context, 'https://github.com/hiitsgabe/retro_toolbox'),
             ),
             SizedBox(height: 16),
             ExpandableInfoCard(
               icon: Icons.person_rounded,
-              initExpanded: true,
               title: 'Authors',
               items: [
                 InfoItem('rafaismyname', 'rafaismy.name', 'https://rafaismy.name'),
-                InfoItem('moterani', 'github.com/moterani', 'https://github.com/moterani'),
+                InfoItem('hiitsgabe', 'gabeismy.name', 'https://gabeismy.name'),
               ],
               onItemTap: (url) => _copyToClipboard(context, url),
             ),
             SizedBox(height: 16),
             ExpandableInfoCard(
-              icon: Icons.flutter_dash_rounded,
-              title: 'Built with',
-                items: [
+              icon: Icons.favorite_rounded,
+              title: 'Credits',
+              items: [
+                InfoItem('nsz', 'NSZ decompression by nicoboss - github.com/nicoboss/nsz', 'https://github.com/nicoboss/nsz'),
+                InfoItem('0x0', 'Ephemeral storage - 0x0.st', 'https://0x0.st'),
+                InfoItem('EmulationStation Carbon', 'Console logos by Rookervik', 'https://github.com/RetroPie/es-theme-carbon'),
+                InfoItem('Art Book Next', 'Console logos by Anthony Caccese (CC-BY-NC-SA)', 'https://github.com/anthonycaccese/es-theme-art-book-next'),
+                InfoItem('Chakra Petch', 'Font by Cadson Demak (OFL)', 'https://fonts.google.com/specimen/Chakra+Petch'),
                 InfoItem('flutter', 'flutter.dev', 'https://flutter.dev'),
                 InfoItem('serious_python', 'pub.dev/packages/serious_python', 'https://pub.dev/packages/serious_python'),
                 InfoItem('file_picker', 'pub.dev/packages/file_picker', 'https://pub.dev/packages/file_picker'),
@@ -128,20 +156,28 @@ class _AboutScreenState extends State<AboutScreen> {
               ],
               onItemTap: (url) => _copyToClipboard(context, url),
             ),
+            SizedBox(height: 32),
+            Text(
+              'Support the developers',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 4),
+            Text(
+              'This app is free and made in our spare time. If it helps you, a coffee keeps it going. ☕',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
             SizedBox(height: 16),
-            ExpandableInfoCard(
-              icon: Icons.favorite_rounded,
-              initExpanded: true,
-              title: 'Special Thanks',
-              items: [
-                InfoItem('nsz', 'NSZ decompression by nicoboss - github.com/nicoboss/nsz', 'https://github.com/nicoboss/nsz'),
-                InfoItem('0x0', 'Ephemeral storage - 0x0.st', 'https://0x0.st'),
-              ],
-              onItemTap: (url) => _copyToClipboard(context, url),
+            InfoCard(
+              icon: Icons.coffee_rounded,
+              title: 'Buy me a coffee',
+              subtitle: 'buymeacoffee.com/hiitsgabe',
+              url: 'https://buymeacoffee.com/hiitsgabe',
+              onTap: () => _copyToClipboard(context, 'https://buymeacoffee.com/hiitsgabe'),
             ),
             SizedBox(height: 40),
             Text(
-              'Made with ❤️ in NYC 🗽',
+              'Made with ❤️ in NYC 🗽 & Toronto 🇨🇦',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 fontStyle: FontStyle.italic,

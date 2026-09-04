@@ -7,6 +7,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
+import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.
@@ -25,6 +26,11 @@ class TinfoilServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const ToolDescription(
+            icon: Icons.cloud_upload_rounded,
+            text: 'Hosts your game library over the local network so Tinfoil on your console can browse and install titles directly from this device. Both must be on the same network.',
+          ),
+          const SizedBox(height: 16),
           ..._authSections(context, ref),
           Card(
             margin: EdgeInsets.zero,

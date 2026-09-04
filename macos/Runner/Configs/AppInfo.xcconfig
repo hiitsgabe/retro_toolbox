@@ -8,7 +8,7 @@
 PRODUCT_NAME = Retro Toolbox
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = name.rafaismy.roms_downloader
+PRODUCT_BUNDLE_IDENTIFIER = name.rafaismy.retrotoolbox
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 rafaismy.name. All rights reserved.

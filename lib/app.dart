@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/screens/home_screen.dart';
+import 'package:roms_downloader/screens/menu_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -14,27 +14,38 @@ class RomsDownloaderApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF646CFF),
+          seedColor: const Color(0xFF7C4DEF),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFFF8F9FA),
+        fontFamily: 'ChakraPetch',
+        scaffoldBackgroundColor: const Color(0xFFF4F0FC),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
-          foregroundColor: Color(0xFF213547),
+          foregroundColor: Color(0xFF2A2340),
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
+          scrolledUnderElevation: 0,
         ),
       ),
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF747BFF),
+          seedColor: const Color(0xFF7C4DEF),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
+        fontFamily: 'ChakraPetch',
+        scaffoldBackgroundColor: const Color(0xFF17102B),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       ),
       themeMode: ThemeMode.system,
-      home: const HomeScreen(),
+      home: const MenuScreen(),
     );
   }
 }

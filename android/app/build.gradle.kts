@@ -15,7 +15,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "name.rafaismy.roms_downloader"
+    namespace = "name.rafaismy.retrotoolbox"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
     // ndkVersion = flutter.ndkVersion
@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "name.rafaismy.roms_downloader"
+        applicationId = "name.rafaismy.retrotoolbox"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
