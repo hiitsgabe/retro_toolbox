@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/services/steam_service.dart';
+import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Search the Steam store, multi-select games, and write `.steam` shortcut
 /// files (ES-DE format) into a chosen folder.
@@ -122,6 +123,13 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
       appBar: AppBar(title: const Text('Steam Shortcuts')),
       body: Column(
         children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: ToolDescription(
+              icon: Icons.videogame_asset_rounded,
+              text: 'Search the store, pick your games, and write shortcut files so they show up as launchable entries with box art. Choose an output folder before saving.',
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: TextField(

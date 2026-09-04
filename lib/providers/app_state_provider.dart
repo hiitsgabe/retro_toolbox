@@ -8,7 +8,11 @@ import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/permission_service.dart';
 
 const _viewModeKey = 'view_mode';
+const _consoleViewModeKey = 'console_view_mode';
 const _selectedConsoleKey = 'selected_console';
+
+ViewMode _parseViewMode(String? name) =>
+    ViewMode.values.firstWhere((m) => m.name == name, orElse: () => ViewMode.grid);
 
 final appStateProvider = StateNotifierProvider<AppStateNotifier, AppState>((ref) {
   final catalogService = CatalogService();
@@ -29,8 +33,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     await PermissionService.ensurePermissions();
 
     final prefs = await SharedPreferences.getInstance();
-    final viewModeKey = prefs.getString(_viewModeKey) ?? 'grid';
-    final savedViewMode = viewModeKey == 'list' ? ViewMode.list : ViewMode.grid;
+    final savedViewMode = _parseViewMode(prefs.getString(_viewModeKey));
+    final savedConsoleViewMode = _parseViewMode(prefs.getString(_consoleViewModeKey));
 
     final consoles = await catalogService.getConsoles();
     
@@ -43,6 +47,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       consoles: consoles,
       selectedConsole: selectedConsole,
       viewMode: savedViewMode,
+      consoleViewMode: savedConsoleViewMode,
     );
 
     _listenToLoadingNotifications();
@@ -93,9 +98,16 @@ class AppStateNotifier extends StateNotifier<AppState> {
   }
 
   void toggleViewMode() {
-    final newMode = state.viewMode == ViewMode.list ? ViewMode.grid : ViewMode.list;
+    // Cycle grid -> list -> coverflow -> grid
+    final newMode = ViewMode.values[(state.viewMode.index + 1) % ViewMode.values.length];
     state = state.copyWith(viewMode: newMode);
     SharedPreferences.getInstance().then((prefs) => prefs.setString(_viewModeKey, newMode.name));
+  }
+
+  void toggleConsoleViewMode() {
+    final newMode = ViewMode.values[(state.consoleViewMode.index + 1) % ViewMode.values.length];
+    state = state.copyWith(consoleViewMode: newMode);
+    SharedPreferences.getInstance().then((prefs) => prefs.setString(_consoleViewModeKey, newMode.name));
   }
 
   void setViewMode(ViewMode mode) {

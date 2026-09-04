@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/providers/jdkv_server_provider.dart';
 import 'package:roms_downloader/services/webdav_server_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
+import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Controls the embedded WebDAV server that syncs emulator saves with JKSV on
 /// a Switch. Android→Switch (JKSV restores) and Switch→Android (confirm-to-pull).
@@ -25,6 +26,11 @@ class JdkvServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          const ToolDescription(
+            icon: Icons.folder_shared_rounded,
+            text: 'Runs a WebDAV server so JKSV on your console can back up and restore game saves to this device over the local network. Point JKSV at the address shown below.',
+          ),
+          const SizedBox(height: 16),
           _folderCard(context, state, notifier),
           const SizedBox(height: 12),
           Card(

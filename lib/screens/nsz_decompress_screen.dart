@@ -12,6 +12,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/widgets/common/path_browser.dart';
+import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
 /// Requires prod.keys — the UI blocks with a keys picker until one is set.
@@ -156,7 +157,16 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
       appBar: AppBar(title: const Text('NSZ Decompress')),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: hasKeys ? _decompressUi(context) : _keysWarning(context),
+        child: Column(
+          children: [
+            const ToolDescription(
+              icon: Icons.unarchive_rounded,
+              text: 'Converts compressed .nsz files back into their original installable form. Pick a file and an output folder, then run. Requires your prod.keys.',
+            ),
+            const SizedBox(height: 16),
+            Expanded(child: hasKeys ? _decompressUi(context) : _keysWarning(context)),
+          ],
+        ),
       ),
     );
   }

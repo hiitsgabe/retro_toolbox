@@ -79,6 +79,15 @@ class _HeaderState extends ConsumerState<Header> {
                   children: [
                     Row(
                       children: [
+                        if (Navigator.canPop(context)) ...[
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back),
+                            tooltip: 'Back',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => Navigator.maybePop(context),
+                          ),
+                          SizedBox(width: 4),
+                        ],
                         Expanded(
                           flex: 3,
                           child: ConsoleDropdown(
@@ -115,7 +124,14 @@ class _HeaderState extends ConsumerState<Header> {
                 )
               : Row(
                   children: [
-                    if (!isNarrow) ...[
+                    if (Navigator.canPop(context)) ...[
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        tooltip: 'Back',
+                        onPressed: () => Navigator.maybePop(context),
+                      ),
+                      SizedBox(width: 4),
+                    ] else if (!isNarrow) ...[
                       Image.asset('assets/icon.png', width: 35),
                       SizedBox(width: 16),
                     ],
@@ -185,10 +201,14 @@ class _HeaderState extends ConsumerState<Header> {
       SizedBox(width: 4),
       _buildActionButton(
         context: context,
-        icon: appState.viewMode == ViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+        icon: switch (appState.viewMode) {
+          ViewMode.grid => Icons.grid_view_rounded,
+          ViewMode.list => Icons.view_list_rounded,
+          ViewMode.coverflow => Icons.view_carousel_rounded,
+        },
         isActive: false,
         onPressed: () => appStateNotifier.toggleViewMode(),
-        tooltip: appState.viewMode == ViewMode.grid ? 'List View' : 'Grid View',
+        tooltip: 'Change view',
       ),
       SizedBox(width: 4),
       PopupMenuButton<String>(

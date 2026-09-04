@@ -1,4 +1,4 @@
-package name.rafaismy.roms_downloader
+package name.rafaismy.retrotoolbox
 
 import io.flutter.embedding.android.FlutterActivity
 
