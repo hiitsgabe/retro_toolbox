@@ -166,30 +166,6 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
-  Future<void> setSteamToolEnabled(bool enabled) async {
-    final newState = state.copyWith(steamToolEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
-  }
-
-  Future<void> setTinfoilToolEnabled(bool enabled) async {
-    final newState = state.copyWith(tinfoilToolEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
-  }
-
-  Future<void> setNszToolEnabled(bool enabled) async {
-    final newState = state.copyWith(nszToolEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
-  }
-
-  Future<void> setJdkvToolEnabled(bool enabled) async {
-    final newState = state.copyWith(jdkvToolEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
-  }
-
   Future<void> setNszKeysPath(String keysPath) async {
     final newState = state.copyWith(
       nszKeysPath: keysPath.isEmpty ? null : keysPath,
