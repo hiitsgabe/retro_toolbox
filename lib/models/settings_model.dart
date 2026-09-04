@@ -21,10 +21,6 @@ class AppSettings {
   final bool nszDecompressEnabled;
   final String? nszKeysPath;
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
-  final bool steamToolEnabled;
-  final bool tinfoilToolEnabled;
-  final bool nszToolEnabled;
-  final bool jdkvToolEnabled;
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -35,10 +31,6 @@ class AppSettings {
     this.nszDecompressEnabled = true,
     this.nszKeysPath,
     this.catalogSourceUrl,
-    this.steamToolEnabled = false,
-    this.tinfoilToolEnabled = false,
-    this.nszToolEnabled = false,
-    this.jdkvToolEnabled = false,
   });
 
   bool get hasIaCredentials =>
@@ -59,10 +51,6 @@ class AppSettings {
     bool clearNszKeysPath = false,
     String? catalogSourceUrl,
     bool clearCatalogSourceUrl = false,
-    bool? steamToolEnabled,
-    bool? tinfoilToolEnabled,
-    bool? nszToolEnabled,
-    bool? jdkvToolEnabled,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -73,10 +61,6 @@ class AppSettings {
       nszDecompressEnabled: nszDecompressEnabled ?? this.nszDecompressEnabled,
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
-      steamToolEnabled: steamToolEnabled ?? this.steamToolEnabled,
-      tinfoilToolEnabled: tinfoilToolEnabled ?? this.tinfoilToolEnabled,
-      nszToolEnabled: nszToolEnabled ?? this.nszToolEnabled,
-      jdkvToolEnabled: jdkvToolEnabled ?? this.jdkvToolEnabled,
     );
   }
 
@@ -90,10 +74,6 @@ class AppSettings {
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
-      'steamToolEnabled': steamToolEnabled,
-      'tinfoilToolEnabled': tinfoilToolEnabled,
-      'nszToolEnabled': nszToolEnabled,
-      'jdkvToolEnabled': jdkvToolEnabled,
     };
   }
 
@@ -107,10 +87,6 @@ class AppSettings {
       nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? true,
       nszKeysPath: json['nszKeysPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
-      steamToolEnabled: json['steamToolEnabled'] as bool? ?? false,
-      tinfoilToolEnabled: json['tinfoilToolEnabled'] as bool? ?? false,
-      nszToolEnabled: json['nszToolEnabled'] as bool? ?? false,
-      jdkvToolEnabled: json['jdkvToolEnabled'] as bool? ?? false,
     );
   }
 }

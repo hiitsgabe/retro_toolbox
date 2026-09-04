@@ -7,14 +7,9 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
-import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
-import 'package:roms_downloader/screens/tinfoil_server_screen.dart';
-import 'package:roms_downloader/screens/nsz_decompress_screen.dart';
-import 'package:roms_downloader/screens/jdkv_server_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
@@ -227,38 +222,6 @@ class _HeaderState extends ConsumerState<Header> {
                 ),
               );
               break;
-            case 'steam':
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SteamShortcutScreen(),
-                ),
-              );
-              break;
-            case 'tinfoil':
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TinfoilServerScreen(),
-                ),
-              );
-              break;
-            case 'nsz':
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const NszDecompressScreen(),
-                ),
-              );
-              break;
-            case 'jdkv':
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const JdkvServerScreen(),
-                ),
-              );
-              break;
             case 'about':
               Navigator.push(
                 context,
@@ -281,50 +244,6 @@ class _HeaderState extends ConsumerState<Header> {
               ],
             ),
           ),
-          if (ref.read(settingsProvider).steamToolEnabled)
-            PopupMenuItem(
-              value: 'steam',
-              child: Row(
-                children: [
-                  Icon(Icons.sports_esports_outlined, size: 18),
-                  SizedBox(width: 12),
-                  Text('Steam Shortcuts'),
-                ],
-              ),
-            ),
-          if (ref.read(settingsProvider).tinfoilToolEnabled)
-            PopupMenuItem(
-              value: 'tinfoil',
-              child: Row(
-                children: [
-                  Icon(Icons.videogame_asset_outlined, size: 18),
-                  SizedBox(width: 12),
-                  Text('Tinfoil Server'),
-                ],
-              ),
-            ),
-          if (ref.read(settingsProvider).nszToolEnabled)
-            PopupMenuItem(
-              value: 'nsz',
-              child: Row(
-                children: [
-                  Icon(Icons.compress, size: 18),
-                  SizedBox(width: 12),
-                  Text('NSZ Decompress'),
-                ],
-              ),
-            ),
-          if (ref.read(settingsProvider).jdkvToolEnabled)
-            PopupMenuItem(
-              value: 'jdkv',
-              child: Row(
-                children: [
-                  Icon(Icons.sync_alt, size: 18),
-                  SizedBox(width: 12),
-                  Text('JDKV Server'),
-                ],
-              ),
-            ),
           PopupMenuItem(
             value: 'about',
             child: Row(

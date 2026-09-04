@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
 
 class ToolsSetting extends ConsumerWidget {
   final Console? console;
@@ -15,50 +14,9 @@ class ToolsSetting extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogNotifier = ref.read(catalogProvider.notifier);
-    final settings = ref.watch(settingsProvider);
-    final settingsNotifier = ref.read(settingsProvider.notifier);
 
     return Column(
       children: [
-        // App-global tool toggles belong on the General tab, not per-console.
-        if (console == null) ...[
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.sports_esports_outlined),
-            title: const Text('Steam Shortcut tool'),
-            subtitle: const Text('Show in the top-right menu'),
-            value: settings.steamToolEnabled,
-            onChanged: settingsNotifier.setSteamToolEnabled,
-          ),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.videogame_asset_outlined),
-            title: const Text('Tinfoil Server tool'),
-            subtitle: const Text('Show in the top-right menu'),
-            value: settings.tinfoilToolEnabled,
-            onChanged: settingsNotifier.setTinfoilToolEnabled,
-          ),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.compress),
-            title: const Text('NSZ Decompress tool'),
-            subtitle: const Text('Show in the top-right menu'),
-            value: settings.nszToolEnabled,
-            onChanged: settingsNotifier.setNszToolEnabled,
-          ),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            secondary: const Icon(Icons.sync_alt),
-            title: const Text('JDKV Server tool'),
-            subtitle: const Text('Sync saves with JKSV on a Switch'),
-            value: settings.jdkvToolEnabled,
-            onChanged: settingsNotifier.setJdkvToolEnabled,
-          ),
-        ],
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.delete_sweep),
