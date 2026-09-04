@@ -3,14 +3,22 @@ PODS:
     - FlutterMacOS
     - ZIPFoundation (= 0.9.19)
   - FlutterMacOS (1.0.0)
+  - rar (0.2.1):
+    - FlutterMacOS
+    - UnrarKit (~> 2.9)
+  - UnrarKit (2.10):
+    - UnrarKit/unrar-lib (= 2.10)
+  - UnrarKit/unrar-lib (2.10)
   - ZIPFoundation (0.9.19)
 
 DEPENDENCIES:
   - flutter_archive (from `Flutter/ephemeral/.symlinks/plugins/flutter_archive/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
+  - rar (from `Flutter/ephemeral/.symlinks/plugins/rar/macos`)
 
 SPEC REPOS:
   trunk:
+    - UnrarKit
     - ZIPFoundation
 
 EXTERNAL SOURCES:
@@ -18,10 +26,14 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_archive/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
+  rar:
+    :path: Flutter/ephemeral/.symlinks/plugins/rar/macos
 
 SPEC CHECKSUMS:
   flutter_archive: 07888d9aeb79da005e0ad8b9d347d17cdea07f68
   FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
+  rar: bea203a640a83e62c47f6e110dd6af83a7e56ac3
+  UnrarKit: 62f535c7a34ec52d2514b9b148f33dcfa9a9dc39
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
 PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
