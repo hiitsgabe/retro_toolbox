@@ -34,12 +34,21 @@ A cross-platform app for browsing and downloading game collections from any HTTP
 - **Multiple Source Types:** HTML directory listings, JSON APIs, Internet Archive metadata API
 - **Authentication:** Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
 
-### Extra Tools
-Optional utilities, each toggled on under **Settings > Tools** and then shown in the top-right menu:
-- **Steam Shortcut Creator:** Search the Steam store and write `.steam` shortcut files into any folder
+### Tools & Servers
+Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
+
+**Servers:**
 - **Tinfoil Server:** Serve your Switch catalog to Tinfoil over the LAN. The app streams from the source and injects auth, so games install straight to the console
-- **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
 - **JDKV Server:** An embedded WebDAV server that syncs emulator save exports with JKSV on a Switch, both directions. The current save is backed up before any replace, and pulls back to the device are confirmed per game
+- **SMB Share:** Connect to SMB/CIFS network shares to browse and pull files
+- **FTP:** An FTP client to transfer files, plus a built-in FTP server to serve files over the LAN
+
+**Tools:**
+- **Steam Shortcut Creator:** Search the Steam store and write `.steam` shortcut files into any folder
+- **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
+- **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android and macOS)
+- **Collection Clean:** Folder-scoped cleanup — dedupe game files (keep the largest), strip region/version tags from filenames, and remove OS junk files. Every action previews before it applies
+- **New Catalog Source:** Add a single console to your catalog from a directory-listing URL or an Internet Archive item
 
 ### Platforms
 - Android (primary), macOS, Windows, Linux
