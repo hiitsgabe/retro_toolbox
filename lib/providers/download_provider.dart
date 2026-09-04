@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:background_downloader/background_downloader.dart';
@@ -16,6 +16,8 @@ import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/utils/network.dart';
+import 'package:roms_downloader/app.dart';
+import 'package:roms_downloader/screens/settings_screen.dart';
 
 final downloadProvider = StateNotifierProvider<DownloadNotifier, DownloadState>((ref) {
   final catalogNotifier = ref.read(catalogProvider.notifier);
@@ -122,6 +124,10 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     } else if (update.status == TaskStatus.failed) {
       debugPrint('Download failed for ${update.task.taskId}: ${update.exception?.description ?? error ?? 'unknown'}');
       queueNotifier.updateTaskStatus(update.task.taskId, TaskQueueStatus.failed, error: error ?? update.exception?.description);
+
+      final ex = update.exception;
+      final isAuthError = ex is TaskHttpException && (ex.httpResponseCode == 401 || ex.httpResponseCode == 403);
+      if (isAuthError && update.task.url.contains('archive.org')) _promptIaLogin();
     } else if (update.status == TaskStatus.canceled) {
       queueNotifier.updateTaskStatus(update.task.taskId, TaskQueueStatus.cancelled);
     }
@@ -444,6 +450,36 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       final taskStatus = Map<String, TaskStatus>.from(state.taskStatus);
       taskStatus[taskId] = TaskStatus.enqueued;
       state = state.copyWith(taskStatus: taskStatus);
+    }
+  }
+
+  bool _iaLoginDialogOpen = false;
+
+  /// Shown when an archive.org download fails with 401/403 — the item is
+  /// restricted and needs the user to sign in to Internet Archive in Settings.
+  /// Guarded so a batch of failing tasks raises a single dialog.
+  Future<void> _promptIaLogin() async {
+    if (_iaLoginDialogOpen) return;
+    final context = navigatorKey.currentContext;
+    if (context == null) return;
+    _iaLoginDialogOpen = true;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Internet Archive login required'),
+        content: const Text(
+          'This item is restricted. Sign in to your Internet Archive account in '
+          'Settings to download it.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Open Settings')),
+        ],
+      ),
+    );
+    _iaLoginDialogOpen = false;
+    if (go == true) {
+      navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null)));
     }
   }
 
