@@ -11,6 +11,8 @@ import 'package:roms_downloader/screens/about_screen.dart';
 import 'package:roms_downloader/screens/setup_wizard_screen.dart';
 import 'package:roms_downloader/screens/tinfoil_server_screen.dart';
 import 'package:roms_downloader/screens/jdkv_server_screen.dart';
+import 'package:roms_downloader/screens/smb_screen.dart';
+import 'package:roms_downloader/screens/ftp_screen.dart';
 import 'package:roms_downloader/screens/nsz_decompress_screen.dart';
 import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
@@ -66,6 +68,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         onTap: () => _push(MenuGridScreen(title: 'Servers', tiles: [
           MenuTile(label: 'Tinfoil Server', icon: Icons.cloud_upload, accentColor: const Color(0xFF167C80), onTap: () => _push(TinfoilServerScreen())),
           MenuTile(label: 'JDKV Server', icon: Icons.folder_shared, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const JdkvServerScreen())),
+          MenuTile(label: 'SMB Share', icon: Icons.folder_open, accentColor: const Color(0xFF7A5CA8), onTap: () => _push(const SmbScreen())),
+          MenuTile(label: 'FTP', icon: Icons.cloud_sync, accentColor: const Color(0xFFB4632E), onTap: () => _push(const FtpScreen())),
         ])),
       ),
       MenuTile(
