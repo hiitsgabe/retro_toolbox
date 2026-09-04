@@ -62,6 +62,20 @@ class CatalogService {
     return name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
   }
 
+  /// Public slug used to key a console in the catalog (derived from its name).
+  static String consoleId(String name) => _nameToId(name);
+
+  /// Extracts an archive.org item id from a bare id or a full item/details URL.
+  /// Returns null if [input] isn't a plausible id or archive.org URL.
+  static String? parseIaItemId(String input) {
+    final s = input.trim();
+    if (s.isEmpty) return null;
+    if (!s.contains('/') && !s.startsWith('http')) {
+      return RegExp(r'^[\w\-.]+$').hasMatch(s) ? s : null;
+    }
+    return RegExp(r'archive\.org/(?:download|details)/([^/]+)').firstMatch(s)?.group(1);
+  }
+
   static Map<String, Console> _parseConsoles(String jsonStr) {
     final decoded = jsonDecode(jsonStr);
     final consoles = <String, Console>{};
@@ -118,6 +132,55 @@ class CatalogService {
     } finally {
       client.close();
     }
+  }
+
+  /// Appends [consoleObj] to a raw catalog JSON string, preserving its shape
+  /// (PyGame array or legacy id-keyed map) and any existing entries such as
+  /// list_systems discovery endpoints. Null/blank input yields a fresh array.
+  /// Throws [StateError] if a console with [id] already exists.
+  static String appendConsoleToRaw(String? rawJson, String id, Map<String, dynamic> consoleObj) {
+    final trimmed = rawJson?.trim() ?? '';
+    final obj = Map<String, dynamic>.from(consoleObj)..remove('id');
+
+    if (trimmed.isEmpty) return jsonEncode([obj]);
+
+    final decoded = jsonDecode(trimmed);
+    if (decoded is List) {
+      for (final item in decoded) {
+        if (item is Map && _nameToId(item['name'] as String? ?? '') == id) {
+          throw StateError('A console with id "$id" already exists.');
+        }
+      }
+      return jsonEncode([...decoded, obj]);
+    }
+    if (decoded is Map<String, dynamic>) {
+      if (decoded.containsKey(id)) {
+        throw StateError('A console with id "$id" already exists.');
+      }
+      return jsonEncode({...decoded, id: obj});
+    }
+    throw const FormatException('Unrecognized catalog JSON shape.');
+  }
+
+  /// Appends a single [console] to the user catalog (creating it from the
+  /// bundled asset if needed), marks it as added, and clears caches.
+  Future<void> addConsole(Console console) async {
+    final file = await _userConsolesFile();
+    String? raw;
+    if (await file.exists()) {
+      raw = await file.readAsString();
+    } else {
+      try {
+        raw = await rootBundle.loadString('assets/catalog/consoles.json');
+      } catch (_) {
+        raw = null;
+      }
+    }
+    final id = _nameToId(console.name);
+    final merged = appendConsoleToRaw(raw, id, {...console.toJson(), 'added': true});
+    await file.parent.create(recursive: true);
+    await file.writeAsString(merged);
+    _consolesCache.clear();
   }
 
   /// Removes the user catalog, reverting to the bundled example (if any).
