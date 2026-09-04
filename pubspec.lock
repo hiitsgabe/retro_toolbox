@@ -760,6 +760,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.1.1"
+  rar:
+    dependency: "direct main"
+    description:
+      name: rar
+      sha256: "670d3b42bcf85fe2d1d63b24e8ca3352dc1aac9414d25903a8b6bb77c8d3b7df"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.3.0"
   riverpod:
     dependency: transitive
     description:
