@@ -218,7 +218,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
           child: Center(child: Text('No matches.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
         )
       else ...[
-        for (final g in slice) _gameCard(theme, g),
+        for (final g in slice) _gameCard(theme, g, state.threeDsIp.trim().isNotEmpty),
         if (pageCount > 1) _pager(theme, page, pageCount, filtered.length, start, slice.length),
       ],
     ];
@@ -238,7 +238,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     );
   }
 
-  Widget _gameCard(ThemeData theme, FbiGame g) {
+  Widget _gameCard(ThemeData theme, FbiGame g, bool canSend) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -249,7 +249,11 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(icon: const Icon(Icons.qr_code_2), tooltip: 'QR', onPressed: () => _showQr(g)),
-            IconButton(icon: const Icon(Icons.send), tooltip: 'Send to 3DS', onPressed: () => _send(g)),
+            IconButton(
+              icon: const Icon(Icons.send),
+              tooltip: canSend ? 'Send to 3DS' : 'Enter your 3DS IP to send',
+              onPressed: canSend ? () => _send(g) : null,
+            ),
           ],
         ),
       ),
