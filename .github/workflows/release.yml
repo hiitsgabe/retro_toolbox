@@ -364,6 +364,33 @@ jobs:
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
 
+      # Bundle chdman (MAME tools, BSD-3) so the CHD Converter works without a
+      # system install. Copies chdman plus its non-core shared libs, rpath'd to
+      # $ORIGIN so they load next to the binary after extraction.
+      - name: Prepare chdman (Linux)
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y mame-tools patchelf
+          CH=$(command -v chdman)
+          echo "chdman: $CH"
+          DEST=assets/chdman/linux
+          rm -f "$DEST"/.gitkeep
+          mkdir -p "$DEST"
+          cp "$CH" "$DEST/chdman"
+          chmod u+w "$DEST/chdman"
+          # Copy dependent libs, skipping the core system set the host always has.
+          skip='libc\.so|libm\.so|libdl\.so|libpthread|librt\.so|libresolv|ld-linux|linux-vdso|libgcc_s|libstdc\+\+'
+          ldd "$CH" | awk '/=> \//{print $3}' | while read -r lib; do
+            base=$(basename "$lib")
+            if echo "$base" | grep -Eq "$skip"; then continue; fi
+            cp -L "$lib" "$DEST/$base"
+            chmod u+w "$DEST/$base"
+            patchelf --set-rpath '$ORIGIN' "$DEST/$base" || true
+          done
+          patchelf --set-rpath '$ORIGIN' "$DEST/chdman"
+          ( cd "$DEST"; ( echo chdman; ls | grep -E '\.so' ) > manifest.txt )
+          echo "Bundled:"; ls -1 "$DEST"
+
       - name: Build Linux (x64)
         run: flutter build linux --release
 
@@ -453,6 +480,26 @@ jobs:
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
+
+      # Bundle chdman (MAME tools, BSD-3) so the CHD Converter works without a
+      # system install. Sourced from the MAME Chocolatey package; the exe is
+      # copied with any DLLs sitting next to it.
+      - name: Prepare chdman (Windows)
+        shell: pwsh
+        run: |
+          choco install mame -y --no-progress
+          $exe = Get-ChildItem -Path 'C:\ProgramData\chocolatey','C:\Program Files' -Recurse -Filter chdman.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { Write-Error 'chdman.exe not found after installing mame'; exit 1 }
+          Write-Host "chdman: $($exe.FullName)"
+          $dest = 'assets/chdman/windows'
+          Remove-Item "$dest/.gitkeep" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item $exe.FullName "$dest/chdman.exe"
+          # chdman.exe is normally self-contained; copy any sibling DLLs just in case.
+          Get-ChildItem -Path $exe.DirectoryName -Filter *.dll -ErrorAction SilentlyContinue | Copy-Item -Destination $dest
+          $names = @('chdman.exe') + (Get-ChildItem $dest -Filter *.dll | ForEach-Object { $_.Name })
+          $names | Set-Content "$dest/manifest.txt"
+          Get-ChildItem $dest | Format-Table Name,Length
 
       # Surfaces the detected Visual Studio install, so a future runner-image
       # change shows up here instead of as an opaque CMake generator error.

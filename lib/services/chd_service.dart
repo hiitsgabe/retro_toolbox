@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, MethodChannel;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -45,16 +45,31 @@ class ChdService {
   // --- binary resolution --------------------------------------------------
 
   static String? _resolvedBundled;
+  static const _nativeChannel = MethodChannel('retrotoolbox/native');
 
-  /// Resolves a usable chdman path: configured path → bundled asset → PATH.
-  /// Returns null if none is available.
+  /// Resolves a usable chdman path. On Android it must be a binary shipped as a
+  /// jniLib (libchdman.so) and run from the read-only nativeLibraryDir, since
+  /// exec from writable app dirs is blocked. Elsewhere: configured path →
+  /// bundled asset → system PATH. Returns null if none is available.
   static Future<String?> resolveChdman(String? configuredPath) async {
     if (configuredPath != null && configuredPath.isNotEmpty && File(configuredPath).existsSync()) {
       return configuredPath;
     }
+    if (Platform.isAndroid) return _androidNativeChdman();
     final bundled = await _bundledChdman();
     if (bundled != null) return bundled;
     return _chdmanOnPath();
+  }
+
+  static Future<String?> _androidNativeChdman() async {
+    try {
+      final dir = await _nativeChannel.invokeMethod<String>('nativeLibDir');
+      if (dir == null) return null;
+      final f = File(p.join(dir, 'libchdman.so'));
+      return f.existsSync() ? f.path : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// If a chdman for this platform ships in assets, extract it (and any sibling

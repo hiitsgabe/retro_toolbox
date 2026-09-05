@@ -1,29 +1,38 @@
-# Bundled chdman binaries (optional)
+# Bundled chdman
 
-CHD conversion (the **CHD Converter** tool) shells out to `chdman`, the MAME
-disc-image tool. The app resolves it in this order:
+CHD conversion (the **CHD Converter** tool) runs `chdman`, the MAME disc-image
+tool (BSD-3-Clause, redistributable). How it's shipped per platform:
 
-1. A path the user set in the tool (**Select chdman binary**).
-2. A binary bundled here, for the current platform (this folder).
-3. `chdman` on the system `PATH` (Batocera, Knulli, and desktops with
-   `mame-tools` usually have it).
+| Platform | Source | Where it lives |
+|----------|--------|----------------|
+| macOS    | Homebrew `rom-tools`, committed | `assets/chdman/macos/` |
+| Linux    | built in release CI (`mame-tools`) | `assets/chdman/linux/` |
+| Windows  | built in release CI (Chocolatey `mame`) | `assets/chdman/windows/` |
+| Android  | **drop-in** (see below) | `android/app/src/main/jniLibs/<abi>/libchdman.so` |
 
-Steps 1 and 3 work out of the box. Step 2 lets the app be self-contained on
-platforms that have no system `chdman` — most importantly **Android**.
+## Desktop layout (macOS / Linux / Windows)
 
-## How to enable a bundled binary
+Each `<os>` folder has a `manifest.txt` listing the files to extract — the
+binary (`chdman` / `chdman.exe`) first, then any bundled shared libraries. At
+runtime `ChdService` copies them into the app support dir (libs load via
+`@loader_path` on macOS / `$ORIGIN` on Linux, so they sit next to the binary)
+and runs the binary. The Linux and Windows folders ship empty (`.gitkeep`) in
+git; the release workflow fills them on each build.
 
-1. Obtain a **trusted** `chdman` built for the target platform/ABI. Verify it
-   yourself — do not ship an unverified binary. `chdman` is part of MAME
-   (BSD-3-Clause), so redistribution is allowed. The open-source
-   [CHDroid](https://github.com/Ottavio97/CHDroid) project shows how the
-   Android arm64 binary is built.
-2. Drop it at `assets/chdman/<os>/chdman` (add `.exe` on Windows), where
-   `<os>` is one of `android`, `macos`, `linux`, `windows` — matching
-   `Platform.operatingSystem`.
-3. Declare the folder in `pubspec.yaml` under `flutter: assets:` — e.g.
-   `- assets/chdman/android/` — and rebuild.
+Resolution order on desktop: user-set path → bundled folder → system `PATH`.
 
-At runtime `ChdService` copies the bundled binary into the app support
-directory, marks it executable, and runs it. No code change is needed once the
-binary and the `pubspec.yaml` line are in place.
+## Android
+
+Android forbids executing binaries from writable app dirs, so chdman is shipped
+as a **jniLib** named `libchdman.so` and run from the read-only
+`nativeLibraryDir`. See `android/app/src/main/jniLibs/README.md`. Drop a
+position-independent chdman built with the Android NDK for each ABI (the
+[CHDroid](https://github.com/Ottavio97/CHDroid) project has a working recipe).
+`ChdService` finds it via the `retrotoolbox/native` method channel.
+
+## Verifying / updating a binary
+
+Only ship binaries from a trusted source (a distro/Homebrew/Chocolatey package,
+or your own build). The macOS binary here came from Homebrew `rom-tools`
+(mamedev.org), with its dylib closure rewritten to `@loader_path` and ad-hoc
+signed.

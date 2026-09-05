@@ -52,6 +52,8 @@ flutter:
     # any sibling libs, listed in its manifest.txt. See assets/chdman/README.md.
     - assets/chdman/
     - assets/chdman/macos/
+    - assets/chdman/linux/
+    - assets/chdman/windows/
   fonts:
     - family: ChakraPetch
       fonts:
