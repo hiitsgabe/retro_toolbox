@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -45,6 +47,17 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     }
   }
 
+  // Render the QR to a PNG and show it as an image. QrImageView's CustomPaint
+  // renders blank under Impeller (macOS/Android), so we rasterize instead.
+  Future<Uint8List?> _qrPng(String url) async {
+    try {
+      final data = await QrPainter(data: url, version: QrVersions.auto, gapless: true).toImageData(600);
+      return data?.buffer.asUint8List();
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _showQr(FbiGame g) {
     showDialog(
       context: context,
@@ -53,21 +66,26 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.white,
-              child: QrImageView(
-                data: g.url,
-                size: 240,
-                backgroundColor: Colors.white,
-                // Without this, data that overflows QR capacity throws and can
-                // wedge the dialog. Show a fallback instead.
-                errorStateBuilder: (context, err) => const SizedBox(
-                  width: 240,
-                  height: 240,
-                  child: Center(child: Text('URL too long for a QR code — use Send instead.', textAlign: TextAlign.center)),
-                ),
-              ),
+            FutureBuilder<Uint8List?>(
+              future: _qrPng(g.url),
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) {
+                  return const SizedBox(width: 240, height: 240, child: Center(child: CircularProgressIndicator()));
+                }
+                final bytes = snap.data;
+                if (bytes == null) {
+                  return const SizedBox(
+                    width: 240,
+                    height: 240,
+                    child: Center(child: Text('URL too long for a QR code — use Send instead.', textAlign: TextAlign.center)),
+                  );
+                }
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.white,
+                  child: Image.memory(bytes, width: 240, height: 240, filterQuality: FilterQuality.none),
+                );
+              },
             ),
             const SizedBox(height: 12),
             const Text('In FBI: Remote Install → Scan QR Code', textAlign: TextAlign.center, style: TextStyle(fontSize: 13)),
