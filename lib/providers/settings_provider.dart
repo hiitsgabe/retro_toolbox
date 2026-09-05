@@ -184,6 +184,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
+  String? getBoot9Path() => state.boot9Path;
+
   Future<void> setBoot9Path(String path) async {
     final newState = state.copyWith(
       boot9Path: path.isEmpty ? null : path,

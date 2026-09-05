@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:roms_downloader/providers/fbi_server_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
@@ -35,7 +36,32 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
+  // FBI installs .cia only. A .3ds/.cci title must be converted first.
+  bool _needsConversion(FbiGame g) {
+    final t = g.game.title.toLowerCase();
+    return !(t.endsWith('.cia'));
+  }
+
+  /// Explains that a 3DS cart image can't go straight to FBI and routes the
+  /// user to convert it (which needs boot9.bin).
+  void _showNeedsConversion(FbiGame g) {
+    final hasBoot9 = ref.read(settingsProvider).boot9Path?.isNotEmpty ?? false;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Needs conversion to CIA'),
+        content: Text(
+          'FBI installs .cia files. “${g.game.title}” is a 3DS cart image (.3ds/.cci), so it has to be '
+          'converted first — use Tools → 3DS → CIA${hasBoot9 ? '' : ', which needs your console\'s boot9.bin'}. '
+          'Once converted, serve the .cia (e.g. via Retro Tools Server) and install it here.',
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+      ),
+    );
+  }
+
   Future<void> _send(FbiGame g) async {
+    if (_needsConversion(g)) return _showNeedsConversion(g);
     final ip = _ip.text.trim();
     if (ip.isEmpty) return _snack('Enter your 3DS IP first.');
     await ref.read(fbiServerProvider.notifier).setThreeDsIp(ip);
@@ -59,6 +85,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
   }
 
   void _showQr(FbiGame g) {
+    if (_needsConversion(g)) return _showNeedsConversion(g);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -244,7 +271,19 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
       child: ListTile(
         leading: const Icon(Icons.videogame_asset_outlined),
         title: Text(g.game.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(g.console.name, style: theme.textTheme.bodySmall),
+        subtitle: Row(
+          children: [
+            Flexible(child: Text(g.console.name, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
+            if (_needsConversion(g)) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: theme.colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
+                child: Text('needs CIA', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onTertiaryContainer)),
+              ),
+            ],
+          ],
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
