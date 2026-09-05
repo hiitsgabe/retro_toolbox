@@ -49,6 +49,7 @@ flutter:
     - assets/icon.png
     - assets/boxarts/
     - assets/console_art/
+    - assets/sport_art/
     # chdman binaries are per-platform. Each <os> folder ships the binary plus
     # any sibling libs, listed in its manifest.txt. See assets/chdman/README.md.
     - assets/chdman/

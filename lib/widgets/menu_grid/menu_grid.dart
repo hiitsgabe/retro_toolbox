@@ -20,6 +20,12 @@ class MenuTile {
   /// Optional brand accent. When set, the tile is a darkened gradient of this
   /// color (logo/label rendered light on top) instead of the neutral surface.
   final Color? accentColor;
+
+  /// Optional smaller line under [label] (e.g. the console for a game tile).
+  final String? subtitle;
+
+  /// Optional corner badge (e.g. "ALPHA").
+  final String? badge;
   final VoidCallback onTap;
 
   const MenuTile({
@@ -29,6 +35,8 @@ class MenuTile {
     this.assetPath,
     this.bgAssetPath,
     this.accentColor,
+    this.subtitle,
+    this.badge,
   });
 
   static void _noop() {}
@@ -39,12 +47,18 @@ class MenuTile {
 class MenuGrid extends StatelessWidget {
   final List<MenuTile> tiles;
 
-  const MenuGrid({super.key, required this.tiles});
+  /// Set when embedding inside another scroll view (so the grid itself doesn't
+  /// scroll and sizes to its content).
+  final bool shrinkWrap;
+
+  const MenuGrid({super.key, required this.tiles, this.shrinkWrap = false});
 
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
       padding: const EdgeInsets.all(16),
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 180,
         mainAxisSpacing: 16,
@@ -135,20 +149,76 @@ class MenuTileFace extends StatelessWidget {
                 if (showLabel)
                   Padding(
                     padding: const EdgeInsets.only(left: 8, right: 8, bottom: 12),
-                    child: Text(
-                      tile.label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _light ? Colors.white : null,
-                        shadows: _light ? const [Shadow(color: Colors.black87, blurRadius: 4)] : null,
-                      ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          tile.label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: _light ? Colors.white : null,
+                            shadows: _light ? const [Shadow(color: Colors.black87, blurRadius: 4)] : null,
+                          ),
+                        ),
+                        if (tile.subtitle != null)
+                          Text(
+                            tile.subtitle!,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _light ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant,
+                              shadows: _light ? const [Shadow(color: Colors.black87, blurRadius: 4)] : null,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
               ],
             ),
+            if (tile.badge != null)
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Transform.rotate(
+                  angle: 0.12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFFFD54F), Color(0xFFFF6F00)],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 1.5),
+                      boxShadow: [
+                        BoxShadow(color: const Color(0xFFFF6F00).withValues(alpha: 0.6), blurRadius: 8, spreadRadius: 0.5),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.auto_awesome, size: 11, color: Colors.black87),
+                        const SizedBox(width: 3),
+                        Text(
+                          tile.badge!,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.black87,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

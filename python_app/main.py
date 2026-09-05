@@ -105,6 +105,279 @@ def run_3dsconv(job):
         _report(progress_file, 'ERROR:Conversion produced no CIA — check that boot9.bin is correct for this ROM')
 
 
+SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_analyze', 'sports_patch'}
+
+
+def _configure_ssl():
+    """Point HTTPS at a real CA bundle.
+
+    The embedded CPython (serious_python) ships no system trust store, so
+    urllib's default context can't verify certificates and every provider
+    request fails — surfacing as "no teams". certifi supplies the CA bundle;
+    force it as the default HTTPS context so the library's stdlib urllib picks
+    it up without any code change on its side.
+    """
+    try:
+        import ssl
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        ssl._create_default_https_context = lambda *a, **k: ctx
+    except Exception as e:
+        _report(None, f'SSL config skipped: {e}')
+
+
+_DATA_EXTS = ('.bin', '.iso', '.img', '.gen', '.md', '.smc', '.sfc', '.nes', '.cso')
+
+
+def _cue_first_bin(cue_path):
+    """The first FILE "..." track a .cue references (the data track), or None."""
+    import re
+    try:
+        txt = open(cue_path, errors='replace').read()
+    except OSError:
+        return None
+    m = re.search(r'FILE\s+"([^"]+)"', txt)
+    return m.group(1) if m else None
+
+
+def _find_data_file(files):
+    """The patchable data image among a disc's files: the .cue's first track if
+    present, else the largest file with a known data extension."""
+    import os
+    cues = [f for f in files if f.lower().endswith('.cue')]
+    for cue in cues:
+        b = _cue_first_bin(cue)
+        if b:
+            for f in files:
+                if os.path.basename(f) == b:
+                    return f
+    cand = [f for f in files if f.lower().endswith(_DATA_EXTS)]
+    if cand:
+        return max(cand, key=lambda f: os.path.getsize(f))
+    return files[0] if files else None
+
+
+def _patch_with_packaging(patcher, rom_path, output_path, rosters, on_progress):
+    """Run patcher.patch, honoring disc packaging like the old app:
+
+    - .zip in -> .zip out: extract, patch the data image in place (internal
+      names preserved), re-zip to output_path.
+    - loose .cue/.bin(+tracks): patch the data track, copy companion tracks and
+      the .cue to the output prefix, rewriting the .cue's FILE references.
+    - single image (.iso/.smc/...): patch straight through.
+
+    Returns the library's PatchResult.
+    """
+    import os
+    import shutil
+    import tempfile
+    import zipfile
+
+    rom_path = str(rom_path)
+    output_path = str(output_path)
+    out_dir = os.path.dirname(output_path)
+    new_prefix = os.path.splitext(os.path.basename(output_path))[0]
+
+    # --- ZIP in -> ZIP out ---------------------------------------------------
+    if rom_path.lower().endswith('.zip'):
+        work = tempfile.mkdtemp(prefix='rrp_zip_')
+        try:
+            with zipfile.ZipFile(rom_path) as zf:
+                zf.extractall(work)
+            inner = [os.path.join(dp, f) for dp, _, fs in os.walk(work) for f in fs]
+            data_file = _find_data_file(inner)
+            if not data_file:
+                raise rrp.RomError('No patchable image inside the zip')
+            result = patcher.patch(
+                rom_path=Path(data_file), output_path=Path(data_file),
+                rosters=rosters, on_progress=on_progress,
+            )
+            out_zip = output_path if output_path.lower().endswith('.zip') else output_path + '.zip'
+            # Rename the inner files to the output prefix too (keeping any
+            # " (Track N)" suffix), and rewrite the .cue's FILE references so it
+            # still points at the renamed tracks.
+            import re as _re
+            data_base = os.path.splitext(os.path.basename(data_file))[0]
+            inner_base = _re.sub(r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', data_base)
+            def _renamed(name):
+                return name.replace(inner_base, new_prefix) if inner_base and inner_base in name else name
+            with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for f in inner:
+                    arc = _renamed(os.path.basename(f))
+                    if f.lower().endswith('.cue') and inner_base:
+                        txt = open(f, errors='replace').read().replace(inner_base, new_prefix)
+                        zf.writestr(arc, txt)
+                    else:
+                        zf.write(f, arc)
+            # Report the zip we actually wrote.
+            result.output_path = out_zip
+            return result
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+    # --- loose multi-track disc (.cue + .bin tracks) -------------------------
+    src_dir = os.path.dirname(rom_path)
+    base = os.path.splitext(os.path.basename(rom_path))[0]
+    # A track suffix like " (Track 2)" isn't part of the shared base name.
+    import re as _re
+    game_base = _re.sub(r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', base)
+    companions = [
+        os.path.join(src_dir, e) for e in (os.listdir(src_dir) if src_dir else [])
+        if e.lower().endswith(('.bin', '.cue')) and e.lower().startswith(game_base.lower())
+    ]
+    if companions:
+        os.makedirs(out_dir, exist_ok=True)
+        data_file = _find_data_file(companions)
+        result = None
+        for f in companions:
+            ext = os.path.splitext(f)[1]
+            dst = os.path.join(out_dir, os.path.basename(f).replace(game_base, new_prefix))
+            if f == data_file:
+                result = patcher.patch(
+                    rom_path=Path(f), output_path=Path(dst),
+                    rosters=rosters, on_progress=on_progress,
+                )
+            elif ext.lower() == '.cue':
+                txt = open(f, errors='replace').read().replace(game_base, new_prefix)
+                open(dst, 'w').write(txt)
+            else:
+                shutil.copy2(f, dst)
+        return result
+
+    # --- single image --------------------------------------------------------
+    return patcher.patch(
+        rom_path=Path(rom_path), output_path=Path(output_path),
+        rosters=rosters, on_progress=on_progress,
+    )
+
+
+def _register_league(league):
+    """Add a user-supplied league to the library's ESPN catalog (idempotent).
+
+    Lets the app offer custom leagues from a JSON file: fetch resolves a
+    league_id to an ESPN code through this catalog, so a code the library
+    doesn't ship must be injected before fetch.
+    """
+    from retro_roster_patcher.sports import espn as _espn
+    if any(item['id'] == league['id'] for item in _espn.ESPN_LEAGUES):
+        return
+    _espn.ESPN_LEAGUES.append({
+        'id': league['id'],
+        'code': league['code'],
+        'name': league.get('name', str(league['id'])),
+        'country': league.get('country', ''),
+    })
+    _espn._ID_TO_LEAGUE = {i['id']: i for i in _espn.ESPN_LEAGUES}
+    _espn._CODE_TO_LEAGUE = {i['code']: i for i in _espn.ESPN_LEAGUES}
+
+
+def run_sports(job):
+    """Drive the retro_roster_patcher library for one sports job.
+
+    Job `type` selects the step; data-returning steps write JSON to `output_file`
+    and then report DONE (the progress_file only carries PROGRESS/DONE/ERROR).
+    Everything is caught and reported as ERROR:<type>: <msg>.
+    """
+    progress_file = job.get('progress_file')
+    output_file = job.get('output_file')
+    jtype = job.get('type')
+
+    def emit(obj):
+        if output_file:
+            with open(output_file, 'w') as f:
+                json.dump(obj, f)
+
+    last = [-1]
+    last_msg = ['']
+
+    def on_progress(frac, msg=''):
+        if msg and msg != last_msg[0]:
+            last_msg[0] = msg
+            _report(progress_file, f'STATUS:{msg}')
+        pct = max(0, min(99, int((frac or 0) * 100)))
+        if pct != last[0]:
+            last[0] = pct
+            _report(progress_file, f'PROGRESS:{pct}')
+
+    _configure_ssl()
+    try:
+        import retro_roster_patcher as rrp
+    except Exception as e:
+        _report(progress_file, f'ERROR:retro_roster_patcher not available: {e}')
+        return
+
+    try:
+        if jtype == 'list_patchers':
+            emit([p.to_dict() for p in rrp.list_patchers()])
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'list_leagues':
+            from retro_roster_patcher.sports import espn as _espn
+            emit([{'id': i['id'], 'name': i['name'], 'country': i.get('country', '')}
+                  for i in _espn.ESPN_LEAGUES])
+            _report(progress_file, 'DONE')
+            return
+
+        game_id = job.get('game_id')
+        cache_dir = job.get('cache_dir') or os.path.join(
+            os.environ.get('JOBS_DIR', '.'), '..', 'rrp_cache')
+        provider = job.get('provider') or None
+
+        if jtype == 'sports_analyze':
+            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            info = patcher.analyze_rom(Path(job['rom_path']))
+            emit(info.to_dict())
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_fetch':
+            # A custom (user-JSON) league carries its ESPN code; register it in
+            # the catalog so fetch can resolve league_id -> code. Built-in
+            # leagues are already there and skip this.
+            league = job.get('league')
+            if league and league.get('code'):
+                _register_league(league)
+            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            data = patcher.fetch(
+                season=int(job['season']),
+                league_id=job.get('league_id') or (league or {}).get('id'),
+                on_progress=on_progress,
+            )
+            # Reorder each squad into the game's fielding order (starters first)
+            # so the editor shows a sensible lineup instead of the provider's
+            # alphabetical dump. Advisory only — patch still runs its own select.
+            for roster in data.teams:
+                try:
+                    roster.players = patcher.suggest_squad_order(roster)
+                except Exception:
+                    pass  # keep raw order if a game's ordering hiccups
+            emit(rrp.league_data_to_dict(data))
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_patch':
+            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            with open(job['rosters_file']) as f:
+                data = rrp.league_data_from_dict(json.load(f))
+            raw_map = job.get('slot_mapping')
+            slot_mapping = ([rrp.SlotMapping.from_dict(m) for m in raw_map]
+                            if raw_map else None)
+            rosters = patcher.map_rosters(data, slot_mapping)
+            result = _patch_with_packaging(
+                patcher, job['rom_path'], job['output_path'], rosters, on_progress,
+            )
+            emit(result.to_dict())
+            _report(progress_file, 'DONE')
+            return
+
+        _report(progress_file, f'ERROR:Unknown sports job type: {jtype}')
+    except rrp.RetroRosterError as e:
+        _report(progress_file, f'ERROR:{type(e).__name__}: {e}')
+    except Exception as e:
+        _report(progress_file, f'ERROR:{e}')
+
+
 def run_job(job):
     """Run one job described by a dict, reporting via its progress_file.
 
@@ -114,6 +387,8 @@ def run_job(job):
     """
     if job.get('type') == '3dsconv':
         return run_3dsconv(job)
+    if job.get('type') in SPORTS_TYPES:
+        return run_sports(job)
 
     progress_file = job.get('progress_file')
     nsz_file = job.get('nsz_file')
@@ -199,9 +474,30 @@ def _self_test():
         assert len(calls) == 1, calls
         assert 'DONE' in open(pf).read()
         assert not glob.glob(os.path.join(d, 'job_*.json*')), 'job file not cleaned up'
-        print('self-test OK')
     finally:
         run_job = original
+
+    # Sports jobs route to run_sports and never raise, even with the lib absent.
+    global run_sports
+    sports_orig = run_sports
+    routed = []
+    run_sports = lambda job: routed.append(job.get('type'))
+    try:
+        for t in SPORTS_TYPES:
+            run_job({'type': t})
+        assert set(routed) == SPORTS_TYPES, routed
+    finally:
+        run_sports = sports_orig
+
+    # With the real handler and the lib unavailable, a sports job reports ERROR
+    # (not a crash) and leaves no DONE.
+    import tempfile as _tf
+    pf2 = os.path.join(_tf.mkdtemp(), 'p.txt')
+    open(pf2, 'w').close()
+    run_job({'type': 'list_patchers', 'progress_file': pf2})
+    out = open(pf2).read()
+    assert 'DONE' in out or 'ERROR:' in out, out
+    print('self-test OK')
 
 
 def main():

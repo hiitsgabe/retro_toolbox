@@ -1,2 +1,8 @@
 zstandard
 pycryptodome
+pyaes
+# CA bundle so the embedded CPython can verify HTTPS to the roster providers.
+certifi
+# Sports roster patching. [images] pulls Pillow, needed by the PSX soccer game's
+# TIM generation; drop the extra if that game is disabled to shrink the build.
+retro-roster-patcher[images] @ git+https://github.com/hiitsgabe/retro_roster_patcher

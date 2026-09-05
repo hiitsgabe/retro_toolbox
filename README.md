@@ -105,6 +105,29 @@ Latest builds are on the [Actions page](../../actions) (GitHub login required).
 
 ## Project Structure
 
+### Sports — custom leagues
+
+The **Sports** menu patches game rosters with real teams via the
+[`retro_roster_patcher`](https://github.com/hiitsgabe/retro_roster_patcher)
+library. Soccer games let you pick a league; the built-in list plus any leagues
+you add yourself are shown.
+
+To add your own, import a JSON file from the league step ("Add your own
+leagues"). Each entry needs an ESPN league code:
+
+```json
+[
+  { "id": 9001, "code": "eng.2", "name": "Championship", "country": "England" }
+]
+```
+
+- `id` — any number not clashing with a built-in league (use 9000+).
+- `code` — the ESPN league code (e.g. `eng.2`, `bra.2`, `conmebol.sudamericana`).
+- `name` / `country` — shown in the picker.
+
+Imported leagues are stored in `sports_custom_leagues.json` in the app's support
+directory and merged into the picker.
+
 ```
 lib/
   models/          # Data models (console, settings, task queue, download)
