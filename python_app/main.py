@@ -21,10 +21,12 @@ def run_3dsconv(job):
     with runpy each time and detect success by a new .cia appearing in output.
     """
     import runpy
+    import re
     progress_file = job.get('progress_file')
     input_file = job.get('input_file')
     output_dir = job.get('output_dir')
     boot9 = job.get('boot9_path') or None
+    ignore_encryption = job.get('ignore_encryption') or False
     if not input_file or not output_dir:
         _report(progress_file, 'ERROR:Missing input_file or output_dir in job')
         return
@@ -35,26 +37,54 @@ def run_3dsconv(job):
     argv = ['3dsconv.py', '-o', output_dir]
     if boot9:
         argv += ['-b', boot9]
+    if ignore_encryption:
+        argv.append('--ignore-encryption')
     argv.append(input_file)
 
-    old_argv = sys.argv
+    # 3dsconv writes "\r  NN.N% x / y" to stdout; capture it into progress.
+    pct_re = re.compile(r'(\d+(?:\.\d+)?)%')
+
+    class _ProgressTap:
+        def __init__(self):
+            self.buf = ''
+            self.last = -1
+
+        def write(self, s):
+            self.buf += s
+            for m in pct_re.finditer(self.buf):
+                pct = int(float(m.group(1)))
+                if pct != self.last:
+                    self.last = pct
+                    if progress_file:
+                        with open(progress_file, 'a') as f:
+                            f.write('PROGRESS:%d\n' % pct)
+            self.buf = self.buf[-64:]
+
+        def flush(self):
+            pass
+
+    old_argv, old_stdout = sys.argv, sys.stdout
     sys.argv = argv
+    sys.stdout = _ProgressTap()
     _report(progress_file, 'PROGRESS:0')
     try:
         runpy.run_path(script, run_name='__main__')
     except SystemExit:
         pass  # 3dsconv calls sys.exit on bad input; success is judged by output
     except Exception as e:
+        sys.stdout = old_stdout
         _report(progress_file, f'ERROR:{e}')
         return
     finally:
-        sys.argv = old_argv
+        sys.argv, sys.stdout = old_argv, old_stdout
 
     new = set(glob.glob(os.path.join(output_dir, '*.cia'))) - before
     if new:
         _report(progress_file, 'DONE')
+    elif not ignore_encryption:
+        _report(progress_file, 'ERROR:No CIA produced. If this ROM is already decrypted, enable "ROM is decrypted"; otherwise a correct boot9.bin is needed.')
     else:
-        _report(progress_file, 'ERROR:Conversion produced no CIA — the ROM may be encrypted and need a correct boot9.bin')
+        _report(progress_file, 'ERROR:Conversion failed — the ROM may be invalid or need a correct boot9.bin')
 
 
 def run_job(job):

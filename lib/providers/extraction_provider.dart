@@ -158,6 +158,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     required String inputPath,
     required String outputDir,
     String? boot9Path,
+    bool ignoreEncryption = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
@@ -172,6 +173,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         inputFile: inputPath,
         outputDir: outputDir,
         boot9Path: boot9Path,
+        ignoreEncryption: ignoreEncryption,
         onProgress: (progress) {
           _updateProgress(taskId, progress);
           ExtractionService.updateNotification('Converting $fileName... ${(progress * 100).round()}%');
