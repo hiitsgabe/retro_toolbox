@@ -104,6 +104,9 @@ class TaskQueueService {
         case TaskType.chdConversion:
           await _executeChdConversionTask(ref, task, notifier);
           break;
+        case TaskType.cia3dsConversion:
+          await _executeCia3dsConversionTask(ref, task, notifier);
+          break;
       }
     } catch (e) {
       debugPrint('Task execution error for ${task.id}: $e');
@@ -148,6 +151,18 @@ class TaskQueueService {
       inputPath: task.params['inputPath'] as String,
       outputDir: task.params['outputDir'] as String,
       chdmanPath: task.params['chdmanPath'] as String?,
+    );
+  }
+
+  static Future<void> _executeCia3dsConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
+    final extractionNotifier = ref.read(extractionProvider.notifier);
+
+    // Fire and forget — cia3dsConvert manages its own queue-status updates.
+    extractionNotifier.cia3dsConvert(
+      taskId: task.params['taskId'] as String,
+      inputPath: task.params['inputPath'] as String,
+      outputDir: task.params['outputDir'] as String,
+      boot9Path: task.params['boot9Path'] as String?,
     );
   }
 }
