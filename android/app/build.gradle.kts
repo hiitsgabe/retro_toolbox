@@ -29,6 +29,15 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    // Extract native libs to disk at install so the bundled chdman (shipped as
+    // jniLibs/<abi>/libchdman.so) lands in the read-only nativeLibraryDir and
+    // can be exec'd — Android blocks running binaries from writable app dirs.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     defaultConfig {
         applicationId = "name.rafaismy.retrotoolbox"
         minSdk = flutter.minSdkVersion
