@@ -20,6 +20,7 @@ class AppSettings {
   final String? iaCookies; // "logged-in-user=..; logged-in-sig=.." for restricted downloads
   final bool nszDecompressEnabled;
   final String? nszKeysPath;
+  final String? chdmanPath; // user-set path to a chdman binary, if any
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
 
   const AppSettings({
@@ -30,6 +31,7 @@ class AppSettings {
     this.iaCookies,
     this.nszDecompressEnabled = true,
     this.nszKeysPath,
+    this.chdmanPath,
     this.catalogSourceUrl,
   });
 
@@ -49,6 +51,8 @@ class AppSettings {
     bool? nszDecompressEnabled,
     String? nszKeysPath,
     bool clearNszKeysPath = false,
+    String? chdmanPath,
+    bool clearChdmanPath = false,
     String? catalogSourceUrl,
     bool clearCatalogSourceUrl = false,
   }) {
@@ -60,6 +64,7 @@ class AppSettings {
       iaCookies: clearIaCredentials ? null : (iaCookies ?? this.iaCookies),
       nszDecompressEnabled: nszDecompressEnabled ?? this.nszDecompressEnabled,
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
+      chdmanPath: clearChdmanPath ? null : (chdmanPath ?? this.chdmanPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
     );
   }
@@ -73,6 +78,7 @@ class AppSettings {
       if (iaCookies != null) 'iaCookies': iaCookies,
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
+      if (chdmanPath != null) 'chdmanPath': chdmanPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
     };
   }
@@ -86,6 +92,7 @@ class AppSettings {
       iaCookies: json['iaCookies'] as String?,
       nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? true,
       nszKeysPath: json['nszKeysPath'] as String?,
+      chdmanPath: json['chdmanPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
     );
   }

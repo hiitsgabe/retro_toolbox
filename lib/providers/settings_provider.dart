@@ -174,4 +174,13 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = newState;
     await _settingsService.saveSettings(newState);
   }
+
+  Future<void> setChdmanPath(String chdmanPath) async {
+    final newState = state.copyWith(
+      chdmanPath: chdmanPath.isEmpty ? null : chdmanPath,
+      clearChdmanPath: chdmanPath.isEmpty,
+    );
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
 }

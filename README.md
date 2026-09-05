@@ -49,6 +49,7 @@ Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
 - **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android and macOS)
 - **Collection Clean:** Folder-scoped cleanup — dedupe game files (keep the largest), strip region/version tags from filenames, and remove OS junk files. Every action previews before it applies
 - **M3U Playlists:** Generate `.m3u` playlists for multi-disc games so emulators show one entry and swap discs in-game
+- **CHD Converter:** Compress disc images (`.cue`/`.gdi`/`.iso`) to CHD and extract them back, via `chdman`. Uses a system or user-set `chdman`, or a per-platform binary bundled under `assets/chdman/` (see its README)
 - **New Catalog Source:** Add a single console to your catalog from a directory-listing URL or an Internet Archive item
 
 ### Platforms
