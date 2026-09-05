@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/services/steam_service.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
 /// Search the Steam store, multi-select games, and write `.steam` shortcut
 /// files (ES-DE format) into a chosen folder.
@@ -201,7 +202,7 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
       itemCount: _results.length + (_loadingMore ? 1 : 0),
       itemBuilder: (context, i) {
         if (i >= _results.length) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: HammerLoader());
         }
         return _gameCard(theme, _results[i]);
       },

@@ -9,6 +9,7 @@ import 'package:roms_downloader/models/app_state_model.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
 import 'package:roms_downloader/widgets/menu_grid/cover_flow.dart';
 import 'package:roms_downloader/widgets/menu_grid/console_slug.dart';
+import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
 /// Grid of consoles. Tapping a console selects it and opens the game list
 /// (HomeScreen). Handles the loading / empty-catalog / error states that used
@@ -28,7 +29,7 @@ class ConsoleGridScreen extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(),
+            const HammerLoader(),
             const SizedBox(height: 16),
             Text(loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...'),
           ],

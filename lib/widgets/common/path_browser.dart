@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
 /// Plain `dart:io` filesystem browser.
 ///
@@ -192,7 +193,7 @@ class _PathBrowserState extends State<PathBrowser> {
 
   Widget _body(ThemeData theme, bool canGoUp, String parent) {
     if (_loading) {
-      return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+      return const Padding(padding: EdgeInsets.all(32), child: Center(child: HammerLoader()));
     }
     if (_error != null) {
       return Padding(
