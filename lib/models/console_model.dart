@@ -21,6 +21,7 @@ class Console {
   final String listItemId;
   final bool listSystems;
   final bool added;
+  final bool convert3dsToCia;
 
   const Console({
     required this.id,
@@ -43,6 +44,7 @@ class Console {
     this.listItemId = 'name',
     this.listSystems = false,
     this.added = false,
+    this.convert3dsToCia = false,
   });
 
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
@@ -101,6 +103,7 @@ class Console {
       listItemId: json['list_item_id'] as String? ?? 'name',
       listSystems: json['list_systems'] as bool? ?? false,
       added: json['added'] as bool? ?? false,
+      convert3dsToCia: json['convert_3ds_to_cia'] as bool? ?? false,
     );
   }
 
@@ -126,6 +129,7 @@ class Console {
       'list_item_id': listItemId,
       if (listSystems) 'list_systems': listSystems,
       if (added) 'added': added,
+      if (convert3dsToCia) 'convert_3ds_to_cia': convert3dsToCia,
     };
   }
 

@@ -210,6 +210,23 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       return; // Never ZIP-extract a .nsz file
     }
 
+    // .3ds/.cci auto-convert to .cia when the console opts in (needs boot9).
+    final lower = game.filename.toLowerCase();
+    if (lower.endsWith('.3ds') || lower.endsWith('.cci')) {
+      final console = CatalogService.consoleByIdSync(game.consoleId);
+      if (console?.convert3dsToCia ?? false) {
+        final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+        final queueNotifier = _ref.read(taskQueueProvider.notifier);
+        Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.cia3dsConversion, {
+              'taskId': taskId,
+              'inputPath': p.join(downloadDir, game.filename),
+              'outputDir': downloadDir,
+              'boot9Path': settingsNotifier.getBoot9Path(),
+            }));
+      }
+      return;
+    }
+
     final autoExtract = settingsNotifier.getAutoExtract(game.consoleId);
     if (!autoExtract) return;
 
