@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/task_queue_model.dart';
+import 'package:roms_downloader/models/extraction_model.dart';
+import 'package:roms_downloader/providers/extraction_provider.dart';
 import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
@@ -28,6 +30,7 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   String? _inputPath;
   String? _outputDir;
   bool? _chdmanReady;
+  String? _activeTaskId;
 
   @override
   void initState() {
@@ -112,9 +115,14 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
       'outputDir': _outputDir!,
       'chdmanPath': ref.read(settingsProvider).chdmanPath,
     });
-    _snack('Conversion added to the task list');
-    Navigator.of(context).pop();
+    // Stay on the page and track progress here instead of popping to the queue.
+    setState(() => _activeTaskId = taskId);
   }
+
+  void _reset() => setState(() {
+        _activeTaskId = null;
+        _inputPath = null;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -132,12 +140,64 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: ready == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : (ready ? _convertUi(context) : _chdmanWarning(context)),
+              child: _activeTaskId != null
+                  ? _progressUi(context)
+                  : ready == null
+                      ? const Center(child: CircularProgressIndicator())
+                      : (ready ? _convertUi(context) : _chdmanWarning(context)),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _progressUi(BuildContext context) {
+    final theme = Theme.of(context);
+    final task = ref.watch(extractionProvider).getTaskState(_activeTaskId!);
+    final status = task?.status ?? ExtractionStatus.extracting;
+    final progress = task?.progress ?? 0.0;
+    final verb = _inputPath != null && ChdService.modeForInput(_inputPath!) == ChdMode.extract ? 'Extracting' : 'Compressing';
+
+    if (status == ExtractionStatus.failed) {
+      return _resultCard(theme, Icons.error_outline, theme.colorScheme.error, 'Conversion failed',
+          task?.error ?? 'Unknown error', 'Try again');
+    }
+    if (status == ExtractionStatus.completed) {
+      return _resultCard(theme, Icons.check_circle, Colors.green, 'Done',
+          'Saved to $_outputDir', 'Convert another');
+    }
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$verb…', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 16),
+          LinearProgressIndicator(value: progress > 0 ? progress : null),
+          const SizedBox(height: 8),
+          Text(progress > 0 ? '${(progress * 100).round()}%' : 'Starting…',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 8),
+          Text('You can leave this screen — it keeps running in the task list.',
+              textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+
+  Widget _resultCard(ThemeData theme, IconData icon, Color color, String title, String detail, String action) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 40, color: color),
+          const SizedBox(height: 12),
+          Text(title, style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(detail, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 20),
+          FilledButton(onPressed: _reset, child: Text(action)),
+        ],
       ),
     );
   }
