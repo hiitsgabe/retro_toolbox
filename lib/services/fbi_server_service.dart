@@ -3,18 +3,20 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
 
-/// A 3DS game exposed over the FBI server, with the URL FBI downloads from.
-typedef FbiGame = ({Game game, Console console, String url});
+/// A 3DS title from the catalog, shown in the FBI list.
+typedef FbiGame = ({Game game, Console console});
 
-/// Serves 3DS .cia titles over HTTP (reusing the Tinfoil proxy) and pushes
-/// their URLs to FBI on the 3DS ("Receive URLs over the network", TCP 5000),
-/// or shows them as QR codes for FBI's "Scan QR Code" install.
+/// Serves prepared/picked .cia files from a local cache over HTTP (with Range)
+/// and installs them on a 3DS running FBI — pushed to "Receive URLs over the
+/// network" (TCP 5000) or shown as a QR for "Scan QR Code". Anything that isn't
+/// already a .cia (a .3ds/.cci, or a .zip of one) is converted before serving.
 class FbiServerService {
-  static const _formats = {'.cia'};
+  static const _formats = {'.cia', '.3ds', '.cci'};
   static const fbiPort = 5000; // the port FBI listens on, on the 3DS
 
   static bool is3dsConsole(Console c) => c.fileFormat?.any((f) => _formats.contains(f.toLowerCase())) ?? false;
@@ -37,44 +39,103 @@ class FbiServerService {
     try {
       socket.add(buildPushPayload(urls));
       await socket.flush();
-      // Best-effort: FBI acks after installing, which can take a while. Don't
-      // block the UI on it — delivery of the payload is what matters here.
       await socket.first.timeout(const Duration(seconds: 3), onTimeout: () => Uint8List(0));
     } catch (_) {
-      // Ack read is optional; the payload was already flushed.
+      // Ack is optional; the payload was already flushed.
     } finally {
       socket.destroy();
     }
   }
 
-  final _http = TinfoilServerService();
-
-  bool get running => _http.running;
-  int get port => _http.port;
-  ValueListenable<int> get activeTransfers => _http.activeTransfers;
-
-  Future<void> start({
-    required int port,
-    required Future<Map<Console, List<Game>>> Function() loadGames,
-    required Map<String, String> Function(Console) authHeaders,
-  }) =>
-      _http.start(port: port, loadGames: loadGames, authHeaders: authHeaders);
-
-  Future<void> stop() => _http.stop();
-
   static Future<List<String>> localAddresses() => TinfoilServerService.localAddresses();
 
-  /// The list of 3DS games and their download URLs on this server.
-  static List<FbiGame> games(Map<Console, List<Game>> gamesByConsole, String hostPort) {
-    final (index, routes) = TinfoilServerService.buildIndex(gamesByConsole, hostPort);
-    final files = index['files'] as List;
+  /// The catalog's 3DS titles (for the list); their URLs are produced only after
+  /// preparing (converting/copying) into the served cache.
+  static List<FbiGame> games(Map<Console, List<Game>> gamesByConsole) {
     final out = <FbiGame>[];
-    var i = 0;
-    routes.forEach((_, entry) {
-      final url = (files[i] as Map)['url'] as String;
-      out.add((game: entry.game, console: entry.console, url: url));
-      i++;
+    gamesByConsole.forEach((console, list) {
+      for (final g in list) {
+        out.add((game: g, console: console));
+      }
     });
     return out;
+  }
+
+  HttpServer? _server;
+  Directory? _cacheDir;
+  final activeTransfers = ValueNotifier<int>(0);
+
+  bool get running => _server != null;
+  int get port => _server?.port ?? 0;
+  Directory? get cacheDir => _cacheDir;
+
+  Future<void> start({required int port, required Directory cacheDir}) async {
+    await stop();
+    _cacheDir = cacheDir;
+    await cacheDir.create(recursive: true);
+    _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+    _server!.listen(_handle, onError: (e) => debugPrint('fbi server error: $e'));
+  }
+
+  Future<void> stop() async {
+    await _server?.close(force: true);
+    _server = null;
+  }
+
+  /// URL FBI downloads a cached .cia from. [fileName] is the file in the cache.
+  String ciaUrl(String hostPort, String fileName) => 'http://$hostPort/cia/${Uri.encodeComponent(fileName)}';
+
+  Future<void> _handle(HttpRequest req) async {
+    try {
+      final segs = req.uri.pathSegments.where((s) => s.isNotEmpty).toList();
+      if (segs.length == 2 && segs[0] == 'cia' && _cacheDir != null) {
+        await _serveCia(req, Uri.decodeComponent(segs[1]));
+        return;
+      }
+      req.response.statusCode = HttpStatus.notFound;
+      await req.response.close();
+    } catch (e) {
+      debugPrint('fbi handle error: $e');
+      try {
+        req.response.statusCode = HttpStatus.internalServerError;
+        await req.response.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _serveCia(HttpRequest req, String name) async {
+    final base = _cacheDir!.absolute.path;
+    final file = File(p.normalize(p.join(base, name)));
+    if (!p.isWithin(base, file.path) || !file.existsSync()) {
+      req.response.statusCode = HttpStatus.notFound;
+      await req.response.close();
+      return;
+    }
+    final total = file.lengthSync();
+    final range = req.headers.value(HttpHeaders.rangeHeader);
+    int start = 0, end = total - 1;
+    if (range != null && range.startsWith('bytes=')) {
+      final parts = range.substring(6).split('-');
+      start = int.tryParse(parts[0]) ?? 0;
+      if (parts.length > 1 && parts[1].isNotEmpty) end = int.tryParse(parts[1]) ?? end;
+      if (start > end || start >= total) {
+        req.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
+        await req.response.close();
+        return;
+      }
+      req.response.statusCode = HttpStatus.partialContent;
+      req.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$total');
+    }
+    req.response.headers
+      ..contentType = ContentType.binary
+      ..set(HttpHeaders.acceptRangesHeader, 'bytes')
+      ..contentLength = end - start + 1;
+    activeTransfers.value++;
+    try {
+      await req.response.addStream(file.openRead(start, end + 1));
+    } finally {
+      activeTransfers.value--;
+      await req.response.close();
+    }
   }
 }

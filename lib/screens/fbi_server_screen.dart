@@ -1,15 +1,16 @@
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:roms_downloader/providers/fbi_server_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
-/// Serves 3DS .cia titles and installs them on a console running FBI, either by
-/// pushing the URL to FBI's "Receive URLs over the network" or via a QR code.
+/// Serves 3DS titles as installable .cia and installs them on a console running
+/// FBI — pick a file you downloaded elsewhere, or a catalog title (downloaded
+/// and converted on demand); then push it to the 3DS or show a QR.
 class FbiServerScreen extends ConsumerStatefulWidget {
   const FbiServerScreen({super.key});
 
@@ -36,45 +37,114 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
-  // FBI installs .cia only. A .3ds/.cci title must be converted first.
-  bool _needsConversion(FbiGame g) {
-    final t = g.game.title.toLowerCase();
-    return !(t.endsWith('.cia'));
+  /// Runs a prepare step behind a progress dialog; returns the served URL or
+  /// null on error/cancel.
+  Future<String?> _prepare(String title, Future<String> Function(void Function(double)) run) async {
+    final progress = ValueNotifier<double>(0);
+    String? result;
+    Object? err;
+    final future = run((p) => progress.value = p).then((url) => result = url).catchError((e) => err = e);
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        future.whenComplete(() {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+        });
+        return AlertDialog(
+          title: const Text('Preparing…'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<double>(
+                valueListenable: progress,
+                builder: (_, v, __) => Column(
+                  children: [
+                    LinearProgressIndicator(value: v > 0 ? v : null),
+                    const SizedBox(height: 6),
+                    Text(v > 0 ? '${(v * 100).round()}%' : 'Working…', style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    progress.dispose();
+    if (err != null) {
+      _snack('$err');
+      return null;
+    }
+    return result;
   }
 
-  /// Explains that a 3DS cart image can't go straight to FBI and routes the
-  /// user to convert it (which needs boot9.bin).
-  void _showNeedsConversion(FbiGame g) {
-    final hasBoot9 = ref.read(settingsProvider).boot9Path?.isNotEmpty ?? false;
+  Future<void> _installFile() async {
+    final picked = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select a .cia / .3ds / .zip to install',
+      type: FileType.custom,
+      allowedExtensions: ['cia', '3ds', 'cci', 'zip'],
+    );
+    final path = picked?.files.firstOrNull?.path;
+    if (path == null || !mounted) return;
+    final url = await _prepare(picked!.files.first.name, (op) => ref.read(fbiServerProvider.notifier).prepareLocalFile(path, op));
+    if (url != null && mounted) _afterPrepared(picked.files.first.name, url);
+  }
+
+  Future<void> _sendCatalog(FbiGame g) async {
+    if (_ip.text.trim().isEmpty) return _snack('Enter your 3DS IP first.');
+    await ref.read(fbiServerProvider.notifier).setThreeDsIp(_ip.text.trim());
+    final url = await _prepare(g.game.title, (op) => ref.read(fbiServerProvider.notifier).prepareCatalog(g, op));
+    if (url == null) return;
+    await _sendUrl(g.game.title, url);
+  }
+
+  Future<void> _qrCatalog(FbiGame g) async {
+    final url = await _prepare(g.game.title, (op) => ref.read(fbiServerProvider.notifier).prepareCatalog(g, op));
+    if (url != null && mounted) _showQr(g.game.title, url);
+  }
+
+  Future<void> _sendUrl(String title, String url) async {
+    try {
+      await ref.read(fbiServerProvider.notifier).sendUrlToThreeDs(url);
+      _snack('Sent “$title” to your 3DS.');
+    } catch (e) {
+      _snack('Failed to reach FBI at ${_ip.text.trim()}:5000 — $e');
+    }
+  }
+
+  /// After a file is prepared and served, offer to push it or show its QR.
+  void _afterPrepared(String title, String url) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Needs conversion to CIA'),
-        content: Text(
-          'FBI installs .cia files. “${g.game.title}” is a 3DS cart image (.3ds/.cci), so it has to be '
-          'converted first — use Tools → 3DS → CIA${hasBoot9 ? '' : ', which needs your console\'s boot9.bin'}. '
-          'Once converted, serve the .cia (e.g. via Retro Tools Server) and install it here.',
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+        title: const Text('Ready to install'),
+        content: Text('“$title” is served. Push it to your 3DS, or show a QR for FBI to scan.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showQr(title, url);
+            },
+            child: const Text('QR'),
+          ),
+          FilledButton(
+            onPressed: _ip.text.trim().isEmpty
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _sendUrl(title, url);
+                  },
+            child: const Text('Send to 3DS'),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> _send(FbiGame g) async {
-    if (_needsConversion(g)) return _showNeedsConversion(g);
-    final ip = _ip.text.trim();
-    if (ip.isEmpty) return _snack('Enter your 3DS IP first.');
-    await ref.read(fbiServerProvider.notifier).setThreeDsIp(ip);
-    try {
-      await ref.read(fbiServerProvider.notifier).sendToThreeDs(g.url);
-      _snack('Sent “${g.game.title}” to your 3DS.');
-    } catch (e) {
-      _snack('Failed to reach FBI at $ip:5000 — $e');
-    }
-  }
-
-  // Render the QR to a PNG and show it as an image. QrImageView's CustomPaint
-  // renders blank under Impeller (macOS/Android), so we rasterize instead.
   Future<Uint8List?> _qrPng(String url) async {
     try {
       final data = await QrPainter(data: url, version: QrVersions.auto, gapless: true).toImageData(600);
@@ -84,17 +154,16 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     }
   }
 
-  void _showQr(FbiGame g) {
-    if (_needsConversion(g)) return _showNeedsConversion(g);
+  void _showQr(String title, String url) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(g.game.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+        title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             FutureBuilder<Uint8List?>(
-              future: _qrPng(g.url),
+              future: _qrPng(url),
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const SizedBox(width: 240, height: 240, child: Center(child: CircularProgressIndicator()));
@@ -131,13 +200,16 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('FBI Server')),
+      floatingActionButton: state.running
+          ? FloatingActionButton.extended(onPressed: _installFile, icon: const Icon(Icons.file_open), label: const Text('Install a file'))
+          : null,
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const ToolDescription(
             icon: Icons.install_mobile,
-            text: 'Installs 3DS .cia titles onto a console running FBI over the local network. Turn the '
-                'server on, then push a game to your 3DS or scan its QR in FBI.',
+            text: 'Installs 3DS titles onto a console running FBI over the local network. Turn the server '
+                'on, then install a file you picked or a catalog title — it’s converted to .cia if needed.',
           ),
           const SizedBox(height: 16),
           Card(
@@ -147,7 +219,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Enable server'),
-                subtitle: Text(state.running ? 'Serving 3DS titles' : 'Off'),
+                subtitle: Text(state.running ? 'Serving on port ${state.port}' : 'Off'),
                 value: state.running,
                 onChanged: (v) => v ? notifier.enable() : notifier.disable(),
               ),
@@ -176,7 +248,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: '3DS IP address',
-                hintText: 'shown in FBI → Remote Install → Receive URLs',
+                hintText: 'FBI → Remote Install → Receive URLs',
                 border: OutlineInputBorder(),
                 isDense: true,
                 prefixIcon: Icon(Icons.devices),
@@ -188,20 +260,20 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Text('3DS titles', style: theme.textTheme.titleSmall),
+                Text('Catalog 3DS titles', style: theme.textTheme.titleSmall),
                 const Spacer(),
                 IconButton(icon: const Icon(Icons.refresh, size: 20), tooltip: 'Reload', onPressed: () => notifier.refreshGames()),
               ],
             ),
             const SizedBox(height: 8),
-            ..._gameList(theme, state, notifier),
+            ..._gameList(theme, state),
           ],
         ],
       ),
     );
   }
 
-  List<Widget> _gameList(ThemeData theme, FbiServerState state, FbiServerNotifier notifier) {
+  List<Widget> _gameList(ThemeData theme, FbiServerState state) {
     if (state.gamesLoading) {
       return const [Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
     }
@@ -210,8 +282,8 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Center(
-            child: Text('No 3DS (.cia) titles in your catalog.',
-                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            child: Text('No 3DS titles in your catalog. Use “Install a file” for a local ROM.',
+                textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ),
         ),
       ];
@@ -232,20 +304,15 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
           prefixIcon: const Icon(Icons.search),
           isDense: true,
           border: const OutlineInputBorder(),
-          suffixIcon: _query.isEmpty
-              ? null
-              : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _search.clear(); _query = ''; _page = 0; })),
+          suffixIcon: _query.isEmpty ? null : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _search.clear(); _query = ''; _page = 0; })),
         ),
         onChanged: (v) => setState(() { _query = v.trim(); _page = 0; }),
       ),
       const SizedBox(height: 8),
       if (filtered.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Center(child: Text('No matches.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
-        )
+        Padding(padding: const EdgeInsets.symmetric(vertical: 24), child: Center(child: Text('No matches.', style: theme.textTheme.bodyMedium)))
       else ...[
-        for (final g in slice) _gameCard(theme, g, state.threeDsIp.trim().isNotEmpty),
+        for (final g in slice) _gameCard(theme, g),
         if (pageCount > 1) _pager(theme, page, pageCount, filtered.length, start, slice.length),
       ],
     ];
@@ -265,34 +332,18 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     );
   }
 
-  Widget _gameCard(ThemeData theme, FbiGame g, bool canSend) {
+  Widget _gameCard(ThemeData theme, FbiGame g) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: const Icon(Icons.videogame_asset_outlined),
         title: Text(g.game.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Row(
-          children: [
-            Flexible(child: Text(g.console.name, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
-            if (_needsConversion(g)) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: theme.colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
-                child: Text('needs CIA', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onTertiaryContainer)),
-              ),
-            ],
-          ],
-        ),
+        subtitle: Text(g.console.name, style: theme.textTheme.bodySmall),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(icon: const Icon(Icons.qr_code_2), tooltip: 'QR', onPressed: () => _showQr(g)),
-            IconButton(
-              icon: const Icon(Icons.send),
-              tooltip: canSend ? 'Send to 3DS' : 'Enter your 3DS IP to send',
-              onPressed: canSend ? () => _send(g) : null,
-            ),
+            IconButton(icon: const Icon(Icons.qr_code_2), tooltip: 'Prepare + QR', onPressed: () => _qrCatalog(g)),
+            IconButton(icon: const Icon(Icons.send), tooltip: 'Prepare + send to 3DS', onPressed: () => _sendCatalog(g)),
           ],
         ),
       ),
@@ -302,7 +353,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
   Widget _instructions(ThemeData theme) {
     const steps = [
       'On the 3DS: open FBI → Remote Install → Receive URLs over the network',
-      'Type the IP it shows above, then Send — or scan a game’s QR',
+      'Type the IP it shows above, then Send — or scan a QR',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
