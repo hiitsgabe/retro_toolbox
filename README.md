@@ -34,6 +34,13 @@ A cross-platform app for browsing and downloading game collections from any HTTP
 - **Multiple Source Types:** HTML directory listings, JSON APIs, Internet Archive metadata API
 - **Authentication:** Bearer tokens, cookie-based tokens, interactive sign-in flows, and IA S3 credentials
 
+### Sports (Alpha)
+Update classic sports games with real, current teams and players, then patch your own ROM.
+- **Roster patcher:** Pick a game (grouped by console or by sport), choose a season, source and league, and patch. Powered by the [`retro_roster_patcher`](https://github.com/hiitsgabe/retro_roster_patcher) library on the bundled Python runtime
+- **League editor:** Reorder teams (ROM slot order), add/remove teams, and edit each squad — reorder players into the game's starting lineup, bench, and extras, edit names/positions/numbers and per-player stats, set team colors, all with player headshots and team crests
+- **Bring your own data:** Import extra leagues or whole teams from JSON, or paste them in
+- **ROM sourcing:** Finds the game in your catalog and offers a direct download (region-aware), or pick a local file. Handles zip-in/zip-out and multi-track `.cue`/`.bin` output packaging
+
 ### Tools & Servers
 Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
 
@@ -42,10 +49,13 @@ Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
 - **JDKV Server:** An embedded WebDAV server that syncs emulator save exports with JKSV on a Switch, both directions. The current save is backed up before any replace, and pulls back to the device are confirmed per game
 - **SMB Share:** Connect to SMB/CIFS network shares to browse and pull files
 - **FTP:** An FTP client to transfer files, plus a built-in FTP server to serve files over the LAN
+- **Retro Tools Server:** Serve local folders (with box art) over the LAN for other devices to browse and pull from
+- **FBI Server:** Serve `.cia`/`.3ds` files to a 3DS running FBI for install over the network
 
 **Tools:**
 - **Steam Shortcut Creator:** Search the Steam store and write `.steam` shortcut files into any folder
 - **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
+- **3DS → CIA:** Convert `.3ds`/`.cci` dumps to installable `.cia` on device (prompts for `boot9.bin` for encrypted dumps)
 - **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android and macOS)
 - **Collection Clean:** Folder-scoped cleanup — dedupe game files (keep the largest), strip region/version tags from filenames, and remove OS junk files. Every action previews before it applies
 - **M3U Playlists:** Generate `.m3u` playlists for multi-disc games so emulators show one entry and swap discs in-game

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/widgets/footer/task_panel_modal.dart';
 import 'package:roms_downloader/screens/console_grid_screen.dart';
@@ -35,41 +34,36 @@ class MenuScreen extends ConsumerStatefulWidget {
 }
 
 class _MenuScreenState extends ConsumerState<MenuScreen> {
-  bool _wizardChecked = false;
+  void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
-  Future<void> _maybeShowWizard() async {
-    if (_wizardChecked) return;
-    _wizardChecked = true;
+  /// First time into the Games Library, run the setup wizard to configure a
+  /// catalog; after that (or once seen) go straight to the console grid. Keeps
+  /// setup out of app boot so the rest of the app is usable immediately.
+  Future<void> _openGamesLibrary() async {
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool(SetupWizardScreen.seenKey) ?? false;
-    if (seen || !mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(fullscreenDialog: true, builder: (_) => const SetupWizardScreen()),
-    );
+    if (!mounted) return;
+    if (!seen) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(fullscreenDialog: true, builder: (_) => const SetupWizardScreen()),
+      );
+      if (!mounted) return;
+    }
+    _push(const ConsoleGridScreen());
   }
-
-  void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
   @override
   Widget build(BuildContext context) {
-    final loading = ref.watch(appStateProvider.select((s) => s.loading));
-    if (!loading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowWizard());
-    }
-
-    final hasConsoles = ref.watch(appStateProvider.select((s) => s.consolesList.isNotEmpty));
-
     final runningCounts = ref.watch(taskQueueProvider.select((s) => s.runningCounts));
     final activeTasks = runningCounts.values.fold<int>(0, (a, b) => a + b);
 
     final tiles = [
-      if (hasConsoles)
-        MenuTile(
-          label: 'Games Library',
-          icon: Icons.download,
-          accentColor: const Color(0xFF2E6DB4),
-          onTap: () => _push(const ConsoleGridScreen()),
-        ),
+      MenuTile(
+        label: 'Games Library',
+        icon: Icons.download,
+        accentColor: const Color(0xFF2E6DB4),
+        onTap: _openGamesLibrary,
+      ),
       MenuTile(
         label: 'Servers',
         icon: Icons.dns,

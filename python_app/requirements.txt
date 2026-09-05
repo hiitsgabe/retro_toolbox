@@ -1,8 +1,8 @@
 zstandard
 pycryptodome
-pyaes
 # CA bundle so the embedded CPython can verify HTTPS to the roster providers.
 certifi
-# Sports roster patching. [images] pulls Pillow, needed by the PSX soccer game's
-# TIM generation; drop the extra if that game is disabled to shrink the build.
-retro-roster-patcher[images] @ git+https://github.com/hiitsgabe/retro_roster_patcher
+# pyaes and retro_roster_patcher are vendored into python_app/ (no wheel on
+# Android's --only-binary install), so they resolve by import, not pip.
+# retro_roster_patcher's optional [images] extra (Pillow, for WE2002 kit/TIM
+# art) is intentionally omitted; roster patching works without it.

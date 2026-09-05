@@ -9,7 +9,7 @@ import 'package:roms_downloader/models/app_state_model.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
 import 'package:roms_downloader/widgets/menu_grid/cover_flow.dart';
 import 'package:roms_downloader/widgets/menu_grid/console_slug.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:roms_downloader/widgets/game_trivia.dart';
 
 /// Grid of consoles. Tapping a console selects it and opens the game list
 /// (HomeScreen). Handles the loading / empty-catalog / error states that used
@@ -25,15 +25,8 @@ class ConsoleGridScreen extends ConsumerWidget {
 
     Widget body;
     if (appState.loading) {
-      body = Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const HammerLoader(),
-            const SizedBox(height: 16),
-            Text(loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...'),
-          ],
-        ),
+      body = GameTriviaLoader(
+        status: loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...',
       );
     } else if (appState.consolesList.isEmpty) {
       body = Center(
@@ -72,6 +65,15 @@ class ConsoleGridScreen extends ConsumerWidget {
               Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
               const SizedBox(height: 12),
               Text(errorMessage, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () {
+                  final console = appState.selectedConsole;
+                  if (console != null) ref.read(catalogProvider.notifier).loadCatalog(console);
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
             ],
           ),
         ),
