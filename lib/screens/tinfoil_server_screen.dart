@@ -69,9 +69,9 @@ class TinfoilServerScreen extends ConsumerWidget {
             _connectionCard(context, host, state.port),
             const SizedBox(height: 16),
             _instructions(theme),
-            if (state.addresses.length > 1) ...[
+            if (addresses.length > 1) ...[
               const SizedBox(height: 8),
-              _otherAddresses(context, state),
+              _otherAddresses(context, addresses),
             ],
             const SizedBox(height: 16),
             Center(
@@ -191,12 +191,12 @@ class TinfoilServerScreen extends ConsumerWidget {
     );
   }
 
-  Widget _otherAddresses(BuildContext context, TinfoilServerState state) {
+  Widget _otherAddresses(BuildContext context, List<String> addresses) {
     return ExpansionTile(
       tilePadding: EdgeInsets.zero,
       title: Text('Other addresses', style: Theme.of(context).textTheme.bodySmall),
       children: [
-        for (final ip in state.addresses.skip(1))
+        for (final ip in addresses.skip(1))
           ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
