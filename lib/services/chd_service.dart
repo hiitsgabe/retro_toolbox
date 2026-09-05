@@ -57,26 +57,41 @@ class ChdService {
     return _chdmanOnPath();
   }
 
-  /// Phase 2: if a chdman binary for this platform ships in assets, extract it
-  /// to the support dir once, mark it executable, and return its path. Returns
-  /// null when no such asset is bundled (the current default).
+  /// If a chdman for this platform ships in assets, extract it (and any sibling
+  /// libraries listed in its manifest) to the support dir once, mark the binary
+  /// executable, and return its path. Returns null when nothing is bundled.
+  ///
+  /// Layout: `assets/chdman/<os>/manifest.txt` lists the files to extract, the
+  /// binary (`chdman`/`chdman.exe`) first, then any bundled dynamic libraries.
+  /// The libraries are loaded via `@loader_path`, so they must land next to the
+  /// binary — which they do, since everything extracts into the same `bin` dir.
   static Future<String?> _bundledChdman() async {
     if (_resolvedBundled != null) return _resolvedBundled;
     final os = Platform.operatingSystem; // android, macos, linux, windows
-    final assetName = 'assets/chdman/$os/chdman${Platform.isWindows ? '.exe' : ''}';
+    final base = 'assets/chdman/$os';
     try {
-      final data = await rootBundle.load(assetName);
-      final dir = await getApplicationSupportDirectory();
-      final dest = File(p.join(dir.path, 'bin', 'chdman${Platform.isWindows ? '.exe' : ''}'));
-      await dest.parent.create(recursive: true);
-      if (!dest.existsSync() || dest.lengthSync() != data.lengthInBytes) {
-        await dest.writeAsBytes(data.buffer.asUint8List(), flush: true);
-        if (!Platform.isWindows) {
-          await Process.run('chmod', ['+x', dest.path]);
+      final manifest = (await rootBundle.loadString('$base/manifest.txt'))
+          .split('\n')
+          .map((l) => l.trim())
+          .where((l) => l.isNotEmpty)
+          .toList();
+      if (manifest.isEmpty) return null;
+
+      final binDir = Directory(p.join((await getApplicationSupportDirectory()).path, 'chdman'));
+      await binDir.create(recursive: true);
+
+      String? binaryPath;
+      for (final name in manifest) {
+        final data = await rootBundle.load('$base/$name');
+        final dest = File(p.join(binDir.path, name));
+        if (!dest.existsSync() || dest.lengthSync() != data.lengthInBytes) {
+          await dest.writeAsBytes(data.buffer.asUint8List(), flush: true);
+          if (!Platform.isWindows) await Process.run('chmod', ['+x', dest.path]);
         }
+        if (name == 'chdman' || name == 'chdman.exe') binaryPath = dest.path;
       }
-      _resolvedBundled = dest.path;
-      return dest.path;
+      _resolvedBundled = binaryPath;
+      return binaryPath;
     } catch (_) {
       // No bundled binary for this platform — fall through to PATH.
       return null;

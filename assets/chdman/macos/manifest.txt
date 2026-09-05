@@ -1,0 +1,6 @@
+chdman
+libFLAC.14.dylib
+libogg.0.dylib
+libSDL3.0.dylib
+libutf8proc.3.dylib
+libzstd.1.dylib
