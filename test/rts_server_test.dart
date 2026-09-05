@@ -19,26 +19,17 @@ void main() {
     expect(c['file_format'], ['.zip', '.chd']);
     expect(c['boxarts'], {'url': 'https://box/'});
     expect(c['roms_folder'], 'snes');
-    expect(c['regex'], RtsServerService.listingRegex);
   });
 
-  test('listing HTML round-trips through the baked-in regex', () {
+  test('listing is a JSON array of {name, size}', () {
     final files = [
       (name: 'Tom & Jerry (USA).zip', size: 1234567),
       (name: 'Zelda.chd', size: 42),
     ];
-    final html = RtsServerService.buildListingHtml(files);
-    final re = RegExp(RtsServerService.listingRegex, multiLine: true, dotAll: true);
-    final matches = re.allMatches(html).toList();
-    expect(matches.length, 2);
-
-    // The consumer builds fullUrl = baseUrl + href and title = text group.
-    for (var i = 0; i < files.length; i++) {
-      final m = matches[i];
-      expect(m.namedGroup('text'), files[i].name);
-      expect(Uri.decodeComponent(m.namedGroup('href')!), files[i].name);
-      expect(m.namedGroup('size')!.isNotEmpty, true);
-    }
+    final decoded = jsonDecode(RtsServerService.buildListingJson(files)) as List;
+    expect(decoded.length, 2);
+    expect(decoded.first['name'], 'Tom & Jerry (USA).zip');
+    expect(decoded.first['size'], 1234567);
   });
 
   test('server serves consoles.json, listing, and file (with range)', () async {

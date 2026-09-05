@@ -287,8 +287,12 @@ class CatalogService {
       throw Exception('HTTP ${response.statusCode}: Failed to fetch catalog from $url');
     }
 
-    final html = await response.transform(utf8.decoder).join();
-    final parsed = await compute(_parseHtmlIsolate, [html, console.toJson(), url]);
+    final body = await response.transform(utf8.decoder).join();
+    // Auto-detect: a JSON listing (e.g. from Retro Tools Server) vs HTML.
+    final trimmed = body.trimLeft();
+    final parsed = (trimmed.startsWith('[') || trimmed.startsWith('{'))
+        ? _parseJsonListing(body, console, url)
+        : await compute(_parseHtmlIsolate, [body, console.toJson(), url]);
     return parsed.map((entry) => Game.fromJson(entry)).toList();
   }
 
@@ -403,6 +407,52 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
     });
   }
 
+  return out;
+}
+
+/// Parses a JSON listing (e.g. from Retro Tools Server): a top-level array, or
+/// an object whose [list_json_file_location] key holds the array. Each item is
+/// an object with a name ([list_item_id]) and optional size. Download URLs are
+/// [baseUrl] + the encoded name, matching the HTML path.
+List<Map<String, dynamic>> _parseJsonListing(String body, Console console, String baseUrl) {
+  final decoded = jsonDecode(body);
+  final List list;
+  if (decoded is List) {
+    list = decoded;
+  } else if (decoded is Map<String, dynamic>) {
+    final key = console.listJsonFileLocation;
+    list = (decoded[key] is List) ? decoded[key] as List : const [];
+  } else {
+    return [];
+  }
+
+  final nameKey = console.listItemId;
+  final fileFormats = console.fileFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
+  final shouldUnzip = console.shouldUnzip;
+  final ignoreExtFilter = console.ignoreExtensionFiltering;
+
+  final out = <Map<String, dynamic>>[];
+  for (final item in list) {
+    if (item is! Map) continue;
+    final name = (item[nameKey] ?? item['name'])?.toString() ?? '';
+    if (name.isEmpty) continue;
+    final lower = name.toLowerCase();
+    if (!ignoreExtFilter) {
+      if (shouldUnzip) {
+        if (!lower.endsWith('.zip')) continue;
+      } else if (fileFormats.isNotEmpty && !fileFormats.any((ext) => lower.endsWith(ext))) {
+        continue;
+      }
+    }
+    final title = name.split('/').last;
+    out.add({
+      'title': title,
+      'url': '$baseUrl${Uri.encodeComponent(name)}',
+      'size': int.tryParse(item['size']?.toString() ?? '') ?? 0,
+      'consoleId': console.id,
+      'metadata': TitleMetadataParser.parseRomTitle(title).toJson(),
+    });
+  }
   return out;
 }
 
