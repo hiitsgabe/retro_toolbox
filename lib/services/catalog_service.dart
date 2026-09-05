@@ -379,10 +379,12 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
     // Skip derivative files (thumbnails, metadata, etc.)
     if (file['source'] == 'derivative') continue;
 
-    // Filter by file_format if specified.
-    if (fileFormats.isNotEmpty) {
-      final ext = name.contains('.') ? '.${name.split('.').last.toLowerCase()}' : '';
-      if (!fileFormats.contains(ext) && !(shouldUnzip && ext == '.zip')) continue;
+    // should_unzip sources list .zip archives; otherwise list only file_format.
+    final ext = name.contains('.') ? '.${name.split('.').last.toLowerCase()}' : '';
+    if (shouldUnzip) {
+      if (ext != '.zip') continue;
+    } else if (fileFormats.isNotEmpty && !fileFormats.contains(ext)) {
+      continue;
     }
 
     final sizeRaw = file['size'];
@@ -418,6 +420,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
 
   final downloadUrlTemplate = console['download_url'] as String?;
   final ignoreExtFilter = console['ignore_extension_filtering'] as bool? ?? false;
+  final shouldUnzip = console['should_unzip'] as bool? ?? false;
   final fileFormats = console['file_format'] != null
       ? List<String>.from(console['file_format'] as List).map((e) => e.toLowerCase()).toList()
       : <String>[];
@@ -461,9 +464,14 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     }
 
     // File format filter (skip when ignore_extension_filtering is set).
-    if (!ignoreExtFilter && fileFormats.isNotEmpty) {
+    // should_unzip sources list .zip archives; otherwise list only file_format.
+    if (!ignoreExtFilter) {
       final lowerTitle = title.toLowerCase();
-      if (!fileFormats.any((ext) => lowerTitle.endsWith(ext))) continue;
+      if (shouldUnzip) {
+        if (!lowerTitle.endsWith('.zip')) continue;
+      } else if (fileFormats.isNotEmpty && !fileFormats.any((ext) => lowerTitle.endsWith(ext))) {
+        continue;
+      }
     }
 
     final sizeStr = _tryNamedGroup(match, 'size');

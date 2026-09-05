@@ -12,6 +12,7 @@ import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/extraction_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
 import 'package:roms_downloader/services/chd_service.dart';
+import 'package:roms_downloader/services/catalog_service.dart';
 
 final extractionProvider = StateNotifierProvider<ExtractionNotifier, ExtractionState>((ref) {
   final gameStateManager = ref.read(gameStateManagerProvider.notifier);
@@ -67,11 +68,16 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     debugPrint('Starting extraction for: $filePath');
 
+    // should_unzip archives should yield only the console's file_format payload
+    // (e.g. .3ds/.cia); drop bundled junk during extraction.
+    final allowed = CatalogService.consoleByIdSync(game.consoleId)?.fileFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
+
     try {
       ExtractionService.startExtraction(
         taskId: taskId,
         filePath: filePath,
         extractionDir: extractionDir,
+        allowedExtensions: allowed,
         onProgress: _updateProgress,
         onError: _updateError,
         onComplete: _updateCompleted,
