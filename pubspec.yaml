@@ -48,6 +48,10 @@ flutter:
     - assets/icon.png
     - assets/boxarts/
     - assets/console_art/
+    # chdman binaries are optional and per-platform. Drop one at
+    # assets/chdman/<os>/chdman and add its folder here (e.g.
+    # assets/chdman/android/) to bundle it. See assets/chdman/README.md.
+    - assets/chdman/
   fonts:
     - family: ChakraPetch
       fonts:

@@ -19,6 +19,7 @@ import 'package:roms_downloader/screens/add_catalog_source_screen.dart';
 import 'package:roms_downloader/screens/collection_clean_screen.dart';
 import 'package:roms_downloader/screens/rar_decompress_screen.dart';
 import 'package:roms_downloader/screens/m3u_screen.dart';
+import 'package:roms_downloader/screens/chd_convert_screen.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
@@ -87,6 +88,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           MenuTile(label: 'Collection Clean', icon: Icons.cleaning_services, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CollectionCleanScreen())),
           MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
           MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
+          MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
         ])),
       ),
       MenuTile(

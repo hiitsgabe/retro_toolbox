@@ -11,6 +11,7 @@ import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/extraction_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
+import 'package:roms_downloader/services/chd_service.dart';
 
 final extractionProvider = StateNotifierProvider<ExtractionNotifier, ExtractionState>((ref) {
   final gameStateManager = ref.read(gameStateManagerProvider.notifier);
@@ -116,6 +117,53 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     } finally {
       ExtractionService.endNotification(taskId);
     }
+  }
+
+  Future<void> chdConvert({
+    required String taskId,
+    required String inputPath,
+    required String outputDir,
+    String? chdmanPath,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    final fileName = path.basename(inputPath);
+    final verb = ChdService.modeForInput(inputPath) == ChdMode.extract ? 'Extracting' : 'Compressing';
+    await ExtractionService.startNotification(taskId, verb, '$verb $fileName...');
+
+    try {
+      await ChdService().convert(
+        inputPath: inputPath,
+        outputDir: outputDir,
+        chdmanPath: chdmanPath,
+        onProgress: (progress) {
+          _updateProgress(taskId, progress);
+          ExtractionService.updateNotification('$verb $fileName... ${(progress * 100).round()}%');
+        },
+      );
+      _onConversionCompleted(taskId);
+    } catch (e) {
+      debugPrint('CHD conversion error: $e');
+      _onNszError(taskId, e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
+    }
+  }
+
+  void _onConversionCompleted(String taskId) {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    final currentTask = tasks[taskId];
+    if (currentTask != null) {
+      tasks[taskId] = currentTask.copyWith(status: ExtractionStatus.completed, progress: 1.0);
+      state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    }
+    _ref.read(taskQueueProvider.notifier).updateTaskStatus(taskId, TaskQueueStatus.completed);
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
+    // ponytail: source file is kept — a conversion isn't a throwaway temp like a
+    // downloaded .nsz. Add an opt-in "delete source" later if users ask.
   }
 
   Future<void> _onNszCompleted(String taskId, String nszFilePath, String outputDir) async {

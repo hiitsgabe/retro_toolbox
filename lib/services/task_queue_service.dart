@@ -101,6 +101,9 @@ class TaskQueueService {
         case TaskType.nszDecompression:
           await _executeNszDecompressionTask(ref, task, notifier);
           break;
+        case TaskType.chdConversion:
+          await _executeChdConversionTask(ref, task, notifier);
+          break;
       }
     } catch (e) {
       debugPrint('Task execution error for ${task.id}: $e');
@@ -133,6 +136,18 @@ class TaskQueueService {
       nszFilePath: task.params['nszFilePath'] as String,
       outputDir: task.params['outputDir'] as String,
       keysPath: task.params['keysPath'] as String? ?? '',
+    );
+  }
+
+  static Future<void> _executeChdConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
+    final extractionNotifier = ref.read(extractionProvider.notifier);
+
+    // Fire and forget — chdConvert manages its own queue-status updates.
+    extractionNotifier.chdConvert(
+      taskId: task.params['taskId'] as String,
+      inputPath: task.params['inputPath'] as String,
+      outputDir: task.params['outputDir'] as String,
+      chdmanPath: task.params['chdmanPath'] as String?,
     );
   }
 }
