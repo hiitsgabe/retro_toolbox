@@ -147,3 +147,10 @@ Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra
     if (extra != null) ...extra,
   };
 }
+
+/// Orders [all] so [preferred] comes first when present, so every server
+/// advertises the IP the user picked in Settings. Falls back to the given order.
+List<String> orderAddresses(List<String> all, String? preferred) {
+  if (preferred == null || preferred.isEmpty || !all.contains(preferred)) return all;
+  return [preferred, ...all.where((a) => a != preferred)];
+}

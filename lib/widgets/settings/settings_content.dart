@@ -6,6 +6,7 @@ import 'package:roms_downloader/widgets/settings/directory_setting.dart';
 import 'package:roms_downloader/widgets/settings/boolean_setting.dart';
 import 'package:roms_downloader/widgets/settings/number_setting.dart';
 import 'package:roms_downloader/widgets/settings/permissions_setting.dart';
+import 'package:roms_downloader/widgets/settings/network_address_setting.dart';
 import 'package:roms_downloader/widgets/settings/tools_setting.dart';
 import 'package:roms_downloader/widgets/settings/favorites_settings.dart';
 import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
@@ -127,6 +128,14 @@ class SettingsContent extends StatelessWidget {
               title: 'Catalog Source',
               subtitle: 'Import a console catalog JSON file or load one from a URL.',
               child: const CatalogSourceSetting(),
+            ),
+            const SizedBox(height: 8),
+            _section(
+              context,
+              icon: Icons.lan_outlined,
+              title: 'Network Address',
+              subtitle: 'Which local IP the servers (Tinfoil, FBI, Retro Tools, FTP, JDKV) advertise.',
+              child: const NetworkAddressSetting(),
             ),
             const SizedBox(height: 8),
             const PermissionsSetting(),

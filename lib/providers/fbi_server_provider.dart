@@ -108,7 +108,9 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
     if (!state.running || state.addresses.isEmpty) return;
     state = state.copyWith(gamesLoading: true);
     try {
-      final hostPort = '${state.addresses.first}:${state.port}';
+      final preferred = _ref.read(settingsProvider).preferredLocalIp;
+      final host = orderAddresses(state.addresses, preferred).first;
+      final hostPort = '$host:${state.port}';
       final games = FbiServerService.games(await _loadGames(), hostPort);
       if (mounted) state = state.copyWith(games: games, gamesLoading: false);
     } catch (e) {
