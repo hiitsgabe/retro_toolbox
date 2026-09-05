@@ -9,14 +9,31 @@ import 'package:roms_downloader/models/console_model.dart';
 /// (ps3, wiiu, xbox360, gba) must come before their prefixes (psx, wii, xbox,
 /// gb). A slug here is semantic — it drives the brand color even when we have
 /// no logo bundled for it (see [_bundledLogos] / [consoleLogoAsset]).
-String? consoleArtSlug(Console console) {
-  final hay = '${console.id} ${console.name}'.toLowerCase();
+String? consoleArtSlug(Console console) => consoleArtSlugForText('${console.id} ${console.name}');
+
+/// Same keyword match as [consoleArtSlug] but on any text (e.g. a game's
+/// platform string like "psx"), so the Sports menu can reuse console art.
+String? consoleArtSlugForText(String text) {
+  final hay = text.toLowerCase();
   for (final entry in _rules) {
     for (final kw in entry.value) {
       if (hay.contains(kw)) return entry.key;
     }
   }
   return null;
+}
+
+/// Bundled console logo for a platform string, or null when none is bundled.
+String? platformLogoAsset(String platform) {
+  final slug = consoleArtSlugForText(platform);
+  if (slug == null || !_bundledLogos.contains(slug)) return null;
+  return 'assets/console_art/${slug}_logo.svg';
+}
+
+/// Brand color for a platform string.
+Color? platformBrandColor(String platform) {
+  final slug = consoleArtSlugForText(platform);
+  return slug == null ? null : _slugColors[slug];
 }
 
 /// Bundled logo asset for [console], or null when no logo file exists for its

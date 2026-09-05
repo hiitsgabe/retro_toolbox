@@ -5,6 +5,7 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/widgets/footer/task_panel_modal.dart';
 import 'package:roms_downloader/screens/console_grid_screen.dart';
+import 'package:roms_downloader/screens/sports_grid_screen.dart';
 import 'package:roms_downloader/screens/menu_grid_screen.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
@@ -64,7 +65,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final tiles = [
       if (hasConsoles)
         MenuTile(
-          label: 'Download Games',
+          label: 'Games Library',
           icon: Icons.download,
           accentColor: const Color(0xFF2E6DB4),
           onTap: () => _push(const ConsoleGridScreen()),
@@ -96,6 +97,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
           MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
         ])),
+      ),
+      MenuTile(
+        label: 'Sports',
+        icon: Icons.sports_esports,
+        accentColor: const Color(0xFF2E9E4F),
+        badge: 'ALPHA',
+        onTap: () => _push(const SportsGridScreen()),
       ),
       MenuTile(
         label: 'Settings',

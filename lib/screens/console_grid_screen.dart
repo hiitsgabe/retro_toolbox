@@ -99,7 +99,7 @@ class ConsoleGridScreen extends ConsumerWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'Download Games',
+                  'Games Library',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
