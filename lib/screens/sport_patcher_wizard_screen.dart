@@ -16,6 +16,7 @@ import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/screens/team_editor_screen.dart';
 import 'package:roms_downloader/services/sports_rom_lookup.dart';
 import 'package:roms_downloader/services/sports_service.dart';
+import 'package:roms_downloader/widgets/game_trivia.dart';
 import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
 
 /// One patch flow per game, in the app's own wizard idiom: step dots up top,
@@ -287,25 +288,6 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 ),
               ),
             ),
-            if (_busy)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 4, 24, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _status ?? 'Working…',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                    Text(
-                      'Pulling every team\'s full squad from the provider. This can take a minute.',
-                      style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(value: _progress == 0 ? null : _progress),
-                  ],
-                ),
-              ),
             _footer(theme),
           ],
         ),
@@ -407,19 +389,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   // -- Step 1: source / season / league / fetch ---------------------------
 
   Widget _rostersStep(ThemeData theme) {
-    if (!_rostersHasOptions) {
-      // Nothing to choose — auto-fetch is running (or failed). Show progress.
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(_status ?? 'Downloading rosters…', style: theme.textTheme.bodyMedium),
-          ],
-        ),
-      );
-    }
+    // While fetching (auto or manual), fill the step with the trivia loader.
+    if (_busy) return GameTriviaLoader(status: _status, seed: info.gameId.hashCode.abs());
     return ListView(
       children: [
         _sectionTitle(theme, Icons.tune, 'Rosters',
@@ -840,6 +811,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Widget _patchStep(ThemeData theme) {
+    if (_busy) {
+      return GameTriviaLoader(status: _status, progress: _progress, seed: info.gameId.hashCode.abs() + 1);
+    }
     if (_result != null) {
       return ListView(
         children: [

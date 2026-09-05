@@ -148,7 +148,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Android
-        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome -r pyaes -r certifi -r "retro-roster-patcher @ git+https://github.com/hiitsgabe/retro_roster_patcher"
+        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
 
       - name: Verify Python bundle
         shell: bash
@@ -166,6 +166,9 @@ jobs:
           echo "App staging ($SERIOUS_PYTHON_APP):"
           check "$SERIOUS_PYTHON_APP" main.py
           check "$SERIOUS_PYTHON_APP" nsz
+          check "$SERIOUS_PYTHON_APP" pyaes
+          check "$SERIOUS_PYTHON_APP" retro_roster_patcher
+          check "$SERIOUS_PYTHON_APP" certifi
           # Unlike the desktop targets, the Android packager pip-installs once
           # per ABI into $SERIOUS_PYTHON_SITE_PACKAGES/<abi> (see the `Android`
           # entry in serious_python's package_command.dart `platforms` map), so
@@ -246,7 +249,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for macOS
-        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome -r pyaes -r certifi -r "retro-roster-patcher @ git+https://github.com/hiitsgabe/retro_roster_patcher"
+        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome
 
       - name: Verify Python bundle
         shell: bash
@@ -264,6 +267,9 @@ jobs:
           echo "App staging ($SERIOUS_PYTHON_APP):"
           check "$SERIOUS_PYTHON_APP" main.py
           check "$SERIOUS_PYTHON_APP" nsz
+          check "$SERIOUS_PYTHON_APP" pyaes
+          check "$SERIOUS_PYTHON_APP" retro_roster_patcher
+          check "$SERIOUS_PYTHON_APP" certifi
           echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
           check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
           check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
@@ -349,7 +355,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Linux
-        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome -r pyaes -r certifi -r "retro-roster-patcher @ git+https://github.com/hiitsgabe/retro_roster_patcher"
+        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome
 
       - name: Verify Python bundle
         shell: bash
@@ -367,6 +373,9 @@ jobs:
           echo "App staging ($SERIOUS_PYTHON_APP):"
           check "$SERIOUS_PYTHON_APP" main.py
           check "$SERIOUS_PYTHON_APP" nsz
+          check "$SERIOUS_PYTHON_APP" pyaes
+          check "$SERIOUS_PYTHON_APP" retro_roster_patcher
+          check "$SERIOUS_PYTHON_APP" certifi
           echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
           check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
           check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
@@ -468,7 +477,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Windows
-        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome -r pyaes -r certifi -r "retro-roster-patcher @ git+https://github.com/hiitsgabe/retro_roster_patcher"
+        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome
 
       - name: Verify Python bundle
         shell: bash
@@ -486,6 +495,9 @@ jobs:
           echo "App staging ($SERIOUS_PYTHON_APP):"
           check "$SERIOUS_PYTHON_APP" main.py
           check "$SERIOUS_PYTHON_APP" nsz
+          check "$SERIOUS_PYTHON_APP" pyaes
+          check "$SERIOUS_PYTHON_APP" retro_roster_patcher
+          check "$SERIOUS_PYTHON_APP" certifi
           echo "Site packages ($SERIOUS_PYTHON_SITE_PACKAGES):"
           check "$SERIOUS_PYTHON_SITE_PACKAGES" zstandard
           check "$SERIOUS_PYTHON_SITE_PACKAGES" Crypto
