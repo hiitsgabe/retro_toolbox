@@ -1,8 +1,7 @@
 zstandard
 pycryptodome
-# CA bundle so the embedded CPython can verify HTTPS to the roster providers.
-certifi
-# pyaes and retro_roster_patcher are vendored into python_app/ (no wheel on
-# Android's --only-binary install), so they resolve by import, not pip.
-# retro_roster_patcher's optional [images] extra (Pillow, for WE2002 kit/TIM
-# art) is intentionally omitted; roster patching works without it.
+# Sports roster patching, from PyPI (pure-Python universal wheel).
+retro-roster-patcher>=0.1.1
+# pyaes and certifi are vendored into python_app/ (no reliable wheel path on
+# Android's --only-binary install / SPM site-packages), so they resolve by
+# import, not pip.
