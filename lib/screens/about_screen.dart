@@ -132,6 +132,9 @@ class _AboutScreenState extends State<AboutScreen> {
               title: 'Credits',
               items: [
                 InfoItem('nsz', 'NSZ decompression by nicoboss - github.com/nicoboss/nsz', 'https://github.com/nicoboss/nsz'),
+                InfoItem('chdman', 'CHD conversion by the MAME project (BSD-3) - mamedev.org', 'https://www.mamedev.org'),
+                InfoItem('3dsconv', '3DS→CIA conversion by ihaveamac (MIT) - github.com/ihaveamac/3dsconv', 'https://github.com/ihaveamac/3dsconv'),
+                InfoItem('pyaes', 'AES for 3dsconv - pypi.org/project/pyaes', 'https://pypi.org/project/pyaes'),
                 InfoItem('0x0', 'Ephemeral storage - 0x0.st', 'https://0x0.st'),
                 InfoItem('EmulationStation Carbon', 'Console logos by Rookervik', 'https://github.com/RetroPie/es-theme-carbon'),
                 InfoItem('Art Book Next', 'Console logos by Anthony Caccese (CC-BY-NC-SA)', 'https://github.com/anthonycaccese/es-theme-art-book-next'),
@@ -147,6 +150,8 @@ class _AboutScreenState extends State<AboutScreen> {
                 InfoItem('permission_handler', 'pub.dev/packages/permission_handler', 'https://pub.dev/packages/permission_handler'),
                 InfoItem('archive', 'pub.dev/packages/archive', 'https://pub.dev/packages/archive'),
                 InfoItem('flutter_archive', 'pub.dev/packages/flutter_archive', 'https://pub.dev/packages/flutter_archive'),
+                InfoItem('rar', 'pub.dev/packages/rar', 'https://pub.dev/packages/rar'),
+                InfoItem('qr_flutter', 'pub.dev/packages/qr_flutter', 'https://pub.dev/packages/qr_flutter'),
                 InfoItem('flutter_foreground_task', 'pub.dev/packages/flutter_foreground_task', 'https://pub.dev/packages/flutter_foreground_task'),
                 InfoItem('package_info_plus', 'pub.dev/packages/package_info_plus', 'https://pub.dev/packages/package_info_plus'),
                 InfoItem('cached_network_image', 'pub.dev/packages/cached_network_image', 'https://pub.dev/packages/cached_network_image'),
