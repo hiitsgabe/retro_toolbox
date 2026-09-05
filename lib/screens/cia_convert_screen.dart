@@ -30,6 +30,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
   String? _inputPath;
   String? _outputDir;
   String? _activeTaskId;
+  bool _decrypted = false;
 
   Future<String> _browseRoot() async {
     if (_outputDir != null) return _outputDir!;
@@ -100,6 +101,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
       'inputPath': _inputPath!,
       'outputDir': _outputDir!,
       'boot9Path': ref.read(settingsProvider).boot9Path,
+      'ignoreEncryption': _decrypted,
     });
     setState(() => _activeTaskId = taskId);
   }
@@ -187,7 +189,15 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
         _fileRow(theme, Icons.insert_drive_file_outlined, '3DS image', _inputPath != null ? p.basename(_inputPath!) : 'No file selected', _pickInput),
         const SizedBox(height: 12),
         _fileRow(theme, Icons.folder_outlined, 'Output folder', _outputDir ?? 'No folder selected', _pickOutput),
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('ROM is decrypted'),
+          subtitle: const Text('Skip decryption (for already-decrypted dumps)'),
+          value: _decrypted,
+          onChanged: (v) => setState(() => _decrypted = v),
+        ),
+        const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(onPressed: canRun ? _enqueue : null, icon: const Icon(Icons.sync, size: 18), label: const Text('Add to task list')),

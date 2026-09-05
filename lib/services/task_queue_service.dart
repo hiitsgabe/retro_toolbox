@@ -163,6 +163,7 @@ class TaskQueueService {
       inputPath: task.params['inputPath'] as String,
       outputDir: task.params['outputDir'] as String,
       boot9Path: task.params['boot9Path'] as String?,
+      ignoreEncryption: task.params['ignoreEncryption'] as bool? ?? false,
     );
   }
 }

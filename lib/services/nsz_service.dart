@@ -61,6 +61,7 @@ class NszService {
     required String inputFile,
     required String outputDir,
     String? boot9Path,
+    bool ignoreEncryption = false,
     required void Function(double progress) onProgress,
   }) =>
       _runJob(
@@ -70,6 +71,7 @@ class NszService {
           'input_file': inputFile,
           'output_dir': outputDir,
           'boot9_path': (boot9Path != null && boot9Path.isNotEmpty) ? boot9Path : null,
+          'ignore_encryption': ignoreEncryption,
         },
         onProgress: onProgress,
       );
