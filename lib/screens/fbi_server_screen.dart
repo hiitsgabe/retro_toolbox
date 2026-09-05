@@ -16,10 +16,15 @@ class FbiServerScreen extends ConsumerStatefulWidget {
 
 class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
   late final _ip = TextEditingController(text: ref.read(fbiServerProvider).threeDsIp);
+  final _search = TextEditingController();
+  String _query = '';
+  int _page = 0;
+  static const _pageSize = 25;
 
   @override
   void dispose() {
     _ip.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -51,7 +56,18 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               color: Colors.white,
-              child: QrImageView(data: g.url, size: 240, backgroundColor: Colors.white),
+              child: QrImageView(
+                data: g.url,
+                size: 240,
+                backgroundColor: Colors.white,
+                // Without this, data that overflows QR capacity throws and can
+                // wedge the dialog. Show a fallback instead.
+                errorStateBuilder: (context, err) => const SizedBox(
+                  width: 240,
+                  height: 240,
+                  child: Center(child: Text('URL too long for a QR code — use Send instead.', textAlign: TextAlign.center)),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             const Text('In FBI: Remote Install → Scan QR Code', textAlign: TextAlign.center, style: TextStyle(fontSize: 13)),
@@ -125,28 +141,80 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
             const SizedBox(height: 16),
             _instructions(theme),
             const SizedBox(height: 16),
-            Text('3DS titles', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            FutureBuilder<List<FbiGame>>(
-              future: notifier.loadGameList(),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
-                }
-                final games = snap.data ?? [];
-                if (games.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: Text('No 3DS (.cia) titles in your catalog.',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                    ),
-                  );
-                }
-                return Column(children: [for (final g in games) _gameCard(theme, g)]);
-              },
+            Row(
+              children: [
+                Text('3DS titles', style: theme.textTheme.titleSmall),
+                const Spacer(),
+                IconButton(icon: const Icon(Icons.refresh, size: 20), tooltip: 'Reload', onPressed: () => notifier.refreshGames()),
+              ],
             ),
+            const SizedBox(height: 8),
+            ..._gameList(theme, state, notifier),
           ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _gameList(ThemeData theme, FbiServerState state, FbiServerNotifier notifier) {
+    if (state.gamesLoading) {
+      return const [Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
+    }
+    if (state.games.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Text('No 3DS (.cia) titles in your catalog.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
+        ),
+      ];
+    }
+
+    final q = _query.toLowerCase();
+    final filtered = q.isEmpty ? state.games : state.games.where((g) => g.game.title.toLowerCase().contains(q)).toList();
+    final pageCount = (filtered.length / _pageSize).ceil();
+    final page = _page.clamp(0, pageCount == 0 ? 0 : pageCount - 1);
+    final start = page * _pageSize;
+    final slice = filtered.skip(start).take(_pageSize).toList();
+
+    return [
+      TextField(
+        controller: _search,
+        decoration: InputDecoration(
+          hintText: 'Search titles',
+          prefixIcon: const Icon(Icons.search),
+          isDense: true,
+          border: const OutlineInputBorder(),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _search.clear(); _query = ''; _page = 0; })),
+        ),
+        onChanged: (v) => setState(() { _query = v.trim(); _page = 0; }),
+      ),
+      const SizedBox(height: 8),
+      if (filtered.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: Text('No matches.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+        )
+      else ...[
+        for (final g in slice) _gameCard(theme, g),
+        if (pageCount > 1) _pager(theme, page, pageCount, filtered.length, start, slice.length),
+      ],
+    ];
+  }
+
+  Widget _pager(ThemeData theme, int page, int pageCount, int total, int start, int shown) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(icon: const Icon(Icons.chevron_left), onPressed: page > 0 ? () => setState(() => _page = page - 1) : null),
+          Text('${start + 1}–${start + shown} of $total', style: theme.textTheme.bodySmall),
+          IconButton(icon: const Icon(Icons.chevron_right), onPressed: page < pageCount - 1 ? () => setState(() => _page = page + 1) : null),
         ],
       ),
     );

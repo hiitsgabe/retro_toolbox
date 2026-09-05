@@ -19,6 +19,8 @@ class FbiServerState {
   final List<String> addresses;
   final String threeDsIp;
   final int activeTransfers;
+  final List<FbiGame> games;
+  final bool gamesLoading;
   final String? error;
 
   const FbiServerState({
@@ -27,16 +29,30 @@ class FbiServerState {
     this.addresses = const [],
     this.threeDsIp = '',
     this.activeTransfers = 0,
+    this.games = const [],
+    this.gamesLoading = false,
     this.error,
   });
 
-  FbiServerState copyWith({bool? running, int? port, List<String>? addresses, String? threeDsIp, int? activeTransfers, String? error, bool clearError = false}) =>
+  FbiServerState copyWith({
+    bool? running,
+    int? port,
+    List<String>? addresses,
+    String? threeDsIp,
+    int? activeTransfers,
+    List<FbiGame>? games,
+    bool? gamesLoading,
+    String? error,
+    bool clearError = false,
+  }) =>
       FbiServerState(
         running: running ?? this.running,
         port: port ?? this.port,
         addresses: addresses ?? this.addresses,
         threeDsIp: threeDsIp ?? this.threeDsIp,
         activeTransfers: activeTransfers ?? this.activeTransfers,
+        games: games ?? this.games,
+        gamesLoading: gamesLoading ?? this.gamesLoading,
         error: clearError ? null : (error ?? this.error),
       );
 }
@@ -87,11 +103,17 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
     return headers;
   }
 
-  /// 3DS games and their URLs on this server (empty until running).
-  Future<List<FbiGame>> loadGameList() async {
-    if (!state.running || state.addresses.isEmpty) return [];
-    final hostPort = '${state.addresses.first}:${state.port}';
-    return FbiServerService.games(await _loadGames(), hostPort);
+  /// Loads the 3DS game list into state once (not on every rebuild).
+  Future<void> refreshGames() async {
+    if (!state.running || state.addresses.isEmpty) return;
+    state = state.copyWith(gamesLoading: true);
+    try {
+      final hostPort = '${state.addresses.first}:${state.port}';
+      final games = FbiServerService.games(await _loadGames(), hostPort);
+      if (mounted) state = state.copyWith(games: games, gamesLoading: false);
+    } catch (e) {
+      if (mounted) state = state.copyWith(gamesLoading: false, error: '$e');
+    }
   }
 
   Future<void> enable() async {
@@ -99,6 +121,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
       await _service.start(port: state.port, loadGames: _loadGames, authHeaders: _authHeaders);
       final addresses = await FbiServerService.localAddresses();
       state = state.copyWith(running: true, addresses: addresses, port: _service.port, clearError: true);
+      refreshGames();
       if (Platform.isAndroid) {
         await FlutterForegroundTask.startService(
           serviceId: 4,
@@ -116,7 +139,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
   Future<void> disable() async {
     await _service.stop();
     if (Platform.isAndroid) await FlutterForegroundTask.stopService();
-    state = state.copyWith(running: false, addresses: const []);
+    state = state.copyWith(running: false, addresses: const [], games: const []);
   }
 
   Future<void> setPort(int port) async {
