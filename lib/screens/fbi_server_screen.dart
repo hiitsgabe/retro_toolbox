@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:roms_downloader/providers/fbi_server_provider.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
+import 'package:roms_downloader/widgets/common/advanced_port.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Serves 3DS titles as installable .cia and installs them on a console running
@@ -226,16 +227,8 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
             ),
           ),
           if (!state.running) ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: '${state.port}',
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Server port', border: OutlineInputBorder(), isDense: true),
-              onChanged: (v) {
-                final port = int.tryParse(v);
-                if (port != null && port > 0 && port < 65536) notifier.setPort(port);
-              },
-            ),
+            const SizedBox(height: 8),
+            AdvancedPort(port: state.port, onChanged: notifier.setPort),
           ],
           if (state.error != null) ...[
             const SizedBox(height: 16),

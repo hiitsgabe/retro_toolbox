@@ -10,7 +10,7 @@ import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
 import 'package:roms_downloader/utils/network.dart';
 
-const _portKey = 'tinfoil_server_port';
+const _portKey = 'tinfoil_server_port_v2';
 
 class TinfoilServerState {
   final bool running;
@@ -21,7 +21,7 @@ class TinfoilServerState {
 
   const TinfoilServerState({
     this.running = false,
-    this.port = 8000,
+    this.port = 9092,
     this.addresses = const [],
     this.activeTransfers = 0,
     this.error,

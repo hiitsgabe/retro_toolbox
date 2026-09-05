@@ -9,6 +9,7 @@ import 'package:roms_downloader/providers/rts_server_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/utils/network.dart';
+import 'package:roms_downloader/widgets/common/advanced_port.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Turns local folders into a catalog other apps consume via New Catalog
@@ -61,17 +62,8 @@ class RtsServerScreen extends ConsumerWidget {
             ),
           ),
           if (!state.running) ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: '${state.port}',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true),
-              onChanged: (v) {
-                final port = int.tryParse(v);
-                if (port != null && port > 0 && port < 65536) notifier.setPort(port);
-              },
-            ),
+            const SizedBox(height: 8),
+            AdvancedPort(port: state.port, onChanged: notifier.setPort),
           ],
           if (state.error != null) ...[
             const SizedBox(height: 16),

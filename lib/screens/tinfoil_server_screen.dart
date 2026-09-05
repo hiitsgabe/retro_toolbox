@@ -9,6 +9,7 @@ import 'package:roms_downloader/services/tinfoil_server_service.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:roms_downloader/widgets/common/advanced_port.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.
@@ -48,17 +49,8 @@ class TinfoilServerScreen extends ConsumerWidget {
             ),
           ),
           if (!state.running) ...[
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: '${state.port}',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true),
-              onChanged: (v) {
-                final port = int.tryParse(v);
-                if (port != null && port > 0 && port < 65536) notifier.setPort(port);
-              },
-            ),
+            const SizedBox(height: 8),
+            AdvancedPort(port: state.port, onChanged: notifier.setPort),
           ],
           if (state.error != null) ...[
             const SizedBox(height: 16),
