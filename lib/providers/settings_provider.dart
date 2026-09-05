@@ -184,6 +184,15 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
+  Future<void> setBoot9Path(String path) async {
+    final newState = state.copyWith(
+      boot9Path: path.isEmpty ? null : path,
+      clearBoot9Path: path.isEmpty,
+    );
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
   Future<void> setPreferredLocalIp(String? ip) async {
     final newState = state.copyWith(
       preferredLocalIp: (ip == null || ip.isEmpty) ? null : ip,

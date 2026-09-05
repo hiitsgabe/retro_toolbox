@@ -44,13 +44,46 @@ class NszService {
     required String outputDir,
     String? keysPath,
     required void Function(double progress) onProgress,
+  }) =>
+      _runJob(
+        tag: 'nsz_${nszFilePath.hashCode.abs()}',
+        job: {
+          'nsz_file': nszFilePath,
+          'output_dir': outputDir,
+          'keys_path': (keysPath != null && keysPath.isNotEmpty) ? keysPath : null,
+        },
+        onProgress: onProgress,
+      );
+
+  /// Converts a .3ds/.cci to .cia via the bundled 3dsconv worker job.
+  /// [boot9Path] is needed for encrypted dumps. Throws on failure.
+  static Future<void> convert3dsToCia({
+    required String inputFile,
+    required String outputDir,
+    String? boot9Path,
+    required void Function(double progress) onProgress,
+  }) =>
+      _runJob(
+        tag: 'cia_${inputFile.hashCode.abs()}',
+        job: {
+          'type': '3dsconv',
+          'input_file': inputFile,
+          'output_dir': outputDir,
+          'boot9_path': (boot9Path != null && boot9Path.isNotEmpty) ? boot9Path : null,
+        },
+        onProgress: onProgress,
+      );
+
+  /// Submits [job] to the persistent worker and resolves when it reports DONE,
+  /// forwarding PROGRESS to [onProgress]; throws on ERROR or a long stall.
+  static Future<void> _runJob({
+    required String tag,
+    required Map<String, dynamic> job,
+    required void Function(double progress) onProgress,
   }) async {
     final jobsDir = await _ensureWorker();
 
-    final progressFile = File(path.join(
-      Directory.systemTemp.path,
-      'nsz_progress_${nszFilePath.hashCode.abs()}.txt',
-    ));
+    final progressFile = File(path.join(Directory.systemTemp.path, 'worker_progress_$tag.txt'));
     await progressFile.writeAsString('');
 
     final completer = Completer<void>();
@@ -96,14 +129,9 @@ class NszService {
     try {
       // Hand the job to the worker. It picks up job_*.json files, decompresses
       // one at a time, and writes PROGRESS/DONE/ERROR into progressFile.
-      final jobId = '${nszFilePath.hashCode.abs()}_${DateTime.now().microsecondsSinceEpoch}';
+      final jobId = '${tag}_${DateTime.now().microsecondsSinceEpoch}';
       final jobFile = File(path.join(jobsDir, 'job_$jobId.json'));
-      await jobFile.writeAsString(jsonEncode({
-        'nsz_file': nszFilePath,
-        'output_dir': outputDir,
-        'keys_path': (keysPath != null && keysPath.isNotEmpty) ? keysPath : null,
-        'progress_file': progressFile.path,
-      }));
+      await jobFile.writeAsString(jsonEncode({...job, 'progress_file': progressFile.path}));
 
       // No fixed total timeout: a big NSZ on a slow SD legitimately runs for
       // hours. Fail only if the worker goes silent (no new progress) for a

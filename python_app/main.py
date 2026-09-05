@@ -14,13 +14,59 @@ def _report(progress_file, msg):
     print(msg, flush=True)
 
 
+def run_3dsconv(job):
+    """Convert one .3ds/.cci to .cia via the bundled 3dsconv, reporting DONE/ERROR.
+
+    3dsconv runs its logic at module top-level off sys.argv, so we exec it fresh
+    with runpy each time and detect success by a new .cia appearing in output.
+    """
+    import runpy
+    progress_file = job.get('progress_file')
+    input_file = job.get('input_file')
+    output_dir = job.get('output_dir')
+    boot9 = job.get('boot9_path') or None
+    if not input_file or not output_dir:
+        _report(progress_file, 'ERROR:Missing input_file or output_dir in job')
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+    before = set(glob.glob(os.path.join(output_dir, '*.cia')))
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'threedsconv', 'threedsconv.py')
+    argv = ['3dsconv.py', '-o', output_dir]
+    if boot9:
+        argv += ['-b', boot9]
+    argv.append(input_file)
+
+    old_argv = sys.argv
+    sys.argv = argv
+    _report(progress_file, 'PROGRESS:0')
+    try:
+        runpy.run_path(script, run_name='__main__')
+    except SystemExit:
+        pass  # 3dsconv calls sys.exit on bad input; success is judged by output
+    except Exception as e:
+        _report(progress_file, f'ERROR:{e}')
+        return
+    finally:
+        sys.argv = old_argv
+
+    new = set(glob.glob(os.path.join(output_dir, '*.cia'))) - before
+    if new:
+        _report(progress_file, 'DONE')
+    else:
+        _report(progress_file, 'ERROR:Conversion produced no CIA — the ROM may be encrypted and need a correct boot9.bin')
+
+
 def run_job(job):
-    """Decompress one NSZ described by a job dict, reporting via its progress_file.
+    """Run one job described by a dict, reporting via its progress_file.
 
     Catches everything: an exception that escapes to the interpreter's default
     excepthook (PyErr_Display) can itself segfault this build, so nothing is
     allowed to propagate out.
     """
+    if job.get('type') == '3dsconv':
+        return run_3dsconv(job)
+
     progress_file = job.get('progress_file')
     nsz_file = job.get('nsz_file')
     output_dir = job.get('output_dir')

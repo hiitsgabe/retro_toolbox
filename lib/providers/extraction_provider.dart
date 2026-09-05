@@ -153,6 +153,39 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
   }
 
+  Future<void> cia3dsConvert({
+    required String taskId,
+    required String inputPath,
+    required String outputDir,
+    String? boot9Path,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    final fileName = path.basename(inputPath);
+    await ExtractionService.startNotification(taskId, 'Converting', 'Converting $fileName to CIA...');
+
+    try {
+      await NszService.convert3dsToCia(
+        inputFile: inputPath,
+        outputDir: outputDir,
+        boot9Path: boot9Path,
+        onProgress: (progress) {
+          _updateProgress(taskId, progress);
+          ExtractionService.updateNotification('Converting $fileName... ${(progress * 100).round()}%');
+        },
+      );
+      _onConversionCompleted(taskId);
+    } catch (e) {
+      debugPrint('3DS→CIA conversion error: $e');
+      _onNszError(taskId, e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
+    }
+  }
+
   void _onConversionCompleted(String taskId) {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     final currentTask = tasks[taskId];

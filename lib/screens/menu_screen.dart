@@ -18,6 +18,7 @@ import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
 import 'package:roms_downloader/screens/add_catalog_source_screen.dart';
 import 'package:roms_downloader/screens/collection_clean_screen.dart';
 import 'package:roms_downloader/screens/rar_decompress_screen.dart';
+import 'package:roms_downloader/screens/cia_convert_screen.dart';
 import 'package:roms_downloader/screens/m3u_screen.dart';
 import 'package:roms_downloader/screens/chd_convert_screen.dart';
 import 'package:roms_downloader/screens/rts_server_screen.dart';
@@ -93,6 +94,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
           MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
           MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
+          MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
         ])),
       ),
       MenuTile(

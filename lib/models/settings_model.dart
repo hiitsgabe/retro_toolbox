@@ -23,6 +23,7 @@ class AppSettings {
   final String? chdmanPath; // user-set path to a chdman binary, if any
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
   final String? preferredLocalIp; // LAN IP all servers advertise/use, if chosen
+  final String? boot9Path; // user-set boot9.bin for 3DS->CIA conversion
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -35,6 +36,7 @@ class AppSettings {
     this.chdmanPath,
     this.catalogSourceUrl,
     this.preferredLocalIp,
+    this.boot9Path,
   });
 
   bool get hasIaCredentials =>
@@ -59,6 +61,8 @@ class AppSettings {
     bool clearCatalogSourceUrl = false,
     String? preferredLocalIp,
     bool clearPreferredLocalIp = false,
+    String? boot9Path,
+    bool clearBoot9Path = false,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -71,6 +75,7 @@ class AppSettings {
       chdmanPath: clearChdmanPath ? null : (chdmanPath ?? this.chdmanPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
       preferredLocalIp: clearPreferredLocalIp ? null : (preferredLocalIp ?? this.preferredLocalIp),
+      boot9Path: clearBoot9Path ? null : (boot9Path ?? this.boot9Path),
     );
   }
 
@@ -86,6 +91,7 @@ class AppSettings {
       if (chdmanPath != null) 'chdmanPath': chdmanPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
       if (preferredLocalIp != null) 'preferredLocalIp': preferredLocalIp,
+      if (boot9Path != null) 'boot9Path': boot9Path,
     };
   }
 
@@ -101,6 +107,7 @@ class AppSettings {
       chdmanPath: json['chdmanPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
       preferredLocalIp: json['preferredLocalIp'] as String?,
+      boot9Path: json['boot9Path'] as String?,
     );
   }
 }
