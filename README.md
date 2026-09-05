@@ -170,6 +170,10 @@ assets/
 
 - **[rafaismyname](https://github.com/rafaismyname):** original project base this is built on
 - **[nicoboss/nsz](https://github.com/nicoboss/nsz):** NSZ/NSP decompression library (embedded in `python_app/nsz/`)
+- **[MAME `chdman`](https://www.mamedev.org)** (BSD-3-Clause): CHD compression/extraction (bundled per-platform under `assets/chdman/`)
+- **[ihaveamac/3dsconv](https://github.com/ihaveamac/3dsconv)** (MIT): 3DS `.3ds`/`.cci` → `.cia` conversion (embedded in `python_app/threedsconv/`), with **[pyaes](https://pypi.org/project/pyaes)** (MIT)
+
+> Key material is never distributed: NSZ needs your own `prod.keys` and 3DS conversion your own `boot9.bin`, exactly as with the console tools. Convert only backups of games and consoles you own.
 
 ---
 
