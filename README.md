@@ -48,6 +48,7 @@ Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
 - **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
 - **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android and macOS)
 - **Collection Clean:** Folder-scoped cleanup — dedupe game files (keep the largest), strip region/version tags from filenames, and remove OS junk files. Every action previews before it applies
+- **M3U Playlists:** Generate `.m3u` playlists for multi-disc games so emulators show one entry and swap discs in-game
 - **New Catalog Source:** Add a single console to your catalog from a directory-listing URL or an Internet Archive item
 
 ### Platforms
