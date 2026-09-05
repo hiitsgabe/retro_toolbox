@@ -177,6 +177,13 @@ jobs:
           done
           exit $fail
 
+      # Android runs chdman from jniLibs, so the desktop chdman assets are dead
+      # weight in the APK — strip them, leaving a placeholder so the declared
+      # asset dirs stay valid.
+      - name: Trim foreign chdman assets
+        run: |
+          for os in macos linux windows; do rm -f assets/chdman/$os/*; : > assets/chdman/$os/.gitkeep; done
+
       - name: Build Android APKs (split ABI)
         run: flutter build apk --release --split-per-abi
 
@@ -264,6 +271,10 @@ jobs:
 
       - name: Install CocoaPods
         run: cd macos && pod install
+
+      - name: Trim foreign chdman assets
+        run: |
+          for os in linux windows; do rm -f assets/chdman/$os/*; : > assets/chdman/$os/.gitkeep; done
 
       - name: Build macOS (${{ matrix.arch }})
         run: |
@@ -390,6 +401,8 @@ jobs:
           patchelf --set-rpath '$ORIGIN' "$DEST/chdman"
           ( cd "$DEST"; ( echo chdman; ls | grep -E '\.so' ) > manifest.txt )
           echo "Bundled:"; ls -1 "$DEST"
+          # Drop the other platforms' chdman assets — dead weight in a Linux build.
+          for os in macos windows; do rm -f assets/chdman/$os/*; : > assets/chdman/$os/.gitkeep; done
 
       - name: Build Linux (x64)
         run: flutter build linux --release
@@ -500,6 +513,8 @@ jobs:
           $names = @('chdman.exe') + (Get-ChildItem $dest -Filter *.dll | ForEach-Object { $_.Name })
           $names | Set-Content "$dest/manifest.txt"
           Get-ChildItem $dest | Format-Table Name,Length
+          # Drop the other platforms' chdman assets — dead weight in a Windows build.
+          foreach ($os in 'macos','linux') { Remove-Item "assets/chdman/$os/*" -Force -Recurse -ErrorAction SilentlyContinue; New-Item -ItemType File -Force "assets/chdman/$os/.gitkeep" | Out-Null }
 
       # Surfaces the detected Visual Studio install, so a future runner-image
       # change shows up here instead of as an opaque CMake generator error.
