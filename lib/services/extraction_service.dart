@@ -88,6 +88,7 @@ class ExtractionService {
     required String taskId,
     required String filePath,
     required String extractionDir,
+    List<String> allowedExtensions = const [],
     required Function(String taskId, double progress) onProgress,
     required Function(String taskId, String extractionDir) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
@@ -99,6 +100,7 @@ class ExtractionService {
         taskId,
         filePath,
         extractionDir,
+        allowedExtensions: allowedExtensions,
         onProgress: onProgress,
         onComplete: onComplete,
         onError: onError,
@@ -136,6 +138,7 @@ class ExtractionService {
       'taskId': taskId,
       'filePath': filePath,
       'extractionDir': extractionDir,
+      'allowedExtensions': allowedExtensions,
     });
   }
 
@@ -174,6 +177,7 @@ class ExtractionService {
     String taskId,
     String filePath,
     String extractionDir, {
+    List<String> allowedExtensions = const [],
     required Function(String taskId, double progress) onProgress,
     required Function(String taskId, String extractionDir) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
@@ -196,6 +200,7 @@ class ExtractionService {
       'taskId': taskId,
       'filePath': filePath,
       'extractionDir': extractionDir,
+      'allowedExtensions': allowedExtensions,
       'sendPort': receivePort.sendPort,
     });
   }
@@ -210,6 +215,7 @@ class ExtractionService {
         sendPort.send({'type': 'progress', 'value': progress});
       });
       await _flattenSingleTopLevelDir(params['extractionDir']);
+      await _pruneToAllowed(params['extractionDir'], (params['allowedExtensions'] as List?)?.cast<String>() ?? const []);
       // Zips can carry mode-000 entries; make extracted files readable.
       if (!Platform.isWindows) {
         await Process.run('chmod', ['-R', 'u+rwX,go+rX', params['extractionDir']]);
@@ -241,6 +247,38 @@ Future<void> _flattenSingleTopLevelDir(String extractionDir) async {
   }
 }
 
+/// Deletes extracted files whose extension isn't in [allowed] (when non-empty),
+/// then removes any dirs left empty. Keeps a should_unzip archive down to just
+/// the console's file_format payload (e.g. .3ds/.cia), dropping bundled junk.
+Future<void> _pruneToAllowed(String extractionDir, List<String> allowed) async {
+  if (allowed.isEmpty) return;
+  final exts = allowed.map((e) => e.toLowerCase()).toSet();
+  try {
+    final dir = Directory(extractionDir);
+    if (!await dir.exists()) return;
+    await for (final e in dir.list(recursive: true, followLinks: false)) {
+      if (e is File && !exts.contains(path.extension(e.path).toLowerCase())) {
+        try {
+          await e.delete();
+        } catch (_) {}
+      }
+    }
+    // Remove now-empty directories (deepest first).
+    final dirs = <Directory>[];
+    await for (final e in dir.list(recursive: true, followLinks: false)) {
+      if (e is Directory) dirs.add(e);
+    }
+    dirs.sort((a, b) => b.path.length.compareTo(a.path.length));
+    for (final d in dirs) {
+      try {
+        if (await d.list().isEmpty) await d.delete();
+      } catch (_) {}
+    }
+  } catch (e) {
+    debugPrint('Prune-to-allowed failed: $e');
+  }
+}
+
 @pragma('vm:entry-point')
 void extractionTaskCallback() {
   FlutterForegroundTask.setTaskHandler(ExtractionTaskHandler());
@@ -264,6 +302,7 @@ class ExtractionTaskHandler extends TaskHandler {
       final taskId = data['taskId'] as String;
       final filePath = data['filePath'] as String;
       final extractionDir = data['extractionDir'] as String;
+      final allowed = (data['allowedExtensions'] as List?)?.cast<String>() ?? const [];
       FlutterForegroundTask.updateService(notificationText: 'Extracting $taskId...');
       FlutterForegroundTask.sendDataToMain({
         'type': ExtractionService.progressDataType,
@@ -287,9 +326,13 @@ class ExtractionTaskHandler extends TaskHandler {
               'value': (progress / 100.0).clamp(0.0, 1.0),
             });
           }
+          if (allowed.isNotEmpty && !zipEntry.isDirectory) {
+            final ext = path.extension(zipEntry.name).toLowerCase();
+            if (!allowed.contains(ext)) return ZipFileOperation.skipItem;
+          }
           return ZipFileOperation.includeItem;
         },
-      ).then((_) => _flattenSingleTopLevelDir(extractionDir)).then((_) {
+      ).then((_) => _flattenSingleTopLevelDir(extractionDir)).then((_) => _pruneToAllowed(extractionDir, allowed)).then((_) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
           'type': ExtractionService.completionDataType,
