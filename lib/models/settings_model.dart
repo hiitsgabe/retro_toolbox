@@ -22,6 +22,7 @@ class AppSettings {
   final String? nszKeysPath;
   final String? chdmanPath; // user-set path to a chdman binary, if any
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
+  final String? preferredLocalIp; // LAN IP all servers advertise/use, if chosen
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -33,6 +34,7 @@ class AppSettings {
     this.nszKeysPath,
     this.chdmanPath,
     this.catalogSourceUrl,
+    this.preferredLocalIp,
   });
 
   bool get hasIaCredentials =>
@@ -55,6 +57,8 @@ class AppSettings {
     bool clearChdmanPath = false,
     String? catalogSourceUrl,
     bool clearCatalogSourceUrl = false,
+    String? preferredLocalIp,
+    bool clearPreferredLocalIp = false,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -66,6 +70,7 @@ class AppSettings {
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
       chdmanPath: clearChdmanPath ? null : (chdmanPath ?? this.chdmanPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
+      preferredLocalIp: clearPreferredLocalIp ? null : (preferredLocalIp ?? this.preferredLocalIp),
     );
   }
 
@@ -80,6 +85,7 @@ class AppSettings {
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (chdmanPath != null) 'chdmanPath': chdmanPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
+      if (preferredLocalIp != null) 'preferredLocalIp': preferredLocalIp,
     };
   }
 
@@ -94,6 +100,7 @@ class AppSettings {
       nszKeysPath: json['nszKeysPath'] as String?,
       chdmanPath: json['chdmanPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
+      preferredLocalIp: json['preferredLocalIp'] as String?,
     );
   }
 }

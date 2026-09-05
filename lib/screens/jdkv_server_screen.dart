@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/providers/jdkv_server_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/services/webdav_server_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
@@ -65,7 +67,7 @@ class JdkvServerScreen extends ConsumerWidget {
           ],
           if (state.running && state.addresses.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _connectionCard(context, state.addresses, state.port),
+            _connectionCard(context, orderAddresses(state.addresses, ref.watch(settingsProvider).preferredLocalIp), state.port),
             const SizedBox(height: 16),
             _instructions(theme),
           ],

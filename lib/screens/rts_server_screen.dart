@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:roms_downloader/models/rts_folder_model.dart';
 import 'package:roms_downloader/providers/rts_server_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Turns local folders into a catalog other apps consume via New Catalog
@@ -18,7 +20,8 @@ class RtsServerScreen extends ConsumerWidget {
     final state = ref.watch(rtsServerProvider);
     final notifier = ref.read(rtsServerProvider.notifier);
     final theme = Theme.of(context);
-    final host = state.addresses.isNotEmpty ? state.addresses.first : null;
+    final addresses = orderAddresses(state.addresses, ref.watch(settingsProvider).preferredLocalIp);
+    final host = addresses.isNotEmpty ? addresses.first : null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Retro Tools Server')),

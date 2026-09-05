@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 
 import 'package:roms_downloader/providers/ftp_provider.dart';
+import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/file_browser.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
@@ -188,7 +190,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
 
   Widget _serverView(BuildContext context, FtpState state, FtpNotifier notifier) {
     final theme = Theme.of(context);
-    final host = state.serverAddresses.isNotEmpty ? state.serverAddresses.first : null;
+    final host = orderAddresses(state.serverAddresses, ref.watch(settingsProvider).preferredLocalIp).firstOrNull;
     final running = state.serverRunning;
 
     if (!_srvPrefilled) {

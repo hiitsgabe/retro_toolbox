@@ -6,6 +6,7 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
@@ -19,7 +20,8 @@ class TinfoilServerScreen extends ConsumerWidget {
     final state = ref.watch(tinfoilServerProvider);
     final notifier = ref.read(tinfoilServerProvider.notifier);
     final theme = Theme.of(context);
-    final host = state.addresses.isNotEmpty ? state.addresses.first : null;
+    final addresses = orderAddresses(state.addresses, ref.watch(settingsProvider).preferredLocalIp);
+    final host = addresses.isNotEmpty ? addresses.first : null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Tinfoil Server')),

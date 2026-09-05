@@ -183,4 +183,13 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = newState;
     await _settingsService.saveSettings(newState);
   }
+
+  Future<void> setPreferredLocalIp(String? ip) async {
+    final newState = state.copyWith(
+      preferredLocalIp: (ip == null || ip.isEmpty) ? null : ip,
+      clearPreferredLocalIp: ip == null || ip.isEmpty,
+    );
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
 }
