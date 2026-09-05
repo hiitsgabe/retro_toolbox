@@ -148,9 +148,10 @@ Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra
   };
 }
 
-/// Orders [all] so [preferred] comes first when present, so every server
-/// advertises the IP the user picked in Settings. Falls back to the given order.
+/// The address(es) servers should advertise. When the user pinned an IP in
+/// Settings (and it's currently up), that's the ONLY one returned — no stray
+/// interfaces shown. Otherwise every detected address, in best-guess order.
 List<String> orderAddresses(List<String> all, String? preferred) {
-  if (preferred == null || preferred.isEmpty || !all.contains(preferred)) return all;
-  return [preferred, ...all.where((a) => a != preferred)];
+  if (preferred != null && preferred.isNotEmpty && all.contains(preferred)) return [preferred];
+  return all;
 }
