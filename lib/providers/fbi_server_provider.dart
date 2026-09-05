@@ -14,7 +14,7 @@ import 'package:roms_downloader/services/fbi_server_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
 import 'package:roms_downloader/utils/network.dart';
 
-const _portKey = 'fbi_server_port';
+const _portKey = 'fbi_server_port_v2';
 const _ipKey = 'fbi_3ds_ip';
 
 class FbiServerState {
@@ -29,7 +29,7 @@ class FbiServerState {
 
   const FbiServerState({
     this.running = false,
-    this.port = 8091,
+    this.port = 9094,
     this.addresses = const [],
     this.threeDsIp = '',
     this.activeTransfers = 0,

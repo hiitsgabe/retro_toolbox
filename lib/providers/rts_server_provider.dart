@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/models/rts_folder_model.dart';
 import 'package:roms_downloader/services/rts_server_service.dart';
 
-const _portKey = 'rts_server_port';
+const _portKey = 'rts_server_port_v2';
 const _foldersKey = 'rts_server_folders';
 
 class RtsServerState {
@@ -20,7 +20,7 @@ class RtsServerState {
 
   const RtsServerState({
     this.running = false,
-    this.port = 8090,
+    this.port = 9093,
     this.addresses = const [],
     this.folders = const [],
     this.activeTransfers = 0,

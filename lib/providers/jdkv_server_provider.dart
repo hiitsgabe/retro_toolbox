@@ -8,7 +8,7 @@ import 'package:roms_downloader/services/jksv_backend.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
 import 'package:roms_downloader/services/webdav_server_service.dart';
 
-const _portKey = 'jdkv_server_port';
+const _portKey = 'jdkv_server_port_v2';
 const _folderKey = 'jdkv_export_folder';
 final _titleIdInUrl = RegExp(r'01[0-9A-Fa-f]{14}');
 
@@ -23,7 +23,7 @@ class JdkvServerState {
 
   const JdkvServerState({
     this.running = false,
-    this.port = 8081,
+    this.port = 9091,
     this.folder,
     this.addresses = const [],
     this.incoming = const [],
