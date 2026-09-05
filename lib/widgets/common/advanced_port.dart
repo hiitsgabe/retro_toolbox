@@ -14,7 +14,7 @@ class AdvancedPort extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
         leading: const Icon(Icons.tune, size: 20),
         title: const Text('Advanced'),
         subtitle: Text('Port $port', style: Theme.of(context).textTheme.bodySmall),
