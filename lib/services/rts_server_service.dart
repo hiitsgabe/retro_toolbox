@@ -10,41 +10,22 @@ import 'package:roms_downloader/services/tinfoil_server_service.dart';
 /// Source: a generated `consoles.json`, an HTML listing per folder (matching
 /// [listingRegex]), and the files themselves (with HTTP Range for resume).
 class RtsServerService {
-  // The listing format this server emits and bakes into each console's regex,
-  // so the consumer parses exactly what we produce. Names are assumed free of
-  // <, >, " (illegal on exFAT/FAT anyway), so no HTML escaping is needed.
-  static const listingRegex =
-      r'<a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a> <span class="size">(?<size>[^<]+)</span>';
-
   static Map<String, dynamic> consoleJson(RtsFolder f, int index, String hostPort) => {
         'name': f.name,
         'url': 'http://$hostPort/f/$index/',
         if (f.formats.isNotEmpty) 'file_format': f.formats,
         if (f.boxartsUrl != null && f.boxartsUrl!.isNotEmpty) 'boxarts': {'url': f.boxartsUrl},
         'roms_folder': f.romsSubfolder,
-        'regex': listingRegex,
         'added': true,
       };
 
   static String buildConsolesJson(List<RtsFolder> folders, String hostPort) =>
       jsonEncode([for (var i = 0; i < folders.length; i++) consoleJson(folders[i], i, hostPort)]);
 
-  static String buildListingHtml(List<({String name, int size})> files) {
-    final b = StringBuffer('<!doctype html><html><body>\n');
-    for (final f in files) {
-      final href = Uri.encodeComponent(f.name);
-      b.writeln('<a href="$href" title="${f.name}">${f.name}</a> <span class="size">${_humanSize(f.size)}</span>');
-    }
-    b.write('</body></html>');
-    return b.toString();
-  }
-
-  static String _humanSize(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
-    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-  }
+  /// A JSON listing the consumer auto-detects: [{name, size}, ...]. Download
+  /// URLs are the folder URL + the encoded name.
+  static String buildListingJson(List<({String name, int size})> files) =>
+      jsonEncode([for (final f in files) {'name': f.name, 'size': f.size}]);
 
   /// Files in [folder] matching [formats] (all, if empty), as (name, size).
   static List<({String name, int size})> listFiles(Directory folder, List<String> formats) {
@@ -104,7 +85,7 @@ class RtsServerService {
         final folder = _folders[idx];
         if (segs.length == 2) {
           final files = listFiles(Directory(folder.path), folder.formats);
-          _send(req, buildListingHtml(files), ContentType.html);
+          _send(req, buildListingJson(files), ContentType('application', 'json', charset: 'utf-8'));
           return;
         }
         // /f/<idx>/<filename>

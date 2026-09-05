@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/rts_folder_model.dart';
 import 'package:roms_downloader/providers/rts_server_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
@@ -208,11 +210,28 @@ class RtsServerScreen extends ConsumerWidget {
     final path = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Pick a folder to share');
     if (path == null || !context.mounted) return;
     final name = p.basename(path);
+
+    // Reuse a matching catalog console's formats/boxart if the folder name lines
+    // up (e.g. "psp" → the PSP console), so the user rarely types formats.
+    final consoles = await CatalogService().getConsoles();
+    final id = CatalogService.consoleId(name);
+    Console? match;
+    for (final c in consoles.values) {
+      if (c.id == id || c.name.toLowerCase() == name.toLowerCase()) {
+        match = c;
+        break;
+      }
+    }
+    final boxarts = (match?.boxarts is Map && (match!.boxarts as Map)['url'] is String)
+        ? (match.boxarts as Map)['url'] as String
+        : RtsFolder.libretroBoxarts(name);
+
+    if (!context.mounted) return;
     final draft = RtsFolder(
       path: path,
       name: name,
-      formats: const [],
-      boxartsUrl: RtsFolder.libretroBoxarts(name),
+      formats: match?.fileFormat ?? const [],
+      boxartsUrl: boxarts,
       romsSubfolder: name,
     );
     final result = await _showEditSheet(context, draft, isNew: true);
