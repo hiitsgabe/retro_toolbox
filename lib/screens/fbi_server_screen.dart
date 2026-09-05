@@ -8,6 +8,7 @@ import 'package:roms_downloader/providers/fbi_server_provider.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
 import 'package:roms_downloader/widgets/common/advanced_port.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
 /// Serves 3DS titles as installable .cia and installs them on a console running
 /// FBI — pick a file you downloaded elsewhere, or a catalog title (downloaded
@@ -167,7 +168,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
               future: _qrPng(url),
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return const SizedBox(width: 240, height: 240, child: Center(child: CircularProgressIndicator()));
+                  return const SizedBox(width: 240, height: 240, child: Center(child: HammerLoader()));
                 }
                 final bytes = snap.data;
                 if (bytes == null) {
@@ -268,7 +269,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
 
   List<Widget> _gameList(ThemeData theme, FbiServerState state) {
     if (state.gamesLoading) {
-      return const [Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))];
+      return const [Padding(padding: EdgeInsets.all(24), child: Center(child: HammerLoader()))];
     }
     if (state.games.isEmpty) {
       return [

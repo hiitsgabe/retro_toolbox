@@ -15,6 +15,7 @@ import 'package:roms_downloader/services/chd_service.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/widgets/common/path_browser.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
 /// Convert disc images to/from CHD via chdman. Compresses .cue/.gdi/.iso and
 /// extracts .chd back. Blocks with a "chdman required" card until a binary is
@@ -143,7 +144,7 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
               child: _activeTaskId != null
                   ? _progressUi(context)
                   : ready == null
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(child: HammerLoader())
                       : (ready ? _convertUi(context) : _chdmanWarning(context)),
             ),
           ],
