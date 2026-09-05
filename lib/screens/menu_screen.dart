@@ -20,6 +20,7 @@ import 'package:roms_downloader/screens/collection_clean_screen.dart';
 import 'package:roms_downloader/screens/rar_decompress_screen.dart';
 import 'package:roms_downloader/screens/m3u_screen.dart';
 import 'package:roms_downloader/screens/chd_convert_screen.dart';
+import 'package:roms_downloader/screens/rts_server_screen.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
@@ -75,6 +76,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           MenuTile(label: 'JDKV Server', icon: Icons.folder_shared, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const JdkvServerScreen())),
           MenuTile(label: 'SMB Share', icon: Icons.folder_open, accentColor: const Color(0xFF7A5CA8), onTap: () => _push(const SmbScreen())),
           MenuTile(label: 'FTP', icon: Icons.cloud_sync, accentColor: const Color(0xFFB4632E), onTap: () => _push(const FtpScreen())),
+          MenuTile(label: 'Retro Tools Server', icon: Icons.dns_rounded, accentColor: const Color(0xFF167C80), onTap: () => _push(const RtsServerScreen())),
         ])),
       ),
       MenuTile(
