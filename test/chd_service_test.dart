@@ -18,6 +18,15 @@ void main() {
     expect(ChdService.planFor('g.txt'), isNull);
   });
 
+  test('extractPlanFromChdInfo picks cd vs dvd from info metadata', () {
+    final cd = "Metadata: Tag='CHT2' Index=0\n  TRACK:1 TYPE:MODE1_RAW";
+    final dvd = "Metadata: Tag='DVD ' Index=0 Length=1 bytes";
+    expect(ChdService.extractPlanFromChdInfo(cd).command, 'extractcd');
+    expect(ChdService.extractPlanFromChdInfo(cd).outExt, '.cue');
+    expect(ChdService.extractPlanFromChdInfo(dvd).command, 'extractdvd');
+    expect(ChdService.extractPlanFromChdInfo(dvd).outExt, '.iso');
+  });
+
   test('parseProgress reads chdman percentage lines', () {
     expect(ChdService.parseProgress('Compressing, 0.0% complete...'), 0.0);
     expect(ChdService.parseProgress('Compressing, 42.3% complete...'), closeTo(0.423, 1e-9));

@@ -35,6 +35,15 @@ class ChdService {
     return null;
   }
 
+  /// Chooses the extract subcommand from `chdman info` output: CD images carry
+  /// track metadata (CHTR/CHCD/CHT2 tags, "TRACK:" lines) and extract to a
+  /// .cue+.bin; everything else is treated as a DVD/raw image → .iso. Using the
+  /// wrong one makes chdman abort (std::nullptr_t), so this must match.
+  static ChdPlan extractPlanFromChdInfo(String info) {
+    final isCd = info.contains('TRACK:') || RegExp(r'CHT[R2]|CHCD').hasMatch(info);
+    return isCd ? (command: 'extractcd', outExt: '.cue') : (command: 'extractdvd', outExt: '.iso');
+  }
+
   /// Extracts the 0.0–1.0 progress from a chdman output line, or null.
   static double? parseProgress(String line) {
     final m = RegExp(r'(\d+(?:\.\d+)?)%').firstMatch(line);
@@ -144,11 +153,16 @@ class ChdService {
       throw StateError('chdman not found. Set its path in the tool, or install mame-tools.');
     }
 
+    // Extract must match how the CHD was made (CD vs DVD/raw) or chdman aborts.
+    final effective = modeForInput(inputPath) == ChdMode.extract
+        ? extractPlanFromChdInfo((await Process.run(chdman, ['info', '-i', inputPath])).stdout.toString())
+        : plan;
+
     final base = p.basenameWithoutExtension(inputPath);
-    final outPath = p.join(outputDir, '$base${plan.outExt}');
+    final outPath = p.join(outputDir, '$base${effective.outExt}');
     await Directory(outputDir).create(recursive: true);
 
-    final process = await Process.start(chdman, [plan.command, '-i', inputPath, '-o', outPath, '-f']);
+    final process = await Process.start(chdman, [effective.command, '-i', inputPath, '-o', outPath, '-f']);
 
     void handle(String line) {
       final pct = parseProgress(line);
