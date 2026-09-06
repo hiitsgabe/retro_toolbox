@@ -102,6 +102,27 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
       await updateFilteredGames(immediate: true);
 
+      // The default filter (USA / normal / good-dump) hides whole catalogs like
+      // homebrew or non-USA sets. If it emptied a catalog that actually has
+      // games, drop the filter so the user sees something instead of "0 games".
+      if (gen == _loadGeneration && mounted &&
+          games.isNotEmpty && state.filteredGamesCount == 0) {
+        state = state.copyWith(
+          filter: const CatalogFilter(
+            regions: {},
+            languages: {},
+            dumpQualities: {},
+            romTypes: {},
+            modifications: {},
+            distributionTypes: {},
+            showLatestRevisionOnly: false,
+            showFavoritesOnly: false,
+            showInLibraryOnly: false,
+          ),
+        );
+        await updateFilteredGames(immediate: true);
+      }
+
       if (gen != _loadGeneration || !mounted) return;
       state = state.copyWith(loading: false, loadingStatus: '');
     } catch (e) {
