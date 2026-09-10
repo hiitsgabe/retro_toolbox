@@ -7,7 +7,7 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/services/metadata_pack_service.dart';
 
-/// O serviço real, apontando para <support>/packs. Os testes sobrescrevem
+/// O serviço real, apontando para `<support>/packs`. Os testes sobrescrevem
 /// este provider com um serviço de diretório temporário e fetch falso.
 final metadataPackServiceProvider =
     FutureProvider<MetadataPackService>((ref) async {
