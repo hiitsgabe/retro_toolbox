@@ -135,6 +135,8 @@ Campo por jogo:
 O `id` é o namespace público compartilhado, o análogo do `tt` do IMDb no Stremio. É ele que
 acopla pack, grade, favoritos e biblioteca local.
 
+Build de 2026-09-10: o pacote do SNES saiu com 2415 jogos a partir de 4268 dumps, 89.1% com capa e 75.3% com sinopse.
+
 ## 5. Subsistema 2: Identidade
 
 Este é o subsistema de maior risco e foi validado por prova de conceito antes do desenho.
