@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,75 @@ class MetadataPackService {
   final PackFetch fetch;
 
   MetadataPackService({required this.cacheDir, required this.fetch});
+
+  /// Release de tag fixa, atualizada no lugar pelo workflow metadata-packs.
+  /// Tag fixa significa URL estável e zero chamadas à API do GitHub no app.
+  static const releaseBase =
+      'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs';
+
+  /// Fetch padrão de produção. Segue redirect, que a release do GitHub sempre
+  /// devolve.
+  static Future<List<int>> httpFetch(Uri uri) async {
+    final client = HttpClient();
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close();
+      if (response.statusCode != HttpStatus.ok) {
+        throw HttpException('HTTP ${response.statusCode}', uri: uri);
+      }
+      final bytes = <int>[];
+      await for (final chunk in response) {
+        bytes.addAll(chunk);
+      }
+      return bytes;
+    } finally {
+      client.close();
+    }
+  }
+
+  Uri packUri(String packId) => Uri.parse('$releaseBase/$packId.json.gz');
+  Uri indexUri() => Uri.parse('$releaseBase/$indexFileName');
+
+  Future<MetadataPack> download(String packId) async {
+    final compressed = await fetch(packUri(packId));
+    final jsonStr = utf8.decode(gzip.decode(compressed));
+    await writeCache(packId, jsonStr);
+    return MetadataPack.decode(jsonStr);
+  }
+
+  Future<PackIndex> downloadIndex() async {
+    final jsonStr = utf8.decode(await fetch(indexUri()));
+    await writeCacheIndex(jsonStr);
+    return PackIndex.decode(jsonStr);
+  }
+
+  /// Cache primeiro, rede depois, cache de novo se a rede falhar. Null só
+  /// quando não existe nem uma coisa nem a outra.
+  Future<MetadataPack?> load(String packId, {bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = await readCached(packId);
+      if (cached != null) return cached;
+    }
+    try {
+      return await download(packId);
+    } catch (e) {
+      debugPrint('Falha ao baixar o pacote $packId: $e');
+      return readCached(packId);
+    }
+  }
+
+  Future<PackIndex?> loadIndex({bool forceRefresh = false}) async {
+    if (!forceRefresh) {
+      final cached = await readCachedIndex();
+      if (cached != null) return cached;
+    }
+    try {
+      return await downloadIndex();
+    } catch (e) {
+      debugPrint('Falha ao baixar o indice de pacotes: $e');
+      return readCachedIndex();
+    }
+  }
 
   static const indexFileName = 'index.json';
 
