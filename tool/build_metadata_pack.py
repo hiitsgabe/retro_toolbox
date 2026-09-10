@@ -13,6 +13,7 @@ Output: <pack>.json.gz per system plus an index.json, both meant to be
 uploaded to a GitHub release with the fixed tag "packs". The pack stores the
 cover URL, never the image bytes.
 """
+import argparse
 import gzip
 import io
 import json
@@ -20,10 +21,12 @@ import os
 import re
 import sqlite3
 import sys
+import tempfile
 import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 
 LIBRETRO_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master"
 THUMBS_API = "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/master:Named_Boxarts"
@@ -364,8 +367,139 @@ def enrich_from_openvgdb(games, index):
             break
 
 
+def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
+    """Junta tudo num documento de pacote pronto para serializar."""
+    pack_id = normalize(system["system"])
+    games = collapse(parse_dat(dat_text), pack_id)
+    side_maps = {
+        source: parse_side_dat(text, SIDE_FIELDS[source])
+        for source, text in side_texts.items()
+    }
+    enrich_from_side(games, side_maps)
+    attach_thumbnail_covers(games, thumbs, system["thumbs"])
+    enrich_from_openvgdb(games, openvgdb)
+    return {"pack": pack_id, "system": system["system"], "built": built, "games": games}
+
+
+def pack_bytes(pack):
+    """JSON compacto em gzip determinístico: mtime zerado para que uma
+    rebuild sem mudança produza bytes idênticos."""
+    raw = json.dumps(pack, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    buffer = io.BytesIO()
+    with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as out:
+        out.write(raw)
+    return buffer.getvalue()
+
+
+def build_index(packs, aliases, built):
+    return {
+        "built": built,
+        "packs": [{
+            "pack": pack["pack"],
+            "system": pack["system"],
+            "games": len(pack["games"]),
+            "aliases": aliases.get(pack["pack"], []),
+        } for pack in packs],
+    }
+
+
+def fetch_text(url, optional=False):
+    """Baixa texto. Com optional=True um 404 vira None, que é o caso normal
+    dos side files: eles só existem para os sistemas No-Intro."""
+    try:
+        with urllib.request.urlopen(url, timeout=180) as response:
+            return response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        if optional and error.code == 404:
+            return None
+        raise
+
+
+def fetch_json(url, token=None):
+    request = urllib.request.Request(url)
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=180) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def thumbnail_names(repo, token=None):
+    """Nomes de arquivo em Named_Boxarts. A árvore de um diretório único cabe
+    numa chamada; se vier truncada o builder devolve conjunto vazio em vez de
+    inventar URL que não existe."""
+    try:
+        tree = fetch_json(THUMBS_API.format(repo=repo), token)
+    except urllib.error.HTTPError as error:
+        print(f"  thumbnails de {repo} indisponiveis: HTTP {error.code}", file=sys.stderr)
+        return set()
+    if tree.get("truncated"):
+        print(f"  arvore de {repo} truncada, ignorando capas", file=sys.stderr)
+        return set()
+    return {entry["path"] for entry in tree.get("tree", [])}
+
+
+def download_openvgdb(dest_dir):
+    """Baixa e descompacta o openvgdb.sqlite, devolvendo a conexão."""
+    zip_path = os.path.join(dest_dir, "openvgdb.zip")
+    urllib.request.urlretrieve(OPENVGDB_URL, zip_path)
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extractall(dest_dir)
+    return sqlite3.connect(os.path.join(dest_dir, "openvgdb.sqlite"))
+
+
 def main():
-    raise SystemExit("CLI ainda nao implementada, ver Task 10")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default="dist/packs", help="diretorio de saida")
+    parser.add_argument("--built", required=True, help="data da build, YYYY-MM-DD")
+    parser.add_argument("--only", action="append", default=[],
+                        help="constroi so estes pack ids, repetivel")
+    args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
+    token = os.environ.get("GITHUB_TOKEN")
+    selected = [s for s in SYSTEMS
+                if not args.only or normalize(s["system"]) in args.only]
+    if not selected:
+        raise SystemExit(f"nenhum sistema casa com {args.only}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        conn = download_openvgdb(tmp)
+        openvgdb = openvgdb_index(conn)
+        conn.close()
+        print(f"OpenVGDB: {len(openvgdb)} CRCs")
+
+        packs = []
+        aliases = {}
+        for system in selected:
+            pack_id = normalize(system["system"])
+            print(f"{system['system']}")
+            dat_url = "{}/metadat/{}/{}.dat".format(
+                LIBRETRO_RAW, system["group"],
+                urllib.parse.quote(system["system"]))
+            dat_text = fetch_text(dat_url)
+            side_texts = {}
+            for source in SIDE_FIELDS:
+                url = "{}/metadat/{}/{}.dat".format(
+                    LIBRETRO_RAW, source, urllib.parse.quote(system["system"]))
+                text = fetch_text(url, optional=True)
+                if text is not None:
+                    side_texts[source] = text
+            thumbs = thumbnail_names(system["thumbs"], token)
+            pack = build_pack(system, dat_text, side_texts, thumbs, openvgdb, args.built)
+            with_cover = sum(1 for g in pack["games"] if g.get("cover"))
+            with_synopsis = sum(1 for g in pack["games"] if g.get("synopsis"))
+            print(f"  {len(pack['games'])} jogos, {with_cover} com capa, "
+                  f"{with_synopsis} com sinopse")
+            path = os.path.join(args.out, f"{pack_id}.json.gz")
+            with open(path, "wb") as out:
+                out.write(pack_bytes(pack))
+            packs.append(pack)
+            aliases[pack_id] = system["aliases"]
+
+        index = build_index(packs, aliases, args.built)
+        with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as out:
+            json.dump(index, out, ensure_ascii=False, indent=2)
+        print(f"{len(packs)} pacotes em {args.out}")
 
 
 if __name__ == "__main__":
