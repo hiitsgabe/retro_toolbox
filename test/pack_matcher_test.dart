@@ -184,4 +184,24 @@ void main() {
       expect(m.tier, MatchTier.fuzzyName);
     });
   });
+
+  group('eixo do checksum', () {
+    test('casa o CRC em maiúsculas e traz o dump certo', () {
+      final m = matcher.matchCrc('A31BEAD4', sourceName: 'qualquer.zip');
+      expect(m, isNotNull);
+      expect(m!.tier, MatchTier.checksum);
+      expect(m.confidence, MatchConfidence.confirmed);
+      expect(m.game.id, 'snes/super-mario-world');
+      expect(m.dump?.name, 'Super Mario World (Europe)');
+      expect(m.sourceName, 'qualquer.zip');
+    });
+
+    test('casa o CRC em minúsculas', () {
+      expect(matcher.matchCrc('a31bead4')?.game.id, 'snes/super-mario-world');
+    });
+
+    test('devolve null para CRC que não está no pacote', () {
+      expect(matcher.matchCrc('DEADBEEF'), isNull);
+    });
+  });
 }
