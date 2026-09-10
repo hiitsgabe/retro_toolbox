@@ -104,4 +104,35 @@ void main() {
       expect(matcher.match('Alguma Coisa Que Nao Existe (USA).zip'), isNull);
     });
   });
+
+  group('tier 2, título canônico', () {
+    test('casa quando só a região e a revisão diferem', () {
+      final m = matcher.match('Chrono Trigger (Europe) (Rev 1).zip');
+      expect(m, isNotNull);
+      expect(m!.tier, MatchTier.canonicalName);
+      expect(m.game.id, 'snes/chrono-trigger');
+    });
+
+    test('casa quando o artigo está invertido dos dois lados', () {
+      // No pacote o dump é "Blue Crystalrod, The (Japan)". A fonte escreve o
+      // artigo na frente. `canon` põe os dois na mesma forma.
+      final m = matcher.match('The Blue Crystalrod (Japan).zip');
+      expect(m, isNotNull);
+      expect(m!.tier, MatchTier.canonicalName);
+      expect(m.game.id, 'snes/the-blue-crystalrod');
+    });
+
+    test('o tier canônico resolve o jogo e não a versão, então não traz dump', () {
+      expect(matcher.match('Chrono Trigger (Europe) (Rev 1).zip')?.dump, isNull);
+    });
+
+    test('o tier exato ganha do canônico quando os dois casariam', () {
+      // "Super Mario World (Europe)" casa exato no segundo dump e casaria
+      // canônico no jogo inteiro. O exato tem que vencer, porque só ele sabe
+      // qual das duas regiões é.
+      final m = matcher.match('Super Mario World (Europe).sfc');
+      expect(m!.tier, MatchTier.exactName);
+      expect(m.dump?.crc, 'A31BEAD4');
+    });
+  });
 }
