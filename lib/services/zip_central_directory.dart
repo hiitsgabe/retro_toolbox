@@ -1,5 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:roms_downloader/utils/file_crc32.dart';
+import 'package:roms_downloader/utils/pack_naming.dart';
 
 /// A resposta de uma requisição com header `Range`, reduzida ao que o parser
 /// precisa. Existe para o teste poder responder sem rede.
@@ -18,6 +22,26 @@ class RangeResponse {
 /// Busca um intervalo de bytes. [range] já vem pronto, no formato do header:
 /// `bytes=-256` ou `bytes=100-199`.
 typedef RangeFetch = Future<RangeResponse> Function(Uri uri, String range);
+
+/// Uma entrada do diretório central. [crc] em maiúsculas, oito dígitos, no
+/// mesmo formato de `PackDump.crc`.
+class ZipEntry {
+  final String name;
+  final String crc;
+
+  const ZipEntry({required this.name, required this.crc});
+
+  /// Verdadeiro quando este CRC pode ser comparado com o de um dump do pacote.
+  ///
+  /// Um zip dentro de um zip tem CRC próprio, que é o do comprimido e não o da
+  /// ROM. Comparar esse CRC com o pacote é pior que não comparar: no melhor
+  /// caso não casa, no pior casa por acidente. Ver a seção 5.8 do spec,
+  /// limite 1.
+  bool get crcMatchesRom => hasRomExtension(name) && !hasArchiveExtension(name);
+
+  @override
+  String toString() => 'ZipEntry($name, $crc)';
+}
 
 /// Lê o diretório central de um ZIP remoto em duas requisições curtas.
 ///
@@ -72,6 +96,42 @@ class ZipCentralDirectory {
     if (_totalFrom(body) == null) return null;
     if (body.bytes.length != size) return null;
     return body.bytes;
+  }
+
+  /// As entradas de um ZIP remoto, ou null quando não deu para ler.
+  static Future<List<ZipEntry>?> read(Uri uri, RangeFetch fetch) async {
+    final raw = await readRaw(uri, fetch);
+    if (raw == null) return null;
+    return parse(raw);
+  }
+
+  /// Quebra os bytes do diretório central em entradas. Para no primeiro
+  /// registro que não começa com `PK\x01\x02` e devolve o que já leu, porque
+  /// meia leitura ainda é útil e um erro aqui não deve custar o palpite todo.
+  static List<ZipEntry>? parse(Uint8List directory) {
+    final view = ByteData.sublistView(directory);
+    final entries = <ZipEntry>[];
+    var pos = 0;
+    while (pos + 46 <= directory.length) {
+      if (view.getUint32(pos, Endian.little) != 0x02014b50) break;
+      final crc = view.getUint32(pos + 16, Endian.little);
+      final nameLen = view.getUint16(pos + 28, Endian.little);
+      final extraLen = view.getUint16(pos + 30, Endian.little);
+      final commentLen = view.getUint16(pos + 32, Endian.little);
+      final nameEnd = pos + 46 + nameLen;
+      if (nameEnd > directory.length) break;
+      entries.add(ZipEntry(
+        // O nome pode ser CP437 ou UTF-8, e o zip só distingue por um bit de
+        // flag que quase ninguém grava direito. `allowMalformed` faz o
+        // acentuado errado virar U+FFFD em vez de levantar, e o `norm` do
+        // matcher come o U+FFFD como pontuação.
+        name: utf8.decode(directory.sublist(pos + 46, nameEnd),
+            allowMalformed: true),
+        crc: formatCrc(crc),
+      ));
+      pos = nameEnd + extraLen + commentLen;
+    }
+    return entries.isEmpty ? null : entries;
   }
 
   /// O tamanho total do arquivo, extraído do `Content-Range`, ou null se a
