@@ -1,0 +1,624 @@
+{
+ "cases": [
+  {
+   "canon": "96 zenkoku koukou soccer senshuken",
+   "displayTitle": "'96 Zenkoku Koukou Soccer Senshuken",
+   "input": "'96 Zenkoku Koukou Soccer Senshuken (Japan)",
+   "norm": "96 zenkoku koukou soccer senshuken (japan)"
+  },
+  {
+   "canon": "addams family the pugsley s scavenger hunt",
+   "displayTitle": "Addams Family, The - Pugsley's Scavenger Hunt",
+   "input": "Addams Family, The - Pugsley's Scavenger Hunt (USA) (Beta 1)",
+   "norm": "addams family the pugsley s scavenger hunt (usa) (beta 1)"
+  },
+  {
+   "canon": "alcahest",
+   "displayTitle": "Alcahest",
+   "input": "Alcahest (Japan)",
+   "norm": "alcahest (japan)"
+  },
+  {
+   "canon": "arcade s greatest hits the atari collection 1",
+   "displayTitle": "Arcade's Greatest Hits - The Atari Collection 1",
+   "input": "Arcade's Greatest Hits - The Atari Collection 1 (USA) (Beta 1)",
+   "norm": "arcade s greatest hits the atari collection 1 (usa) (beta 1)"
+  },
+  {
+   "canon": "blt",
+   "displayTitle": "BLT",
+   "input": "BLT (World) (Demo 1)",
+   "norm": "blt (world) (demo 1)"
+  },
+  {
+   "canon": "battle racers",
+   "displayTitle": "Battle Racers",
+   "input": "Battle Racers (Japan)",
+   "norm": "battle racers (japan)"
+  },
+  {
+   "canon": "biometal",
+   "displayTitle": "BioMetal",
+   "input": "BioMetal (Japan) (En)",
+   "norm": "biometal (japan) (en)"
+  },
+  {
+   "canon": "bram stoker s dracula",
+   "displayTitle": "Bram Stoker's Dracula",
+   "input": "Bram Stoker's Dracula (Europe)",
+   "norm": "bram stoker s dracula (europe)"
+  },
+  {
+   "canon": "bulls vs blazers and the nba playoffs",
+   "displayTitle": "Bulls vs Blazers and the NBA Playoffs",
+   "input": "Bulls vs Blazers and the NBA Playoffs (Europe) (Rev 1)",
+   "norm": "bulls vs blazers and the nba playoffs (europe) (rev 1)"
+  },
+  {
+   "canon": "champions world class soccer",
+   "displayTitle": "Champions - World Class Soccer",
+   "input": "Champions - World Class Soccer (USA) (En,Fr,De,Es)",
+   "norm": "champions world class soccer (usa) (en fr de es)"
+  },
+  {
+   "canon": "classic road",
+   "displayTitle": "Classic Road",
+   "input": "Classic Road (Japan)",
+   "norm": "classic road (japan)"
+  },
+  {
+   "canon": "cool spot",
+   "displayTitle": "Cool Spot",
+   "input": "Cool Spot (USA)",
+   "norm": "cool spot (usa)"
+  },
+  {
+   "canon": "daibakushou jinsei gekijou zukkoke salaryman hen",
+   "displayTitle": "Daibakushou Jinsei Gekijou - Zukkoke Salaryman Hen",
+   "input": "Daibakushou Jinsei Gekijou - Zukkoke Salaryman Hen (Japan)",
+   "norm": "daibakushou jinsei gekijou zukkoke salaryman hen (japan)"
+  },
+  {
+   "canon": "derby jockey kishu ou e no michi",
+   "displayTitle": "Derby Jockey - Kishu Ou e no Michi",
+   "input": "Derby Jockey - Kishu Ou e no Michi (Japan)",
+   "norm": "derby jockey kishu ou e no michi (japan)"
+  },
+  {
+   "canon": "donkey kong country competition cartridge",
+   "displayTitle": "Donkey Kong Country - Competition Cartridge",
+   "input": "Donkey Kong Country - Competition Cartridge (USA) (Competition Cart, Nintendo Power mail-order)",
+   "norm": "donkey kong country competition cartridge (usa) (competition cart nintendo power mail order)"
+  },
+  {
+   "canon": "dragon ball z super gokuu den kakusei hen",
+   "displayTitle": "Dragon Ball Z - Super Gokuu Den - Kakusei Hen",
+   "input": "Dragon Ball Z - Super Gokuu Den - Kakusei Hen (Japan)",
+   "norm": "dragon ball z super gokuu den kakusei hen (japan)"
+  },
+  {
+   "canon": "dungeon master",
+   "displayTitle": "Dungeon Master",
+   "input": "Dungeon Master (Japan)",
+   "norm": "dungeon master (japan)"
+  },
+  {
+   "canon": "eric cantona football challenge",
+   "displayTitle": "Eric Cantona Football Challenge",
+   "input": "Eric Cantona Football Challenge (France) (En,Fr,De,Es,It,Nl,Sv)",
+   "norm": "eric cantona football challenge (france) (en fr de es it nl sv)"
+  },
+  {
+   "canon": "famicom tantei club part ii ushiro ni tatsu shoujo",
+   "displayTitle": "Famicom Tantei Club Part II - Ushiro ni Tatsu Shoujo",
+   "input": "Famicom Tantei Club Part II - Ushiro ni Tatsu Shoujo (Japan) (Rev 1) (NP)",
+   "norm": "famicom tantei club part ii ushiro ni tatsu shoujo (japan) (rev 1) (np)"
+  },
+  {
+   "canon": "final fight 2",
+   "displayTitle": "Final Fight 2",
+   "input": "Final Fight 2 (Japan)",
+   "norm": "final fight 2 (japan)"
+  },
+  {
+   "canon": "flintstones the the treasure of sierra madrock",
+   "displayTitle": "Flintstones, The - The Treasure of Sierra Madrock",
+   "input": "Flintstones, The - The Treasure of Sierra Madrock (Europe)",
+   "norm": "flintstones the the treasure of sierra madrock (europe)"
+  },
+  {
+   "canon": "gs mikami joreishi wa nice body",
+   "displayTitle": "GS Mikami - Joreishi wa Nice Body",
+   "input": "GS Mikami - Joreishi wa Nice Body (Japan)",
+   "norm": "gs mikami joreishi wa nice body (japan)"
+  },
+  {
+   "canon": "gdleen",
+   "displayTitle": "Gdleen",
+   "input": "Gdleen (Japan) (Rev 1)",
+   "norm": "gdleen (japan) (rev 1)"
+  },
+  {
+   "canon": "gouketsuji ichizoku",
+   "displayTitle": "Gouketsuji Ichizoku",
+   "input": "Gouketsuji Ichizoku (Japan)",
+   "norm": "gouketsuji ichizoku (japan)"
+  },
+  {
+   "canon": "harley s humongous adventure",
+   "displayTitle": "Harley's Humongous Adventure",
+   "input": "Harley's Humongous Adventure (Europe)",
+   "norm": "harley s humongous adventure (europe)"
+  },
+  {
+   "canon": "hisshou 777 fighter iii kokuryuu ou no fukkatsu",
+   "displayTitle": "Hisshou 777 Fighter III - Kokuryuu Ou no Fukkatsu",
+   "input": "Hisshou 777 Fighter III - Kokuryuu Ou no Fukkatsu (Japan)",
+   "norm": "hisshou 777 fighter iii kokuryuu ou no fukkatsu (japan)"
+  },
+  {
+   "canon": "the humans",
+   "displayTitle": "The Humans",
+   "input": "Humans, The (World) (Evercade)",
+   "norm": "humans the (world) (evercade)"
+  },
+  {
+   "canon": "indiana jones greatest adventures",
+   "displayTitle": "Indiana Jones' Greatest Adventures",
+   "input": "Indiana Jones' Greatest Adventures (Europe)",
+   "norm": "indiana jones greatest adventures (europe)"
+  },
+  {
+   "canon": "j r r tolkien s the lord of the rings volume one",
+   "displayTitle": "J.R.R. Tolkien's The Lord of the Rings - Volume One",
+   "input": "J.R.R. Tolkien's The Lord of the Rings - Volume One (Germany) (Sample)",
+   "norm": "j r r tolkien s the lord of the rings volume one (germany) (sample)"
+  },
+  {
+   "canon": "jikkyou world soccer 2 fighting eleven",
+   "displayTitle": "Jikkyou World Soccer 2 - Fighting Eleven",
+   "input": "Jikkyou World Soccer 2 - Fighting Eleven (Japan) (Beta)",
+   "norm": "jikkyou world soccer 2 fighting eleven (japan) (beta)"
+  },
+  {
+   "canon": "the jungle book",
+   "displayTitle": "The Jungle Book",
+   "input": "Jungle Book, The (Europe)",
+   "norm": "jungle book the (europe)"
+  },
+  {
+   "canon": "kawa no nushi tsuri 2",
+   "displayTitle": "Kawa no Nushi Tsuri 2",
+   "input": "Kawa no Nushi Tsuri 2 (Japan)",
+   "norm": "kawa no nushi tsuri 2 (japan)"
+  },
+  {
+   "canon": "kikuni masahiko no jantoushi doraou 2",
+   "displayTitle": "Kikuni Masahiko no Jantoushi Doraou 2",
+   "input": "Kikuni Masahiko no Jantoushi Doraou 2 (Japan)",
+   "norm": "kikuni masahiko no jantoushi doraou 2 (japan)"
+  },
+  {
+   "canon": "kouryuu no mimi",
+   "displayTitle": "Kouryuu no Mimi",
+   "input": "Kouryuu no Mimi (Japan)",
+   "norm": "kouryuu no mimi (japan)"
+  },
+  {
+   "canon": "legend",
+   "displayTitle": "Legend",
+   "input": "Legend (Europe)",
+   "norm": "legend (europe)"
+  },
+  {
+   "canon": "the lion king",
+   "displayTitle": "The Lion King",
+   "input": "Lion King, The (USA) (Beta 4)",
+   "norm": "lion king the (usa) (beta 4)"
+  },
+  {
+   "canon": "madden nfl 95",
+   "displayTitle": "Madden NFL 95",
+   "input": "Madden NFL 95 (USA)",
+   "norm": "madden nfl 95 (usa)"
+  },
+  {
+   "canon": "majin tensei",
+   "displayTitle": "Majin Tensei",
+   "input": "Majin Tensei (Japan) (Rev 1)",
+   "norm": "majin tensei (japan) (rev 1)"
+  },
+  {
+   "canon": "matsumura kunihiro den saikyou no rekishi o nurikaero",
+   "displayTitle": "Matsumura Kunihiro Den - Saikyou no Rekishi o Nurikaero!",
+   "input": "Matsumura Kunihiro Den - Saikyou no Rekishi o Nurikaero! (Japan)",
+   "norm": "matsumura kunihiro den saikyou no rekishi o nurikaero (japan)"
+  },
+  {
+   "canon": "mega man x",
+   "displayTitle": "Mega Man X",
+   "input": "Mega Man X (USA) (Mega Man X Collection)",
+   "norm": "mega man x (usa) (mega man x collection)"
+  },
+  {
+   "canon": "micro machines",
+   "displayTitle": "Micro Machines",
+   "input": "Micro Machines (Europe)",
+   "norm": "micro machines (europe)"
+  },
+  {
+   "canon": "mortal kombat shinken kourin densetsu",
+   "displayTitle": "Mortal Kombat - Shinken Kourin Densetsu",
+   "input": "Mortal Kombat - Shinken Kourin Densetsu (Japan) (En)",
+   "norm": "mortal kombat shinken kourin densetsu (japan) (en)"
+  },
+  {
+   "canon": "mystic quest legend",
+   "displayTitle": "Mystic Quest Legend",
+   "input": "Mystic Quest Legend (Germany)",
+   "norm": "mystic quest legend (germany)"
+  },
+  {
+   "canon": "nfl quarterback club",
+   "displayTitle": "NFL Quarterback Club",
+   "input": "NFL Quarterback Club (USA) (Beta)",
+   "norm": "nfl quarterback club (usa) (beta)"
+  },
+  {
+   "canon": "newman haas indycar featuring nigel mansell",
+   "displayTitle": "Newman Haas IndyCar featuring Nigel Mansell",
+   "input": "Newman Haas IndyCar featuring Nigel Mansell (USA)",
+   "norm": "newman haas indycar featuring nigel mansell (usa)"
+  },
+  {
+   "canon": "nosferatu",
+   "displayTitle": "Nosferatu",
+   "input": "Nosferatu (USA)",
+   "norm": "nosferatu (usa)"
+  },
+  {
+   "canon": "p t o pacific theater of operations",
+   "displayTitle": "P.T.O. - Pacific Theater of Operations",
+   "input": "P.T.O. - Pacific Theater of Operations (USA)",
+   "norm": "p t o pacific theater of operations (usa)"
+  },
+  {
+   "canon": "panel de pon",
+   "displayTitle": "Panel de Pon",
+   "input": "Panel de Pon (World) (Ja) (Rev 1) (Virtual Console, Switch Online)",
+   "norm": "panel de pon (world) (ja) (rev 1) (virtual console switch online)"
+  },
+  {
+   "canon": "picross np vol 8",
+   "displayTitle": "Picross NP Vol. 8",
+   "input": "Picross NP Vol. 8 (Japan) (NP)",
+   "norm": "picross np vol 8 (japan) (np)"
+  },
+  {
+   "canon": "plok",
+   "displayTitle": "Plok",
+   "input": "Plok (USA)",
+   "norm": "plok (usa)"
+  },
+  {
+   "canon": "power rangers zeo battle racers",
+   "displayTitle": "Power Rangers Zeo - Battle Racers",
+   "input": "Power Rangers Zeo - Battle Racers (USA)",
+   "norm": "power rangers zeo battle racers (usa)"
+  },
+  {
+   "canon": "puzzle bobble",
+   "displayTitle": "Puzzle Bobble",
+   "input": "Puzzle Bobble (Japan)",
+   "norm": "puzzle bobble (japan)"
+  },
+  {
+   "canon": "realm",
+   "displayTitle": "Realm",
+   "input": "Realm (Europe)",
+   "norm": "realm (europe)"
+  },
+  {
+   "canon": "river city girls zero",
+   "displayTitle": "River City Girls Zero",
+   "input": "River City Girls Zero (World) (Ja) (Switch)",
+   "norm": "river city girls zero (world) (ja) (switch)"
+  },
+  {
+   "canon": "rokudenashi blues taiketsu tokyo shitennou",
+   "displayTitle": "Rokudenashi Blues - Taiketsu! Tokyo Shitennou",
+   "input": "Rokudenashi Blues - Taiketsu! Tokyo Shitennou (Japan)",
+   "norm": "rokudenashi blues taiketsu tokyo shitennou (japan)"
+  },
+  {
+   "canon": "sm choukyoushi hitomi vol 2 remix",
+   "displayTitle": "SM Choukyoushi Hitomi Vol. 2 Remix",
+   "input": "SM Choukyoushi Hitomi Vol. 2 Remix (Japan)",
+   "norm": "sm choukyoushi hitomi vol 2 remix (japan)"
+  },
+  {
+   "canon": "secret of mana",
+   "displayTitle": "Secret of Mana",
+   "input": "Secret of Mana (World) (Fr) (Rev 1) (Collection of Mana)",
+   "norm": "secret of mana (world) (fr) (rev 1) (collection of mana)"
+  },
+  {
+   "canon": "shin megami tensei ii",
+   "displayTitle": "Shin Megami Tensei II",
+   "input": "Shin Megami Tensei II (Japan)",
+   "norm": "shin megami tensei ii (japan)"
+  },
+  {
+   "canon": "simcity",
+   "displayTitle": "SimCity",
+   "input": "SimCity (Europe)",
+   "norm": "simcity (europe)"
+  },
+  {
+   "canon": "solstice ii",
+   "displayTitle": "Solstice II",
+   "input": "Solstice II (Japan)",
+   "norm": "solstice ii (japan)"
+  },
+  {
+   "canon": "speed racer",
+   "displayTitle": "Speed Racer",
+   "input": "Speed Racer (USA)",
+   "norm": "speed racer (usa)"
+  },
+  {
+   "canon": "star fox 2",
+   "displayTitle": "Star Fox 2",
+   "input": "Star Fox 2 (Japan) (Beta 4)",
+   "norm": "star fox 2 (japan) (beta 4)"
+  },
+  {
+   "canon": "street fighter ii",
+   "displayTitle": "Street Fighter II",
+   "input": "Street Fighter II (Japan) (Beta)",
+   "norm": "street fighter ii (japan) (beta)"
+  },
+  {
+   "canon": "super adventure island ii",
+   "displayTitle": "Super Adventure Island II",
+   "input": "Super Adventure Island II (Europe)",
+   "norm": "super adventure island ii (europe)"
+  },
+  {
+   "canon": "super bomberman 2",
+   "displayTitle": "Super Bomberman 2",
+   "input": "Super Bomberman 2 (USA) (Beta)",
+   "norm": "super bomberman 2 (usa) (beta)"
+  },
+  {
+   "canon": "super dany",
+   "displayTitle": "Super Dany",
+   "input": "Super Dany (France)",
+   "norm": "super dany (france)"
+  },
+  {
+   "canon": "super fire pro wrestling 3",
+   "displayTitle": "Super Fire Pro Wrestling 3",
+   "input": "Super Fire Pro Wrestling 3 (Japan) (Auto Demo)",
+   "norm": "super fire pro wrestling 3 (japan) (auto demo)"
+  },
+  {
+   "canon": "super hanafuda 2",
+   "displayTitle": "Super Hanafuda 2",
+   "input": "Super Hanafuda 2 (Japan)",
+   "norm": "super hanafuda 2 (japan)"
+  },
+  {
+   "canon": "super mahjong taikai",
+   "displayTitle": "Super Mahjong Taikai",
+   "input": "Super Mahjong Taikai (Japan) (Rev 2)",
+   "norm": "super mahjong taikai (japan) (rev 2)"
+  },
+  {
+   "canon": "super mario world 2 yoshi s island",
+   "displayTitle": "Super Mario World 2 - Yoshi's Island",
+   "input": "Super Mario World 2 - Yoshi's Island (Europe) (En,Fr,De) (Rev 2)",
+   "norm": "super mario world 2 yoshi s island (europe) (en fr de) (rev 2)"
+  },
+  {
+   "canon": "super pang",
+   "displayTitle": "Super Pang",
+   "input": "Super Pang (Japan)",
+   "norm": "super pang (japan)"
+  },
+  {
+   "canon": "super sangokushi ii",
+   "displayTitle": "Super Sangokushi II",
+   "input": "Super Sangokushi II (Japan)",
+   "norm": "super sangokushi ii (japan)"
+  },
+  {
+   "canon": "super street fighter ii",
+   "displayTitle": "Super Street Fighter II",
+   "input": "Super Street Fighter II (USA) (Beta 1)",
+   "norm": "super street fighter ii (usa) (beta 1)"
+  },
+  {
+   "canon": "super volley ii",
+   "displayTitle": "Super Volley II",
+   "input": "Super Volley II (Japan)",
+   "norm": "super volley ii (japan)"
+  },
+  {
+   "canon": "tactical soccer",
+   "displayTitle": "Tactical Soccer",
+   "input": "Tactical Soccer (Japan)",
+   "norm": "tactical soccer (japan)"
+  },
+  {
+   "canon": "tecmo super nba basketball",
+   "displayTitle": "Tecmo Super NBA Basketball",
+   "input": "Tecmo Super NBA Basketball (USA) (SNS-NA)",
+   "norm": "tecmo super nba basketball (usa) (sns na)"
+  },
+  {
+   "canon": "tetris 2",
+   "displayTitle": "Tetris 2",
+   "input": "Tetris 2 (USA) (Rev 1)",
+   "norm": "tetris 2 (usa) (rev 1)"
+  },
+  {
+   "canon": "todd mcfarlane s spawn the video game",
+   "displayTitle": "Todd McFarlane's Spawn - The Video Game",
+   "input": "Todd McFarlane's Spawn - The Video Game (USA) (Beta)",
+   "norm": "todd mcfarlane s spawn the video game (usa) (beta)"
+  },
+  {
+   "canon": "trials of mana",
+   "displayTitle": "Trials of Mana",
+   "input": "Trials of Mana (World) (De) (Collection of Mana)",
+   "norm": "trials of mana (world) (de) (collection of mana)"
+  },
+  {
+   "canon": "uwol quest for money",
+   "displayTitle": "UWOL - Quest for Money",
+   "input": "UWOL - Quest for Money (World) (v1.3)",
+   "norm": "uwol quest for money (world) (v1 3)"
+  },
+  {
+   "canon": "urban strike",
+   "displayTitle": "Urban Strike",
+   "input": "Urban Strike (USA)",
+   "norm": "urban strike (usa)"
+  },
+  {
+   "canon": "wagyan paradise",
+   "displayTitle": "Wagyan Paradise",
+   "input": "Wagyan Paradise (Japan)",
+   "norm": "wagyan paradise (japan)"
+  },
+  {
+   "canon": "wing commander",
+   "displayTitle": "Wing Commander",
+   "input": "Wing Commander (Germany)",
+   "norm": "wing commander (germany)"
+  },
+  {
+   "canon": "world cup usa 94",
+   "displayTitle": "World Cup USA 94",
+   "input": "World Cup USA 94 (USA) (En,Fr,De,Es,It,Nl,Pt,Sv)",
+   "norm": "world cup usa 94 (usa) (en fr de es it nl pt sv)"
+  },
+  {
+   "canon": "yoshi s safari",
+   "displayTitle": "Yoshi's Safari",
+   "input": "Yoshi's Safari (Europe)",
+   "norm": "yoshi s safari (europe)"
+  },
+  {
+   "canon": "zig zag cat dachou club mo oosawagi da",
+   "displayTitle": "Zig Zag Cat - Dachou Club mo Oosawagi da",
+   "input": "Zig Zag Cat - Dachou Club mo Oosawagi da (Japan)",
+   "norm": "zig zag cat dachou club mo oosawagi da (japan)"
+  },
+  {
+   "canon": "chrono trigger",
+   "displayTitle": "Chrono Trigger",
+   "input": "Chrono Trigger (USA).sfc",
+   "norm": "chrono trigger (usa)"
+  },
+  {
+   "canon": "chrono trigger",
+   "displayTitle": "Chrono Trigger",
+   "input": "Chrono Trigger (USA).zip",
+   "norm": "chrono trigger (usa)"
+  },
+  {
+   "canon": "chrono trigger",
+   "displayTitle": "Chrono_Trigger_",
+   "input": "Chrono_Trigger_(USA).zip",
+   "norm": "chrono trigger (usa)"
+  },
+  {
+   "canon": "chrono trigger",
+   "displayTitle": "chrono trigger",
+   "input": "chrono trigger (usa)",
+   "norm": "chrono trigger (usa)"
+  },
+  {
+   "canon": "the legend of zelda",
+   "displayTitle": "The Legend of Zelda",
+   "input": "Legend of Zelda, The (USA).smc",
+   "norm": "legend of zelda the (usa)"
+  },
+  {
+   "canon": "the blue crystalrod",
+   "displayTitle": "The Blue Crystalrod",
+   "input": "Blue Crystalrod, The (Japan)",
+   "norm": "blue crystalrod the (japan)"
+  },
+  {
+   "canon": "addams family",
+   "displayTitle": "Addams Family",
+   "input": "Addams Family, (USA)",
+   "norm": "addams family (usa)"
+  },
+  {
+   "canon": "pokemon rojo",
+   "displayTitle": "Pokémon Rojo",
+   "input": "Pokémon Rojo (Spain).gb",
+   "norm": "pokemon rojo (spain)"
+  },
+  {
+   "canon": "asterix and obelix",
+   "displayTitle": "Astérix & Obélix",
+   "input": "Astérix & Obélix (Europe)",
+   "norm": "asterix and obelix (europe)"
+  },
+  {
+   "canon": "dig and spike volleyball",
+   "displayTitle": "Dig & Spike Volleyball",
+   "input": "Dig & Spike Volleyball (USA)",
+   "norm": "dig and spike volleyball (usa)"
+  },
+  {
+   "canon": "super mario world 2 yoshi s island",
+   "displayTitle": "Super Mario World 2 - Yoshi's Island",
+   "input": "Super Mario World 2 - Yoshi's Island (USA)",
+   "norm": "super mario world 2 yoshi s island (usa)"
+  },
+  {
+   "canon": "zero 4 champ rr z",
+   "displayTitle": "Zero 4 Champ RR-Z",
+   "input": "Zero 4 Champ RR-Z (Japan)",
+   "norm": "zero 4 champ rr z (japan)"
+  },
+  {
+   "canon": "jikkyou powerful pro yakyuu basic ban 98",
+   "displayTitle": "Jikkyou Powerful Pro Yakyuu - Basic Ban '98",
+   "input": "Jikkyou Powerful Pro Yakyuu - Basic Ban '98 (Japan)",
+   "norm": "jikkyou powerful pro yakyuu basic ban 98 (japan)"
+  },
+  {
+   "canon": "vol 3",
+   "displayTitle": "Vol. 3",
+   "input": "Vol. 3",
+   "norm": "vol 3"
+  },
+  {
+   "canon": "",
+   "displayTitle": "",
+   "input": "(USA)",
+   "norm": "(usa)"
+  },
+  {
+   "canon": "",
+   "displayTitle": "---",
+   "input": "---",
+   "norm": ""
+  },
+  {
+   "canon": "",
+   "displayTitle": "",
+   "input": "",
+   "norm": ""
+  }
+ ],
+ "stride": 50,
+ "system": "Nintendo - Super Nintendo Entertainment System"
+}
