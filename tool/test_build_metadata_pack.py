@@ -251,5 +251,68 @@ class CollapseTest(unittest.TestCase):
         entries = [{"name": "(USA)", "crc": "1", "sha1": None, "serial": None}]
         self.assertEqual(b.collapse(entries, "nes"), [])
 
+
+class EnrichTest(unittest.TestCase):
+    def games(self):
+        return [{
+            "id": "snes/chrono-trigger",
+            "title": "Chrono Trigger",
+            "dumps": [
+                {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C"},
+                {"name": "Chrono Trigger (USA)", "crc": "2D206BF7"},
+            ],
+        }]
+
+    def test_fills_the_fields_from_the_side_maps(self):
+        games = self.games()
+        b.enrich_from_side(games, {
+            "genre": {"2D206BF7": "Role-Playing"},
+            "developer": {"2D206BF7": "Square"},
+            "publisher": {"2D206BF7": "Square"},
+            "releaseyear": {"2D206BF7": "1995"},
+        })
+        self.assertEqual(games[0]["genre"], "Role-Playing")
+        self.assertEqual(games[0]["developer"], "Square")
+        self.assertEqual(games[0]["publisher"], "Square")
+        self.assertEqual(games[0]["year"], 1995)
+
+    def test_the_first_dump_with_a_value_wins(self):
+        games = self.games()
+        b.enrich_from_side(games, {
+            "genre": {"1F2E3D4C": "Action", "2D206BF7": "Role-Playing"},
+        })
+        self.assertEqual(games[0]["genre"], "Action")
+
+    def test_serial_lands_on_the_dump_not_on_the_game(self):
+        games = self.games()
+        b.enrich_from_side(games, {"serial": {"2D206BF7": "SNS-AC-USA"}})
+        self.assertNotIn("serial", games[0])
+        self.assertEqual(games[0]["dumps"][1]["serial"], "SNS-AC-USA")
+
+    def test_serial_already_on_the_dump_is_not_overwritten(self):
+        games = self.games()
+        games[0]["dumps"][1]["serial"] = "JA-ESTAVA-LA"
+        b.enrich_from_side(games, {"serial": {"2D206BF7": "SNS-AC-USA"}})
+        self.assertEqual(games[0]["dumps"][1]["serial"], "JA-ESTAVA-LA")
+
+    def test_missing_side_maps_leave_the_game_untouched(self):
+        games = self.games()
+        b.enrich_from_side(games, {})
+        self.assertEqual(set(games[0]), {"id", "title", "dumps"})
+
+    def test_non_numeric_year_is_ignored(self):
+        games = self.games()
+        b.enrich_from_side(games, {"releaseyear": {"2D206BF7": "199x"}})
+        self.assertNotIn("year", games[0])
+
+    def test_franchise_and_esrb_are_carried_over(self):
+        games = self.games()
+        b.enrich_from_side(games, {
+            "franchise": {"2D206BF7": "Chrono"},
+            "esrb": {"2D206BF7": "E"},
+        })
+        self.assertEqual(games[0]["franchise"], "Chrono")
+        self.assertEqual(games[0]["esrb"], "E")
+
 if __name__ == "__main__":
     unittest.main()
