@@ -247,6 +247,50 @@ def collapse(entries, pack_id):
     return games
 
 
+# Campo do side file para chave no JSON do jogo. O serial é o único que não
+# descreve o jogo e sim o dump, então tem tratamento próprio.
+GAME_FIELDS = {
+    "genre": "genre",
+    "developer": "developer",
+    "publisher": "publisher",
+    "franchise": "franchise",
+    "esrb": "esrb",
+}
+
+
+def enrich_from_side(games, side_maps):
+    """Preenche os campos do jogo a partir dos mapas CRC para valor.
+
+    Um jogo tem vários dumps; o primeiro dump que tiver valor para o campo
+    ganha, o que torna o resultado determinístico.
+    """
+    for game in games:
+        for source, target in GAME_FIELDS.items():
+            table = side_maps.get(source)
+            if not table:
+                continue
+            for dump in game["dumps"]:
+                value = table.get(dump.get("crc"))
+                if value:
+                    game[target] = value
+                    break
+        years = side_maps.get("releaseyear")
+        if years:
+            for dump in game["dumps"]:
+                value = years.get(dump.get("crc"))
+                if value and value.isdigit():
+                    game["year"] = int(value)
+                    break
+        serials = side_maps.get("serial")
+        if serials:
+            for dump in game["dumps"]:
+                if dump.get("serial"):
+                    continue
+                value = serials.get(dump.get("crc"))
+                if value:
+                    dump["serial"] = value
+
+
 def main():
     raise SystemExit("CLI ainda nao implementada, ver Task 10")
 
