@@ -85,4 +85,93 @@ void main() {
     expect(index!.packs.single.pack, 'snes');
     expect(await svc.cachedPacks(), isEmpty);
   });
+
+  List<int> gz(String s) => gzip.encode(utf8.encode(s));
+
+  test('packUri e indexUri apontam para a release de tag fixa', () {
+    final svc = service();
+    expect(svc.packUri('snes').toString(),
+        'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs/snes.json.gz');
+    expect(svc.indexUri().toString(),
+        'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs/index.json');
+  });
+
+  test('download descompacta, grava no cache e devolve o pacote', () async {
+    final pedidos = <Uri>[];
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async {
+        pedidos.add(uri);
+        return gz(packJson);
+      },
+    );
+    final pack = await svc.download('snes');
+    expect(pack.games.single.title, 'Chrono Trigger');
+    expect(pedidos.single.path, endsWith('/packs/snes.json.gz'));
+    expect(await File(p.join(tmp.path, 'snes.json')).exists(), isTrue);
+  });
+
+  test('load usa o cache e não chama a rede', () async {
+    var chamadas = 0;
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async {
+        chamadas++;
+        return gz(packJson);
+      },
+    );
+    await svc.writeCache('snes', packJson);
+    final pack = await svc.load('snes');
+    expect(pack!.games.single.title, 'Chrono Trigger');
+    expect(chamadas, 0);
+  });
+
+  test('load com forceRefresh vai na rede mesmo tendo cache', () async {
+    var chamadas = 0;
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async {
+        chamadas++;
+        return gz(packJson);
+      },
+    );
+    await svc.writeCache('snes', packJson);
+    await svc.load('snes', forceRefresh: true);
+    expect(chamadas, 1);
+  });
+
+  test('load cai de volta no cache quando a rede falha', () async {
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async => throw const SocketException('sem rede'),
+    );
+    await svc.writeCache('snes', packJson);
+    final pack = await svc.load('snes', forceRefresh: true);
+    expect(pack!.games.single.title, 'Chrono Trigger');
+  });
+
+  test('load devolve null quando não tem rede nem cache', () async {
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async => throw const SocketException('sem rede'),
+    );
+    expect(await svc.load('snes'), isNull);
+  });
+
+  test('loadIndex baixa o index.json sem gzip e cacheia', () async {
+    const indexJson =
+        '{"built":"2026-09-10","packs":[{"pack":"snes","system":"S","games":1,"aliases":["snes"]}]}';
+    final pedidos = <Uri>[];
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async {
+        pedidos.add(uri);
+        return utf8.encode(indexJson);
+      },
+    );
+    final index = await svc.loadIndex(forceRefresh: true);
+    expect(index!.packs.single.pack, 'snes');
+    expect(pedidos.single.path, endsWith('/packs/index.json'));
+    expect((await svc.readCachedIndex())!.built, '2026-09-10');
+  });
 }
