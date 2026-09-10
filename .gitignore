@@ -349,3 +349,5 @@ portmaster/*.AppImage
 assets/catalog/consoles.json
 
 docs/superpowers/
+# superpowers brainstorm session files
+.superpowers/
