@@ -249,6 +249,15 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     state = state.copyWith(selectedGames: selectedGames);
   }
 
+  /// Limpa a seleção inteira. É o `×` da barra do rodapé.
+  ///
+  /// A guarda de vazio não é micro-otimização: toda a grade escuta
+  /// `catalogProvider`, então emitir estado igual custa um rebuild da tela.
+  void clearSelection() {
+    if (state.selectedGames.isEmpty) return;
+    state = state.copyWith(selectedGames: {});
+  }
+
   void updateFilter(CatalogFilter filter) {
     state = state.copyWith(filter: filter);
     updateFilteredGames();
