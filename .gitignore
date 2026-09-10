@@ -351,3 +351,6 @@ assets/catalog/consoles.json
 docs/superpowers/
 # superpowers brainstorm session files
 .superpowers/
+
+# Python bytecode do tool/
+tool/__pycache__/

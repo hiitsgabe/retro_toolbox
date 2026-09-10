@@ -2468,7 +2468,7 @@ python3 tool/build_metadata_pack.py \
   --built 2026-09-10 \
   --only nintendo_super_nintendo_entertainment_system
 ```
-Expected: sai algo como `OpenVGDB: 51742 CRCs`, depois `Nintendo - Super Nintendo Entertainment System` e uma linha `  2415 jogos, 2096 com capa, 1818 com sinopse`. Anote os três números.
+Expected: sai algo como `OpenVGDB: 33448 CRCs`, depois `Nintendo - Super Nintendo Entertainment System` e uma linha `  2415 jogos, 2152 com capa, 1819 com sinopse`. Anote os três números.
 
 - [ ] **Step 2: Conferir os números contra a PoC**
 
@@ -2519,7 +2519,7 @@ Expected: o JSON do jogo com título, dumps e capa, depois `ok`.
 - [ ] **Step 4: Conferir o tamanho do arquivo**
 
 Run: `ls -lh /tmp/packs-verify/`
-Expected: o `.json.gz` na casa de 1 a 3 MB. Bem acima disso significa que sinopse longa demais entrou sem corte, e vale truncar a sinopse em 1200 caracteres no `enrich_from_openvgdb` antes de seguir.
+Expected: o `.json.gz` na casa de 0,5 MB, que é o que o build real do SNES produziu (469K comprimido, 2,0 MB cru). Acima de 3 MB significa que sinopse longa demais entrou sem corte, e vale truncar a sinopse em 1200 caracteres no `enrich_from_openvgdb` antes de seguir. Para referência, a maior sinopse do SNES tem 2418 caracteres e a média fica em 257, então o corte não é necessário neste pacote.
 
 - [ ] **Step 5: Rodar a suíte inteira dos dois lados**
 
