@@ -93,4 +93,28 @@ class PackMatcher {
       score: bestScore,
     );
   }
+
+  /// O eixo que não erra. [crc] pode vir em qualquer caixa.
+  ///
+  /// Cuidado de quem chama: o CRC tem que ser o da **ROM**, não o do arquivo
+  /// que a fonte serve. Um ZIP tem CRC próprio, e ele não está no pacote. Ver
+  /// a seção 5.8 do spec, limite 1.
+  GameMatch? matchCrc(String crc, {String sourceName = ''}) {
+    final upper = crc.toUpperCase();
+    final game = pack.byCrc[upper];
+    if (game == null) return null;
+    PackDump? dump;
+    for (final candidate in game.dumps) {
+      if (candidate.crc == upper) {
+        dump = candidate;
+        break;
+      }
+    }
+    return GameMatch(
+      game: game,
+      dump: dump,
+      tier: MatchTier.checksum,
+      sourceName: sourceName,
+    );
+  }
 }
