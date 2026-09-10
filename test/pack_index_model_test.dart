@@ -69,6 +69,22 @@ void main() {
 ''';
     final index = PackIndex.decode(colliding);
     expect(index.resolve(const PackTarget('snes', 'Snes'))?.pack, 'snes');
+
+    // A mesma asserção com a ordem das entradas invertida. A garantia vem de
+    // resolve varrer todos os packs antes de olhar qualquer alias, não da
+    // ordem em que o índice foi escrito, e este par prova isso.
+    const reversed = '''
+{
+  "built": "2026-09-10",
+  "packs": [
+    {"pack": "snes", "system": "Snes", "games": 2, "aliases": []},
+    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]}
+  ]
+}
+''';
+    expect(
+        PackIndex.decode(reversed).resolve(const PackTarget('snes', 'Snes'))?.pack,
+        'snes');
   });
 
   test('console sem pacote devolve null', () {

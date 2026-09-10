@@ -103,6 +103,15 @@ class ParseDatTest(unittest.TestCase):
         entries = b.parse_dat(NO_INTRO_DAT)
         self.assertIsNone(entries[0]["serial"])
 
+    def test_region_is_read_and_is_optional(self):
+        entries = b.parse_dat(NO_INTRO_DAT)
+        self.assertEqual(entries[1]["region"], "USA")
+        self.assertEqual(entries[0]["region"], "Japan")
+        # Nem todo bloco declara região. No DAT real do SNES são 293 de 4268,
+        # no do GameCube 33 de 2268, então a ausência é normal e vira None.
+        sem = b.parse_dat('game (\n\tname "Sem Regiao"\n)\n')
+        self.assertIsNone(sem[0]["region"])
+
 
 class ParseSideDatTest(unittest.TestCase):
     def test_maps_crc_to_value(self):
@@ -199,9 +208,12 @@ class SlugTest(unittest.TestCase):
 class CollapseTest(unittest.TestCase):
     def setUp(self):
         self.entries = [
-            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A", "serial": None},
-            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B", "serial": None},
-            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None, "serial": None},
+            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A",
+             "serial": None, "region": "USA"},
+            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B",
+             "serial": None, "region": "Japan"},
+            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None,
+             "serial": None, "region": None},
         ]
 
     def test_dumps_of_the_same_game_collapse_into_one_entry(self):
@@ -246,6 +258,12 @@ class CollapseTest(unittest.TestCase):
         self.assertEqual(len(games), 2)
         self.assertEqual(games[0]["id"], "md/sonic-beta")
         self.assertEqual(games[1]["id"], "md/sonic-beta-2")
+
+    def test_region_travels_to_the_dump_and_is_omitted_when_absent(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(games[0]["dumps"][0]["region"], "USA")
+        self.assertEqual(games[0]["dumps"][1]["region"], "Japan")
+        self.assertNotIn("region", games[1]["dumps"][0])
 
     def test_entries_without_a_canon_title_are_dropped(self):
         entries = [{"name": "(USA)", "crc": "1", "sha1": None, "serial": None}]

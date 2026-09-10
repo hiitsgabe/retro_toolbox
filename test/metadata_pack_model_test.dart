@@ -13,7 +13,7 @@ void main() {
       "id": "nintendo_super_nintendo_entertainment_system/chrono-trigger",
       "title": "Chrono Trigger",
       "dumps": [
-        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null},
+        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
         {"name": "Chrono Trigger (Japan)", "crc": "1f2e3d4c"}
       ],
       "cover": "https://example.invalid/cover.png",
@@ -45,6 +45,12 @@ void main() {
     expect(pack.games.first.dumps.first.crc, '2D206BF7');
     expect(pack.games.first.dumps.first.sha1, 'ABC');
     expect(pack.games.first.dumps[1].sha1, isNull);
+  });
+
+  test('region é lida como veio e é opcional', () {
+    final pack = MetadataPack.decode(sample);
+    expect(pack.games.first.dumps.first.region, 'USA');
+    expect(pack.games.first.dumps[1].region, isNull);
   });
 
   test('campos opcionais ausentes viram null e dumps vazio é permitido', () {
