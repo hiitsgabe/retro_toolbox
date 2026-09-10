@@ -62,6 +62,19 @@ class PackMatcher {
         sourceName: sourceName,
       );
     }
+
+    final key = canon(sourceName);
+    if (key.isEmpty) return null;
+
+    final byCanon = _byCanon[key];
+    if (byCanon != null) {
+      return GameMatch(
+        game: byCanon,
+        tier: MatchTier.canonicalName,
+        sourceName: sourceName,
+      );
+    }
+
     return null;
   }
 }
