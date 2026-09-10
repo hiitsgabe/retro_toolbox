@@ -242,6 +242,51 @@ Isso mantém o scan barato no caso comum, que é a biblioteca que o próprio app
 nomeou, e evita a mentira mais irritante possível: o tile afirmar que você já tem um jogo
 que você não tem.
 
+### 5.8 Verificação ao vivo do Range, e três limites que a PoC não registrou
+
+A seção 5.4 foi reconferida contra fontes reais em 2026-09-10, e a técnica se sustenta, mas
+com uma condição que não estava escrita e duas armadilhas que precisam virar código.
+
+**Confirmado.** Contra o item `ef_nintendo_snes_no-intro_2024-04-20` do archive.org, que é a
+fonte da PoC e continua no ar com 4122 zips, um por jogo: **6 de 6 arquivos resolvidos pelo
+CRC32, 2124 bytes no total, 354 bytes por arquivo**. Bate com os 326 bytes da PoC. Um dos
+casos mostra bem o valor: dois arquivos cujos nomes só diferem num sufixo de aftermarket
+resolveram para `16 BIT XMAS 2011 - Christmas Craze (World) (Alt)` e
+`16 BIT XMAS 2011 - Christmas Craze (World)`, exatamente o tipo de par que o eixo de nome
+erra em silêncio.
+
+**Limite 1, o eixo do CRC exige que o ZIP contenha a ROM, não outro ZIP.** O item
+`snes_20250129` serve um único ZIP de 2,4 GB cujas 4038 entradas são elas mesmas arquivos
+`.zip`. O CRC do diretório central é o CRC do zip interno, e o cruzamento com o DAT do
+No-Intro deu **0 de 4038**. A regra que vale escrever: só use o CRC do diretório central
+quando o nome da entrada terminar em extensão de ROM. Terminando em `.zip` ou `.7z`, o CRC
+não é comparável com o pacote e o match tem que cair no eixo de nome.
+
+Nesse mesmo caso o Range continua valendo muito, só que pelo outro eixo: **0,51 MB de
+diretório central devolvem os 4038 nomes de uma vez**, e são nomes canônicos do No-Intro.
+Uma requisição paga a listagem inteira de um set que a fonte não expõe de outro jeito.
+
+**Limite 2, o parse do EOCD falha silencioso e caro se não for validado.** Uma requisição a
+uma URL `.zip` do Myrient devolveu **status 200 com `Content-Type: text/html`**, uma página
+de 2334 bytes. Procurar `PK\x05\x06` na cauda casou dentro do HTML e produziu "28515
+entradas, diretório central de 779318387 bytes". Sem validação o app emitiria em seguida um
+Range de 779 MB por causa de uma página de erro. Duas guardas obrigatórias, e elas são
+baratas: exigir status **206** com cabeçalho `Content-Range`, nunca 200; e checar
+`offset + tamanho <= tamanho total` lido do próprio `Content-Range` antes da segunda
+requisição. Qualquer uma das duas falhando, o arquivo cai no eixo de nome sem segunda
+requisição.
+
+**Limite 3, as fontes reais são heterogêneas e a maioria não serve o eixo do CRC.** Dos
+cinco itens de SNES levantados na PoC, um é o set em 4122 zips por jogo, um é o ZIP de zips
+de 2,4 GB, um traz nove arquivos `.7z`, um traz um `.iso` e um traz um `.rar`. Só o primeiro
+serve o CRC por Range. `.7z` e `.rar` não têm diretório central lido por Range, e para eles
+o eixo de nome é tudo que existe, com o piso de erro da seção 5.3. O `SourceResolver` da
+fatia 5 precisa expor a forma do item para o matcher decidir se tenta o Range ou nem começa.
+
+**Nota lateral útil.** A API `archive.org/metadata/<item>` já devolve `crc32` por arquivo de
+graça, sem Range nenhum. É o CRC do arquivo servido, ou seja do ZIP externo, então não casa
+com o pacote, mas serve de chave de cache estável para o resultado do match daquele arquivo.
+
 ## 6. Subsistema 3: Addon e Accounts
 
 ### 6.1 O addon é o `consoles.json` de hoje
