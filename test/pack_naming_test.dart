@@ -48,4 +48,48 @@ void main() {
       expect(norm(''), '');
     });
   });
+
+  group('displayTitle', () {
+    test('preserva a caixa original', () {
+      expect(displayTitle('Chrono Trigger (USA)'), 'Chrono Trigger');
+    });
+
+    test('move o artigo do fim para a frente sem mexer no resto', () {
+      expect(displayTitle('Legend of Zelda, The (USA)'), 'The Legend of Zelda');
+      expect(displayTitle('Blue Crystalrod, The (Japan)'), 'The Blue Crystalrod');
+    });
+
+    test('preserva acento e pontuação', () {
+      expect(displayTitle('Pokémon Rojo (Spain).gb'), 'Pokémon Rojo');
+      expect(displayTitle('Super Mario World 2 - Yoshi\'s Island (USA)'),
+          'Super Mario World 2 - Yoshi\'s Island');
+    });
+
+    test('nome que é só tag vira vazio', () {
+      expect(displayTitle('(USA)'), '');
+    });
+
+    test('tira vírgula sobrando na ponta', () {
+      expect(displayTitle('Addams Family, (USA)'), 'Addams Family');
+    });
+  });
+
+  group('canon', () {
+    test('descarta tags de região e revisão', () {
+      expect(canon('Chrono Trigger (USA) (Rev 1)'), 'chrono trigger');
+      expect(canon('Chrono Trigger (Japan) [T+Eng]'), 'chrono trigger');
+    });
+
+    test('move o artigo antes de normalizar', () {
+      expect(canon('Legend of Zelda, The (USA)'), 'the legend of zelda');
+    });
+
+    test('regiões diferentes do mesmo jogo dão a mesma chave', () {
+      expect(canon('Super Mario World (USA)'), canon('Super Mario World (Europe)'));
+    });
+
+    test('nome que é só tag vira chave vazia', () {
+      expect(canon('(USA)'), '');
+    });
+  });
 }
