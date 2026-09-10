@@ -83,3 +83,34 @@ String norm(String value) {
   v = v.replaceAll(_disallowed, ' ');
   return v.replaceAll(_spaces, ' ').trim();
 }
+
+final _tags = RegExp(r'\([^)]*\)|\[[^\]]*\]');
+final _trailingArticle = RegExp(
+  r'^(.*?), (the|a|an|le|la|les|el|los|das|der|die)$',
+  caseSensitive: false,
+);
+
+/// Equivalente do `.strip().strip(",").strip()` do Python: apara espaço,
+/// depois vírgula das duas pontas, depois espaço de novo.
+String _trimSpaceThenComma(String value) {
+  var v = value.trim();
+  var start = 0;
+  var end = v.length;
+  while (start < end && v[start] == ',') start++;
+  while (end > start && v[end - 1] == ',') end--;
+  return v.substring(start, end).trim();
+}
+
+/// Título de exibição a partir do nome do DAT: sem extensão, sem tags, com o
+/// artigo de volta na frente, e com a caixa e os acentos originais intactos.
+String displayTitle(String datName) {
+  var v = stripRomExtension(datName).replaceAll(_tags, ' ');
+  v = _trimSpaceThenComma(v.replaceAll(_spaces, ' '));
+  final match = _trailingArticle.firstMatch(v);
+  if (match != null) v = '${match.group(2)} ${match.group(1)}';
+  return v;
+}
+
+/// Título canônico: a chave de agrupamento de um jogo. É o título de exibição
+/// passado por [norm].
+String canon(String value) => norm(displayTitle(value));
