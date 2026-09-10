@@ -75,6 +75,22 @@ class PackMatcher {
       );
     }
 
-    return null;
+    final pool = _byHead[_head(key)] ?? _byCanon.keys.toList();
+    String? best;
+    var bestScore = 0.0;
+    for (final candidate in pool) {
+      final score = ratio(key, candidate);
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+    if (best == null || bestScore < fuzzyCutoff) return null;
+    return GameMatch(
+      game: _byCanon[best]!,
+      tier: MatchTier.fuzzyName,
+      sourceName: sourceName,
+      score: bestScore,
+    );
   }
 }
