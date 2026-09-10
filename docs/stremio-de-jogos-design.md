@@ -218,6 +218,30 @@ Para esses o truque do Range não existe e o match cai nos tiers de nome, com o 
 da seção 5.3. A chave correta para esses sistemas é o **serial**, que já vem no
 libretro-database. Fica registrado como trabalho futuro, não faz parte da fatia 1.
 
+### 5.7 Terceiro eixo: o arquivo que já está no disco
+
+A seção 5.1 fala em dois eixos, mas o eixo do checksum tem dois casos e só um deles estava
+coberto. O caso descoberto é o arquivo que **já existia**: baixado antes de o app existir,
+copiado de outra máquina, ou trazido por outra tool.
+
+Hoje o `library_snapshot_provider.dart` descobre o que você tem varrendo o diretório e
+indexando por nome exato e por base name. Isso é suficiente enquanto a grade mostra arquivos,
+porque o nome na grade é o nome no disco. Em MODO PACK deixa de ser: o tile é um jogo, e
+dizer "você já tem" exige mapear arquivo local de volta para jogo canônico, com o mesmo piso
+de erro da seção 5.3.
+
+Regra: **nome primeiro, CRC só na dúvida.**
+
+1. Casa por nome, exato e canônico, contra o pack.
+2. Se o nome for ambíguo ou não casar em nenhum tier confiável, calcula o CRC32 daquele
+   arquivo e resolve pelo checksum.
+3. O resultado é cacheado por `(caminho, tamanho, mtime)`, então só o primeiro scan paga, e
+   só paga pelos arquivos duvidosos.
+
+Isso mantém o scan barato no caso comum, que é a biblioteca que o próprio app baixou e
+nomeou, e evita a mentira mais irritante possível: o tile afirmar que você já tem um jogo
+que você não tem.
+
 ## 6. Subsistema 3: Addon e Accounts
 
 ### 6.1 O addon é o `consoles.json` de hoje
@@ -282,6 +306,37 @@ Na instalação, se o JSON vier com `auth.token` preenchido, o app move para o
 Estado atual a corrigir: o app guarda tokens e credenciais S3 do Internet Archive em
 `shared_preferences` em texto puro, sem `flutter_secure_storage`. Isso precisa ser resolvido
 **antes** de introduzir chave de debrid.
+
+### 6.4 O app já é um servidor de addon
+
+A seção 6.1 diz que o addon é o `consoles.json` de hoje. Isso é mais forte do que parecia:
+o **Retro Tools Server** (`rts_server_screen.dart`) pega pastas locais, monta um catálogo e
+serve em `http://host:porta/consoles.json`. A tool **New Catalog Source** consome exatamente
+esse endereço.
+
+```
+   RTS Server              consoles.json              New Catalog Source
+   pastas locais    ---->  http://host:porta/  ---->  outra instância do app
+   (produtor)                                         (consumidor)
+```
+
+O protocolo de addon **já existe, já roda e já fecha o loop entre duas instâncias do app**.
+A decisão de "addon é o `consoles.json`" não é uma escolha nova, é o reconhecimento de uma
+coisa que já está implementada dos dois lados.
+
+Duas consequências de projeto:
+
+- **Qualquer extensão do formato tem que ser emitida pelo RTS também.** Se o addon passar a
+  declarar `auth` ou `infohash` e o RTS continuar emitindo o formato antigo, o app deixa de
+  conseguir se alimentar. O produtor e o consumidor são o mesmo binário, então divergir é um
+  bug com nome.
+- **Em MODO PACK o RTS melhora de graça.** Alguém instala a URL do seu RTS como addon e, se
+  tiver o pack daquele console, sua pasta local aparece como fonte na grade dele, casada por
+  nome. Funciona sem código novo porque o addon é burro e quem adivinha é o app.
+
+Os outros cinco servidores (Tinfoil, JDKV, FBI, SMB, FTP) são outra categoria: servem
+**arquivo** para um console ou outro aparelho, não **catálogo** para o app. Nada neste
+documento os afeta.
 
 ## 7. Modos de grade
 
@@ -453,9 +508,9 @@ para que a decisão seja rastreável, não para ser rediscutida.
 Cada fatia é um spec e um plano próprios, na ordem:
 
 1. **Metadata Pack**: GitHub Action, formato, publicação, download e cache no app.
-2. **Identidade**: matcher por tiers, CRC32 por Range, confiança na UI.
+2. **Identidade**: matcher por tiers, CRC32 por Range, confiança na UI, e o eixo local da seção 5.7.
 3. **Grade e modos**: MODO PACK e MODO FONTE, badge de disponibilidade, tela do jogo.
-4. **Addon e Accounts**: tela de contas, migração de token para secure storage, correção da seção 6.3.
+4. **Addon e Accounts**: tela de contas, migração de token para secure storage, correção da seção 6.3, e manter o RTS emitindo o formato estendido conforme a seção 6.4.
 5. **SourceResolver**: extração da interface, `HttpResolver` a partir do código atual.
 6. **Debrid**: `DebridClient`, Real-Debrid, item de listagem com `infohash`.
 

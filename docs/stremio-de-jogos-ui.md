@@ -59,6 +59,13 @@ marca nenhuma.
 
 Contagem de fontes **não** aparece no tile. Ela aparece no detalhe, como "outras N fontes".
 
+**A borda de "já baixado" muda de significado.** Hoje ela reflete um arquivo:
+`library_snapshot_provider.dart` indexa o diretório por nome exato e base name, e o nome na
+grade é o nome no disco. Em MODO PACK o tile é um jogo, então a borda passa a significar
+"você tem alguma versão deste jogo". Isso exige mapear arquivo local de volta para jogo
+canônico, com a regra de nome primeiro e CRC só na dúvida da seção 5.7 do spec de arquitetura.
+Enquanto o scan roda, o tile não mostra borda nenhuma, nunca uma borda errada.
+
 ### 3.2 Estados vazios
 
 O argumento de "marcar só a exceção" depende de a maioria ter fonte, e isso depende do addon
@@ -220,6 +227,17 @@ da ordem. Quem já usa o app não vê diferença no dia seguinte.
 **Tela de addons**, lista enxuta. Cada linha: ícone, nome, cobertura resumida ("25 consoles"),
 chip de "conta" quando exige credencial, alça de arrasto e seta. No fim, "+ Instalar de URL".
 
+**A tool "New Catalog Source" continua em Tools, onde está.** Os dois caminhos coexistem
+porque servem públicos diferentes: a tool monta um console à mão, pedindo nome, pasta de ROMs,
+formatos e comportamento de unzip; o "+ Instalar de URL" instala um catálogo que já vem
+pronto. Custo aceito: dois caminhos que terminam no mesmo lugar. O que o console montado à mão
+ganha é aparecer na lista de addons como qualquer outro, com prioridade arrastável e conta se
+precisar.
+
+O **Retro Tools Server** aparece na lista de addons de quem instalar a URL dele, e não muda
+nada na tela do servidor em si. Ele é o produtor do mesmo formato, e o vínculo está na seção
+6.4 do spec de arquitetura.
+
 **Tela de detalhe do addon**, uma por addon:
 
 - Identificação: nome e URL de origem
@@ -279,6 +297,9 @@ fonte", que reabre o detalhe do jogo já com a fonte que falhou riscada. Nada de
 | `widgets/settings/accounts_setting.dart` | Vira a visão consolidada de contas, incluindo debrid |
 | `services/task_queue_service.dart` | Estado "resolvendo" antes de "baixando" |
 | `models/catalog_filter_model.dart` | `regions` passa a alimentar a regra do lote, além do filtro |
+| `providers/library_snapshot_provider.dart` | Em MODO PACK, mapeia arquivo local para jogo canônico: nome primeiro, CRC na dúvida, cache por caminho, tamanho e mtime |
+| `screens/add_catalog_source_screen.dart` | Nenhuma mudança de fluxo. O console que ela cria passa a aparecer na lista de addons |
+| `screens/rts_server_screen.dart` | Nenhuma mudança de tela. Só precisa emitir as extensões do formato quando elas existirem, seção 6.4 do spec de arquitetura |
 | **novo** `screens/game_detail_screen.dart` | Seções 7 e 8 |
 | **novo** `screens/addons_screen.dart` | Lista de addons, seção 9 |
 | **novo** `screens/addon_detail_screen.dart` | Detalhe do addon, seção 9 |
@@ -294,6 +315,11 @@ fonte", que reabre o detalhe do jogo já com a fonte que falhou riscada. Nada de
   continuam como estão. Este documento só trata da grade. Adaptá-los ao MODO PACK é trabalho
   separado.
 - **Redesenho do tema.** Material 3, seed `#7C4DEF` e ChakraPetch ficam como estão.
+- **Tinfoil, JDKV, FBI, SMB e FTP.** Servem arquivo para outro aparelho, não catálogo para o
+  app. Intocados.
+- **As tools de arquivo local.** NSZ, RAR, CHD, CIA, M3U, Collection Clean, Steam Shortcuts e
+  Sports continuam como estão. Vale registrar que em MODO PACK elas ganham algo que nunca
+  tiveram, um nome canônico e um CRC por jogo, mas aproveitar isso é trabalho separado.
 
 ## 13. Ordem de implementação
 
@@ -302,6 +328,7 @@ Este documento não vira um plano só. Ele se distribui pelas fatias do spec de 
 | Seção deste documento | Fatia |
 | --- | --- |
 | 8, confiança do match | Fatia 2, Identidade |
+| 3.1, borda de "já baixado" | Fatia 2, Identidade |
 | 3, 4, 5, 6, 7, grade, seleção, lote e detalhe | Fatia 3, Grade e modos |
 | 9, addons e contas | Fatia 4, Addon e Accounts |
 | 10, debrid na fila | Fatia 6, Debrid |
