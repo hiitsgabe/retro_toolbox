@@ -582,7 +582,7 @@ E troque a linha 96, que hoje é só `Footer(),`, por:
 
 O `select` sobre `selectedGames.length` é de propósito: a barra só reconstrói quando o **número** muda, não a cada mexida no catálogo.
 
-O corpo do `onDownload` é o mesmo que estava no header (`header.dart:190-191`), palavra por palavra. Na Task 5 ele passa a chamar a folha de confirmação; aqui ele só muda de lugar, para o commit ser uma coisa só.
+O corpo do `onDownload` é o mesmo que estava no header (`header.dart:190-191`), com **uma** troca obrigatória: lá o console vem de `widget.selectedConsole?.id`, porque `Header` recebe o console por parâmetro; aqui vem de `appState.selectedConsole?.id`, porque `HomeScreen` já lê o `appStateProvider`. Copiar `widget.selectedConsole` para dentro do `HomeScreen` não compila. Fora isso é a mesma linha. Na Task 5 ela passa a chamar a folha de confirmação; aqui ela só muda de lugar, para o commit ser uma coisa só.
 
 Acrescente também o import do serviço da fila:
 
