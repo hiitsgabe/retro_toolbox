@@ -24,21 +24,33 @@ class MetadataPackService {
 
   /// Fetch padrão de produção. Segue redirect, que a release do GitHub sempre
   /// devolve.
-  static Future<List<int>> httpFetch(Uri uri) async {
-    final client = HttpClient();
+  ///
+  /// Teto de tempo igual ao lado Python (`timeout=180`). O `connectionTimeout`
+  /// limita só a fase de connect; o `.timeout` no futuro inteiro é que segura
+  /// uma conexão que aceita e depois emudece, senão o `await for` da leitura
+  /// penduraria para sempre. Numa primeira carga sem cache isso travaria a
+  /// tela; com o teto, vira exceção e `load` cai no cache.
+  static const httpTimeout = Duration(seconds: 180);
+
+  static Future<List<int>> httpFetch(Uri uri,
+      {Duration timeout = httpTimeout}) async {
+    final client = HttpClient()..connectionTimeout = timeout;
     try {
-      final request = await client.getUrl(uri);
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('HTTP ${response.statusCode}', uri: uri);
-      }
-      final bytes = <int>[];
-      await for (final chunk in response) {
-        bytes.addAll(chunk);
-      }
-      return bytes;
+      return await () async {
+        final request = await client.getUrl(uri);
+        final response = await request.close();
+        if (response.statusCode != HttpStatus.ok) {
+          throw HttpException('HTTP ${response.statusCode}', uri: uri);
+        }
+        final bytes = <int>[];
+        await for (final chunk in response) {
+          bytes.addAll(chunk);
+        }
+        return bytes;
+      }()
+          .timeout(timeout);
     } finally {
-      client.close();
+      client.close(force: true);
     }
   }
 
