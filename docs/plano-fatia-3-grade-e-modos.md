@@ -126,6 +126,23 @@ Em MODO PACK a grade não passa pelo `FilteringService`, porque aquele serviço 
 
 ---
 
+## Sexta decisão travada: nenhum teste toca o disco de favoritos
+
+Esta seção existe porque a primeira versão deste plano estava **errada** neste ponto, e o erro foi pego rodando o código na Task 1. Está escrito aqui inteiro para que ninguém repita.
+
+`CatalogNotifier` escuta `favoritesProvider` no construtor (`catalog_provider.dart:38`), e `FavoritesNotifier` chama `_loadFavorites()` dentro do próprio construtor (`favorites_provider.dart:9`), que vai ao disco por `path_provider`. Qualquer teste que construa um `catalogProvider` de verdade, em `ProviderContainer` ou em `ProviderScope`, herda isso. **Verificado rodando**, e são dois defeitos distintos, não um:
+
+1. Sem nada, o teste passa e **depois** estoura `MissingPluginException(No implementation found for method getApplicationSupportDirectory on channel plugins.flutter.io/path_provider)`. O `flutter test` conta isso como falha do caso que já tinha passado.
+2. Registrando um handler falso para o canal do `path_provider`, o `MissingPluginException` some e aparece o segundo defeito, mais difícil: `_loadFavorites` é `async` e a atribuição `state = await ...` completa **depois** do `addTearDown(container.dispose)`, então estoura `Bad state: Tried to use FavoritesNotifier after 'dispose' was called`. Com um caso só isso às vezes não aparece, por sorte de escalonamento. Com dois, aparece sempre.
+
+`TestWidgetsFlutterBinding.ensureInitialized()` **não conserta nem um nem outro**. O binding não registra o canal do `path_provider`, e não tem nada a ver com a corrida do `dispose`. Se você viu essa linha em algum lugar deste plano como sendo o conserto, o plano estava errado.
+
+**O conserto, e ele é obrigatório:** sobrescrever `favoritesProvider` por uma versão em memória. A Task 1 cria `test/support/favorites_stub.dart` com `InMemoryFavoritesNotifier` e a constante `semDiscoDeFavoritos`, e **todo** teste desta fatia que construa `catalogProvider` de verdade tem que pôr `semDiscoDeFavoritos` na lista de `overrides`. São eles: Task 1, Task 12, Task 15, Task 16, Task 18 e Task 21.
+
+O stub guarda favorito em memória de verdade, com `toggleFavorite` que funciona, e **não** é um no-op. Isso não é capricho: os testes das Tasks 15 e 18 apertam o coração e esperam o ícone virar `Icons.favorite`. Com um stub que não faz nada, esses testes falhariam, e o conserto errado seria afrouxar a asserção.
+
+---
+
 ## Estrutura de arquivos
 
 Quinze arquivos de produção novos. **Três** arquivos de produção existentes modificados. `pubspec.yaml` não muda.
@@ -166,6 +183,12 @@ Quinze arquivos de produção novos. **Três** arquivos de produção existentes
 
 ---
 
+**Um arquivo de apoio de teste**, que não é de produção e por isso não aparece na conferência de `lib/` da Task 22:
+
+| Arquivo | Responsabilidade | Depende de |
+|---|---|---|
+| `test/support/favorites_stub.dart` | `InMemoryFavoritesNotifier` e a constante `semDiscoDeFavoritos`, a sobrescrita de `favoritesProvider` que tira o disco e a corrida de `async` do caminho. Criado na Task 1, usado pelas Tasks 1, 12, 15, 16, 18 e 21. Ver a "Sexta decisão travada". | `favorites_provider`, `favorites_model` |
+
 ## Convenção de commit desta fatia
 
 Cada Task abaixo é dividida entre um agente de teste e um agente de produção, e por isso **cada Task traz duas mensagens de commit**, nunca uma:
@@ -195,7 +218,73 @@ Este grupo não toca em pack, matcher nem addon. Ele melhora o app de hoje sozin
 
 O `×` da barra do rodapé precisa limpar a seleção inteira, e esse método não existe. Hoje só há `toggleGameSelection` (`:228`), `selectGame` (`:240`) e `deselectGame` (`:246`).
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Crie o stub de favoritos que a fatia inteira vai usar**
+
+Leia a "Sexta decisão travada" antes deste passo. Em resumo: `catalogProvider` de verdade vai ao disco e estoura depois do teste, e este arquivo é o conserto, usado por seis Tasks.
+
+Crie `test/support/favorites_stub.dart`:
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roms_downloader/models/favorites_model.dart';
+import 'package:roms_downloader/providers/favorites_provider.dart';
+
+/// Favoritos em memória, sem disco e sem `async` que sobreviva ao teste.
+///
+/// O `FavoritesNotifier` de verdade chama `_loadFavorites()` no construtor,
+/// que vai ao `path_provider`. Em teste isso dá `MissingPluginException`, e
+/// se você calar o canal, dá `Bad state: Tried to use FavoritesNotifier
+/// after dispose` porque o `await` completa depois do teardown.
+///
+/// Guarda favorito de verdade, e não é no-op: as Tasks 15 e 18 apertam o
+/// coração e esperam o ícone virar.
+class InMemoryFavoritesNotifier extends StateNotifier<Favorites>
+    implements FavoritesNotifier {
+  InMemoryFavoritesNotifier()
+      : super(Favorites(lastUpdated: DateTime.fromMillisecondsSinceEpoch(0)));
+
+  @override
+  Future<void> toggleFavorite(String gameId) async {
+    final ids = Set<String>.from(state.gameIds);
+    ids.contains(gameId) ? ids.remove(gameId) : ids.add(gameId);
+    state = state.copyWith(gameIds: ids);
+  }
+
+  @override
+  Future<void> addFavorite(String gameId) async {
+    state = state.copyWith(gameIds: Set<String>.from(state.gameIds)..add(gameId));
+  }
+
+  @override
+  Future<void> removeFavorite(String gameId) async {
+    state = state.copyWith(gameIds: Set<String>.from(state.gameIds)..remove(gameId));
+  }
+
+  @override
+  Future<void> clearFavorites() async {
+    state = state.copyWith(gameIds: {});
+  }
+
+  @override
+  Future<String> exportFavorites() async => 'stub';
+
+  @override
+  Future<void> importFavorites(String slug, {bool merge = true}) async {}
+
+  @override
+  Future<void> deleteExport() async {}
+
+  @override
+  bool isFavorite(String gameId) => state.isFavorite(gameId);
+}
+
+/// Ponha isto na lista de `overrides` de todo teste que construa
+/// `catalogProvider` de verdade, em container ou em `ProviderScope`.
+final semDiscoDeFavoritos =
+    favoritesProvider.overrideWith((_) => InMemoryFavoritesNotifier());
+```
+
+- [ ] **Step 2: Escreva os testes que falham**
 
 Crie `test/catalog_selection_test.dart`:
 
@@ -204,13 +293,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 
-void main() {
-  // O CatalogNotifier escuta favoritesProvider no construtor, e o
-  // FavoritesService toca disco. Sem binding isso explode antes do teste.
-  TestWidgetsFlutterBinding.ensureInitialized();
+import 'support/favorites_stub.dart';
 
+void main() {
   test('clearSelection zera a seleção inteira', () {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -224,7 +311,7 @@ void main() {
   });
 
   test('clearSelection não emite estado quando a seleção já está vazia', () {
-    final container = ProviderContainer();
+    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -240,7 +327,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 3: Rode e veja falhar**
 
 ```bash
 flutter test test/catalog_selection_test.dart
@@ -248,7 +335,9 @@ flutter test test/catalog_selection_test.dart
 
 Esperado: falha de compilação, `The method 'clearSelection' isn't defined for the type 'CatalogNotifier'`.
 
-- [ ] **Step 3: Implemente**
+Se em vez disso você vir `MissingPluginException` ou `Tried to use FavoritesNotifier after dispose`, o Step 1 não foi feito ou o `semDiscoDeFavoritos` não entrou nos `overrides`.
+
+- [ ] **Step 4: Implemente**
 
 Em `lib/providers/catalog_provider.dart`, logo depois de `deselectGame` (que termina na linha 250), acrescente:
 
@@ -263,7 +352,7 @@ Em `lib/providers/catalog_provider.dart`, logo depois de `deselectGame` (que ter
   }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 5: Rode e veja passar**
 
 ```bash
 flutter test test/catalog_selection_test.dart
@@ -271,13 +360,13 @@ flutter test test/catalog_selection_test.dart
 
 Esperado: `+2`, zero falha.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
-Duas mensagens, uma por agente:
+Duas mensagens, uma por agente. O stub vai junto do commit de teste, porque é arquivo de teste:
 
 ```bash
 # agente de teste
-git add test/catalog_selection_test.dart
+git add test/support/favorites_stub.dart test/catalog_selection_test.dart
 git commit -m "test(selecao): clearSelection zera a selecao sem emitir a toa"
 
 # agente de producao
@@ -2533,6 +2622,8 @@ import 'package:roms_downloader/services/source_index.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
+import 'support/favorites_stub.dart';
+
 PackGame _pg(String id, String title) => PackGame(id: id, title: title, dumps: [PackDump(name: '$title (USA)')]);
 
 PackGridEntry _entrada(String id, String title, {bool comFonte = true}) => PackGridEntry(
@@ -2564,6 +2655,7 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      semDiscoDeFavoritos,
       packGridEntriesProvider.overrideWithValue(entradas),
       sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
     ],
@@ -2804,7 +2896,7 @@ Esperado: `+7`, zero falha.
 
 Dois tropeços prováveis:
 
-- Se o toque longo não selecionar nada, o culpado é o `catalogProvider` de verdade dentro do `ProviderScope`. Ele é real de propósito, para provar a fiação inteira; o construtor dele escuta `favoritesProvider`, que toca disco, e num `testWidgets` o binding já está inicializado, então funciona. Se mesmo assim quebrar, o conserto é `TestWidgetsFlutterBinding.ensureInitialized()` na primeira linha de `main`, e **não** sobrescrever `catalogProvider`.
+- Se o toque longo não selecionar nada, o culpado é o `catalogProvider` de verdade dentro do `ProviderScope`. Ele é real de propósito, para provar a fiação inteira. O construtor dele escuta `favoritesProvider`, que vai ao disco, e é por isso que `semDiscoDeFavoritos` está nos `overrides`: sem ele o teste estoura com `MissingPluginException` ou com `Tried to use FavoritesNotifier after dispose`, os dois **depois** de o caso ter passado. Ver a "Sexta decisão travada". O que você **não** deve fazer é sobrescrever o `catalogProvider`, porque aí o teste para de provar a fiação e passa a provar o dublê.
 - Se `find.text('Super Metroid')` achar mais de um widget, é o `Tooltip` do tile duplicando o texto na árvore. Nesse caso use `find.byKey(const ValueKey('pack:snes/super-metroid'))`.
 
 - [ ] **Step 5: Commit**
@@ -3801,6 +3893,8 @@ import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/screens/game_detail_screen.dart';
 
+import 'support/favorites_stub.dart';
+
 const _alvo = PackTarget('snes', 'Super Nintendo');
 
 PackGame _pg() => const PackGame(
@@ -3838,6 +3932,7 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      semDiscoDeFavoritos,
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
@@ -3911,6 +4006,7 @@ void main() {
     late WidgetRef capturado;
     await tester.pumpWidget(ProviderScope(
       overrides: [
+        semDiscoDeFavoritos,
         packTargetProvider.overrideWithValue(_alvo),
         preferredRegionsProvider.overrideWithValue(const {'USA'}),
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
@@ -4207,6 +4303,7 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      semDiscoDeFavoritos,
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
@@ -5370,6 +5467,7 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      semDiscoDeFavoritos,
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
@@ -7042,7 +7140,7 @@ Qualquer linha extra é um arquivo de produção que a fatia tocou sem estar no 
 git diff --name-only f9da109 -- test/ | sort
 ```
 
-Esperado, dezesseis linhas:
+Esperado, dezessete linhas:
 
 ```
 test/batch_confirm_sheet_test.dart
@@ -7061,7 +7159,10 @@ test/source_pick_model_test.dart
 test/source_pick_service_test.dart
 test/source_verification_provider_test.dart
 test/source_verification_service_test.dart
+test/support/favorites_stub.dart
 ```
+
+`test/support/favorites_stub.dart` não é um caso de teste, é o apoio da "Sexta decisão travada", criado na Task 1 e usado pelas Tasks 1, 12, 15, 16, 18 e 21. Ele não soma nenhum `+` na contagem da suíte.
 
 Nenhum arquivo de teste **antigo** pode aparecer nessa lista. Se aparecer, alguém consertou um teste velho para acomodar a fatia, e isso é exatamente a regressão que o Step 1 procura, só que disfarçada de teste verde.
 
