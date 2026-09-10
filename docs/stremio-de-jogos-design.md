@@ -289,6 +289,46 @@ fatia 5 precisa expor a forma do item para o matcher decidir se tenta o Range ou
 graça, sem Range nenhum. É o CRC do arquivo servido, ou seja do ZIP externo, então não casa
 com o pacote, mas serve de chave de cache estável para o resultado do match daquele arquivo.
 
+### 5.9 A PoC remedida contra o que o app realmente tem
+
+A seção 5.2 mediu contra o DAT. O app não tem o DAT, tem o pacote da fatia 1, que é o DAT
+depois de colapsado, e o pacote perde uma coisa de propósito: o **nome da linha `rom`**.
+Cada dump guarda só o nome do bloco `game`. Antes de escrever o matcher a medição foi
+refeita em 2026-09-10 com exatamente os dados que o app terá, mesmo DAT e mesma listagem de
+4122 arquivos do item `ef_nintendo_snes_no-intro_2024-04-20`.
+
+| Cenário | Tier 1 | Tier 2 | Tier 3 | Sem match | Arquivo | Jogo |
+| --- | --- | --- | --- | --- | --- | --- |
+| Seção 5.2, com nome de rom | 89.40% | 8.32% | 0.63% | 1.65% | 98.35% | 96.98% |
+| Sem nome de rom, como o pacote é | 86.95% | 10.77% | 0.63% | 1.65% | 98.35% | 96.98% |
+
+**Nada se perde, 101 arquivos só mudam de tier.** O nome do `rom` é o nome do `game` mais a
+extensão, e `norm` corta extensão, então quem casava por rom passa a casar por canônico. A
+cobertura fica idêntica nas duas pontas. A consequência prática é uma só: a tabela de tiers
+da seção 5.2 **não vai se reproduzir no app**, e 86.95 / 10.77 é o número certo para quem
+for conferir o matcher. Não é regressão.
+
+**O `canon` do builder e o `canon` da PoC dão o mesmo resultado.** Eles são escritos
+diferente: a PoC normaliza e depois corta as tags, o builder corta as tags no nome cru e
+normaliza depois, porque `norm` come a vírgula que separa `Legend of Zelda` de `The`. Nos
+4122 arquivos os dois produzem tier por tier o mesmo número. O builder continua sendo o
+certo, porque é ele que gerou os `id` publicados, mas fica registrado que a diferença é
+teórica neste corpus.
+
+**Trocar `difflib` por `rapidfuzz` no tier 3 não muda nada.** A PoC usou
+`SequenceMatcher.ratio`, que é Ratcliff/Obershelp; o Dart tem `rapidfuzz.ratio`, que é
+similaridade indel normalizada, e as duas não são a mesma função. Com corte em 0.90 as duas
+resolveram os **mesmos 26 arquivos para os mesmos 26 alvos, zero divergência**. O matcher em
+Dart pode usar `rapidfuzz.ratio` com corte 90 sem refazer a medição.
+
+**O tier 3 erra, e dá para ver a olho nu.** Dos 26 casos, pelo menos 4 estão errados:
+`Pro Action Replay MK2` resolve para `pro action replay mk3` e `SM Choukyoushi Hitomi Vol. 3`
+resolve para `sm choukyoushi hitomi vol 1`, dois arquivos cada. São 15% de erro dentro do
+tier, contra 0.63% de ganho de cobertura. É a mesma conta que matou o tier de token set na
+seção 5.3, e é o argumento concreto para a regra da seção 5.5: **tier 3 nunca é apresentado
+como certeza**. Um dígito no fim do título é justamente o que a distância de edição não
+enxerga.
+
 ## 6. Subsistema 3: Addon e Accounts
 
 ### 6.1 O addon é o `consoles.json` de hoje
