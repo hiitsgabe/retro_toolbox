@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir e publicar um pacote de metadados por console (título canônico, dumps com CRC/SHA1/serial, capa, sinopse, gênero, ano) e fazer o app baixar, cachear e resolver esse pacote para os consoles do catálogo do usuário, sem login e sem servidor próprio.
+**Goal:** Construir e publicar um pacote de metadados por console (título canônico, dumps com CRC/SHA1/serial/região, capa, sinopse, gênero, ano) e fazer o app baixar, cachear e resolver esse pacote para os consoles do catálogo do usuário, sem login e sem servidor próprio.
 
 **Architecture:** Um script Python em `tool/` roda no GitHub Actions, lê os DATs do libretro-database (No-Intro e Redump), colapsa os dumps em jogos canônicos, enriquece com os side files de `metadat/` e com o OpenVGDB, confere a existência da capa no libretro-thumbnails e publica um `<pack>.json.gz` por sistema mais um `index.json` numa release de tag fixa `packs`. No lado Flutter, `MetadataPackService` baixa sob demanda, descompacta com `gzip` do `dart:io`, grava em `getApplicationSupportDirectory()/packs/` e serve do disco nas próximas aberturas; `PackIndex.resolve` liga o id/nome arbitrário do console do usuário ao id do pacote.
 
@@ -74,7 +74,7 @@ void main() {
       "id": "nintendo_super_nintendo_entertainment_system/chrono-trigger",
       "title": "Chrono Trigger",
       "dumps": [
-        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null},
+        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
         {"name": "Chrono Trigger (Japan)", "crc": "1f2e3d4c"}
       ],
       "cover": "https://example.invalid/cover.png",
@@ -106,6 +106,12 @@ void main() {
     expect(pack.games.first.dumps.first.crc, '2D206BF7');
     expect(pack.games.first.dumps.first.sha1, 'ABC');
     expect(pack.games.first.dumps[1].sha1, isNull);
+  });
+
+  test('region é lida como veio e é opcional', () {
+    final pack = MetadataPack.decode(sample);
+    expect(pack.games.first.dumps.first.region, 'USA');
+    expect(pack.games.first.dumps[1].region, isNull);
   });
 
   test('campos opcionais ausentes viram null e dumps vazio é permitido', () {
@@ -151,19 +157,36 @@ import 'dart:convert';
 /// [name] é o nome do jogo no DAT, sem extensão, com as tags de região e
 /// revisão preservadas, porque é ele que o matcher compara com o nome do
 /// arquivo remoto.
+///
+/// [crc] e [sha1] são normalizados para maiúsculas, porque são hexadecimais e a
+/// comparação precisa ser estável entre o DAT e o que o app calcula. O [serial]
+/// não é: ele é uma string de catálogo do fabricante, com maiúsculas e hifens
+/// que fazem parte do valor, e é gravado exatamente como o DAT emite.
+/// [region] é a região declarada no DAT, quando existe. Nem todo bloco traz
+/// uma: no SNES 293 dos 4268 blocos não têm, no GameCube 33 de 2268. Por isso é
+/// opcional. Ela existe para a regra de região preferida do download em lote e
+/// para o cartão de detalhe mostrar "(USA)" sem reparsear o nome em runtime.
 class PackDump {
   final String name;
   final String? crc;
   final String? sha1;
   final String? serial;
+  final String? region;
 
-  const PackDump({required this.name, this.crc, this.sha1, this.serial});
+  const PackDump({
+    required this.name,
+    this.crc,
+    this.sha1,
+    this.serial,
+    this.region,
+  });
 
   factory PackDump.fromJson(Map<String, dynamic> json) => PackDump(
         name: json['name'] as String,
         crc: (json['crc'] as String?)?.toUpperCase(),
         sha1: (json['sha1'] as String?)?.toUpperCase(),
         serial: json['serial'] as String?,
+        region: json['region'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -171,6 +194,7 @@ class PackDump {
         if (crc != null) 'crc': crc,
         if (sha1 != null) 'sha1': sha1,
         if (serial != null) 'serial': serial,
+        if (region != null) 'region': region,
       };
 }
 
@@ -280,7 +304,7 @@ class MetadataPack {
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `flutter test test/metadata_pack_model_test.dart`
-Expected: PASS, 5 testes.
+Expected: PASS, 6 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -375,6 +399,22 @@ void main() {
 ''';
     final index = PackIndex.decode(colliding);
     expect(index.resolve(const PackTarget('snes', 'Snes'))?.pack, 'snes');
+
+    // A mesma asserção com a ordem das entradas invertida. A garantia vem de
+    // resolve varrer todos os packs antes de olhar qualquer alias, não da
+    // ordem em que o índice foi escrito, e este par prova isso.
+    const reversed = '''
+{
+  "built": "2026-09-10",
+  "packs": [
+    {"pack": "snes", "system": "Snes", "games": 2, "aliases": []},
+    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]}
+  ]
+}
+''';
+    expect(
+        PackIndex.decode(reversed).resolve(const PackTarget('snes', 'Snes'))?.pack,
+        'snes');
   });
 
   test('console sem pacote devolve null', () {
@@ -1064,7 +1104,7 @@ Expected: PASS, 3 testes.
 - [ ] **Step 5: Rodar a suíte inteira**
 
 Run: `flutter test`
-Expected: PASS, com todos os testes que já existiam intactos. Esta fatia adiciona 30 testes Dart: 5 no Task 1, 8 no Task 2, 7 no Task 3, 7 no Task 4 e 3 aqui.
+Expected: PASS, com todos os testes que já existiam intactos. Esta fatia adiciona 31 testes Dart: 6 no Task 1, 8 no Task 2, 7 no Task 3, 7 no Task 4 e 3 aqui.
 
 - [ ] **Step 6: Commit**
 
@@ -1195,6 +1235,15 @@ class ParseDatTest(unittest.TestCase):
     def test_no_intro_has_no_serial_in_the_main_dat(self):
         entries = b.parse_dat(NO_INTRO_DAT)
         self.assertIsNone(entries[0]["serial"])
+
+    def test_region_is_read_and_is_optional(self):
+        entries = b.parse_dat(NO_INTRO_DAT)
+        self.assertEqual(entries[1]["region"], "USA")
+        self.assertEqual(entries[0]["region"], "Japan")
+        # Nem todo bloco declara região. No DAT real do SNES são 293 de 4268,
+        # no do GameCube 33 de 2268, então a ausência é normal e vira None.
+        sem = b.parse_dat('game (\n\tname "Sem Regiao"\n)\n')
+        self.assertIsNone(sem[0]["region"])
 
 
 class ParseSideDatTest(unittest.TestCase):
@@ -1358,6 +1407,10 @@ SYSTEMS = [
 GAME_RE = re.compile(r"game \(\s*(.*?)\n\)", re.S)
 NAME_RE = re.compile(r'^\s*name "([^"]+)"', re.M)
 SERIAL_RE = re.compile(r'^\s*serial "([^"]+)"', re.M)
+REGION_RE = re.compile(r'^\s*region "([^"]+)"', re.M)
+# O md5 é capturado só para o grupo do sha1 cair na posição certa. Ele não vai
+# para o pacote: nenhum dos três eixos de identidade da fatia 2 usa md5, e
+# guardar um hash a mais por dump inflaria o pacote sem comprador.
 ROM_RE = re.compile(
     r'rom \( name "([^"]+)"(?:\s+size \d+)?\s+crc (\w+)'
     r"(?:\s+md5 (\w+))?(?:\s+sha1 (\w+))?"
@@ -1376,6 +1429,10 @@ def parse_dat(text):
     Só a primeira linha rom de cada bloco entra: em jogos de disco as demais
     são faixas de áudio, cujo CRC não serve para identificar o arquivo que o
     usuário baixa.
+
+    O crc e o sha1 sobem para maiúsculas porque são hexadecimais e a comparação
+    precisa ser estável. O serial não: ele é uma string de catálogo do
+    fabricante e vai para o pacote exatamente como o DAT emite.
     """
     entries = []
     for block in GAME_RE.findall(text):
@@ -1384,11 +1441,13 @@ def parse_dat(text):
             continue
         rom = ROM_RE.search(block)
         serial = SERIAL_RE.search(block)
+        region = REGION_RE.search(block)
         entries.append({
             "name": name.group(1),
             "crc": rom.group(2).upper() if rom else None,
             "sha1": rom.group(4).upper() if rom and rom.group(4) else None,
             "serial": serial.group(1) if serial else None,
+            "region": region.group(1) if region else None,
         })
     return entries
 
@@ -1416,7 +1475,7 @@ if __name__ == "__main__":
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py' -v`
-Expected: PASS, 14 testes.
+Expected: PASS, 15 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -1496,9 +1555,12 @@ class SlugTest(unittest.TestCase):
 class CollapseTest(unittest.TestCase):
     def setUp(self):
         self.entries = [
-            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A", "serial": None},
-            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B", "serial": None},
-            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None, "serial": None},
+            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A",
+             "serial": None, "region": "USA"},
+            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B",
+             "serial": None, "region": "Japan"},
+            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None,
+             "serial": None, "region": None},
         ]
 
     def test_dumps_of_the_same_game_collapse_into_one_entry(self):
@@ -1543,6 +1605,12 @@ class CollapseTest(unittest.TestCase):
         self.assertEqual(len(games), 2)
         self.assertEqual(games[0]["id"], "md/sonic-beta")
         self.assertEqual(games[1]["id"], "md/sonic-beta-2")
+
+    def test_region_travels_to_the_dump_and_is_omitted_when_absent(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(games[0]["dumps"][0]["region"], "USA")
+        self.assertEqual(games[0]["dumps"][1]["region"], "Japan")
+        self.assertNotIn("region", games[1]["dumps"][0])
 
     def test_entries_without_a_canon_title_are_dropped(self):
         entries = [{"name": "(USA)", "crc": "1", "sha1": None, "serial": None}]
@@ -1636,7 +1704,7 @@ def collapse(entries, pack_id):
             by_canon[key] = game
             games.append(game)
         dump = {"name": entry["name"]}
-        for field in ("crc", "sha1", "serial"):
+        for field in ("crc", "sha1", "serial", "region"):
             if entry.get(field):
                 dump[field] = entry[field]
         game["dumps"].append(dump)
@@ -1646,7 +1714,7 @@ def collapse(entries, pack_id):
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 34 testes.
+Expected: PASS, 36 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -1790,7 +1858,7 @@ def enrich_from_side(games, side_maps):
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 41 testes.
+Expected: PASS, 43 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -2028,7 +2096,7 @@ def enrich_from_openvgdb(games, index):
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 55 testes.
+Expected: PASS, 57 testes.
 
 - [ ] **Step 5: Commit**
 
@@ -2286,7 +2354,7 @@ def main():
 - [ ] **Step 4: Rodar o teste e ver passar**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 61 testes.
+Expected: PASS, 63 testes.
 
 - [ ] **Step 5: Conferir que a CLI carrega**
 
@@ -2414,18 +2482,23 @@ games = pack['games']
 dumps = sum(len(g['dumps']) for g in games)
 cover = sum(1 for g in games if g.get('cover'))
 syn = sum(1 for g in games if g.get('synopsis'))
+reg = sum(1 for g in games for d in g['dumps'] if d.get('region'))
 print('jogos', len(games))
 print('dumps', dumps)
 print('capa %.1f%%' % (100 * cover / len(games)))
 print('sinopse %.1f%%' % (100 * syn / len(games)))
+print('regiao %.1f%% dos dumps' % (100 * reg / dumps))
 assert 2300 <= len(games) <= 2550, 'colapso fora da faixa da PoC'
 assert dumps > 4000, 'parser perdeu dumps'
 assert cover / len(games) > 0.80, 'cobertura de capa caiu'
 assert syn / len(games) > 0.65, 'cobertura de sinopse caiu'
+# No DAT do SNES 293 dos 4268 blocos não declaram região, ou seja 93,1% têm.
+# Abaixo de 85% o REGION_RE parou de casar.
+assert reg / dumps > 0.85, 'region sumiu do parser'
 print('ok')
 PY
 ```
-Expected: as quatro linhas de número e `ok` no final.
+Expected: as cinco linhas de número e `ok` no final.
 
 - [ ] **Step 3: Conferir a sanidade de um jogo conhecido**
 
@@ -2474,5 +2547,11 @@ Explicitamente fora do escopo da fatia 1, cada item com a fatia dona:
 - Tela de contas, migração de token para secure storage e o formato estendido do RTS: fatia 4.
 - `SourceResolver` e `HttpResolver`: fatia 5.
 - `DebridClient` e Real-Debrid: fatia 6.
+
+Três decisões de formato que valem estar escritas, para a fatia 2 não as tratar como esquecimento:
+
+- **`norm` e `canon` não existem em Dart.** Eles vivem só no builder Python, e o app nunca os executa: o pacote já chega com o título canônico pronto. A fatia 2 precisa de normalização em runtime para comparar o nome do arquivo remoto com o do dump, então ela vai reimplementar essas duas funções em Dart, não herdá-las. As duas versões precisam concordar caso a caso, e as fixtures de `NormTest` e `DisplayTitleTest` deste plano servem de base para o par de testes.
+- **O md5 é descartado de propósito.** O DAT traz md5 em toda linha `rom`, e o `ROM_RE` até o captura, mas só para o grupo do sha1 cair na posição certa. Nenhum dos três eixos de identidade do spec usa md5: o casamento por nome não usa hash, a conferência pós-download usa CRC32 e o desempate da seção 5.7 também. Um terceiro hash por dump engordaria o pacote sem comprador.
+- **O `serial` não é normalizado.** `crc` e `sha1` sobem para maiúsculas nos dois lados, no Python e no `PackDump.fromJson`, porque são hexadecimais e a comparação precisa ser estável. O `serial` é uma string de catálogo do fabricante, com maiúsculas e hifens que fazem parte do valor (`SLPS-01204`, `SHVC-AY2J-JPN`), e vai para o pacote exatamente como o DAT emite. Quem comparar serial na fatia 2 compara literal.
 
 Ao fim desta fatia nada muda na tela: o app ganha a capacidade de buscar e guardar os pacotes, e nenhuma tela ainda os consome. Isso é intencional. A fatia 3 é a primeira que aparece para o usuário.
