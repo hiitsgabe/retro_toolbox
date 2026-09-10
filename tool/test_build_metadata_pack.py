@@ -142,5 +142,114 @@ class SystemsTableTest(unittest.TestCase):
             self.assertIn(s["group"], ("no-intro", "redump"))
             self.assertTrue(s["thumbs"])
 
+
+class NormTest(unittest.TestCase):
+    def test_lowercases_and_strips_punctuation(self):
+        self.assertEqual(b.norm("Chrono Trigger (USA)"), "chrono trigger (usa)")
+
+    def test_expands_ampersand(self):
+        self.assertEqual(b.norm("Dig & Spike"), "dig and spike")
+
+    def test_drops_accents(self):
+        self.assertEqual(b.norm("Pokémon Rojo"), "pokemon rojo")
+
+    def test_strips_rom_extensions(self):
+        self.assertEqual(b.norm("Chrono Trigger (USA).sfc"), "chrono trigger (usa)")
+        self.assertEqual(b.norm("Chrono Trigger (USA).zip"), "chrono trigger (usa)")
+
+
+class CanonTest(unittest.TestCase):
+    def test_drops_region_and_revision_tags(self):
+        self.assertEqual(b.canon("Chrono Trigger (USA) (Rev 1)"), "chrono trigger")
+        self.assertEqual(b.canon("Chrono Trigger (Japan) [T+Eng]"), "chrono trigger")
+
+    def test_moves_the_trailing_article_to_the_front(self):
+        self.assertEqual(b.canon("Legend of Zelda, The (USA)"), "the legend of zelda")
+
+    def test_different_regions_share_one_canon(self):
+        self.assertEqual(
+            b.canon("Super Mario World (USA)"), b.canon("Super Mario World (Europe)")
+        )
+
+
+class DisplayTitleTest(unittest.TestCase):
+    def test_keeps_the_original_casing(self):
+        self.assertEqual(b.display_title("Chrono Trigger (USA)"), "Chrono Trigger")
+
+    def test_moves_the_article_without_lowercasing_the_rest(self):
+        self.assertEqual(
+            b.display_title("Legend of Zelda, The (USA)"), "The Legend of Zelda"
+        )
+
+    def test_keeps_accents_and_punctuation(self):
+        self.assertEqual(b.display_title("Pokémon Rojo (Spain).gb"), "Pokémon Rojo")
+
+    def test_name_that_is_only_tags_becomes_empty(self):
+        self.assertEqual(b.display_title("(USA)"), "")
+
+
+class SlugTest(unittest.TestCase):
+    def test_makes_a_url_safe_slug(self):
+        self.assertEqual(b.slug("the legend of zelda"), "the-legend-of-zelda")
+
+    def test_collapses_runs_of_separators(self):
+        self.assertEqual(b.slug("f-zero  ii!!"), "f-zero-ii")
+
+
+class CollapseTest(unittest.TestCase):
+    def setUp(self):
+        self.entries = [
+            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A", "serial": None},
+            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B", "serial": None},
+            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None, "serial": None},
+        ]
+
+    def test_dumps_of_the_same_game_collapse_into_one_entry(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(len(games), 2)
+        self.assertEqual(len(games[0]["dumps"]), 2)
+
+    def test_title_comes_from_the_first_dump_without_its_tags(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(games[0]["title"], "Chrono Trigger")
+        self.assertEqual(games[1]["title"], "The Legend of Zelda")
+
+    def test_id_is_pack_slash_slug(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(games[0]["id"], "snes/chrono-trigger")
+        self.assertEqual(games[1]["id"], "snes/the-legend-of-zelda")
+
+    def test_dump_order_is_the_dat_order(self):
+        games = b.collapse(self.entries, "snes")
+        self.assertEqual(
+            [d["name"] for d in games[0]["dumps"]],
+            ["Chrono Trigger (USA)", "Chrono Trigger (Japan)"],
+        )
+
+    def test_hyphen_and_space_spellings_are_the_same_game(self):
+        entries = [
+            {"name": "Pac-Man (USA)", "crc": "1", "sha1": None, "serial": None},
+            {"name": "Pac Man (Japan)", "crc": "2", "sha1": None, "serial": None},
+        ]
+        games = b.collapse(entries, "nes")
+        self.assertEqual(len(games), 1)
+        self.assertEqual(games[0]["id"], "nes/pac-man")
+
+    def test_two_titles_with_the_same_slug_get_a_numeric_suffix(self):
+        # Tags desbalanceadas sobrevivem ao canon, entao dois jogos de canon
+        # diferente podem cair no mesmo slug. O sufixo garante id único.
+        entries = [
+            {"name": "Sonic (Beta", "crc": "1", "sha1": None, "serial": None},
+            {"name": "Sonic Beta", "crc": "2", "sha1": None, "serial": None},
+        ]
+        games = b.collapse(entries, "md")
+        self.assertEqual(len(games), 2)
+        self.assertEqual(games[0]["id"], "md/sonic-beta")
+        self.assertEqual(games[1]["id"], "md/sonic-beta-2")
+
+    def test_entries_without_a_canon_title_are_dropped(self):
+        entries = [{"name": "(USA)", "crc": "1", "sha1": None, "serial": None}]
+        self.assertEqual(b.collapse(entries, "nes"), [])
+
 if __name__ == "__main__":
     unittest.main()
