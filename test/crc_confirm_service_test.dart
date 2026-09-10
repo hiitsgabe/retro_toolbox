@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/services/crc_confirm_service.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
-import 'package:roms_downloader/services/zip_central_directory.dart';
 
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
