@@ -70,4 +70,55 @@ void main() {
         throw const SocketException('sem rede');
     expect(await ZipCentralDirectory.readRaw(uri, explode), isNull);
   });
+
+  group('entradas', () {
+    test('lê nome e CRC de uma entrada', () {
+      final entries = ZipCentralDirectory.parse(entry);
+      expect(entries, hasLength(1));
+      expect(entries!.single.name, 'Chrono Trigger (USA).sfc');
+      expect(entries.single.crc, '2D206BF7');
+    });
+
+    test('lê várias entradas mesmo com extra e comentário entre elas', () {
+      final blob = BytesBuilder()
+        ..add(cdEntry('a.sfc', 0x00000001, extraLen: 9))
+        ..add(cdEntry('b.sfc', 0x000000FF, commentLen: 5))
+        ..add(cdEntry('c.sfc', 0xA31BEAD4));
+      final entries = ZipCentralDirectory.parse(blob.toBytes());
+      expect(entries?.map((e) => e.name), ['a.sfc', 'b.sfc', 'c.sfc']);
+      expect(entries?.map((e) => e.crc),
+          ['00000001', '000000FF', 'A31BEAD4']);
+    });
+
+    test('crcMatchesRom só aceita a ROM em si', () {
+      bool rom(String name) =>
+          ZipCentralDirectory.parse(cdEntry(name, 1))!.single.crcMatchesRom;
+      expect(rom('Chrono Trigger (USA).sfc'), isTrue);
+      expect(rom('Chrono Trigger (USA).iso'), isTrue);
+      // Contêiner dentro de contêiner: o CRC é do comprimido, não da ROM.
+      expect(rom('Chrono Trigger (USA).zip'), isFalse);
+      expect(rom('Chrono Trigger (USA).7z'), isFalse);
+      // Não é ROM nenhuma.
+      expect(rom('leiame.txt'), isFalse);
+    });
+
+    test('para no lixo e devolve o que já tinha lido', () {
+      final blob = BytesBuilder()
+        ..add(cdEntry('a.sfc', 0x00000001))
+        ..add(Uint8List.fromList(List.filled(60, 0x41)));
+      expect(ZipCentralDirectory.parse(blob.toBytes())?.map((e) => e.name),
+          ['a.sfc']);
+    });
+
+    test('read junta as duas metades e entrega as entradas', () async {
+      final server = FakeRangeServer(buildZip([
+        cdEntry('Super Mario World (Europe).sfc', 0xA31BEAD4),
+        cdEntry('leiame.txt', 0x00000009),
+      ]));
+      final entries = await ZipCentralDirectory.read(uri, server.fetch);
+      expect(entries?.map((e) => e.name),
+          ['Super Mario World (Europe).sfc', 'leiame.txt']);
+      expect(entries?.where((e) => e.crcMatchesRom).single.crc, 'A31BEAD4');
+    });
+  });
 }
