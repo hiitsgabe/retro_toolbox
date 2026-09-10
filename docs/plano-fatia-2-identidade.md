@@ -125,7 +125,11 @@ void main() {
     });
 
     test('preserva as tags de região e revisão', () {
-      expect(norm('Chrono Trigger (USA) (Rev 1) [!]'), 'chrono trigger (usa) (rev 1) []');
+      // O `!` é pontuação proibida e vira espaço, e um espaço só não é
+      // colapsado pelo `\s+`, então o colchete sai com o espaço dentro. É o que
+      // o `norm` do builder faz, conferido rodando o próprio Python. A paridade
+      // com o builder manda aqui, mesmo que `[ ]` seja mais feio que `[]`.
+      expect(norm('Chrono Trigger (USA) (Rev 1) [!]'), 'chrono trigger (usa) (rev 1) [ ]');
     });
 
     test('nome só de pontuação vira vazio', () {
