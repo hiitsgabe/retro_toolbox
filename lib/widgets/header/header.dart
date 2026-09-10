@@ -7,7 +7,6 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
@@ -179,19 +178,6 @@ class _HeaderState extends ConsumerState<Header> {
         isActive: catalogState.filter.isActive,
         onPressed: () => FilterModal.show(context),
         tooltip: 'Filters',
-      ),
-      SizedBox(width: 4),
-      _buildActionButton(
-        context: context,
-        icon: Icons.download_rounded,
-        isActive: canDownload,
-        onPressed: canDownload
-            ? () {
-                final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-                TaskQueueService.startDownloads(ref, context, selectedGames, widget.selectedConsole?.id);
-              }
-            : null,
-        tooltip: 'Download Selected',
       ),
       SizedBox(width: 4),
       _buildActionButton(

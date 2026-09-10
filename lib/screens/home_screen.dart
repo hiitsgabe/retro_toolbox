@@ -8,6 +8,8 @@ import 'package:roms_downloader/widgets/game_list/game_list.dart';
 import 'package:roms_downloader/widgets/game_grid/game_grid.dart';
 import 'package:roms_downloader/widgets/game_grid/game_cover_flow.dart';
 import 'package:roms_downloader/widgets/footer/footer.dart';
+import 'package:roms_downloader/widgets/footer/selection_bar.dart';
+import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
@@ -92,6 +94,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ViewMode.coverflow => const GameCoverFlow(),
                         ViewMode.list => GameList(),
                       },
+          ),
+          SelectionBar(
+            count: ref.watch(catalogProvider.select((s) => s.selectedGames.length)),
+            onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
+            onDownload: () {
+              final catalogState = ref.read(catalogProvider);
+              final selectedGames =
+                  catalogState.games.where((g) => catalogState.selectedGames.contains(g.gameId)).toList();
+              TaskQueueService.startDownloads(ref, context, selectedGames, appState.selectedConsole?.id);
+            },
           ),
           Footer(),
         ],
