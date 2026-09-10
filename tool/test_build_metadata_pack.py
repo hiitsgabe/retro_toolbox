@@ -314,5 +314,123 @@ class EnrichTest(unittest.TestCase):
         self.assertEqual(games[0]["franchise"], "Chrono")
         self.assertEqual(games[0]["esrb"], "E")
 
+
+class ThumbNameTest(unittest.TestCase):
+    def test_keeps_the_dat_name_and_adds_png(self):
+        self.assertEqual(b.thumb_name("Chrono Trigger (USA)"), "Chrono Trigger (USA).png")
+
+    def test_replaces_the_characters_libretro_forbids(self):
+        self.assertEqual(
+            b.thumb_name("Advanced Dungeons & Dragons - Eye of the Beholder (USA)"),
+            "Advanced Dungeons _ Dragons - Eye of the Beholder (USA).png",
+        )
+        self.assertEqual(b.thumb_name("Ratchet: Deadlocked"), "Ratchet_ Deadlocked.png")
+
+
+class RegionPriorityTest(unittest.TestCase):
+    def test_usa_beats_japan(self):
+        self.assertLess(
+            b.region_rank("Chrono Trigger (USA)"), b.region_rank("Chrono Trigger (Japan)")
+        )
+
+    def test_world_beats_europe(self):
+        self.assertLess(
+            b.region_rank("Sonic (World)"), b.region_rank("Sonic (Europe)")
+        )
+
+    def test_unknown_region_goes_last(self):
+        self.assertGreater(
+            b.region_rank("Sonic (Korea)"), b.region_rank("Sonic (Japan)")
+        )
+
+
+class AttachCoversTest(unittest.TestCase):
+    def games(self):
+        return [{
+            "id": "snes/chrono-trigger",
+            "title": "Chrono Trigger",
+            "dumps": [
+                {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C"},
+                {"name": "Chrono Trigger (USA)", "crc": "2D206BF7"},
+            ],
+        }]
+
+    def test_picks_the_preferred_region_cover(self):
+        games = self.games()
+        available = {"Chrono Trigger (Japan).png", "Chrono Trigger (USA).png"}
+        b.attach_thumbnail_covers(games, available, "Nintendo_-_Super_Nintendo_Entertainment_System")
+        self.assertEqual(
+            games[0]["cover"],
+            "https://raw.githubusercontent.com/libretro-thumbnails/"
+            "Nintendo_-_Super_Nintendo_Entertainment_System/master/Named_Boxarts/"
+            "Chrono%20Trigger%20%28USA%29.png",
+        )
+
+    def test_falls_back_to_the_only_available_region(self):
+        games = self.games()
+        b.attach_thumbnail_covers(games, {"Chrono Trigger (Japan).png"}, "R")
+        self.assertIn("Japan", games[0]["cover"])
+
+    def test_no_thumbnail_leaves_the_game_without_cover(self):
+        games = self.games()
+        b.attach_thumbnail_covers(games, set(), "R")
+        self.assertNotIn("cover", games[0])
+
+
+class OpenVgdbTest(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.executescript('''
+            CREATE TABLE ROMs (romID INTEGER, romHashCRC TEXT);
+            CREATE TABLE RELEASES (romID INTEGER, releaseDescription TEXT,
+                releaseCoverFront TEXT, releaseDeveloper TEXT,
+                releasePublisher TEXT, releaseGenre TEXT, releaseDate TEXT);
+            INSERT INTO ROMs VALUES (1, '2D206BF7');
+            INSERT INTO RELEASES VALUES (1, 'Um RPG.', 'https://img/ct.jpg',
+                'Square', 'Square', 'Role-Playing', 'Mar 11, 1995');
+            INSERT INTO ROMs VALUES (2, 'AAAAAAAA');
+            INSERT INTO RELEASES VALUES (2, NULL, NULL, NULL, NULL, NULL, NULL);
+        ''')
+
+    def test_index_is_keyed_by_uppercase_crc(self):
+        index = b.openvgdb_index(self.conn)
+        self.assertIn("2D206BF7", index)
+        self.assertEqual(index["2D206BF7"]["synopsis"], "Um RPG.")
+
+    def test_year_is_extracted_from_the_release_date(self):
+        index = b.openvgdb_index(self.conn)
+        self.assertEqual(index["2D206BF7"]["year"], 1995)
+
+    def test_rows_without_any_useful_field_are_skipped(self):
+        self.assertNotIn("AAAAAAAA", b.openvgdb_index(self.conn))
+
+    def test_enrich_fills_only_what_is_missing(self):
+        games = [{
+            "id": "snes/chrono-trigger", "title": "Chrono Trigger",
+            "genre": "RPG",
+            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+        }]
+        b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
+        self.assertEqual(games[0]["genre"], "RPG")
+        self.assertEqual(games[0]["synopsis"], "Um RPG.")
+        self.assertEqual(games[0]["developer"], "Square")
+        self.assertEqual(games[0]["year"], 1995)
+
+    def test_openvgdb_cover_is_only_a_fallback(self):
+        games = [{
+            "id": "a", "title": "A", "cover": "https://libretro/x.png",
+            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+        }]
+        b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
+        self.assertEqual(games[0]["cover"], "https://libretro/x.png")
+
+    def test_openvgdb_cover_is_used_when_there_is_none(self):
+        games = [{
+            "id": "a", "title": "A",
+            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+        }]
+        b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
+        self.assertEqual(games[0]["cover"], "https://img/ct.jpg")
+
 if __name__ == "__main__":
     unittest.main()
