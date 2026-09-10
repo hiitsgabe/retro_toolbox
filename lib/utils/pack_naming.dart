@@ -96,8 +96,12 @@ String _trimSpaceThenComma(String value) {
   var v = value.trim();
   var start = 0;
   var end = v.length;
-  while (start < end && v[start] == ',') start++;
-  while (end > start && v[end - 1] == ',') end--;
+  while (start < end && v[start] == ',') {
+    start++;
+  }
+  while (end > start && v[end - 1] == ',') {
+    end--;
+  }
   return v.substring(start, end).trim();
 }
 
