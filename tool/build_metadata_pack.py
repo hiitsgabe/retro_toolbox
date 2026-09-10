@@ -291,6 +291,79 @@ def enrich_from_side(games, side_maps):
                     dump["serial"] = value
 
 
+# O libretro-thumbnails troca estes caracteres por "_" no nome do arquivo.
+THUMB_FORBIDDEN_RE = re.compile(r"[&*/:`<>?\\|]")
+REGION_ORDER = ["(usa", "(world", "(europe", "(japan"]
+YEAR_RE = re.compile(r"(19|20)\d{2}")
+
+
+def thumb_name(dat_name):
+    return THUMB_FORBIDDEN_RE.sub("_", dat_name) + ".png"
+
+
+def region_rank(dat_name):
+    low = dat_name.lower()
+    for index, marker in enumerate(REGION_ORDER):
+        if marker in low:
+            return index
+    return len(REGION_ORDER)
+
+
+def attach_thumbnail_covers(games, available, repo):
+    """Escolhe a capa do libretro-thumbnails do dump de melhor região que
+    realmente existe no repositório."""
+    for game in games:
+        best = None
+        for dump in sorted(game["dumps"], key=lambda d: region_rank(d["name"])):
+            name = thumb_name(dump["name"])
+            if name in available:
+                best = name
+                break
+        if best is None:
+            continue
+        game["cover"] = THUMBS_RAW.format(
+            repo=repo, name=urllib.parse.quote(best, safe="")
+        )
+
+
+def openvgdb_index(conn):
+    """CRC32 em maiúsculas para os campos úteis do OpenVGDB."""
+    rows = conn.execute(
+        "SELECT r.romHashCRC, rel.releaseDescription, rel.releaseCoverFront, "
+        "rel.releaseDeveloper, rel.releasePublisher, rel.releaseGenre, rel.releaseDate "
+        "FROM ROMs r JOIN RELEASES rel ON rel.romID = r.romID"
+    )
+    index = {}
+    for crc, synopsis, cover, developer, publisher, genre, date in rows:
+        if not crc:
+            continue
+        year = None
+        if date:
+            match = YEAR_RE.search(date)
+            if match:
+                year = int(match.group(0))
+        record = {"synopsis": synopsis, "cover": cover, "developer": developer,
+                  "publisher": publisher, "genre": genre, "year": year}
+        if not any(record.values()):
+            continue
+        index.setdefault(crc.upper(), record)
+    return index
+
+
+def enrich_from_openvgdb(games, index):
+    """Só preenche buraco. O libretro-database sempre ganha do OpenVGDB, que
+    não tem licença declarada e é a fonte menos confiável das duas."""
+    for game in games:
+        for dump in game["dumps"]:
+            record = index.get(dump.get("crc"))
+            if not record:
+                continue
+            for field in ("synopsis", "cover", "developer", "publisher", "genre", "year"):
+                if record.get(field) and not game.get(field):
+                    game[field] = record[field]
+            break
+
+
 def main():
     raise SystemExit("CLI ainda nao implementada, ver Task 10")
 
