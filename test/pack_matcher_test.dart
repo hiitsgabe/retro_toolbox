@@ -135,4 +135,53 @@ void main() {
       expect(m.dump?.crc, 'A31BEAD4');
     });
   });
+
+  group('tier 3, similaridade', () {
+    test('casa acima do corte', () {
+      // "Hammer Lock" contra "HammerLock", um espaço de diferença: 97.56.
+      final m = matcher.match('Hammer Lock Wrestling (USA).zip');
+      expect(m, isNotNull);
+      expect(m!.tier, MatchTier.fuzzyName);
+      expect(m.game.id, 'snes/hammerlock-wrestling');
+    });
+
+    test('não casa abaixo do corte', () {
+      // 47.46 contra "chrono trigger".
+      expect(
+        matcher.match('Chrono Trigger 2 - Ressurection of the Ancients (USA).zip'),
+        isNull,
+      );
+    });
+
+    test('o score fica entre o corte e cem', () {
+      final m = matcher.match('Hammer Lock Wrestling (USA).zip')!;
+      expect(m.score, greaterThanOrEqualTo(fuzzyCutoff));
+      expect(m.score, lessThan(100));
+    });
+
+    test('escolhe o candidato de maior score, não o primeiro do balde', () {
+      // O balde "zero" tem "zero 4 champ rr" (90.32) antes de
+      // "zero 4 champ rr z" (96.97). O segundo é o certo.
+      final m = matcher.match('Zero4 Champ RR-Z (Japan).zip');
+      expect(m!.tier, MatchTier.fuzzyName);
+      expect(m.game.id, 'snes/zero-4-champ-rr-z');
+    });
+
+    test('o tier 3 erra, e o modelo diz que é palpite', () {
+      // Caso real da PoC: MK2 resolve para MK3 com 95.24. O dígito no fim do
+      // título é exatamente o que a distância de edição não enxerga. Ver a
+      // seção 5.9 do spec.
+      final m = matcher.match('Pro Action Replay MK2 (Europe) (Unl) [b].zip');
+      expect(m!.game.id, 'snes/pro-action-replay-mk3');
+      expect(m.confidence, MatchConfidence.guess);
+    });
+
+    test('varre o pacote inteiro quando o balde do primeiro token não existe', () {
+      // "rammerlock" cai no balde "ramm", que não existe. Sem o fallback o
+      // match de 95.00 contra "hammerlock wrestling" se perderia.
+      final m = matcher.match('Rammerlock Wrestling.zip');
+      expect(m!.game.id, 'snes/hammerlock-wrestling');
+      expect(m.tier, MatchTier.fuzzyName);
+    });
+  });
 }
