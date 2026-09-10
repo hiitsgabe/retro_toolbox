@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -155,6 +156,44 @@ void main() {
       fetch: (uri) async => throw const SocketException('sem rede'),
     );
     expect(await svc.load('snes'), isNull);
+  });
+
+  test('httpFetch nao pendura numa conexao que aceita mas nunca responde',
+      () async {
+    // Servidor que aceita a conexao TCP e fica mudo de proposito. E o pior
+    // caso de rede ruim: o connect completa, mas a resposta nunca chega. Se
+    // httpFetch so tivesse connectionTimeout, este teste penduraria para
+    // sempre, porque connectionTimeout cobre so a fase de connect.
+    final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    server.listen((socket) {
+      // segura o socket aberto, nunca escreve resposta
+    });
+    addTearDown(() async {
+      await server.close();
+    });
+    final uri = Uri.parse('http://127.0.0.1:${server.port}/qualquer');
+
+    // Orcamento curto so para o teste; producao usa MetadataPackService
+    // .httpTimeout (180s). O ponto e que ele estoura em vez de pendurar.
+    final sw = Stopwatch()..start();
+    await expectLater(
+      MetadataPackService.httpFetch(uri,
+          timeout: const Duration(milliseconds: 300)),
+      throwsA(isA<TimeoutException>()),
+    );
+    // A prova de "nao pendura": estourou perto do orcamento, nao ficou preso.
+    expect(sw.elapsed, lessThan(const Duration(seconds: 5)));
+  });
+
+  test('load cai no cache quando o fetch estoura por timeout', () async {
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async =>
+          throw TimeoutException('rede pendurou', const Duration(seconds: 1)),
+    );
+    await svc.writeCache('snes', packJson);
+    final pack = await svc.load('snes', forceRefresh: true);
+    expect(pack!.games.single.title, 'Chrono Trigger');
   });
 
   test('loadIndex baixa o index.json sem gzip e cacheia', () async {
