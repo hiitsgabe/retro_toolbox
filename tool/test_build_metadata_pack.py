@@ -432,5 +432,80 @@ class OpenVgdbTest(unittest.TestCase):
         b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
         self.assertEqual(games[0]["cover"], "https://img/ct.jpg")
 
+
+class BuildPackTest(unittest.TestCase):
+    def test_assembles_the_pack_document(self):
+        pack = b.build_pack(
+            system={"system": "Nintendo - Super Nintendo Entertainment System",
+                    "group": "no-intro",
+                    "thumbs": "Nintendo_-_Super_Nintendo_Entertainment_System",
+                    "aliases": ["snes"]},
+            dat_text=NO_INTRO_DAT,
+            side_texts={"genre": GENRE_DAT, "serial": SERIAL_DAT},
+            thumbs=set(),
+            openvgdb={},
+            built="2026-09-10",
+        )
+        self.assertEqual(pack["pack"], "nintendo_super_nintendo_entertainment_system")
+        self.assertEqual(pack["system"], "Nintendo - Super Nintendo Entertainment System")
+        self.assertEqual(pack["built"], "2026-09-10")
+        self.assertEqual(len(pack["games"]), 3)
+
+    def test_side_data_reaches_the_games(self):
+        pack = b.build_pack(
+            system={"system": "Nintendo - Super Nintendo Entertainment System",
+                    "group": "no-intro", "thumbs": "T", "aliases": []},
+            dat_text=NO_INTRO_DAT,
+            side_texts={"genre": GENRE_DAT, "serial": SERIAL_DAT},
+            thumbs=set(),
+            openvgdb={},
+            built="2026-09-10",
+        )
+        by_id = {g["id"]: g for g in pack["games"]}
+        chrono = by_id["nintendo_super_nintendo_entertainment_system/chrono-trigger"]
+        self.assertEqual(chrono["genre"], "Role-Playing")
+
+    def test_missing_side_files_are_tolerated(self):
+        pack = b.build_pack(
+            system={"system": "Sony - PlayStation", "group": "redump",
+                    "thumbs": "T", "aliases": []},
+            dat_text=REDUMP_DAT,
+            side_texts={},
+            thumbs=set(),
+            openvgdb={},
+            built="2026-09-10",
+        )
+        self.assertEqual(len(pack["games"]), 2)
+        self.assertEqual(pack["games"][0]["dumps"][0]["serial"], "SLPS-01204")
+
+
+class WritePackTest(unittest.TestCase):
+    def test_gzip_round_trips_and_is_deterministic(self):
+        pack = {"pack": "snes", "system": "S", "built": "2026-09-10", "games": []}
+        first = b.pack_bytes(pack)
+        second = b.pack_bytes(pack)
+        self.assertEqual(first, second)
+        self.assertEqual(json.loads(gzip.decompress(first).decode("utf-8")), pack)
+
+
+class BuildIndexTest(unittest.TestCase):
+    def test_index_carries_pack_system_count_and_aliases(self):
+        packs = [{"pack": "snes", "system": "Nintendo - Super Nintendo Entertainment System",
+                  "built": "2026-09-10", "games": [{"id": "a"}, {"id": "b"}]}]
+        aliases = {"snes": ["super_nintendo", "snes"]}
+        index = b.build_index(packs, aliases, "2026-09-10")
+        self.assertEqual(index["built"], "2026-09-10")
+        self.assertEqual(index["packs"], [{
+            "pack": "snes",
+            "system": "Nintendo - Super Nintendo Entertainment System",
+            "games": 2,
+            "aliases": ["super_nintendo", "snes"],
+        }])
+
+    def test_empty_pack_list_still_produces_a_valid_index(self):
+        self.assertEqual(b.build_index([], {}, "2026-09-10"),
+                         {"built": "2026-09-10", "packs": []})
+
+
 if __name__ == "__main__":
     unittest.main()
