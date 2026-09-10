@@ -163,6 +163,90 @@ def parse_side_dat(text, field):
     return out
 
 
+ROM_EXTS = (".zip", ".7z", ".sfc", ".smc", ".fig", ".swc", ".bin", ".rar", ".gz",
+            ".nes", ".gb", ".gbc", ".gba", ".nds", ".3ds", ".n64", ".z64", ".v64",
+            ".md", ".gen", ".gg", ".iso", ".cue", ".chd", ".col", ".int")
+ARTICLE_RE = re.compile(
+    r"^(.*?), (the|a|an|le|la|les|el|los|das|der|die)$", re.I)
+TAG_RE = re.compile(r"\([^)]*\)|\[[^\]]*\]")
+
+
+def strip_ext(name):
+    low = name.lower()
+    for ext in sorted(ROM_EXTS, key=len, reverse=True):
+        if low.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
+def norm(value):
+    """Forma comparável do nome do arquivo: sem extensão, sem acento, sem
+    pontuação, mas com as tags de região e revisão preservadas."""
+    value = strip_ext(value)
+    value = unicodedata.normalize("NFKD", value)
+    value = "".join(c for c in value if not unicodedata.combining(c))
+    value = value.lower().replace("&", " and ")
+    value = re.sub(r"[^a-z0-9()\[\]]+", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def display_title(dat_name):
+    """Título de exibição a partir do nome do DAT: sem extensão, sem tags de
+    região e revisão, com o artigo de volta na frente.
+
+    A troca do artigo acontece aqui, no nome cru, e não depois de norm, porque
+    norm come a vírgula que separa "Legend of Zelda" de "The".
+    """
+    value = TAG_RE.sub(" ", strip_ext(dat_name))
+    value = re.sub(r"\s+", " ", value).strip().strip(",").strip()
+    match = ARTICLE_RE.match(value)
+    if match:
+        value = f"{match.group(2)} {match.group(1)}"
+    return value
+
+
+def canon(value):
+    """Título canônico do jogo, a chave de agrupamento: o título de exibição
+    passado por norm."""
+    return norm(display_title(value))
+
+
+def slug(value):
+    return re.sub(r"^-+|-+$", "", re.sub(r"[^a-z0-9]+", "-", value.lower()))
+
+
+def collapse(entries, pack_id):
+    """Dumps do DAT para jogos canônicos, na ordem em que aparecem."""
+    games = []
+    by_canon = {}
+    used_slugs = {}
+    for entry in entries:
+        key = canon(entry["name"])
+        if not key:
+            continue
+        game = by_canon.get(key)
+        if game is None:
+            base = slug(key)
+            count = used_slugs.get(base, 0) + 1
+            used_slugs[base] = count
+            game_slug = base if count == 1 else f"{base}-{count}"
+            game = {
+                "id": f"{pack_id}/{game_slug}",
+                # O título vem do primeiro dump, que preserva a grafia e os
+                # acentos do DAT. O canon serve só para agrupar e para o slug.
+                "title": display_title(entry["name"]),
+                "dumps": [],
+            }
+            by_canon[key] = game
+            games.append(game)
+        dump = {"name": entry["name"]}
+        for field in ("crc", "sha1", "serial", "region"):
+            if entry.get(field):
+                dump[field] = entry[field]
+        game["dumps"].append(dump)
+    return games
+
+
 def main():
     raise SystemExit("CLI ainda nao implementada, ver Task 10")
 
