@@ -81,5 +81,16 @@ void main() {
     test('reorderAddons com índice de origem fora da lista devolve a mesma lista', () {
       expect(reorderAddons([a, b], 5, 0).map((x) => x.id), ['a', 'b']);
     });
+
+    test('upsertAddon substitui na posição 0, que é a do embutido', () {
+      final saida = upsertAddon([a, b, c], const Addon(id: 'a', name: 'A novo'));
+      expect(saida.map((x) => x.id), ['a', 'b', 'c']);
+      expect(saida.first.name, 'A novo');
+    });
+
+    test('reorderAddons descendo para o meio desconta a vaga que o item deixou', () {
+      const d = Addon(id: 'd', name: 'D');
+      expect(reorderAddons([a, b, c, d], 0, 2).map((x) => x.id), ['b', 'a', 'c', 'd']);
+    });
   });
 }
