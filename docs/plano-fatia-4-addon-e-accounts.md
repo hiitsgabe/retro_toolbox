@@ -3998,7 +3998,7 @@ Dois seams de teste, porque o caminho inteiro passa por `path_provider` (`getApp
 
 São métodos públicos com doc dizendo para que servem, sem `@visibleForTesting`. O repositório não usa a anotação em lugar nenhum (`grep -rn "visibleForTesting" lib/` não acha nada), e introduzir a primeira nesta Task acrescenta risco de `flutter analyze` mudar de 22 por um detalhe que não é o assunto da fatia.
 
-**O teste de rede serve JSON, não HTML.** `_fetchFromUrl` manda HTML para `compute(_parseHtmlIsolate, ...)`, que sobe isolate de verdade; o ramo JSON (`_parseJsonListing`, `catalog_service.dart:417`) é síncrono e no mesmo isolate. Um corpo que começa com `[` cai no ramo JSON (`:292-295`), e é o que o teste usa.
+**O teste de rede serve JSON, não HTML.** `_fetchFromUrl` manda HTML para `compute(_parseHtmlIsolate, ...)`, que sobe isolate de verdade; o ramo JSON (`_parseJsonListing`, `catalog_service.dart:479`) é síncrono e no mesmo isolate. Um corpo que começa com `[` cai no ramo JSON (`:354-356`), e é o que o teste usa.
 
 - [ ] **Step 1: Escreva o teste que falha**
 
@@ -4471,7 +4471,7 @@ E troque `_fetchFromUrl` e `_fetchFromUrlIA` (linhas 276-321) para receberem a f
   }
 ```
 
-**Tropeço provável:** deixar `console.auth` em `_fetchFromUrlIA` ao trocar só o `_fetchFromUrl`. A auth de IA S3 é lida por outro caminho (`auth['type'] == 'ia_s3'`, `catalog_service.dart:306-307`), e o grep por `buildConsoleAuthHeaders` não acha esse trecho. O critério é: **dentro de `_fetchFromUrl` e `_fetchFromUrlIA` não pode sobrar nenhuma leitura de `console.auth`.** Confira:
+**Tropeço provável:** deixar `console.auth` em `_fetchFromUrlIA` ao trocar só o `_fetchFromUrl`. A auth de IA S3 é lida por outro caminho (`auth['type'] == 'ia_s3'`, `catalog_service.dart:368-369`), e o grep por `buildConsoleAuthHeaders` não acha esse trecho. O critério é: **dentro de `_fetchFromUrl` e `_fetchFromUrlIA` não pode sobrar nenhuma leitura de `console.auth`.** Confira:
 
 ```bash
 grep -n "console.auth" lib/services/catalog_service.dart
