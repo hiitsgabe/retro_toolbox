@@ -2721,7 +2721,7 @@ Seis Tasks. Aqui o app deixa de ter **um** catálogo e passa a ter **N**, numa l
 
 O problema central desta grupo não é guardar uma lista. É este: **`Console.auth` é um mapa só, e `_fetchCatalog` passa um `authToken` só para todas as urls do console** (`catalog_service.dart:304-316` e `:344`). Se dois addons declararem o mesmo console, fundir os dois num `Console` faz as urls do segundo serem buscadas com o token do primeiro, e o usuário vê "HTTP 401" numa fonte que ele configurou certo. Por isso a fusão não devolve só `Map<String, Console>`: devolve também, por console, a lista de `ConsoleSource`, que é onde a auth passa a morar.
 
-Uma decisão de escopo que economiza muito churn: **o arquivo de catálogo do addon embutido continua sendo `config/consoles.json`**. Só os addons novos ganham arquivo em `config/addons/<id>.json`. Com isso `setCatalogFromJson`, `addConsole`, `resetCatalog` e `hasUserCatalog` (`catalog_service.dart:109`, `:167`, `:187`, `:193`) seguem apontando para o mesmo arquivo de sempre, e a migração da Task 11 não move byte nenhum de disco: ela só escreve uma lista de um item no `shared_preferences`. Migração que não mexe em arquivo é migração que não tem como perder o catálogo do usuário.
+Uma decisão de escopo que economiza muito churn: **o arquivo de catálogo do addon embutido continua sendo `config/consoles.json`**. Só os addons novos ganham arquivo em `config/addons/<id>.json`. Com isso `setCatalogFromJson`, `addConsole`, `resetCatalog` e `hasUserCatalog` (`catalog_service.dart:170`, `:229`, `:249`, `:255`) seguem apontando para o mesmo arquivo de sempre, e a migração da Task 11 não move byte nenhum de disco: ela só escreve uma lista de um item no `shared_preferences`. Migração que não mexe em arquivo é migração que não tem como perder o catálogo do usuário.
 
 ### Task 8b: a hidratação para de inventar configuração
 
@@ -3759,7 +3759,7 @@ class AddonStore {
   ///
   /// O embutido continua em `config/consoles.json`, que é exatamente onde
   /// `CatalogService.setCatalogFromJson`, `addConsole` e `resetCatalog` já
-  /// escrevem (`catalog_service.dart:102-105`). É por isso que a migração não
+  /// escrevem (`catalog_service.dart:104-107`). É por isso que a migração não
   /// move byte nenhum de disco: ela só escreve uma lista no
   /// `shared_preferences`, e migração que não mexe em arquivo não tem como
   /// perder o catálogo do usuário.
@@ -3796,7 +3796,7 @@ class AddonStore {
 flutter test test/addon_store_test.dart
 ```
 
-Esperado: `+13`, zero falha.
+Esperado: `+14`, zero falha. São 7 casos de migração, 2 de lista e 5 de disco. Este número já esteve escrito como `+13`, e estava errado: contei os `test(` do bloco do Step 1 e são 14.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
@@ -3804,7 +3804,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+464`, zero falha.
+Esperado: `+465`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3959,7 +3959,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+470`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Esperado: `+471`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
 
 - [ ] **Step 6: Analise**
 
@@ -4579,7 +4579,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+480`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+481`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4854,7 +4854,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+490`, zero falha.
+Esperado: `+491`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4880,10 +4880,10 @@ git commit -m "feat(addon): provider da lista de addons e a prioridade derivada 
 | 8b, hidratação sem inventar config | 4 | 425 |
 | 9, modelo de addon | 15 | 440 |
 | 10, fusão de catálogos | 11 | 451 |
-| 11, persistência | 13 | 464 |
-| 12, `Game.sourceId` | 6 | 470 |
-| 13, catálogo de N addons | 10 | 480 |
-| 14, provider e prioridade | 10 | 490 |
+| 11, persistência | 14 | 465 |
+| 12, `Game.sourceId` | 6 | 471 |
+| 13, catálogo de N addons | 10 | 481 |
+| 14, provider e prioridade | 10 | 491 |
 
 ---
 
@@ -5078,7 +5078,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+493`, zero falha.
+Esperado: `+494`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5287,7 +5287,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+496`, zero falha.
+Esperado: `+497`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5557,7 +5557,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+500`, zero falha.
+Esperado: `+501`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5580,9 +5580,9 @@ git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id c
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 493 |
-| 16, a prioridade chega nas telas | 3 | 496 |
-| 17, o nome do addon na tela | 4 | 500 |
+| 15, o id do addon na grade e no lote | 3 | 494 |
+| 16, a prioridade chega nas telas | 3 | 497 |
+| 17, o nome do addon na tela | 4 | 501 |
 
 ---
 
@@ -5944,7 +5944,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+517`, zero falha.
+Esperado: `+518`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6436,7 +6436,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+530`, zero falha.
+Esperado: `+531`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6759,7 +6759,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+536`, zero falha.
+Esperado: `+537`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -7045,7 +7045,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+542`, zero falha.
+Esperado: `+543`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7480,7 +7480,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+550`, zero falha.
+Esperado: `+551`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7912,7 +7912,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+559`, zero falha.
+Esperado: `+560`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8287,7 +8287,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+565`, zero falha.
+Esperado: `+566`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8749,7 +8749,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+572`, zero falha, `22 issues found`.
+Esperado: `+573`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8768,14 +8768,14 @@ O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com a
 
 | Task | Casos | Acumulado |
 | --- | --- | --- |
-| 18 | 17 | `+517` |
-| 19 | 13 | `+530` |
-| 20 | 6 | `+536` |
-| 21 | 6 | `+542` |
-| 22 | 8 | `+550` |
-| 23 | 9 | `+559` |
-| 24 | 6 | `+565` |
-| 25 | 7 | `+572` |
+| 18 | 17 | `+518` |
+| 19 | 13 | `+531` |
+| 20 | 6 | `+537` |
+| 21 | 6 | `+543` |
+| 22 | 8 | `+551` |
+| 23 | 9 | `+560` |
+| 24 | 6 | `+566` |
+| 25 | 7 | `+573` |
 
 ---
 
@@ -8892,7 +8892,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+577`, zero falha.
+Esperado: `+578`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -9061,7 +9061,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+577`, zero falha.
+Esperado: `+578`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
