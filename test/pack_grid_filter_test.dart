@@ -4,8 +4,8 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 
-PackGridEntry _e(String title, {bool comFonte = true}) => PackGridEntry(
-      game: PackGame(id: 'snes/${title.toLowerCase()}', title: title, dumps: const []),
+PackGridEntry _e(String title, {bool comFonte = true, String? id}) => PackGridEntry(
+      game: PackGame(id: id ?? 'snes/${title.toLowerCase()}', title: title, dumps: const []),
       sources: comFonte
           ? [const MatchedSource(filename: 'a.zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1)]
           : const [],
@@ -50,6 +50,22 @@ void main() {
     final saida = filterPackEntries([_e('Super Metroid', comFonte: false)], '');
 
     expect(saida.single.hasSource, isFalse);
+  });
+
+  test('títulos iguais saem sempre na mesma ordem, desempatados pelo id', () {
+    // Todo outro teste de ordenação usa títulos distintos, então `byTitle != 0`
+    // é sempre verdadeiro e o ramo do desempate nunca roda. Sem este caso,
+    // apagar o desempate ou invertê-lo não deixa nenhum teste vermelho.
+    //
+    // As duas chamadas são o ponto: a entrada vai nas duas ordens possíveis e a
+    // saída tem que ser a mesma. Uma chamada só passaria por acaso, porque em
+    // lista de dois elementos o `sort` do Dart cai em inserção, que preserva a
+    // ordem de entrada quando o comparador devolve 0.
+    final usa = _e('Final Fantasy', id: 'snes/ff-usa');
+    final eur = _e('Final Fantasy', id: 'snes/ff-eur');
+
+    expect(filterPackEntries([usa, eur], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
+    expect(filterPackEntries([eur, usa], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
   });
 
   test('espaço em volta da busca não conta', () {
