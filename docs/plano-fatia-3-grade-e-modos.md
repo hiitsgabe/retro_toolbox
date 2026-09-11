@@ -2462,6 +2462,15 @@ class PackGridItem extends StatelessWidget {
         ),
         child: Tooltip(
           message: title,
+          // Sem `manual` o `Tooltip` monta um `LongPressGestureRecognizer`
+          // proprio, porque `TooltipTriggerMode.longPress` e o padrao em
+          // mobile e o `flutter_test` roda como Android. Esse reconhecedor e
+          // o mais interno, ganha a arena e engole o toque longo do
+          // `GestureDetector` de fora, entao a selecao nunca dispara.
+          // `manual` tira so o gatilho de toque e mantem o hover de desktop,
+          // que e onde a dica de titulo truncado serve para alguma coisa. Em
+          // mobile o toque longo e da selecao, e isso e decisao travada.
+          triggerMode: TooltipTriggerMode.manual,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: Stack(
@@ -2594,6 +2603,8 @@ flutter test test/pack_grid_item_test.dart
 Esperado: `+11`, zero falha.
 
 Se `tester.tap(find.byType(PackGridItem))` reclamar de alvo ambíguo ou de ponteiro fora da tela, aumente a `largura` do `_host`: o tile respeita `aspectRatio` e um `SizedBox` estreito demais pode estourar a altura da tela de teste.
+
+Se o caso `toque curto abre e toque longo seleciona` falhar com `Expected: <1> Actual: <0>` na linha do `selecionou`, o `triggerMode: TooltipTriggerMode.manual` do Step 3 nao foi transcrito. Medido nas duas direcoes: com o `Tooltip` padrao da `abriu=1 selecionou=0`, com `manual` da `abriu=1 selecionou=1`. Nao conserte trocando o teste por `longPressAt`, nem tirando o `Tooltip`, nem pondo `behavior:` no `GestureDetector`: o conserto e o `triggerMode`.
 
 - [ ] **Step 5: Commit**
 
