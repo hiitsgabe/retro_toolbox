@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:roms_downloader/models/settings_model.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier();
+  return SettingsNotifier(ref.watch(vaultProvider.future).then((escolha) => escolha.vault));
 });
 
 final settingProvider = Provider.family<dynamic, ({String key, String? consoleId})>((ref, params) {
@@ -31,22 +33,29 @@ final settingWatcherProvider = Provider.family<Map<String, dynamic>, String>((re
 
 class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
+  final Future<SecretVault> _vault;
 
-  SettingsNotifier() : super(const AppSettings()) {
+  SettingsNotifier(this._vault) : super(const AppSettings()) {
     _loadSettings();
   }
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
+    final settings = await _settingsService.loadSettings(await _vault);
     state = settings;
+  }
+
+  /// Troca o estado e salva. Existe porque onze métodos faziam as duas linhas
+  /// na mão, e agora cada um deles precisaria também esperar o cofre.
+  Future<void> _persist(AppSettings novo) async {
+    state = novo;
+    await _settingsService.saveSettings(novo, await _vault);
   }
 
   Future<void> setGeneralSetting<T>(String key, T value) async {
     final newState = state.copyWith(
       generalSettings: state.generalSettings.setSetting(key, value),
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setConsoleSetting<T>(String consoleId, String key, T? value) async {
@@ -59,8 +68,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       },
     );
 
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setSetting<T>(String key, T value, [String? consoleId]) async {
@@ -125,11 +133,14 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final updated = token.isEmpty
         ? current.copyWith(clearAuthToken: true)
         : current.copyWith(authToken: token);
-    final newState = state.copyWith(
+    if (token.isEmpty) {
+      // `saveSettings` de propósito não apaga o que está null. Sair da conta
+      // tem que apagar, e é aqui que isso é dito.
+      await _settingsService.clearConsoleToken(consoleId, await _vault);
+    }
+    await _persist(state.copyWith(
       consoleSettings: {...state.consoleSettings, consoleId: updated},
-    );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    ));
   }
 
   String? getConsoleAuthToken(String consoleId) {
@@ -138,22 +149,19 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setIaCredentials(String accessKey, String secretKey, {String? cookies}) async {
     final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey, iaCookies: cookies);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> clearIaCredentials() async {
-    final newState = state.copyWith(clearIaCredentials: true);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _settingsService.clearIaSecrets(await _vault);
+    await _persist(state.copyWith(clearIaCredentials: true));
   }
 
   Future<void> setCatalogSourceUrl(String? url) async {
     final newState = url == null || url.isEmpty
         ? state.copyWith(clearCatalogSourceUrl: true)
         : state.copyWith(catalogSourceUrl: url);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   bool getNszDecompressEnabled() => state.nszDecompressEnabled;
@@ -162,8 +170,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setNszDecompressEnabled(bool enabled) async {
     final newState = state.copyWith(nszDecompressEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setNszKeysPath(String keysPath) async {
@@ -171,8 +178,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       nszKeysPath: keysPath.isEmpty ? null : keysPath,
       clearNszKeysPath: keysPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setChdmanPath(String chdmanPath) async {
@@ -180,8 +186,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       chdmanPath: chdmanPath.isEmpty ? null : chdmanPath,
       clearChdmanPath: chdmanPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   String? getBoot9Path() => state.boot9Path;
@@ -191,8 +196,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       boot9Path: path.isEmpty ? null : path,
       clearBoot9Path: path.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setPreferredLocalIp(String? ip) async {
@@ -200,7 +204,6 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       preferredLocalIp: (ip == null || ip.isEmpty) ? null : ip,
       clearPreferredLocalIp: ip == null || ip.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 }

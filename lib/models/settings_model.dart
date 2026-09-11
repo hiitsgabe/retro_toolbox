@@ -83,9 +83,6 @@ class AppSettings {
     return {
       'consoleSettings': consoleSettings.map((key, value) => MapEntry(key, value.toJson())),
       'generalSettings': generalSettings.toJson(),
-      if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
-      if (iaSecretKey != null) 'iaSecretKey': iaSecretKey,
-      if (iaCookies != null) 'iaCookies': iaCookies,
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (chdmanPath != null) 'chdmanPath': chdmanPath,
@@ -155,7 +152,6 @@ class BaseSettings {
       AppSettings.maxParallelDownloads: maxParallelDownloads,
       AppSettings.maxParallelExtractions: maxParallelExtractions,
       if (extractToFolder != null) AppSettings.extractToFolder: extractToFolder,
-      if (authToken != null) 'authToken': authToken,
     };
   }
 
