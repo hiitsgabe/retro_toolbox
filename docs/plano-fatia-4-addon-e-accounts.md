@@ -3833,7 +3833,7 @@ O `Game` de hoje não sabe de onde veio (`game_model.dart:4-19`: título, url, t
 
 Dois detalhes que decidem a forma do campo:
 
-**Ele é não-nulável, com valor padrão.** O `Game` vai e volta de disco: `_fetchCatalog` escreve `jsonEncode(catalog.map((g) => g.toJson()))` no arquivo de cache (`catalog_service.dart:265`) e `loadCatalog` lê de lá (`:210-211`). Todo cache escrito antes desta fatia existe e não tem o campo. Se o campo fosse nulável, cada consumidor teria que lembrar do `?? algo`, e o primeiro que esquecesse produziria um jogo sem fonte no meio da grade. Não-nulável com padrão resolve a degradação **num lugar só**, dentro do `fromJson`.
+**Ele é não-nulável, com valor padrão.** O `Game` vai e volta de disco: `_fetchCatalog` escreve `jsonEncode(catalog.map((g) => g.toJson()))` no arquivo de cache (`catalog_service.dart:327`) e `loadCatalog` lê de lá (`:271-273`). Todo cache escrito antes desta fatia existe e não tem o campo. Se o campo fosse nulável, cada consumidor teria que lembrar do `?? algo`, e o primeiro que esquecesse produziria um jogo sem fonte no meio da grade. Não-nulável com padrão resolve a degradação **num lugar só**, dentro do `fromJson`.
 
 **O padrão é `kBuiltinAddonId` e não `kBuiltinSourceId`.** O `sourceId` agora é id de addon, e ele é comparado contra a lista de ids que o usuário arrastou. Um jogo marcado `'listagem'` nunca casaria com nenhum addon da lista. O `kBuiltinSourceId` da fatia 3 era explicitamente provisório (`source_pick_model.dart:4-17`: "Na fatia 4 ele vira o id do addon que serviu o arquivo") e a Task 15 o remove.
 
@@ -3909,7 +3909,7 @@ o campo, depois de `consoleId` (linha 8):
   /// O id do addon que serviu este arquivo.
   ///
   /// Não-nulável de propósito. O `Game` vai e volta de disco pelo cache de
-  /// catálogo (`catalog_service.dart:265` escreve, `:210` lê), e todo cache
+  /// catálogo (`catalog_service.dart:327` escreve, `:271` lê), e todo cache
   /// escrito antes da fatia 4 não tem o campo. Com padrão, a degradação
   /// acontece uma vez, no `fromJson`; com `null`, ela viraria um `??` em cada
   /// consumidor e o primeiro esquecido põe um jogo sem fonte na grade.
