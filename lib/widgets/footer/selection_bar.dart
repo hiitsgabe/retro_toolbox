@@ -42,6 +42,13 @@ class SelectionBar extends StatelessWidget {
             Expanded(
               child: Text(
                 count == 1 ? '1 selecionado' : '$count selecionados',
+                // Mesma política do `footer.dart:99-100`, e pelo mesmo motivo:
+                // a faixa tem altura fixa, então com `textScaler` grande em
+                // tela estreita o parágrafo pede mais altura do que recebe e
+                // é cortado no meio da palavra, sem reticência e sem a faixa
+                // amarela de overflow. Medido em 320dp e 360dp com escala 2.0.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: scheme.onPrimary,
                   fontSize: 13,
