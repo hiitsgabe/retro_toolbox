@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/services/directory_service.dart';
@@ -9,15 +10,6 @@ import 'package:roms_downloader/services/secret_vault.dart';
 
 class SettingsService {
   static const String _settingsKey = 'app_settings';
-
-  /// O addon a que pertencem os consoles do catálogo de hoje.
-  ///
-  /// Enquanto existe uma fonte só, este id é constante. Quando houver N
-  /// addons, este espelho continua sendo só do embutido, e o token dos outros
-  /// passa a ser lido sob demanda no cofre (Task 19). Ele vive aqui, e não em
-  /// [SecretRef], porque é fato sobre a instalação e não sobre o formato da
-  /// chave.
-  static const String builtinAddonId = 'builtin';
 
   final DirectoryService _directoryService = DirectoryService();
 
@@ -28,7 +20,7 @@ class SettingsService {
 
       if (settingsJson != null) {
         final cru = jsonDecode(settingsJson) as Map<String, dynamic>;
-        final limpo = await SecretMigration(vault: vault, builtinAddonId: builtinAddonId).drain(cru);
+        final limpo = await SecretMigration(vault: vault, builtinAddonId: kBuiltinAddonId).drain(cru);
 
         // Só reescreve se a migração de fato tirou alguma coisa. A carga roda
         // em toda abertura do app; reescrever sempre é escrita em disco por
@@ -59,7 +51,7 @@ class SettingsService {
   Future<AppSettings> _hydrate(AppSettings settings, SecretVault vault) async {
     final consoles = <String, BaseSettings>{};
     for (final entrada in settings.consoleSettings.entries) {
-      final token = await vault.read(SecretRef.addonToken(builtinAddonId, entrada.key));
+      final token = await vault.read(SecretRef.addonToken(kBuiltinAddonId, entrada.key));
       consoles[entrada.key] = token == null ? entrada.value : entrada.value.withAuthToken(token);
     }
 
@@ -94,7 +86,7 @@ class SettingsService {
     await _writeIfPresent(vault, SecretRef.iaSecretKey, settings.iaSecretKey);
     await _writeIfPresent(vault, SecretRef.iaCookies, settings.iaCookies);
     for (final entrada in settings.consoleSettings.entries) {
-      await _writeIfPresent(vault, SecretRef.addonToken(builtinAddonId, entrada.key), entrada.value.authToken);
+      await _writeIfPresent(vault, SecretRef.addonToken(kBuiltinAddonId, entrada.key), entrada.value.authToken);
     }
   }
 
@@ -110,7 +102,7 @@ class SettingsService {
   }
 
   Future<void> clearConsoleToken(String consoleId, SecretVault vault) async {
-    await vault.delete(SecretRef.addonToken(builtinAddonId, consoleId));
+    await vault.delete(SecretRef.addonToken(kBuiltinAddonId, consoleId));
   }
 
   T? getGeneralSetting<T>(AppSettings settings, String key) {

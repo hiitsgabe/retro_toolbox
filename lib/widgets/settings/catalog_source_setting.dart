@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/services/settings_service.dart';
 
 class CatalogSourceSetting extends ConsumerStatefulWidget {
   const CatalogSourceSetting({super.key});
@@ -78,7 +78,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
         () => _catalogService.setCatalogFromJson(
               File(path).readAsStringSync(),
               vault: vault,
-              addonId: SettingsService.builtinAddonId,
+              addonId: kBuiltinAddonId,
             ),
         'Catalog imported.');
   }
@@ -92,7 +92,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
         () => _catalogService.setCatalogFromUrl(
               url,
               vault: vault,
-              addonId: SettingsService.builtinAddonId,
+              addonId: kBuiltinAddonId,
             ),
         'Catalog loaded from URL.');
   }
