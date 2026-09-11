@@ -617,7 +617,7 @@ git commit -m "feat(cofre): contrato de cofre reusavel e o cofre em memoria"
 - Create: `lib/services/prefs_vault.dart`
 - Test: `test/prefs_vault_test.dart`
 
-Esta é a metade desconfortável da decisão travada: num Linux sem chaveiro, o segredo continua em texto puro. O que esta Task **ganha** mesmo assim, e não é pouco, é que o segredo sai de dentro do `app_settings`, que é o JSON que o app serializa inteiro, loga em `debugPrint` quando dá erro e vai ganhar exportação de addon na Grupo 3. Chave separada é chave que não vaza de carona.
+Esta é a metade desconfortável da decisão travada: num Linux sem chaveiro, o segredo continua em texto puro. O que esta Task **ganha** mesmo assim, e não é pouco, é que o segredo sai de dentro do `app_settings`, que é o JSON que o app serializa inteiro e **cujo erro de leitura imprime o próprio JSON de volta**. Medido, não deduzido: a `FormatException` do `jsonDecode` embute o trecho da fonte na mensagem, e o `debugPrint('Error loading settings: $e')` do caminho de erro (`settings_service.dart:21`) manda isso para o log com o segredo dentro. Um `app_settings` corrompido por qualquer motivo vaza `iaSecretKey` no log. Chave separada é chave que não vaza de carona.
 
 O prefixo `secret:` existe para que a Task 5 possa afirmar que a migração não deixou nada para trás, e para que um `getKeys()` futuro consiga listar só segredo.
 
@@ -645,9 +645,10 @@ void main() {
 
   test('o segredo não encosta na chave que guarda as settings', () async {
     // O ganho real desta implementação não é cifrar, porque ela não cifra. É
-    // tirar o segredo de dentro do `app_settings`, que o app serializa
-    // inteiro, imprime em `debugPrint` no caminho de erro
-    // (`settings_service.dart:21`) e vai ganhar exportação na Grupo 3.
+    // tirar o segredo de dentro do `app_settings`, cujo erro de leitura
+    // imprime o próprio JSON de volta: a `FormatException` do `jsonDecode`
+    // embute o trecho da fonte, e o `debugPrint` do caminho de erro
+    // (`settings_service.dart:21`) manda isso para o log com o segredo dentro.
     SharedPreferences.setMockInitialValues({'app_settings': '{"nszDecompressEnabled":true}'});
     SharedPreferences.resetStatic();
     final prefs = await SharedPreferences.getInstance();
