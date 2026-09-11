@@ -428,6 +428,16 @@ void main() {
     expect(find.text('3 selecionados'), findsOneWidget);
   });
 
+  testWidgets('ocupa exatamente 48 de altura com seleção', (tester) async {
+    await tester.pumpWidget(_host(count: 3));
+
+    // O contrário do primeiro caso, e não uma redundância dele: o `IconButton`
+    // e o `FilledButton` medem 48 sozinhos por causa do alvo de toque padrão
+    // do Material, então o `SizedBox(height: 48)` não tem folga nenhuma.
+    // Qualquer padding a mais estoura a faixa, e sem este caso nada avisa.
+    expect(tester.getSize(find.byType(SelectionBar)).height, 48);
+  });
+
   testWidgets('o × chama onClear e o botão chama onDownload', (tester) async {
     final fired = <String>[];
     await tester.pumpWidget(_host(
@@ -503,6 +513,13 @@ class SelectionBar extends StatelessWidget {
             Expanded(
               child: Text(
                 count == 1 ? '1 selecionado' : '$count selecionados',
+                // Mesma política do `footer.dart:99-100`, e pelo mesmo motivo:
+                // a faixa tem altura fixa, então com `textScaler` grande em
+                // tela estreita o parágrafo pede mais altura do que recebe e
+                // é cortado no meio da palavra, sem reticência e sem a faixa
+                // amarela de overflow. Medido em 320dp e 360dp com escala 2.0.
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: scheme.onPrimary,
                   fontSize: 13,
@@ -531,7 +548,7 @@ class SelectionBar extends StatelessWidget {
 flutter test test/selection_bar_test.dart
 ```
 
-Esperado: `+4`, zero falha.
+Esperado: `+5`, zero falha.
 
 - [ ] **Step 5: Commit**
 
@@ -628,7 +645,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+184 -1` na suíte (178 da linha de base mais 2 da Task 1 e 4 da Task 2).
+Esperado: 22 findings e zero erro no analyze; `+185 -1` na suíte (178 da linha de base mais 2 da Task 1 e 5 da Task 2).
 
 - [ ] **Step 5: Commit**
 
@@ -1336,7 +1353,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+202 -1` na suíte. A conta: 178 da linha de base, mais 2 da Task 1, 4 da Task 2, 6 da Task 4, 8 da Task 5 e 4 desta.
+Esperado: 22 findings e zero erro; `+203 -1` na suíte. A conta: 178 da linha de base, mais 2 da Task 1, 5 da Task 2, 6 da Task 4, 8 da Task 5 e 4 desta.
 
 Confira à mão, porque nenhum teste cobre isso: rode o app, marque três jogos, aperte "Baixar", tire um da folha, confirme, e veja que dois entram na fila e a barra roxa apaga.
 
@@ -3318,7 +3335,7 @@ Agora a suíte inteira, porque esta Task fecha o Grupo 3:
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+255 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Esperado: `+256 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 10: Commit da ligação**
 
@@ -4683,7 +4700,7 @@ Se os dois testes de `tap` falharem com `Actual: _TextFinder:<zero widgets>` log
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+286 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 108 das dezesseis Tasks.
+Esperado: `+287 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 109 das dezesseis Tasks.
 
 - [ ] **Step 7: Commit**
 
@@ -6213,7 +6230,7 @@ Se `o Baixar da linha devolve aquela fonte` pegar o botão errado, confira a ord
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+320 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
+Esperado: `+321 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
 
 - [ ] **Step 11: Commit**
 
@@ -6455,7 +6472,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+322 -1` na suíte, sendo os 320 da Task 18 mais os 2 desta.
+Esperado: 22 findings e zero erro no analyze; `+323 -1` na suíte, sendo os 321 da Task 18 mais os 2 desta.
 
 - [ ] **Step 9: Commit**
 
@@ -6810,7 +6827,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+330 -1` na suíte, sendo os 322 da Task 19 mais os 8 desta.
+Esperado: 22 findings e zero erro no analyze; `+331 -1` na suíte, sendo os 323 da Task 19 mais os 8 desta.
 
 - [ ] **Step 13: Commit**
 
@@ -7053,7 +7070,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+333 -1` na suíte, sendo os 330 da Task 20 mais os 3 desta.
+Esperado: 22 findings e zero erro; `+334 -1` na suíte, sendo os 331 da Task 20 mais os 3 desta.
 
 - [ ] **Step 8: Commit**
 
@@ -7192,34 +7209,34 @@ O suspeito mais provável é `use_build_context_synchronously` em `home_screen.d
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+333 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Esperado: `+334 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
 
-A conta dos 330, para o caso de o número não bater e você precisar saber onde procurar:
+A conta dos 334, para o caso de o número não bater e você precisar saber onde procurar:
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
 | linha de base | — | 178 |
 | 1, `clearSelection` | 2 | 180 |
-| 2, `SelectionBar` | 4 | 184 |
-| 3, fiação | 0 | 184 |
-| 4, `BatchPlan` | 6 | 190 |
-| 5, folha de lote | 8 | 198 |
-| 6, `planFromGames` | 4 | 202 |
-| 7, `PackGridEntry` | 4 | 206 |
-| 8, `SourceIndex` | 7 | 213 |
-| 9, `filterPackEntries` | 7 | 220 |
-| 10, providers | 7 | 227 |
-| 11, `PackGridItem` | 11 | 238 |
-| 12, `PackGrid` | 7 | 245 |
-| 13, jogos no disco | 10 | 255 |
-| 14, `planFromEntries` | 11 | 266 |
-| 15, tela de detalhe | 9 | 275 |
-| 16, sem fonte e outras fontes | 11 | 286 |
-| 17, verificação por CRC | 16 | 302 |
-| 18, CRC na tela de detalhe | 18 | 320 |
-| 19, roteamento de modo | 2 | 322 |
-| 20, lote de MODO PACK | 8 | 330 |
-| 21, barra na tela de detalhe | 3 | 333 |
+| 2, `SelectionBar` | 5 | 185 |
+| 3, fiação | 0 | 185 |
+| 4, `BatchPlan` | 6 | 191 |
+| 5, folha de lote | 8 | 199 |
+| 6, `planFromGames` | 4 | 203 |
+| 7, `PackGridEntry` | 4 | 207 |
+| 8, `SourceIndex` | 7 | 214 |
+| 9, `filterPackEntries` | 7 | 221 |
+| 10, providers | 7 | 228 |
+| 11, `PackGridItem` | 11 | 239 |
+| 12, `PackGrid` | 7 | 246 |
+| 13, jogos no disco | 10 | 256 |
+| 14, `planFromEntries` | 11 | 267 |
+| 15, tela de detalhe | 9 | 276 |
+| 16, sem fonte e outras fontes | 11 | 287 |
+| 17, verificação por CRC | 16 | 303 |
+| 18, CRC na tela de detalhe | 18 | 321 |
+| 19, roteamento de modo | 2 | 323 |
+| 20, lote de MODO PACK | 8 | 331 |
+| 21, barra na tela de detalhe | 3 | 334 |
 
 - [ ] **Step 6: Regressão de MODO FONTE, à mão**
 
