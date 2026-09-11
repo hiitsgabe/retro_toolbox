@@ -3624,6 +3624,30 @@ E os testes no fim de `main`:
     expect(plan.picks.single.reason, 'vem do addon de maior prioridade');
   });
 
+  test('a prioridade do addon escolhe a fonte, não só escreve o motivo', () {
+    // O caso acima afirma só o `reason`, e o `reason` sai de `_reason`, que
+    // recalcula `_priorityRank` por conta própria. Com isso, neutralizar o
+    // eixo de addon dentro de `_compare` não deixa nenhum teste vermelho, e o
+    // estrago é pior que um ramo morto: o desempate cairia na ordem de
+    // chegada, o lote baixaria da fonte lenta, e o motivo continuaria dizendo
+    // que ela veio do addon de maior prioridade. Texto certo, arquivo errado.
+    //
+    // As duas fontes diferem no `size`, que não entra em `_compare`, então
+    // quem ganhou o `sort` fica observável. A lenta vem primeiro de propósito:
+    // é ela que venceria pela ordem de chegada.
+    final plan = _plano(
+      [
+        _entrada('Chrono Trigger', [
+          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento', size: 10),
+          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido', size: 20),
+        ]),
+      ],
+      prioridade: const ['rapido', 'lento'],
+    );
+
+    expect(plan.picks.single.size, 20);
+  });
+
   test('empate em tudo fica com a primeira, e o motivo admite o empate', () {
     final plan = _plano([
       _entrada('Chrono Trigger', [
@@ -3863,7 +3887,7 @@ String _reason(
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `+15`, zero falha. São os 4 da Task 6 mais os 11 desta.
+Esperado: `+16`, zero falha. São os 4 da Task 6 mais os 12 desta.
 
 Se o teste do empate total falhar escolhendo a segunda fonte, o culpado é o desempate por `order`: confira que ele é a **última** linha de `_compare` e que `order` é o índice do laço, não o índice depois do `sort`.
 
@@ -3873,7 +3897,7 @@ Agora a suíte inteira, porque esta Task fecha o Grupo 3:
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+271 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Esperado: `+272 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 5: Commit**
 
@@ -4375,7 +4399,7 @@ class _Destaque extends StatelessWidget {
 flutter test test/game_detail_screen_test.dart test/source_pick_model_test.dart test/source_pick_service_test.dart test/pack_grid_provider_test.dart
 ```
 
-Esperado: `+37`, zero falha. São 7 desta tela, 6 do modelo, 15 do serviço e 9 dos providers.
+Esperado: `+38`, zero falha. São 7 desta tela, 6 do modelo, 16 do serviço e 9 dos providers.
 
 Tropeço provável: se `find.text('Chrono Trigger')` achar mais de um widget no primeiro teste, é o título no `AppBar` mais o título no topo. Por isso o teste usa `findsWidgets` e não `findsOneWidget`.
 
@@ -4820,7 +4844,7 @@ Se os dois testes de `tap` falharem com `Actual: _TextFinder:<zero widgets>` log
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+291 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 113 das dezesseis Tasks.
+Esperado: `+292 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 114 das dezesseis Tasks.
 
 - [ ] **Step 7: Commit**
 
@@ -5587,7 +5611,7 @@ O `switch` sem `break` é Dart 3 e passa no analisador. Conferido rodando `dart 
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `+23`, zero falha. São os 15 das Tasks 6 e 14 mais os 8 desta.
+Esperado: `+24`, zero falha. São os 16 das Tasks 6 e 14 mais os 8 desta.
 
 - [ ] **Step 5: Ajuste o `_host` do teste de tela**
 
@@ -6334,7 +6358,7 @@ Sumiu o `_outrasFontes` da Task 16: quem tira a vencedora da lista agora é o fi
 flutter test test/game_detail_screen_test.dart test/source_pick_service_test.dart
 ```
 
-Esperado: `+51`, zero falha. São 28 da tela e 23 do serviço.
+Esperado: `+52`, zero falha. São 28 da tela e 24 do serviço.
 
 Três tropeços prováveis:
 
@@ -6350,7 +6374,7 @@ Se `o Baixar da linha devolve aquela fonte` pegar o botão errado, confira a ord
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+325 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
+Esperado: `+326 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
 
 - [ ] **Step 11: Commit**
 
@@ -6615,7 +6639,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+327 -1` na suíte, sendo os 325 da Task 18 mais os 2 desta.
+Esperado: 22 findings e zero erro no analyze; `+328 -1` na suíte, sendo os 326 da Task 18 mais os 2 desta.
 
 - [ ] **Step 9: Commit**
 
@@ -6979,7 +7003,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+335 -1` na suíte, sendo os 327 da Task 19 mais os 8 desta.
+Esperado: 22 findings e zero erro no analyze; `+336 -1` na suíte, sendo os 328 da Task 19 mais os 8 desta.
 
 - [ ] **Step 13: Commit**
 
@@ -7222,7 +7246,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+338 -1` na suíte, sendo os 335 da Task 20 mais os 3 desta.
+Esperado: 22 findings e zero erro; `+339 -1` na suíte, sendo os 336 da Task 20 mais os 3 desta.
 
 - [ ] **Step 8: Commit**
 
@@ -7361,9 +7385,9 @@ O suspeito mais provável é `use_build_context_synchronously` em `home_screen.d
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+338 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Esperado: `+339 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
 
-A conta dos 338, para o caso de o número não bater e você precisar saber onde procurar:
+A conta dos 339, para o caso de o número não bater e você precisar saber onde procurar:
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
@@ -7381,14 +7405,14 @@ A conta dos 338, para o caso de o número não bater e você precisar saber onde
 | 11, `PackGridItem` | 11 | 243 |
 | 12, `PackGrid` | 7 | 250 |
 | 13, jogos no disco | 10 | 260 |
-| 14, `planFromEntries` | 11 | 271 |
-| 15, tela de detalhe | 9 | 280 |
-| 16, sem fonte e outras fontes | 11 | 291 |
-| 17, verificação por CRC | 16 | 307 |
-| 18, CRC na tela de detalhe | 18 | 325 |
-| 19, roteamento de modo | 2 | 327 |
-| 20, lote de MODO PACK | 8 | 335 |
-| 21, barra na tela de detalhe | 3 | 338 |
+| 14, `planFromEntries` | 12 | 272 |
+| 15, tela de detalhe | 9 | 281 |
+| 16, sem fonte e outras fontes | 11 | 292 |
+| 17, verificação por CRC | 16 | 308 |
+| 18, CRC na tela de detalhe | 18 | 326 |
+| 19, roteamento de modo | 2 | 328 |
+| 20, lote de MODO PACK | 8 | 336 |
+| 21, barra na tela de detalhe | 3 | 339 |
 
 - [ ] **Step 6: Regressão de MODO FONTE, à mão**
 
