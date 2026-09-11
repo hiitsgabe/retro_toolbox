@@ -6964,6 +6964,13 @@ flutter run -d linux
 4. Tire um da folha e confirme. Dois entram na fila e a barra apaga.
 5. Marque um jogo que a grade mostra sem fonte. A folha tem que abrir com ele embaixo de "Não vão para a fila", com o motivo, e com o botão Baixar desligado.
 6. Num console **sem** pacote, repita os passos 1, 3 e 4. Tem que funcionar igualzinho a antes desta fatia.
+7. Marque um jogo que **já está baixando** e aperte Baixar. Ele vai entrar na fila uma segunda vez. **Isso é esperado nesta fatia, não é regressão sua, e não conserte aqui.** Veja a limitação conhecida abaixo.
+
+**Limitação conhecida, herdada e deliberadamente não consertada aqui: o lote enfileira duplicata.** `TaskQueueService.startDownloads` (`task_queue_service.dart:51`) enfileira sem filtrar por estado da tarefa, e `TaskQueueNotifier.enqueue` (`task_queue_provider.dart:21`) anexa sem procurar duplicata. Quem filtra é o outro `startDownloads`, o do notifier (`download_provider.dart:260`), e o caminho do lote nunca passou por ele.
+
+Isto é **anterior à fatia 3**, conferido e não deduzido: em `f9da109` o `header.dart:191` já chamava o mesmo método estático sem filtro, e o portão do botão era `hasDownloadableSelectedGames()`, que é `selectedGames.any(isTaskDownloadable)` (`download_provider.dart:337-340` naquele commit). **`any`, não `every`**: bastava um jogo novo na seleção para o botão ligar e os já-baixando irem junto. O que a fatia 3 muda é só o caso degenerado em que *nenhum* selecionado é baixável, que antes deixava o botão apagado e agora abre a folha.
+
+Não se conserta nesta fatia por dois motivos. O filtro certo mora em `download_provider.dart` e `task_queue_service.dart`, os dois na tabela de intocados que a Task 22 confere. E a alternativa de fazer o `gameResolverProvider` da Task 15 devolver `null` para o já-enfileirado daria ao usuário o motivo errado, "a fonte saiu da listagem antes de a fila começar", que é mentira. O conserto honesto é a fatia 4, que reescreve a camada de download e de contas de qualquer jeito: ou `enqueue` passa a ser idempotente por `taskId`, ou `planFromEntries` ganha um conjunto de já-enfileirados e emite `PickFailure` com motivo próprio.
 
 - [ ] **Step 12: Prove que não quebrou nada**
 
