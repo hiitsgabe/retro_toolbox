@@ -7919,8 +7919,16 @@ import 'package:roms_downloader/providers/vault_provider.dart';
 ///
 /// Carregando não avisa: enquanto a sondagem não voltou, o app não sabe se
 /// cifra, e um aviso que pisca em todo boot de máquina que tem chaveiro é um
-/// aviso que o usuário aprende a ignorar. Erro avisa, porque chaveiro que não
-/// abriu é exatamente o caso.
+/// aviso que o usuário aprende a ignorar. Erro avisa, e avisa pior que o caso
+/// normal, porque aí não há cofre nenhum.
+///
+/// **O ramo de erro não é o chaveiro falhando.** Chaveiro que não abre é o
+/// caminho previsto: a sonda engole a exceção, devolve `false` e a escolha cai
+/// para a reserva, o que chega aqui como `data` com `encryptedAtRest: false`. O
+/// único jeito de o `error` acontecer é a **reserva** levantar, ou seja
+/// `PrefsVault.open()` (`vault_provider.dart:33`, fora de qualquer `try`). Por
+/// isso a mensagem fala em cofre e não em chaveiro: culpar o chaveiro aqui
+/// mandaria o usuário procurar o problema no lugar errado.
 class VaultWarning extends ConsumerWidget {
   const VaultWarning({super.key});
 
@@ -7928,7 +7936,7 @@ class VaultWarning extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final texto = ref.watch(vaultProvider).when(
           loading: () => null,
-          error: (e, _) => 'Não deu para abrir o chaveiro do sistema: $e',
+          error: (e, _) => 'Não deu para abrir cofre nenhum, nem o do sistema nem a reserva: $e',
           data: (escolha) => escolha.encryptedAtRest ? null : 'As credenciais ficam em texto puro neste aparelho.',
         );
     if (texto == null) return const SizedBox.shrink();
