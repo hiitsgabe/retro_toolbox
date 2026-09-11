@@ -4607,6 +4607,13 @@ Depois, o método privado:
   /// um console servido por um addon de terceiro com auth aparece na listagem
   /// do Tinfoil e falha ao baixar. O caminho normal do app, que é a grade e o
   /// download pelo `download_provider`, usa o token certo por addon.
+  ///
+  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
+  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
+  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
+  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
+  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
+  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
   Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
     final token = settings.consoleSettings[consoleId]?.authToken ?? '';
     return token.isEmpty ? const {} : {kBuiltinAddonId: token};
@@ -4614,6 +4621,8 @@ Depois, o método privado:
 ```
 
 O `settings.consoleSettings[...].authToken` é o espelho do embutido, e continua sendo exatamente o que estas duas linhas liam antes. O comportamento de hoje fica idêntico; o que muda é que ele para de vazar para os outros addons.
+
+**Não procure os outros dois chamadores neste Step.** `lib/providers/jdkv_server_provider.dart:96` e `lib/services/sports_rom_lookup.dart:41` também chamam `loadCatalog`, mas passam só o id: nunca passaram `authToken` e por isso não quebram na troca de assinatura. Um console com auth já falhava por lá antes desta fatia e continua falhando igual. Isso é dívida anterior, está escrito no doc de `_tokensDoEmbutido` para não sumir, e não é desta Task consertar.
 
 - [ ] **Step 6: Ligue o provider ao cofre**
 
