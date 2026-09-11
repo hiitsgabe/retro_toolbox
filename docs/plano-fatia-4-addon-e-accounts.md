@@ -327,8 +327,23 @@ class SecretRef {
   static String debrid(String provider) => 'debrid/${_sane(provider)}';
 
   /// Troca o que estrutura a chave por `_`, para que nenhum id consiga forjar
-  /// a chave de outro. Só `:` e `/` são estruturais, então trocar os dois
-  /// basta, e trocar mais colapsaria ids distintos num só.
+  /// a chave de outro. Só `:` e `/` são estruturais, então trocar os dois basta.
+  ///
+  /// A troca **não** é injetiva: `a:b`, `a/b` e `a_b` saem todos como `a_b`.
+  /// Não se perde nada com isso, porque `_nameToId`
+  /// (`catalog_service.dart:61`) já colapsa todo não alfanumérico em `_`, e
+  /// então os ids reais nunca distinguem esses três. Trocar mais, tipo
+  /// `[^a-z0-9]`, aí sim perderia: `meu-rts` e `meu_rts` são dois addons e
+  /// virariam a mesma chave.
+  ///
+  /// Parte vazia sai sem guarda, de propósito. `_nameToId` devolve `''` para
+  /// um nome só de pontuação, e aí `addonToken('x', '')` é igual a
+  /// `addonPrefix('x')`. É inofensivo: o prefixo só serve para apagar em lote
+  /// e nunca é chave de nada, e dois consoles de id vazio já são **um**
+  /// console, porque `_parseConsoles` (`catalog_service.dart:91`) grava os
+  /// dois na mesma entrada do mapa. Levantar aqui derrubaria a migração da
+  /// Task 5, que itera chaves já gravadas, para defender contra uma colisão
+  /// que o catálogo colapsou antes.
   static String _sane(String part) => part.replaceAll(RegExp(r'[:/]'), '_');
 }
 ```
