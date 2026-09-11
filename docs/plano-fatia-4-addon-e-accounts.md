@@ -2246,10 +2246,12 @@ import 'package:roms_downloader/utils/console_auth.dart';
 Confira que nenhum dos quatro sobrou:
 
 ```bash
-grep -rn "auth\??\[.token.\]" lib/
+grep -rnE "auth\??\['token'\]" lib/
 ```
 
 Esperado: nenhuma linha. Se aparecer alguma em `console_model.dart`, é o `toJson`/`fromJson` do modelo, que continua sabendo carregar o campo; o que não pode sobrar é **leitura para decidir autenticação**.
+
+**O `-E` é obrigatório, não é estilo.** Sem ele o `grep` é BRE, e aí `\?` vira quantificador sobre o `h` de `auth` enquanto o segundo `?` vira literal: o padrão passa a exigir uma `?` depois de `auth`, e **os únicos três sítios que casam são os que têm `auth?[`**. O quarto, `network.dart:41`, escreve `auth['token']` sem `?` e escapa. Medido antes da Task rodar, com os quatro ainda no lugar: o BRE achou três, o `-E` achou quatro. Quer dizer que a checagem em BRE daria "nenhuma linha" mesmo para quem esquecesse o Step 3, que é justamente o sítio que a seção 6.3 lista.
 
 - [ ] **Step 7: Rode para ver passar**
 
