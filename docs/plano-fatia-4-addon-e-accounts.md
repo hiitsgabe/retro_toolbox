@@ -8886,7 +8886,7 @@ A seção 6.4 do spec de arquitetura diz que o **Retro Tools Server** monta um c
 
 Esta fatia mexeu no formato: `harvestAuthTokens` tira `auth.token` e põe `requires_token`, a fusão passou a carregar `ConsoleSource` por console, e o id do addon virou chave de cofre. Nada disso quebra o RTS, que nunca emitiu `auth`. O que não existe é um teste que caia no dia em que quebrar, e o custo de escrevê-lo é cinco casos sem uma linha de produção.
 
-`RtsServerService.consoleJson` e `buildConsolesJson` são estáticos e puros (`rts_server_service.dart:13-23`), então o teste liga o produtor no consumidor sem subir servidor.
+`RtsServerService.consoleJson` e `buildConsolesJson` são estáticos e puros (`rts_server_service.dart:13-24`), então o teste liga o produtor no consumidor sem subir servidor.
 
 - [ ] **Step 1: Escreva os testes**
 
