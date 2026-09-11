@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
@@ -27,7 +28,7 @@ String _appSettings({String? iaAccessKey, String? authTokenSnes}) {
   });
 }
 
-String _chaveDoSnes() => SecretRef.addonToken(SettingsService.builtinAddonId, 'snes');
+String _chaveDoSnes() => SecretRef.addonToken(kBuiltinAddonId, 'snes');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -141,11 +142,11 @@ void main() {
   test('apagar o token de um console não leva o do vizinho', () async {
     final vault = MemoryVault();
     await vault.write(_chaveDoSnes(), 'tok-snes');
-    await vault.write(SecretRef.addonToken(SettingsService.builtinAddonId, 'n64'), 'tok-n64');
+    await vault.write(SecretRef.addonToken(kBuiltinAddonId, 'n64'), 'tok-n64');
 
     await SettingsService().clearConsoleToken('snes', vault);
 
     expect(await vault.read(_chaveDoSnes()), isNull);
-    expect(await vault.read(SecretRef.addonToken(SettingsService.builtinAddonId, 'n64')), 'tok-n64');
+    expect(await vault.read(SecretRef.addonToken(kBuiltinAddonId, 'n64')), 'tok-n64');
   });
 }

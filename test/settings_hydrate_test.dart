@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
@@ -26,7 +27,7 @@ Future<void> _prefsCom(String appSettings) async {
 
 Future<SecretVault> _cofreComTokenDoSnes() async {
   final vault = MemoryVault();
-  await vault.write(SecretRef.addonToken(SettingsService.builtinAddonId, 'snes'), 'tok-snes');
+  await vault.write(SecretRef.addonToken(kBuiltinAddonId, 'snes'), 'tok-snes');
   return vault;
 }
 
