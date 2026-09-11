@@ -9,7 +9,10 @@ import 'package:roms_downloader/widgets/game_grid/game_grid.dart';
 import 'package:roms_downloader/widgets/game_grid/game_cover_flow.dart';
 import 'package:roms_downloader/widgets/footer/footer.dart';
 import 'package:roms_downloader/widgets/footer/selection_bar.dart';
+import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/services/task_queue_service.dart';
+import 'package:roms_downloader/widgets/game_grid/batch_confirm_sheet.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 
@@ -21,6 +24,40 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
+  Future<void> _confirmarLote() async {
+    final catalogState = ref.read(catalogProvider);
+    final selecionados =
+        catalogState.games.where((g) => catalogState.selectedGames.contains(g.gameId)).toList();
+    if (selecionados.isEmpty) return;
+
+    // O plano corrente vive aqui, e não dentro da folha, porque a folha é um
+    // widget puro (Task 5): ela avisa que uma linha saiu e quem guarda o
+    // resultado é este método.
+    var plano = planFromGames(selecionados);
+    final confirmado = await showModalBottomSheet<BatchPlan>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (_, setSheetState) => BatchConfirmSheet(
+          plan: plano,
+          onConfirm: (p) => Navigator.of(sheetContext).pop(p),
+          onRemove: (gameId) => setSheetState(() => plano = plano.withoutPick(gameId)),
+        ),
+      ),
+    );
+    if (confirmado == null || !mounted) return;
+
+    await TaskQueueService.startDownloads(
+      ref,
+      context,
+      confirmado.picks.map((pick) => pick.game).toList(),
+      ref.read(appStateProvider).selectedConsole?.id,
+    );
+    if (!mounted) return;
+    ref.read(catalogProvider.notifier).clearSelection();
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
@@ -98,12 +135,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SelectionBar(
             count: ref.watch(catalogProvider.select((s) => s.selectedGames.length)),
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: () {
-              final catalogState = ref.read(catalogProvider);
-              final selectedGames =
-                  catalogState.games.where((g) => catalogState.selectedGames.contains(g.gameId)).toList();
-              TaskQueueService.startDownloads(ref, context, selectedGames, appState.selectedConsole?.id);
-            },
+            onDownload: _confirmarLote,
           ),
           Footer(),
         ],
