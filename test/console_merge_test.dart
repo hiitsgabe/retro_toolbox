@@ -101,4 +101,57 @@ void main() {
     expect(merged.consoles.keys, ['snes']);
     expect(merged.sources['snes']!.single.addonId, 'um');
   });
+
+  test('withUrls troca as urls e não perde nenhum dos outros campos', () {
+    // Todo campo aqui vale o CONTRÁRIO do padrão do construtor. Se algum
+    // valesse o padrão, apagar a linha correspondente do `withUrls` passaria
+    // despercebido: o construtor repõe o mesmo valor e o teste segue verde.
+    const cheio = Console(
+      id: 'snes',
+      name: 'Super Nintendo',
+      urls: ['https://a/'],
+      regex: r'\.sfc$',
+      boxarts: {'url': 'https://box/'},
+      fileFormat: ['sfc', 'smc'],
+      romsFolder: 'roms/snes',
+      shouldUnzip: true,
+      extractContents: false,
+      shouldFilterUsa: false,
+      usaRegex: r'\(USA\)',
+      shouldDecompressNsz: true,
+      ignoreExtensionFiltering: true,
+      downloadUrl: 'https://baixa/',
+      auth: {'type': 'cookies'},
+      listUrl: 'https://lista/',
+      listJsonFileLocation: 'items',
+      listItemId: 'title',
+      listSystems: true,
+      added: true,
+      convert3dsToCia: true,
+    );
+
+    final copia = cheio.withUrls(['https://b/', 'https://c/']);
+
+    expect(copia.urls, ['https://b/', 'https://c/']);
+    expect(copia.id, cheio.id);
+    expect(copia.name, cheio.name);
+    expect(copia.regex, cheio.regex);
+    expect(copia.boxarts, cheio.boxarts);
+    expect(copia.fileFormat, cheio.fileFormat);
+    expect(copia.romsFolder, cheio.romsFolder);
+    expect(copia.shouldUnzip, cheio.shouldUnzip);
+    expect(copia.extractContents, cheio.extractContents);
+    expect(copia.shouldFilterUsa, cheio.shouldFilterUsa);
+    expect(copia.usaRegex, cheio.usaRegex);
+    expect(copia.shouldDecompressNsz, cheio.shouldDecompressNsz);
+    expect(copia.ignoreExtensionFiltering, cheio.ignoreExtensionFiltering);
+    expect(copia.downloadUrl, cheio.downloadUrl);
+    expect(copia.auth, cheio.auth);
+    expect(copia.listUrl, cheio.listUrl);
+    expect(copia.listJsonFileLocation, cheio.listJsonFileLocation);
+    expect(copia.listItemId, cheio.listItemId);
+    expect(copia.listSystems, cheio.listSystems);
+    expect(copia.added, cheio.added);
+    expect(copia.convert3dsToCia, cheio.convert3dsToCia);
+  });
 }

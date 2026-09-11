@@ -3,8 +3,16 @@ import 'package:roms_downloader/models/addon_model.dart';
 
 void main() {
   group('Addon.idFromUrl', () {
-    test('o mesmo catálogo em http e https dá o mesmo id', () {
-      expect(Addon.idFromUrl('http://exemplo.com/catalogo.json'), Addon.idFromUrl('https://exemplo.com/catalogo.json'));
+    test('o mesmo catálogo em http e https dá o mesmo id, e o espaço colado junto não conta', () {
+      const limpa = 'https://exemplo.com/catalogo.json';
+      expect(Addon.idFromUrl('http://exemplo.com/catalogo.json'), Addon.idFromUrl(limpa));
+      // O `trim` não é enfeite: sem ele `Uri.tryParse` não acha host nenhum
+      // numa url colada com espaço, e o id vira `https_exemplo_com_catalogo_json`.
+      // Colar com espaço é o que um campo de texto entrega.
+      expect(Addon.idFromUrl('  $limpa  '), Addon.idFromUrl(limpa));
+      // E o formato fica preso a um literal. Comparar id com id sobrevive a
+      // qualquer troca do slug, inclusive a uma que embaralhe o id inteiro.
+      expect(Addon.idFromUrl(limpa), 'exemplo_com_catalogo_json');
     });
 
     test('barra final, query e fragmento não mudam o id', () {
@@ -18,12 +26,19 @@ void main() {
       expect(Addon.idFromUrl('https://WWW.Exemplo.COM/Catalogo'), Addon.idFromUrl('https://exemplo.com/catalogo'));
     });
 
-    test('dois catálogos no mesmo host têm ids diferentes', () {
+    test('dois catálogos no mesmo host têm ids diferentes, e a porta faz parte do host', () {
       expect(Addon.idFromUrl('https://exemplo.com/snes.json'), isNot(Addon.idFromUrl('https://exemplo.com/nes.json')));
+      // Dois servidores de LAN no mesmo IP, em portas diferentes, são dois
+      // addons. Com a porta fora do id eles dividiriam a chave de cofre, e o
+      // token do segundo instalado apagaria o do primeiro.
+      expect(Addon.idFromUrl('http://192.168.0.10:8080/f/0/'), isNot(Addon.idFromUrl('http://192.168.0.10:8081/f/0/')));
+      expect(Addon.idFromUrl('https://exemplo.com:8080/c.json'), isNot(Addon.idFromUrl('https://exemplo.com/c.json')));
     });
 
-    test('nunca devolve o id do embutido, nem para uma url que daria nele', () {
+    test('o id do embutido: nenhuma url cai nele, e só ele responde isBuiltin', () {
       expect(Addon.idFromUrl('https://builtin/'), isNot(kBuiltinAddonId));
+      expect(const Addon(id: kBuiltinAddonId, name: 'Listagem').isBuiltin, isTrue);
+      expect(const Addon(id: 'ultranx', name: 'UltraNX').isBuiltin, isFalse);
     });
 
     test('url sem host cai num id derivado do texto, e não vazio', () {
