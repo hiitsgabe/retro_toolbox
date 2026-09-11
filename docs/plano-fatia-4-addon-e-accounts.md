@@ -2263,7 +2263,7 @@ Se aparecer alguma em `console_model.dart`, leia antes de consertar. O `toJson`/
 flutter test test/console_auth_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Esperado: `+9`, zero falha. São os seis casos de `buildConsoleAuthHeaders` mais os três de `consoleHasToken`, que é o que o bloco do Step 1 tem. Este número já esteve escrito como `+11` e estava errado: quem fecha a conta é o Step 8, e `402 + 9 = 411` bate, enquanto `402 + 11` daria 413. Corrigido depois de medir `+9: All tests passed!` no arquivo isolado.
 
 **Tropeço provável:** `flutter analyze` acusando `unused_local_variable` para o `settings` do `setup_wizard_screen.dart`, se as duas telas usavam `settings` só dentro do `authed`. Se acontecer, `consoleHasToken(settings, c.id)` continua precisando dele, então o aviso quer dizer que você trocou por outra coisa.
 
@@ -2723,6 +2723,213 @@ O problema central desta grupo não é guardar uma lista. É este: **`Console.au
 
 Uma decisão de escopo que economiza muito churn: **o arquivo de catálogo do addon embutido continua sendo `config/consoles.json`**. Só os addons novos ganham arquivo em `config/addons/<id>.json`. Com isso `setCatalogFromJson`, `addConsole`, `resetCatalog` e `hasUserCatalog` (`catalog_service.dart:109`, `:167`, `:187`, `:193`) seguem apontando para o mesmo arquivo de sempre, e a migração da Task 11 não move byte nenhum de disco: ela só escreve uma lista de um item no `shared_preferences`. Migração que não mexe em arquivo é migração que não tem como perder o catálogo do usuário.
 
+### Task 8b: a hidratação para de inventar configuração
+
+**Files:**
+- Modify: `lib/models/settings_model.dart:129-146`
+- Modify: `lib/services/settings_service.dart:63`
+- Modify: `test/settings_service_test.dart:68-77` (só o comentário)
+- Test: `test/settings_hydrate_test.dart`
+
+Esta Task não estava no plano. Ela existe porque a revisão de qualidade da Task 6 achou, por mutação, um defeito de comportamento que a Task 6 introduziu e que nenhum teste pegava.
+
+**O defeito.** `BaseSettings.copyWith` (`settings_model.dart:140-142`) não é um `copyWith` inocente:
+
+```dart
+      autoExtract: autoExtract ?? this.autoExtract ?? true,
+      maxParallelDownloads: maxParallelDownloads ?? this.maxParallelDownloads ?? 5,
+      maxParallelExtractions: maxParallelExtractions ?? this.maxParallelExtractions ?? 2,
+```
+
+Ele **materializa padrão em campo que estava `null`**. A Task 6 pôs uma chamada dele em `_hydrate` (`settings_service.dart:63`), que roda a cada abertura do app, para todo console que tenha token no cofre. Resultado: o console ganha override explícito de `autoExtract: true`, `maxParallelDownloads: 5` e `maxParallelExtractions: 2` que o usuário nunca pediu, e isso vai para o disco no salvamento seguinte, virando permanente.
+
+**Por que não é cosmético.** `autoExtract` muda comportamento. `download_provider.dart:230` chama `getAutoExtract(game.consoleId)`, e `getSetting` (`settings_service.dart`) consulta o console **antes** do geral. Então o usuário desliga a extração automática no geral, e o único efeito de ter login num console é que aquele console volta a extrair sozinho, em silêncio, a cada abertura.
+
+**O que é novo e o que não é, com precisão.** O mecanismo é antigo: `setConsoleAuthToken` já fazia `copyWith(authToken: token)` antes da Task 6, conferido em `git show 058cef5~1:lib/providers/settings_provider.dart`. Mas ali ele dispara **por ação do usuário**, uma vez, na tela em que ele está mexendo em configuração. O que a Task 6 acrescentou é o disparo **a cada carga**. E a Task 8 piora: com a colheita, o token chega ao cofre sem o usuário jamais ter aberto a tela de login, então a hidratação passa a inventar configuração para console que o usuário nunca tocou. Não mexa no `copyWith` para consertar isso: o caminho do formulário quer o padrão materializado. Quem está errado é o chamador novo.
+
+- [ ] **Step 1: Escreva o teste que falha**
+
+Crie `test/settings_hydrate_test.dart`:
+
+```dart
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
+import 'package:roms_downloader/models/settings_model.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
+import 'package:roms_downloader/services/settings_service.dart';
+
+/// Arquivo de quem configurou o geral e **não** configurou o console.
+///
+/// `autoExtract: false` no geral é o que torna o defeito visível: se a
+/// hidratação inventar `autoExtract: true` no console, o console passa a
+/// ganhar do geral, porque `getSetting` consulta o console primeiro.
+String _arquivo() => jsonEncode({
+      'consoleSettings': {
+        'snes': {'downloadDir': '/roms/snes'},
+      },
+      'generalSettings': {'downloadDir': '/casa/roms', 'autoExtract': false, 'maxParallelDownloads': 10},
+    });
+
+Future<void> _prefsCom(String appSettings) async {
+  SharedPreferences.setMockInitialValues({'app_settings': appSettings});
+  SharedPreferences.resetStatic();
+}
+
+Future<SecretVault> _cofreComTokenDoSnes() async {
+  final vault = MemoryVault();
+  await vault.write(SecretRef.addonToken(SettingsService.builtinAddonId, 'snes'), 'tok-snes');
+  return vault;
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('o console com token no cofre não ganha `autoExtract` que ninguém pediu', () async {
+    await _prefsCom(_arquivo());
+
+    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+
+    expect(settings.consoleSettings['snes']?.autoExtract, isNull);
+    expect(SettingsService().getSetting<bool>(settings, AppSettings.autoExtract, 'snes'), isFalse);
+  });
+
+  test('o console com token no cofre não ganha os dois limites de paralelismo', () async {
+    await _prefsCom(_arquivo());
+
+    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+
+    expect(settings.consoleSettings['snes']?.maxParallelDownloads, isNull);
+    expect(settings.consoleSettings['snes']?.maxParallelExtractions, isNull);
+    expect(SettingsService().getSetting<int>(settings, AppSettings.maxParallelDownloads, 'snes'), 10);
+  });
+
+  test('a hidratação continua entregando o token e o que o usuário configurou', () async {
+    // O controle. Sem ele, apagar a hidratação inteira faria os dois casos de
+    // cima passarem, e eles são asserções sobre ausência.
+    await _prefsCom(_arquivo());
+
+    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+
+    expect(settings.consoleSettings['snes']?.authToken, 'tok-snes');
+    expect(settings.consoleSettings['snes']?.downloadDir, '/roms/snes');
+  });
+
+  test('salvar com segredo vazio não apaga o que está no cofre', () async {
+    // A guarda `valor.isEmpty` de `_writeIfPresent`. Sem ela, `vault.write`
+    // com string vazia vira `delete` (`secret_vault.dart:38-41`), e um
+    // salvamento comum apagaria a credencial.
+    await _prefsCom(_arquivo());
+    final vault = MemoryVault();
+    await vault.write(SecretRef.iaAccessKey, 'AK');
+
+    await SettingsService().saveSettings(const AppSettings(iaAccessKey: ''), vault);
+
+    expect(await vault.read(SecretRef.iaAccessKey), 'AK');
+  });
+}
+```
+
+- [ ] **Step 2: Rode para ver falhar**
+
+```bash
+export PATH=/home/exedev/flutter/bin:$PATH
+flutter test test/settings_hydrate_test.dart
+```
+
+Esperado: os dois primeiros casos falham com `Expected: null, Actual: <true>` e `Expected: null, Actual: <5>`. O terceiro e o quarto já passam: eles trancam o que já está certo, para que o conserto não os quebre.
+
+- [ ] **Step 3: Dê ao `BaseSettings` uma cópia que não inventa nada**
+
+Em `lib/models/settings_model.dart`, logo depois do `copyWith`, acrescente:
+
+```dart
+  /// Devolve uma cópia com o token trocado e **nada mais**.
+  ///
+  /// Existe porque [copyWith] materializa padrão em campo `null`
+  /// (`autoExtract ?? this.autoExtract ?? true`, e os dois limites logo
+  /// abaixo). No formulário isso é o desejado: o usuário está mexendo em
+  /// configuração e ver o valor efetivo é útil. Na hidratação do cofre não é:
+  /// ela roda a cada abertura do app, e depois da Task 8 roda também para
+  /// console que o usuário nunca abriu, então gravaria override que ninguém
+  /// pediu. `autoExtract` chega a mudar comportamento, porque `getSetting`
+  /// consulta o console antes do geral (`download_provider.dart:230`).
+  BaseSettings withAuthToken(String token) => BaseSettings(
+        downloadDir: downloadDir,
+        autoExtract: autoExtract,
+        maxParallelDownloads: maxParallelDownloads,
+        maxParallelExtractions: maxParallelExtractions,
+        extractToFolder: extractToFolder,
+        authToken: token,
+      );
+```
+
+- [ ] **Step 4: Troque o chamador**
+
+Em `lib/services/settings_service.dart`, linha 63, troque
+
+```dart
+      consoles[entrada.key] = token == null ? entrada.value : entrada.value.copyWith(authToken: token);
+```
+
+por
+
+```dart
+      consoles[entrada.key] = token == null ? entrada.value : entrada.value.withAuthToken(token);
+```
+
+- [ ] **Step 5: Conserte o comentário que promete demais**
+
+Em `test/settings_service_test.dart`, o caso "carregar não reescreve o app_settings quando não havia segredo" (linhas 68-77) compara **conteúdo**, e quando não há segredo `jsonEncode(limpo)` é idêntico a `jsonEncode(cru)`. Ou seja: ele não distingue "não escreveu" de "escreveu igual", e tirar o `if` de `settings_service.dart:38` o deixa verde. Medido por mutação. Troque o comentário dele por:
+
+```dart
+    // A carga roda em toda abertura. Reescrever sempre é escrita em disco por
+    // nada. ATENÇÃO ao que este caso tranca e ao que não tranca: ele compara o
+    // conteúdo, e quando não há segredo o JSON limpo é idêntico ao cru, então
+    // ele fica verde tanto para "não reescreveu" quanto para "reescreveu igual".
+    // Medido por mutação: tirar o `if` de `settings_service.dart:38` não o
+    // derruba. Trancar o ato de escrever exigiria injetar o `SharedPreferences`
+    // no `SettingsService`, que hoje o chama direto; está anotado para a fatia 5.
+```
+
+- [ ] **Step 6: Rode para ver passar**
+
+```bash
+flutter test test/settings_hydrate_test.dart test/settings_service_test.dart
+```
+
+Esperado: `+17`, zero falha. São os 4 deste arquivo mais os 13 da Task 6.
+
+- [ ] **Step 7: Rode a suíte inteira**
+
+```bash
+flutter test
+```
+
+Esperado: `+425`, zero falha.
+
+- [ ] **Step 8: Analise e compile**
+
+```bash
+flutter analyze
+flutter build linux --debug
+```
+
+Esperado: `22 issues found`, build ok.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add test/settings_hydrate_test.dart test/settings_service_test.dart
+git commit -m "test(cofre): hidratar o token nao pode inventar configuracao de console"
+git add lib/models/settings_model.dart lib/services/settings_service.dart
+git commit -m "feat(cofre): hidratar o token nao pode inventar configuracao de console"
+```
+
+---
+
 ### Task 9: `Addon`, o modelo e a lista ordenada
 
 **Files:**
@@ -2989,7 +3196,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+434`, zero falha. Se `test/settings_service_test.dart` ou `test/catalog_auth_token_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos seis arquivos, não só nos de `lib/`.
+Esperado: `+438`, zero falha. Se `test/settings_service_test.dart` ou `test/catalog_auth_token_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos seis arquivos, não só nos de `lib/`.
 
 - [ ] **Step 7: Analise**
 
@@ -3272,7 +3479,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+445`, zero falha.
+Esperado: `+449`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3597,7 +3804,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+458`, zero falha.
+Esperado: `+462`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3752,7 +3959,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+464`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Esperado: `+468`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
 
 - [ ] **Step 6: Analise**
 
@@ -4372,7 +4579,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+474`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+478`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4647,7 +4854,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+484`, zero falha.
+Esperado: `+488`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4870,7 +5077,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+487`, zero falha.
+Esperado: `+491`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5079,7 +5286,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+490`, zero falha.
+Esperado: `+494`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5349,7 +5556,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+494`, zero falha.
+Esperado: `+498`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5736,7 +5943,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+511`, zero falha.
+Esperado: `+515`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6228,7 +6435,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+524`, zero falha.
+Esperado: `+528`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6551,7 +6758,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+530`, zero falha.
+Esperado: `+534`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -6837,7 +7044,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+536`, zero falha.
+Esperado: `+540`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7272,7 +7479,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+544`, zero falha.
+Esperado: `+548`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7704,7 +7911,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+553`, zero falha.
+Esperado: `+557`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8079,7 +8286,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+559`, zero falha.
+Esperado: `+563`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8541,7 +8748,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+566`, zero falha, `22 issues found`.
+Esperado: `+570`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8684,7 +8891,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+571`, zero falha.
+Esperado: `+575`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -8853,7 +9060,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+571`, zero falha.
+Esperado: `+575`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
