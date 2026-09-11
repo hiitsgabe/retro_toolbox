@@ -1173,7 +1173,13 @@ git add test/secure_storage_vault_test.dart test/vault_provider_test.dart
 git commit -m "test(cofre): cofre do sistema, sonda de disponibilidade e escolha com reserva"
 git add pubspec.yaml lib/services/secure_storage_vault.dart lib/providers/vault_provider.dart
 git commit -m "feat(cofre): cofre do sistema, sonda de disponibilidade e escolha com reserva"
+git add linux/flutter/generated_plugin_registrant.cc linux/flutter/generated_plugins.cmake \
+        macos/Flutter/GeneratedPluginRegistrant.swift \
+        windows/flutter/generated_plugin_registrant.cc windows/flutter/generated_plugins.cmake
+git commit -m "chore(cofre): registra o plugin do cofre nos tres alvos de desktop"
 ```
+
+O terceiro commit é o único da fatia inteira, porque é a única Task que traz dependência com código nativo. Esses cinco arquivos são gerados, mas são **versionados** neste repositório (`git log -- linux/flutter/generated_plugin_registrant.cc` mostra que todo bump de plugin os carrega junto), e o `pub get` do Step 1 os reescreveu para registrar o `flutter_secure_storage`. Deixá-los de fora não quebra build nenhum, porque qualquer `pub get` os regenera, mas deixa cinco arquivos sujos no `git status` de todas as 23 Tasks seguintes, e aí um deslize de verdade passa despercebido no meio do ruído. O `pubspec.lock` continua fora, e ele sim fica sujo até o fim: a sujeira dele é anterior a esta fatia.
 
 ---
 
