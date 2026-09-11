@@ -6345,9 +6345,11 @@ E na assinatura de `_buildActionWidgets`, troque `required bool canDownload,` po
 
 A Task 3 apagou o botão "Download Selected", mas `canDownload` sobreviveu, porque parâmetro de método sem uso **não** é apontado pelo `flutter analyze` com as regras deste repositório. O Step 3 acabou de tirar o último uso dele. Apague agora, nesta ordem:
 
-1. Em `build`, a linha `final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();` (hoje a 47).
-2. Em `build`, a linha `final downloadNotifier = ref.read(downloadProvider.notifier);` (hoje a 37), que existia só para alimentar a de cima.
+1. Em `build`, a linha `final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();` (hoje a 46).
+2. Em `build`, a linha `final downloadNotifier = ref.read(downloadProvider.notifier);` (hoje a 36), que existia só para alimentar a de cima.
 3. O import `package:roms_downloader/providers/download_provider.dart` (hoje a linha 7).
+
+> **Confira o conteúdo da linha antes de apagar, não o número.** Esses três números foram medidos depois que a Task 3 fechou (commit `b31f052`), que encurtou `header.dart` em 14 linhas. A primeira versão deste plano dizia 47 e 37, medidos antes da Task 3, e estava errada em duas das três. Se o arquivo mudar de novo antes de você chegar aqui, o `grep -n "canDownload\|downloadNotifier\|download_provider" lib/widgets/header/header.dart` é a fonte da verdade, e este parágrafo é só uma pista.
 
 Depois rode:
 
