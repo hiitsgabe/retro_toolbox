@@ -5601,7 +5601,7 @@ Antes das telas vêm duas Tasks sem pixel nenhum, pelo mesmo motivo de sempre: o
 ### Task 18: as três perguntas que as telas fazem ao catálogo
 
 **Files:**
-- Modify: `lib/models/console_model.dart:55-59` (o getter vira uma chamada)
+- Modify: `lib/models/console_model.dart:84-95` (o getter vira uma chamada)
 - Modify: `lib/services/console_merge.dart` (ganha `authForAddon`, `AddonCoverage` e `MergedCatalog.coverage`)
 - Modify: `lib/providers/addon_provider.dart` (ganha `addonCoverageProvider`)
 - Test: `test/addon_coverage_test.dart`
@@ -5821,13 +5821,17 @@ bool authNeedsToken(Map<String, dynamic>? auth) {
 }
 ```
 
-e troque o getter inteiro das linhas 55 a 59 por:
+e troque as linhas 84 a 95 por:
 
 ```dart
   /// True when this console uses a user-editable bearer/cookie token for auth.
   /// IA S3 auth is managed separately via the Internet Archive login flow.
   bool get hasTokenAuth => authNeedsToken(auth);
 ```
+
+**Duas ressalvas sobre esse intervalo, porque ele já esteve escrito errado de duas maneiras.** A primeira é que são 84 a 95, e não 55 a 59: o plano foi escrito contra `ef5ee57`, e desde então a Task 8 pôs cinco linhas de comentário dentro do getter e a Task 10 pôs `withUrls` acima dele. Confira antes de apagar: `sed -n '84,95p' lib/models/console_model.dart` tem que começar em `/// True when this console uses` e terminar no `}` do getter. A segunda é que o intervalo **inclui as duas linhas de doc**, e não só o corpo. Tem que incluir, porque o bloco acima já traz essas duas linhas de volta; trocar só o corpo deixaria o doc duplicado. Esta era a segunda forma do erro, e ela existia desde a primeira versão do plano, independente da defasagem.
+
+As cinco linhas de comentário que a Task 8 pôs dentro do getter somem aqui, e isso é mudança de lugar e não perda: elas explicavam `requires_token` e a colheita, e esse texto está no doc de `authNeedsToken`, logo acima, que é onde a regra passa a morar.
 
 **Tropeço provável:** copiar a regra para a função e deixar o corpo antigo no getter, "para não mexer no que funciona". Fica igual hoje e diverge no primeiro dia em que alguém corrigir um dos dois. O caso `'hasTokenAuth é a função, e não uma segunda regra'` existe para pegar isso, e ele passa com a duplicação: o que ele fixa é que os dois concordam, e o que impede a divergência é a delegação. Delegue.
 
