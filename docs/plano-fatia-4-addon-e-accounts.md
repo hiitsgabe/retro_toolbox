@@ -2719,7 +2719,7 @@ git commit -m "feat(seguranca): instalar catalogo colhe o token para o cofre e l
 
 Seis Tasks. Aqui o app deixa de ter **um** catálogo e passa a ter **N**, numa lista ordenada que o usuário controla. É a parte grande da fatia, e a ordem das Tasks segue a mesma regra do Grupo 1: primeiro o que é Dart puro (9, 10, 12), depois o que encosta em disco e em `shared_preferences` (11, 13, 14).
 
-O problema central desta grupo não é guardar uma lista. É este: **`Console.auth` é um mapa só, e `_fetchCatalog` passa um `authToken` só para todas as urls do console** (`catalog_service.dart:242-254` e `:282`). Se dois addons declararem o mesmo console, fundir os dois num `Console` faz as urls do segundo serem buscadas com o token do primeiro, e o usuário vê "HTTP 401" numa fonte que ele configurou certo. Por isso a fusão não devolve só `Map<String, Console>`: devolve também, por console, a lista de `ConsoleSource`, que é onde a auth passa a morar.
+O problema central desta grupo não é guardar uma lista. É este: **`Console.auth` é um mapa só, e `_fetchCatalog` passa um `authToken` só para todas as urls do console** (`catalog_service.dart:304-316` e `:344`). Se dois addons declararem o mesmo console, fundir os dois num `Console` faz as urls do segundo serem buscadas com o token do primeiro, e o usuário vê "HTTP 401" numa fonte que ele configurou certo. Por isso a fusão não devolve só `Map<String, Console>`: devolve também, por console, a lista de `ConsoleSource`, que é onde a auth passa a morar.
 
 Uma decisão de escopo que economiza muito churn: **o arquivo de catálogo do addon embutido continua sendo `config/consoles.json`**. Só os addons novos ganham arquivo em `config/addons/<id>.json`. Com isso `setCatalogFromJson`, `addConsole`, `resetCatalog` e `hasUserCatalog` (`catalog_service.dart:109`, `:167`, `:187`, `:193`) seguem apontando para o mesmo arquivo de sempre, e a migração da Task 11 não move byte nenhum de disco: ela só escreve uma lista de um item no `shared_preferences`. Migração que não mexe em arquivo é migração que não tem como perder o catálogo do usuário.
 
@@ -3393,8 +3393,8 @@ import 'package:roms_downloader/models/console_model.dart';
 /// Uma url de catálogo, com de qual addon ela veio e com que auth ela fala.
 ///
 /// Existe porque `Console.auth` é um mapa só e `_fetchCatalog` passava um
-/// `authToken` só para todas as urls do console (`catalog_service.dart:242` e
-/// `:282`). Com dois addons servindo o mesmo console, isso mandaria o token do
+/// `authToken` só para todas as urls do console (`catalog_service.dart:304` e
+/// `:344`). Com dois addons servindo o mesmo console, isso mandaria o token do
 /// primeiro para o servidor do segundo. A auth não pertence ao console: ela
 /// pertence à url.
 @immutable
