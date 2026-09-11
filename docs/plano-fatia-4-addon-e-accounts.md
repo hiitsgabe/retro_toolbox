@@ -4065,6 +4065,242 @@ git add lib/models/game_model.dart
 git commit -m "feat(addon): o Game carrega o id do addon que o serviu"
 ```
 
+### Task 12b: a porta que o id descarta e os dezessete campos que o `withUrls` pode esquecer
+
+**Files:**
+- Modify: `lib/models/addon_model.dart` (`idFromUrl` passa a distinguir a porta)
+- Test: `test/addon_model_test.dart`, `test/console_merge_test.dart`
+
+Esta Task não estava no plano original. Ela sai da revisão por mutação das Tasks 9 e 10, depois de a Task 11b já ter fechado os dois mutantes da lista ordenada. São dois assuntos, e só um é defeito de produção.
+
+**O defeito: `Addon.idFromUrl` joga a porta fora.** `Uri.host` não inclui a porta, e o id é montado com `uri.host + uri.path`. Medido, com a lógica de hoje inlineada num script:
+
+```
+exemplo_com_catalogo_json      <https://exemplo.com/catalogo.json>
+exemplo_com_catalogo_json      <https://exemplo.com:8080/catalogo.json>
+exemplo_com_catalogo_json      <http://exemplo.com:9000/catalogo.json>
+```
+
+Os três são o mesmo addon aos olhos do app. Isso importa porque o id é chave de cofre (`SecretRef.addonToken(addonId, consoleId)`) e vira chave de arquivo em disco na Task 13: dois addons que colidem no id não convivem, `upsertAddon` substitui um pelo outro na lista e o token do segundo sobrescreve o do primeiro. O doc do próprio método enumera o que ele normaliza de propósito, "esquema, `www.`, caixa, query, fragmento, barra final", e a porta não está na lista. Não foi decisão, foi descuido. E este app serve LAN em porta: `RtsServerService.consoleJson` monta `http://$hostPort/f/$index/`, então dois servidores no mesmo host em portas diferentes é o caso realista, não o exótico.
+
+**A lacuna de teste: `Console.withUrls` copia vinte e um campos na mão e só um está preso.** A revisão apagou cada linha de campo da cópia (`console_model.dart:64-81`) e rodou a suíte: dezessete apagam em silêncio, com tudo verde. Só `regex` é pego, pelo teste de precedência de metadados. O comentário do método diz que escolheu a cópia manual em vez de um `copyWith` completo, e a razão escrita é "um lugar a mais para esquecer de atualizar quando o `Console` crescer". Escolha defensável; o que falta é o teste que prova que ela não esqueceu. O risco é baixo hoje, porque `withUrls` tem um consumidor só, e sobe na Task 13, quando `mergeCatalogs` entra no `CatalogService`.
+
+**Por que isto custa só um caso à cadeia.** Três dos quatro buracos de `addon_model.dart` (a porta, o `trim`, e o `isBuiltin`) cabem como `expect` a mais dentro de casos que já existem e já falam desse assunto, então não criam `test(` nenhum. Só o `withUrls` precisa de um caso novo, porque não há caso existente sobre cópia de campos. Reforçar um caso existente vale tanto quanto criar um, e não move a cadeia de totais de dezesseis Tasks.
+
+- [ ] **Step 1: Reforce três casos que já existem**
+
+Em `test/addon_model_test.dart`, troque o caso `'o mesmo catálogo em http e https dá o mesmo id'` inteiro por:
+
+```dart
+    test('o mesmo catálogo em http e https dá o mesmo id, e o espaço colado junto não conta', () {
+      const limpa = 'https://exemplo.com/catalogo.json';
+      expect(Addon.idFromUrl('http://exemplo.com/catalogo.json'), Addon.idFromUrl(limpa));
+      // O `trim` não é enfeite: sem ele `Uri.tryParse` não acha host nenhum
+      // numa url colada com espaço, e o id vira `https_exemplo_com_catalogo_json`.
+      // Colar com espaço é o que um campo de texto entrega.
+      expect(Addon.idFromUrl('  $limpa  '), Addon.idFromUrl(limpa));
+      // E o formato fica preso a um literal. Comparar id com id sobrevive a
+      // qualquer troca do slug, inclusive a uma que embaralhe o id inteiro.
+      expect(Addon.idFromUrl(limpa), 'exemplo_com_catalogo_json');
+    });
+```
+
+o caso `'dois catálogos no mesmo host têm ids diferentes'` inteiro por:
+
+```dart
+    test('dois catálogos no mesmo host têm ids diferentes, e a porta faz parte do host', () {
+      expect(Addon.idFromUrl('https://exemplo.com/snes.json'), isNot(Addon.idFromUrl('https://exemplo.com/nes.json')));
+      // Dois servidores de LAN no mesmo IP, em portas diferentes, são dois
+      // addons. Com a porta fora do id eles dividiriam a chave de cofre, e o
+      // token do segundo instalado apagaria o do primeiro.
+      expect(Addon.idFromUrl('http://192.168.0.10:8080/f/0/'), isNot(Addon.idFromUrl('http://192.168.0.10:8081/f/0/')));
+      expect(Addon.idFromUrl('https://exemplo.com:8080/c.json'), isNot(Addon.idFromUrl('https://exemplo.com/c.json')));
+    });
+```
+
+e o caso `'nunca devolve o id do embutido, nem para uma url que daria nele'` inteiro por:
+
+```dart
+    test('o id do embutido: nenhuma url cai nele, e só ele responde isBuiltin', () {
+      expect(Addon.idFromUrl('https://builtin/'), isNot(kBuiltinAddonId));
+      expect(const Addon(id: kBuiltinAddonId, name: 'Listagem').isBuiltin, isTrue);
+      expect(const Addon(id: 'ultranx', name: 'UltraNX').isBuiltin, isFalse);
+    });
+```
+
+O nome dos três casos muda junto com o corpo, de propósito: um caso que afirma mais do que o nome diz é um caso que ninguém vai reler quando quebrar.
+
+- [ ] **Step 2: Escreva o caso novo do `withUrls`**
+
+Ainda sem tocar em `lib/`. Em `test/console_merge_test.dart`, acrescente antes do `}` que fecha o `main`:
+
+```dart
+  test('withUrls troca as urls e não perde nenhum dos outros campos', () {
+    // Todo campo aqui vale o CONTRÁRIO do padrão do construtor. Se algum
+    // valesse o padrão, apagar a linha correspondente do `withUrls` passaria
+    // despercebido: o construtor repõe o mesmo valor e o teste segue verde.
+    const cheio = Console(
+      id: 'snes',
+      name: 'Super Nintendo',
+      urls: ['https://a/'],
+      regex: r'\.sfc$',
+      boxarts: {'url': 'https://box/'},
+      fileFormat: ['sfc', 'smc'],
+      romsFolder: 'roms/snes',
+      shouldUnzip: true,
+      extractContents: false,
+      shouldFilterUsa: false,
+      usaRegex: r'\(USA\)',
+      shouldDecompressNsz: true,
+      ignoreExtensionFiltering: true,
+      downloadUrl: 'https://baixa/',
+      auth: {'type': 'cookies'},
+      listUrl: 'https://lista/',
+      listJsonFileLocation: 'items',
+      listItemId: 'title',
+      listSystems: true,
+      added: true,
+      convert3dsToCia: true,
+    );
+
+    final copia = cheio.withUrls(['https://b/', 'https://c/']);
+
+    expect(copia.urls, ['https://b/', 'https://c/']);
+    expect(copia.id, cheio.id);
+    expect(copia.name, cheio.name);
+    expect(copia.regex, cheio.regex);
+    expect(copia.boxarts, cheio.boxarts);
+    expect(copia.fileFormat, cheio.fileFormat);
+    expect(copia.romsFolder, cheio.romsFolder);
+    expect(copia.shouldUnzip, cheio.shouldUnzip);
+    expect(copia.extractContents, cheio.extractContents);
+    expect(copia.shouldFilterUsa, cheio.shouldFilterUsa);
+    expect(copia.usaRegex, cheio.usaRegex);
+    expect(copia.shouldDecompressNsz, cheio.shouldDecompressNsz);
+    expect(copia.ignoreExtensionFiltering, cheio.ignoreExtensionFiltering);
+    expect(copia.downloadUrl, cheio.downloadUrl);
+    expect(copia.auth, cheio.auth);
+    expect(copia.listUrl, cheio.listUrl);
+    expect(copia.listJsonFileLocation, cheio.listJsonFileLocation);
+    expect(copia.listItemId, cheio.listItemId);
+    expect(copia.listSystems, cheio.listSystems);
+    expect(copia.added, cheio.added);
+    expect(copia.convert3dsToCia, cheio.convert3dsToCia);
+  });
+```
+
+**Tropeço provável:** pôr um campo no valor padrão para encurtar. `shouldUnzip` já é `false` e `extractContents` já é `true` no construtor, então escrever esses dois valores faz o caso passar mesmo com a linha apagada do `withUrls`. O que prende o campo não é ele estar no `expect`, é ele valer algo que o padrão não repõe.
+
+- [ ] **Step 3: Rode para ver falhar**
+
+```bash
+flutter test test/addon_model_test.dart test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -20
+```
+
+Esperado: **uma falha só**, e é a da porta, no caso `'dois catálogos no mesmo host têm ids diferentes, e a porta faz parte do host'`. As outras adições (o `trim`, o literal do id, o `isBuiltin`, e os vinte e um campos do `withUrls`) descrevem comportamento que já está certo hoje, então passam de primeira. Isso é o esperado, não é motivo de suspeita: elas existem para travar o que funciona, não para consertar.
+
+- [ ] **Step 4: Ponha a porta no id**
+
+Em `lib/models/addon_model.dart`, no doc de `idFromUrl`, troque a frase da normalização:
+
+```dart
+  /// Estável de propósito: `http` e `https`, com `www.` ou sem, com query ou
+  /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
+  /// fonte tem que reencontrar o token que já está no cofre, e o token está
+  /// guardado sob o id.
+```
+
+por:
+
+```dart
+  /// Estável de propósito: `http` e `https`, com `www.` ou sem, com query ou
+  /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
+  /// fonte tem que reencontrar o token que já está no cofre, e o token está
+  /// guardado sob o id.
+  ///
+  /// **A porta entra no id, e não é normalização esquecida.** `Uri.host` a
+  /// descarta, então sem isto `192.168.0.10:8080/f/0/` e `192.168.0.10:8081/f/0/`
+  /// seriam o mesmo addon, dividindo chave de cofre e arquivo de catálogo. Dois
+  /// servidores de LAN no mesmo aparelho é o caso comum aqui, não o exótico.
+  /// Uso `hasPort` e não `port` porque `port` resolve o padrão do esquema: com
+  /// ele, `http://e.com/c` daria 80 e `https://e.com/c` daria 443, e a estabilidade
+  /// entre esquemas, que é a primeira promessa deste método, iria embora. O preço
+  /// é que uma url que escreve `:80` à toa vira um id diferente da que não escreve.
+  /// Esse erro cria um addon duplicado, que se vê na lista; o erro oposto apagaria
+  /// um token em silêncio.
+```
+
+e troque a linha do `cru`:
+
+```dart
+    final cru = (uri == null || uri.host.isEmpty) ? url : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.path}';
+```
+
+por:
+
+```dart
+    final cru = (uri == null || uri.host.isEmpty)
+        ? url
+        : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.hasPort ? ':${uri.port}' : ''}${uri.path}';
+```
+
+- [ ] **Step 5: Rode para ver passar**
+
+```bash
+flutter test test/addon_model_test.dart test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -3
+```
+
+Esperado: `+29`, zero falha. São os `+17` de `addon_model_test.dart`, que **não muda**, porque o Step 1 só acrescentou `expect` dentro de casos existentes, mais os `+12` de `console_merge_test.dart`, que era `+11`. Se o primeiro número virar `+18` ou mais, algum dos três blocos do Step 1 virou caso novo em vez de substituir o antigo, e aí a cadeia de totais deste plano está errada a partir daqui.
+
+- [ ] **Step 6: Prove que o caso do `withUrls` pega o que diz pegar**
+
+Um caso que passa não prova nada. Escolha dois campos, um `bool` com padrão e um nulável, apague a linha de cada um no `withUrls` e veja o caso ficar vermelho:
+
+```bash
+sed -i '/^        auth: auth,$/d' lib/models/console_model.dart
+flutter test test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -3
+git checkout -- lib/models/console_model.dart
+
+sed -i '/^        shouldFilterUsa: shouldFilterUsa,$/d' lib/models/console_model.dart
+flutter test test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -3
+git checkout -- lib/models/console_model.dart
+```
+
+Cada rodada tem que falhar no caso `'withUrls troca as urls e não perde nenhum dos outros campos'`. Depois das duas, confira a restauração antes de medir qualquer outra coisa:
+
+```bash
+git status --short lib/models/console_model.dart
+```
+
+Esperado: **nenhuma linha**. Se aparecer ` M`, o `git checkout` não rodou e todo número daqui para a frente é de uma árvore mutada.
+
+- [ ] **Step 7: Rode a suíte inteira**
+
+```bash
+flutter test
+```
+
+Esperado: `+474`, zero falha.
+
+- [ ] **Step 8: Analise**
+
+```bash
+flutter analyze
+```
+
+Esperado: `22 issues found`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add test/addon_model_test.dart test/console_merge_test.dart
+git commit -m "test(addon): a porta no id, o trim, o isBuiltin e os vinte e um campos do withUrls"
+git add lib/models/addon_model.dart
+git commit -m "feat(addon): a porta passa a fazer parte do id do addon"
+```
+
+---
+
 ### Task 13: o `CatalogService` lê N addons e busca cada fonte com a auth dela
 
 **Files:**
@@ -4675,7 +4911,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+483`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+484`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4950,7 +5186,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+493`, zero falha.
+Esperado: `+494`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4979,8 +5215,9 @@ git commit -m "feat(addon): provider da lista de addons e a prioridade derivada 
 | 11, persistência | 14 | 465 |
 | 11b, os dois casos da lista ordenada | 2 | 467 |
 | 12, `Game.sourceId` | 6 | 473 |
-| 13, catálogo de N addons | 10 | 483 |
-| 14, provider e prioridade | 10 | 493 |
+| 12b, o campo esquecido e a porta descartada | 1 | 474 |
+| 13, catálogo de N addons | 10 | 484 |
+| 14, provider e prioridade | 10 | 494 |
 
 ---
 
@@ -5175,7 +5412,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+496`, zero falha.
+Esperado: `+497`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5384,7 +5621,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+499`, zero falha.
+Esperado: `+500`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5654,7 +5891,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+503`, zero falha.
+Esperado: `+504`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5677,9 +5914,9 @@ git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id c
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 496 |
-| 16, a prioridade chega nas telas | 3 | 499 |
-| 17, o nome do addon na tela | 4 | 503 |
+| 15, o id do addon na grade e no lote | 3 | 497 |
+| 16, a prioridade chega nas telas | 3 | 500 |
+| 17, o nome do addon na tela | 4 | 504 |
 
 ---
 
@@ -6045,7 +6282,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+520`, zero falha.
+Esperado: `+521`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6537,7 +6774,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+533`, zero falha.
+Esperado: `+534`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6860,7 +7097,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+539`, zero falha.
+Esperado: `+540`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -7146,7 +7383,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+545`, zero falha.
+Esperado: `+546`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7581,7 +7818,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+553`, zero falha.
+Esperado: `+554`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8013,7 +8250,7 @@ Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o
 flutter test
 ```
 
-Esperado: `+562`, zero falha.
+Esperado: `+563`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8388,7 +8625,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+568`, zero falha.
+Esperado: `+569`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8850,7 +9087,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+575`, zero falha, `22 issues found`.
+Esperado: `+576`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8863,20 +9100,20 @@ git commit -m "feat(accounts): reunir as contas de addon na tela de Accounts"
 
 ---
 
-Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+503` para `+575`. Os dois extremos já estiveram escritos como `+492` e `+564`. Hoje a diferença é de onze, e não de nove: nove eram a defasagem original e dois vieram depois, da Task 11b, que a revisão da Task 9 obrigou a acrescentar. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+503` e a linha da Task 25 na tabela fecha em `+575`.
+Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+504` para `+576`. Os dois extremos já estiveram escritos como `+492` e `+564`. Hoje a diferença é de doze, e não de nove: nove eram a defasagem original, dois vieram da Task 11b e um da Task 12b, as duas nascidas da revisão por mutação das Tasks 9 e 10. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+504` e a linha da Task 25 na tabela fecha em `+576`.
 
 O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com alça de arrasto, o detalhe por addon com origem, conta, cobertura, prioridade e remoção, a instalação por URL, o Accounts consolidado com uma linha por par (addon, console) e o estado de conexão, e o token deixando de ser do console para ser do par. O que ele não entregou, e está declarado na Task 22: a contagem de itens por console na cobertura, que custaria uma requisição de listagem por console ao abrir uma tela de leitura.
 
 | Task | Casos | Acumulado |
 | --- | --- | --- |
-| 18 | 17 | `+520` |
-| 19 | 13 | `+533` |
-| 20 | 6 | `+539` |
-| 21 | 6 | `+545` |
-| 22 | 8 | `+553` |
-| 23 | 9 | `+562` |
-| 24 | 6 | `+568` |
-| 25 | 7 | `+575` |
+| 18 | 17 | `+521` |
+| 19 | 13 | `+534` |
+| 20 | 6 | `+540` |
+| 21 | 6 | `+546` |
+| 22 | 8 | `+554` |
+| 23 | 9 | `+563` |
+| 24 | 6 | `+569` |
+| 25 | 7 | `+576` |
 
 ---
 
@@ -8993,7 +9230,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+580`, zero falha.
+Esperado: `+581`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -9162,7 +9399,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+580`, zero falha.
+Esperado: `+581`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
