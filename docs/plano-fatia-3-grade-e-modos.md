@@ -8,6 +8,8 @@
 
 **Tech Stack:** Flutter, Riverpod (`flutter_riverpod: ^2.6.1`), Material 3 com seed `#7C4DEF` e ChakraPetch, `cached_network_image` para as capas, `flutter_test` sem mockito, injeção por construtor. Nenhuma dependência nova no `pubspec.yaml`.
 
+> **Nota posterior à execução, sobre o `-1`.** Todo "Esperado: `+N -1`" deste plano conta com uma falha permanente, `test/rar_decompress_screen_test.dart`. Ela foi consertada em `5d21b14`, **depois** de a fatia fechar. Num HEAD a partir dali, cada um desses passos dá `+N` e nenhuma falha, e **qualquer** falha é regressão. O detalhe está no Step 5 da Task 22.
+
 ---
 
 ## Antes de começar: leia estas quatro coisas
@@ -7361,6 +7363,8 @@ test/support/favorites_stub.dart
 
 Nenhum arquivo de teste **antigo** pode aparecer nessa lista. Se aparecer, alguém consertou um teste velho para acomodar a fatia, e isso é exatamente a regressão que o Step 1 procura, só que disfarçada de teste verde.
 
+> **Exceção registrada depois da varredura, em `5d21b14`.** Hoje a lista tem **dezoito** linhas, e a décima oitava é `test/rar_decompress_screen_test.dart`, que é antigo. Não é a regressão que este Step procura: o conserto veio depois de a fatia 3 já ter passado nos Steps 1 a 5 e 7, não mudou nenhum arquivo de `lib/`, e não tem relação com a fatia. O teste nunca passou uma vez desde `b011601`, o commit que o criou, porque `FilledButton.icon` devolve `_FilledButtonWithIcon` e `find.byType` casa por tipo exato. Ele morria em `Bad state: No element` antes de afirmar coisa alguma. Quem repetir este Step, confira que a décima oitava linha é essa e só essa.
+
 - [ ] **Step 4: Analise**
 
 ```bash
@@ -7385,9 +7389,11 @@ O suspeito mais provável é `use_build_context_synchronously` em `home_screen.d
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+339 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Esperado, na varredura original: `+339 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
 
-A conta dos 339, para o caso de o número não bater e você precisar saber onde procurar:
+> **Depois de `5d21b14`, o esperado é `+340`, sem nenhuma falha.** Aquele `-1` era um teste que nunca passou desde que nasceu, consertado fora da fatia. O caso continua sendo um só, ele agora conta como `+`. Se você rodar hoje e ver `+339 -1`, seu HEAD é anterior a `5d21b14`; **qualquer falha é regressão**, não existe mais "a falha de sempre".
+
+A conta dos 339 da fatia, para o caso de o número não bater e você precisar saber onde procurar (o 340 é esse 339 mais o conserto do `rar`, que é de fora):
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
