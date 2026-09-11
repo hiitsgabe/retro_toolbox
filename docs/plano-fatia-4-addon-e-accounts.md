@@ -77,8 +77,10 @@ A seção 6.3 do spec diz que "duas mudanças fecham o buraco". São quatro:
 Os dois últimos **não montam header**: eles só decidem se a UI mostra o console como autenticado. Passam despercebidos num `grep` por `buildConsoleAuthHeaders`, que acha só quatro chamadores e nenhum deles. O `grep` que acha os quatro é:
 
 ```bash
-grep -rn "auth\??\[.token.\]" lib/
+grep -rnE "auth\??\['token'\]" lib/
 ```
+
+O `-E` é obrigatório. Sem ele o `grep` é BRE, o `\?` vira quantificador e o segundo `?` vira literal, e aí o padrão passa a exigir uma `?` depois de `auth`: acha os três que escrevem `auth?[` e deixa passar justamente o `network.dart:41`, que escreve `auth['token']` sem `?` e é o sítio que a 6.3 lista. Medido com os quatro ainda no lugar: BRE achou três, `-E` achou quatro.
 
 Se você consertar só os dois primeiros, o app continua dizendo "este console tem auth configurada" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface, e é pior de achar depois.
 
@@ -2249,7 +2251,9 @@ Confira que nenhum dos quatro sobrou:
 grep -rnE "auth\??\['token'\]" lib/
 ```
 
-Esperado: nenhuma linha. Se aparecer alguma em `console_model.dart`, é o `toJson`/`fromJson` do modelo, que continua sabendo carregar o campo; o que não pode sobrar é **leitura para decidir autenticação**.
+Esperado: **exatamente uma linha**, o comentário que o Step 3 acabou de escrever em `lib/utils/network.dart:41`, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali. É texto, não leitura. Confira olhando a linha, não só contando. Qualquer segunda linha é sítio vivo que sobrou.
+
+Se aparecer alguma em `console_model.dart`, leia antes de consertar. O `toJson`/`fromJson` do modelo continua sabendo carregar o campo, e isso é certo. Mas `Console.hasTokenAuth` (`console_model.dart:55-59`) também lê `auth!.containsKey('token')`, e esse **não** é sítio desta Task: ele não pergunta "qual é o token", pergunta "este console aceita token", que é capacidade declarada pelo catálogo e não segredo. Quem mexe nele é a Task 8, que troca a pergunta por `requires_token`. Não antecipe aqui.
 
 **O `-E` é obrigatório, não é estilo.** Sem ele o `grep` é BRE, e aí `\?` vira quantificador sobre o `h` de `auth` enquanto o segundo `?` vira literal: o padrão passa a exigir uma `?` depois de `auth`, e **os únicos três sítios que casam são os que têm `auth?[`**. O quarto, `network.dart:41`, escreve `auth['token']` sem `?` e escapa. Medido antes da Task rodar, com os quatro ainda no lugar: o BRE achou três, o `-E` achou quatro. Quer dizer que a checagem em BRE daria "nenhuma linha" mesmo para quem esquecesse o Step 3, que é justamente o sítio que a seção 6.3 lista.
 
@@ -8870,10 +8874,12 @@ Esta é a razão de ser da fatia, e é o passo que mais dá vontade de resumir e
 Primeiro, os sítios que leem o token de dentro do arquivo compartilhável. O grep que acha os quatro **não** é por `buildConsoleAuthHeaders`, que só acha os chamadores dele:
 
 ```bash
-grep -rn "auth\??\[.token.\]" lib/
+grep -rnE "auth\??\['token'\]" lib/
 ```
 
-Esperado: nenhuma linha, ou só linhas dentro de `harvestAuthTokens`, que é quem **tira** o token. Os quatro sítios de partida eram `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91` e `lib/screens/setup_wizard_screen.dart:392`. Os dois últimos não montavam header: decidiam se o console "tem auth configurada" com `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, e por isso passam despercebidos num grep por `buildConsoleAuthHeaders`. Se eles sobrarem, o app continua dizendo "este console tem auth" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface.
+O `-E` é obrigatório, e se você rodar a versão BRE deste mesmo grep a varredura mente para você: sem `-E` o `\?` vira quantificador e o segundo `?` vira literal, o padrão passa a exigir uma `?` depois de `auth`, e o único dos quatro que escreve `auth['token']` sem `?` é justamente `network.dart:41`, o sítio que a 6.3 lista. Medido antes da Task 7 rodar: BRE achou três, `-E` achou quatro.
+
+Esperado: duas classes de linha, e nenhuma outra. Primeira, dentro de `harvestAuthTokens`, que é quem **tira** o token. Segunda, **o comentário em `lib/utils/network.dart:41`**, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali antes; é texto, não leitura, e confirmado por inspeção da linha. Qualquer terceira linha é sítio vivo. Os quatro sítios de partida eram `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91` e `lib/screens/setup_wizard_screen.dart:392`. Os dois últimos não montavam header: decidiam se o console "tem auth configurada" com `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, e por isso passam despercebidos num grep por `buildConsoleAuthHeaders`. Se eles sobrarem, o app continua dizendo "este console tem auth" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface.
 
 Depois, o arquivo compartilhável em si:
 
