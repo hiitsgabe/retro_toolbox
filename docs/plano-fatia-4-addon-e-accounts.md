@@ -7904,7 +7904,7 @@ class _Linha extends StatelessWidget {
 flutter test test/addons_screen_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o número isolado e o que a Task acrescenta à suíte são o mesmo. Este número já esteve escrito como `+11`, e estava errado: contei os casos do bloco do Step 1 e são nove. A cadeia de totais do Step 6 sempre esteve certa, `551 + 9 = 560`, então só esta linha muda.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
