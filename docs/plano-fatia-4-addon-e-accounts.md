@@ -2717,7 +2717,7 @@ git commit -m "feat(seguranca): instalar catalogo colhe o token para o cofre e l
 
 ## Grupo 3: o modelo de addon
 
-Seis Tasks. Aqui o app deixa de ter **um** catálogo e passa a ter **N**, numa lista ordenada que o usuário controla. É a parte grande da fatia, e a ordem das Tasks segue a mesma regra do Grupo 1: primeiro o que é Dart puro (9, 10, 12), depois o que encosta em disco e em `shared_preferences` (11, 13, 14).
+Seis Tasks, mais a 11b, que a revisão da Task 9 obrigou a acrescentar e que só escreve teste. Aqui o app deixa de ter **um** catálogo e passa a ter **N**, numa lista ordenada que o usuário controla. É a parte grande da fatia, e a ordem das Tasks segue a mesma regra do Grupo 1: primeiro o que é Dart puro (9, 10, 12), depois o que encosta em disco e em `shared_preferences` (11, 13, 14). A 11b fica entre a 11 e a 12 porque ela fecha dois buracos de cobertura em `addon_model.dart`, e a Task 14 é a primeira a apoiar a prioridade arrastável nessas duas funções.
 
 O problema central desta grupo não é guardar uma lista. É este: **`Console.auth` é um mapa só, e `_fetchCatalog` passa um `authToken` só para todas as urls do console** (`catalog_service.dart:304-316` e `:344`). Se dois addons declararem o mesmo console, fundir os dois num `Console` faz as urls do segundo serem buscadas com o token do primeiro, e o usuário vê "HTTP 401" numa fonte que ele configurou certo. Por isso a fusão não devolve só `Map<String, Console>`: devolve também, por console, a lista de `ConsoleSource`, que é onde a auth passa a morar.
 
@@ -3136,7 +3136,7 @@ List<Addon> reorderAddons(List<Addon> lista, int from, int to) {
 }
 ```
 
-**Tropeço provável:** o `-1` do `ReorderableListView`. É fácil escrever `saida.insert(to, item)` e ver os testes de "subindo" passarem, porque subindo o desconto não existe. Só o caso de descer pega, e é o caso que o usuário faz primeiro, porque a fonte nova nasce no fim da lista e ele quer promovê-la. O teste "descendo aplica o desconto" existe para isso e não deve ser afrouxado.
+**Tropeço provável:** o `-1` do `ReorderableListView`. É fácil escrever `saida.insert(to, item)` e ver os testes de "subindo" passarem, porque subindo o desconto não existe. Só o caso de descer pega, e é o caso que o usuário faz primeiro, porque a fonte nova nasce no fim da lista e ele quer promovê-la. O teste "descendo aplica o desconto" foi escrito para isso e **não faz isso**, e esta frase já afirmou que fazia. Ele move para o fim da lista, e aí o `clamp` iguala `to - 1` e `to`, então a asserção passa com o desconto e sem. Quem pega é um destino do **meio**, e ele só entra na Task 11b. Deixo o erro escrito aqui em vez de apagar a frase, porque um "Tropeço provável" que aponta para o teste errado é pior que nenhum: ele convence o leitor de que a linha está guardada.
 
 - [ ] **Step 4: Tire a constante duplicada que a Task 6 criou**
 
@@ -3823,6 +3823,93 @@ git add lib/services/addon_store.dart lib/services/settings_service.dart
 git commit -m "feat(addon): persistencia da lista de addons e do catalogo de cada um"
 ```
 
+### Task 11b: os dois casos que a lista ordenada não tinha
+
+**Files:**
+- Test: `test/addon_model_test.dart` (dois casos novos, nada mais)
+
+Esta Task nasceu da revisão da Task 9 e **não muda uma linha de produção**. `upsertAddon` e `reorderAddons` estão certos; o que não está é a cobertura deles. Por isso ela tem um commit só, `test(...)`, e nenhum `feat(...)`: a regra de nunca misturar `lib/` e `test/` num commit continua valendo, e aqui simplesmente não há `lib/` para commitar.
+
+Os dois buracos foram achados por mutação, não por leitura, e cada um é um mutante que sobrevive à suíte inteira:
+
+**Primeiro: `to - 1` pode virar `to` e nada fica vermelho.** O caso que existe hoje se chama `'reorderAddons descendo aplica o desconto do ReorderableListView'` e faz `reorderAddons([a, b, c], 0, 3)`. Ele não testa o desconto. Mover para o **fim** apaga a diferença: tirado o item de origem sobram dois, e tanto `to - 1 = 2` quanto `to = 3` passam pelo `clamp(0, 2)` e dão 2. O nome do caso promete uma coisa e a asserção fixa outra, que é a pior forma de teste, porque ele parece cobrir. O desconto só aparece quando o destino é uma vaga do **meio**: em `[a, b, c, d]`, mover 0 para 2 dá `['b', 'a', 'c', 'd']` com desconto e `['b', 'c', 'a', 'd']` sem. O plano afirmava o contrário num "Tropeço provável" da Task 9; a afirmação estava errada.
+
+**Segundo: `i < 0` pode virar `i <= 0` e nada fica vermelho.** O caso `'upsertAddon substitui SEM mudar a posição'` substitui o addon da posição 1. Com `i = 1` os dois operadores concordam. Na posição 0 eles divergem, e a posição 0 é exatamente a do embutido: sob o mutante, reinstalar o addon que está em primeiro lugar não o substituiria, acrescentaria uma segunda cópia no fim. Isso é um estado que a tela de addons mostraria como duas linhas com o mesmo id.
+
+- [ ] **Step 1: Escreva os dois casos**
+
+Em `test/addon_model_test.dart`, dentro do mesmo `group` onde os casos de `upsertAddon` e `reorderAddons` já estão, acrescente:
+
+```dart
+    test('upsertAddon substitui na posição 0, que é a do embutido', () {
+      final saida = upsertAddon([a, b, c], const Addon(id: 'a', name: 'A novo'));
+      expect(saida.map((x) => x.id), ['a', 'b', 'c']);
+      expect(saida.first.name, 'A novo');
+    });
+
+    test('reorderAddons descendo para o meio desconta a vaga que o item deixou', () {
+      const d = Addon(id: 'd', name: 'D');
+      expect(reorderAddons([a, b, c, d], 0, 2).map((x) => x.id), ['b', 'a', 'c', 'd']);
+    });
+```
+
+O `const d` é local ao caso de propósito: `a`, `b` e `c` já existem no arquivo e um quarto no topo só serviria a este caso.
+
+- [ ] **Step 2: Prove que cada um pega o seu mutante**
+
+Isto não é opcional, e é o motivo de a Task existir. Um caso que passa não prova nada; o que prova é o caso ficando vermelho quando a linha que ele cobre muda.
+
+```bash
+sed -i 's/final destino = to > from ? to - 1 : to;/final destino = to;/' lib/models/addon_model.dart
+flutter test test/addon_model_test.dart 2>&1 | tr '\r' '\n' | tail -3
+git checkout -- lib/models/addon_model.dart
+
+sed -i 's/if (i < 0) return \[...lista, novo\];/if (i <= 0) return [...lista, novo];/' lib/models/addon_model.dart
+flutter test test/addon_model_test.dart 2>&1 | tr '\r' '\n' | tail -3
+git checkout -- lib/models/addon_model.dart
+```
+
+Esperado: cada uma das duas rodadas falha, e falha **no caso novo correspondente**, não em outro. Se alguma passar, o caso não está pegando o que ele diz pegar e não adianta seguir.
+
+Depois das duas, confira que a restauração foi de verdade antes de medir qualquer coisa:
+
+```bash
+git status --short lib/models/addon_model.dart
+```
+
+Esperado: nenhuma linha. Um `M` aqui quer dizer que um `git checkout --` não rodou, e todo número dos Steps seguintes seria o do mutante.
+
+- [ ] **Step 3: Rode o arquivo**
+
+```bash
+flutter test test/addon_model_test.dart
+```
+
+Esperado: `+17`, zero falha. São os 15 da Task 9 mais estes 2.
+
+- [ ] **Step 4: Rode a suíte inteira**
+
+```bash
+flutter test
+```
+
+Esperado: `+467`, zero falha.
+
+- [ ] **Step 5: Analise**
+
+```bash
+flutter analyze
+```
+
+Esperado: `22 issues found`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add test/addon_model_test.dart
+git commit -m "test(addon): a substituicao na posicao 0 e o desconto de descida para o meio"
+```
+
 ### Task 12: `Game.sourceId`, o jogo sabe de qual addon veio
 
 **Files:**
@@ -3959,7 +4046,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+471`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Esperado: `+473`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
 
 - [ ] **Step 6: Analise**
 
@@ -4579,7 +4666,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+481`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+483`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4854,7 +4941,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+491`, zero falha.
+Esperado: `+493`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4881,9 +4968,10 @@ git commit -m "feat(addon): provider da lista de addons e a prioridade derivada 
 | 9, modelo de addon | 15 | 440 |
 | 10, fusão de catálogos | 11 | 451 |
 | 11, persistência | 14 | 465 |
-| 12, `Game.sourceId` | 6 | 471 |
-| 13, catálogo de N addons | 10 | 481 |
-| 14, provider e prioridade | 10 | 491 |
+| 11b, os dois casos da lista ordenada | 2 | 467 |
+| 12, `Game.sourceId` | 6 | 473 |
+| 13, catálogo de N addons | 10 | 483 |
+| 14, provider e prioridade | 10 | 493 |
 
 ---
 
@@ -5078,7 +5166,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+494`, zero falha.
+Esperado: `+496`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5287,7 +5375,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+497`, zero falha.
+Esperado: `+499`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5557,7 +5645,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+501`, zero falha.
+Esperado: `+503`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5580,9 +5668,9 @@ git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id c
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 494 |
-| 16, a prioridade chega nas telas | 3 | 497 |
-| 17, o nome do addon na tela | 4 | 501 |
+| 15, o id do addon na grade e no lote | 3 | 496 |
+| 16, a prioridade chega nas telas | 3 | 499 |
+| 17, o nome do addon na tela | 4 | 503 |
 
 ---
 
@@ -5948,7 +6036,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+518`, zero falha.
+Esperado: `+520`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6440,7 +6528,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+531`, zero falha.
+Esperado: `+533`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6763,7 +6851,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+537`, zero falha.
+Esperado: `+539`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -7049,7 +7137,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+543`, zero falha.
+Esperado: `+545`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7484,7 +7572,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+551`, zero falha.
+Esperado: `+553`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7916,7 +8004,7 @@ Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o
 flutter test
 ```
 
-Esperado: `+560`, zero falha.
+Esperado: `+562`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8291,7 +8379,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+566`, zero falha.
+Esperado: `+568`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8753,7 +8841,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+573`, zero falha, `22 issues found`.
+Esperado: `+575`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8766,20 +8854,20 @@ git commit -m "feat(accounts): reunir as contas de addon na tela de Accounts"
 
 ---
 
-Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+501` para `+573`. Os dois extremos já estiveram escritos como `+492` e `+564`, nove a menos cada um. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+501` e a linha da Task 25 na tabela fecha em `+573`.
+Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+503` para `+575`. Os dois extremos já estiveram escritos como `+492` e `+564`. Hoje a diferença é de onze, e não de nove: nove eram a defasagem original e dois vieram depois, da Task 11b, que a revisão da Task 9 obrigou a acrescentar. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+503` e a linha da Task 25 na tabela fecha em `+575`.
 
 O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com alça de arrasto, o detalhe por addon com origem, conta, cobertura, prioridade e remoção, a instalação por URL, o Accounts consolidado com uma linha por par (addon, console) e o estado de conexão, e o token deixando de ser do console para ser do par. O que ele não entregou, e está declarado na Task 22: a contagem de itens por console na cobertura, que custaria uma requisição de listagem por console ao abrir uma tela de leitura.
 
 | Task | Casos | Acumulado |
 | --- | --- | --- |
-| 18 | 17 | `+518` |
-| 19 | 13 | `+531` |
-| 20 | 6 | `+537` |
-| 21 | 6 | `+543` |
-| 22 | 8 | `+551` |
-| 23 | 9 | `+560` |
-| 24 | 6 | `+566` |
-| 25 | 7 | `+573` |
+| 18 | 17 | `+520` |
+| 19 | 13 | `+533` |
+| 20 | 6 | `+539` |
+| 21 | 6 | `+545` |
+| 22 | 8 | `+553` |
+| 23 | 9 | `+562` |
+| 24 | 6 | `+568` |
+| 25 | 7 | `+575` |
 
 ---
 
@@ -8896,7 +8984,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+578`, zero falha.
+Esperado: `+580`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -9065,7 +9153,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+578`, zero falha.
+Esperado: `+580`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
