@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,8 +9,10 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
+import 'package:roms_downloader/providers/source_verification_provider.dart';
 import 'package:roms_downloader/screens/game_detail_screen.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 
@@ -59,6 +63,7 @@ Widget _host(
   PackGridEntry entrada, {
   void Function(SourcePick)? onDownload,
   GameResolver? resolver,
+  SourceVerification Function(String filename)? verificacao,
 }) {
   return ProviderScope(
     overrides: [
@@ -66,6 +71,19 @@ Widget _host(
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
+      // Sobrescrita da família inteira, que vale para qualquer argumento.
+      // Conferido que compila no Riverpod 2.6: `familia.overrideWith((ref,
+      // arg) => ...)`, sem parênteses de argumento antes do `overrideWith`.
+      sourceVerificationProvider.overrideWith((ref, pedido) {
+        final estado = verificacao?.call(pedido.filename) ?? SourceVerification.notVerified;
+        // `verifying` não é valor que o provider devolva: ele é o
+        // `AsyncLoading`. Um `Completer` que nunca completa segura a tela
+        // nesse estado sem deixar timer pendente no fim do teste.
+        if (estado == SourceVerification.verifying) {
+          return Completer<SourceVerification>().future;
+        }
+        return estado;
+      }),
     ],
     child: MaterialApp(
       home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
@@ -140,6 +158,7 @@ void main() {
         packTargetProvider.overrideWithValue(_alvo),
         preferredRegionsProvider.overrideWithValue(const {'USA'}),
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
+        sourceVerificationProvider.overrideWith((ref, pedido) => SourceVerification.notVerified),
       ],
       child: MaterialApp(
         home: Consumer(builder: (context, ref, _) {
@@ -278,5 +297,163 @@ void main() {
     // O `HTTP` do canto direito do mockup da seção 7. Com uma fonte só não há
     // lista, então este é o único `HTTP` da tela.
     expect(find.text('HTTP'), findsOneWidget);
+  });
+
+  testWidgets('enquanto verifica, o botão diz Baixar mesmo assim', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      verificacao: (_) => SourceVerification.verifying,
+    ));
+
+    expect(find.widgetWithText(FilledButton, 'Baixar mesmo assim'), findsOneWidget);
+    expect(find.text('4.0 MB, listagem, verificando'), findsOneWidget);
+  });
+
+  testWidgets('CRC ok troca o motivo pelo motivo do CRC', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      verificacao: (_) => SourceVerification.crcOk,
+    ));
+
+    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
+    expect(find.text('4.0 MB, listagem, CRC ok'), findsOneWidget);
+    // Com certeza dada, o botão não hesita.
+    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
+  });
+
+  testWidgets('a fonte descartada sai do destaque e a outra sobe', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (filename) => filename.contains('USA')
+          ? SourceVerification.crcDiscarded
+          : SourceVerification.crcOk,
+    ));
+
+    // Por nome, a USA ganharia pela região preferida. O CRC desmentiu, e o
+    // destaque trocou de arquivo. É o ponto inteiro da seção 8.
+    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
+    expect(find.text('outra fonte, 1 descartada'), findsOneWidget);
+  });
+
+  testWidgets('a linha descartada aparece marcada', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (filename) => filename.contains('USA')
+          ? SourceVerification.crcDiscarded
+          : SourceVerification.crcOk,
+    ));
+
+    await tester.tap(find.text('outra fonte, 1 descartada'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('4.0 MB, listagem, HTTP, casamento provável, descartada pelo CRC'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('com uma confirmada, a que ainda verifica não faz o botão hesitar', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (filename) => filename.contains('USA')
+          ? SourceVerification.verifying
+          : SourceVerification.crcOk,
+    ));
+
+    // A leitura que ainda roda é de uma fonte que já perdeu, então ela não
+    // pode mais mudar o destaque.
+    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
+    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
+  });
+
+  testWidgets('nenhuma verificável: o card diz que não tem certeza de nenhuma', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (_) => SourceVerification.impossible,
+    ));
+
+    expect(find.text('não tenho certeza de nenhuma'), findsOneWidget);
+    // Nada em destaque significa nada de motivo de escolha por nome.
+    expect(find.text('escolhido pela sua região preferida (USA)'), findsNothing);
+  });
+
+  testWidgets('nesse estado a lista já abre e cada linha tem o seu Baixar', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (_) => SourceVerification.impossible,
+    ));
+
+    // Sem tap nenhum: a lista nasce aberta.
+    expect(find.text('Chrono Trigger (USA).zip'), findsOneWidget);
+    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
+    // Dois botões, e nenhum terceiro: não há card de destaque.
+    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNWidgets(2));
+  });
+
+  testWidgets('o Baixar da linha devolve aquela fonte, marcada como incerta', (tester) async {
+    final baixados = <SourcePick>[];
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      onDownload: baixados.add,
+      verificacao: (_) => SourceVerification.impossible,
+    ));
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Baixar').first);
+    await tester.pump();
+
+    expect(baixados.single.filename, 'Chrono Trigger (USA).zip');
+    expect(baixados.single.uncertain, isTrue);
+  });
+
+  testWidgets('todas descartadas: a faixa diz que nenhuma passou', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (_) => SourceVerification.crcDiscarded,
+    ));
+
+    expect(find.text('nenhuma fonte passou na verificação por CRC'), findsOneWidget);
+    expect(find.text('outras 2 fontes, 2 descartadas'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+  });
+
+  testWidgets('a fonte impossível de verificar diz isso na linha', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip'),
+        _fonte('Chrono Trigger (Japan).zip'),
+      ]),
+      verificacao: (filename) => filename.contains('USA')
+          ? SourceVerification.crcOk
+          : SourceVerification.impossible,
+    ));
+
+    await tester.tap(find.text('outra fonte'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('4.0 MB, listagem, HTTP, casamento provável, sem como verificar'),
+      findsOneWidget,
+    );
   });
 }

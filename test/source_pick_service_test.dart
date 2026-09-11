@@ -4,6 +4,7 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 
 Game _game(String filename, int size) => Game(
@@ -41,6 +42,16 @@ BatchPlan _plano(
       preferredRegions: regioes,
       resolveGame: resolver ?? _resolve,
       sourcePriority: prioridade,
+    );
+
+VerifiedSource _v(String filename, SourceVerification state) => (
+      source: MatchedSource(
+        filename: filename,
+        sourceId: kBuiltinSourceId,
+        confidence: MatchConfidence.likely,
+        size: 100,
+      ),
+      state: state,
     );
 
 void main() {
@@ -212,5 +223,92 @@ void main() {
 
     expect(plan.picks, isEmpty);
     expect(plan.failures.single.reason, 'a fonte saiu da listagem antes de a fila começar');
+  });
+
+  test('sem fonte nenhuma não há nada elegível e não há incerteza', () {
+    final split = splitByVerification(const []);
+
+    expect(split.eligible, isEmpty);
+    expect(split.discarded, isEmpty);
+    expect(split.confirmed, isFalse);
+    expect(split.verifying, isFalse);
+    // Zero fonte é a faixa de "sem fonte" da Task 16, não o estado novo.
+    expect(split.noCertainty, isFalse);
+  });
+
+  test('sem verificação, todas disputam', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.notVerified),
+      _v('b.zip', SourceVerification.notVerified),
+    ]);
+
+    expect(split.eligible.length, 2);
+    expect(split.confirmed, isFalse);
+    expect(split.noCertainty, isFalse);
+  });
+
+  test('uma confirmada por CRC tira as não confirmadas da disputa', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.notVerified),
+      _v('b.zip', SourceVerification.crcOk),
+    ]);
+
+    // É aqui que o destaque troca de arquivo (seção 8).
+    expect(split.eligible.map((v) => v.source.filename), ['b.zip']);
+    expect(split.confirmed, isTrue);
+  });
+
+  test('a descartada nunca disputa e sai contada à parte', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.crcDiscarded),
+      _v('b.zip', SourceVerification.notVerified),
+    ]);
+
+    expect(split.eligible.map((v) => v.source.filename), ['b.zip']);
+    expect(split.discarded.map((v) => v.source.filename), ['a.zip']);
+  });
+
+  test('enquanto alguma verifica, ninguém é excluído', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.verifying),
+      _v('b.zip', SourceVerification.notVerified),
+    ]);
+
+    expect(split.verifying, isTrue);
+    expect(split.eligible.length, 2);
+    expect(split.noCertainty, isFalse);
+  });
+
+  test('todas impossíveis viram o estado de não tenho certeza de nenhuma', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.impossible),
+      _v('b.zip', SourceVerification.impossible),
+    ]);
+
+    expect(split.noCertainty, isTrue);
+  });
+
+  test('uma impossível e uma sem verificar não é incerteza total', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.impossible),
+      _v('b.zip', SourceVerification.notVerified),
+    ]);
+
+    // A segunda nunca foi perguntada, então ainda não se sabe. Abrir a lista
+    // e desistir do destaque aqui seria desistir cedo demais.
+    expect(split.noCertainty, isFalse);
+    expect(split.eligible.length, 2);
+  });
+
+  test('tudo descartado deixa a disputa vazia sem virar incerteza', () {
+    final split = splitByVerification([
+      _v('a.zip', SourceVerification.crcDiscarded),
+      _v('b.zip', SourceVerification.crcDiscarded),
+    ]);
+
+    expect(split.eligible, isEmpty);
+    expect(split.discarded.length, 2);
+    // Não é incerteza: é certeza de que nenhuma serve. A tela mostra a faixa.
+    expect(split.noCertainty, isFalse);
   });
 }
