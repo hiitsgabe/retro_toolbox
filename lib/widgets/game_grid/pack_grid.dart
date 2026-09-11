@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
+import 'package:roms_downloader/providers/owned_games_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
@@ -21,6 +22,10 @@ class PackGrid extends ConsumerWidget {
     final entries = ref.watch(packGridEntriesProvider);
     final index = ref.watch(sourceIndexProvider);
     final selected = ref.watch(catalogProvider.select((s) => s.selectedGames));
+    // A varredura da biblioteca (Task 13). `valueOrNull` é o que entrega a
+    // regra da seção 3.1 de graça: enquanto ela não resolve, o conjunto é
+    // vazio e nenhum tile ganha borda.
+    final owned = ref.watch(ownedGameIdsProvider).valueOrNull ?? const <String>{};
     final catalogNotifier = ref.read(catalogProvider.notifier);
 
     // Seção 4 do spec de UI: a visibilidade do checkbox é global e depende só
@@ -60,6 +65,7 @@ class PackGrid extends ConsumerWidget {
                         title: entry.game.title,
                         coverUrl: entry.game.cover,
                         hasSource: entry.hasSource,
+                        isOwned: owned.contains(entry.game.id),
                         isSelected: selected.contains(entry.selectionKey),
                         selectionActive: selectionActive,
                         onTap: () => onOpenGame(entry),
