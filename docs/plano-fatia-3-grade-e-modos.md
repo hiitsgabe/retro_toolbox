@@ -1007,8 +1007,79 @@ void main() {
     final botao = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Baixar'));
     expect(botao.onPressed, isNull);
   });
+
+  testWidgets('o cabeçalho conta as incertezas, e some quando não há nenhuma', (tester) async {
+    // O selo por linha já tinha teste; a contagem do cabeçalho não tinha, e
+    // ela tem plural próprio. Os três ramos num caso só de propósito: é uma
+    // regra de texto, e três casos separados custariam três vezes o mesmo
+    // cenário para provar a mesma frase.
+    await tester.pumpWidget(_host(BatchPlan(picks: [
+      _pick('certo.zip', 1024),
+      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('outra.zip', 1024, uncertain: true),
+    ])));
+    expect(find.text('2 incertos'), findsOneWidget);
+
+    await tester.pumpWidget(_host(BatchPlan(picks: [
+      _pick('certo.zip', 1024),
+      _pick('duvida.zip', 1024, uncertain: true),
+    ])));
+    expect(find.text('1 incerto'), findsOneWidget);
+
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certo.zip', 1024)])));
+    expect(find.textContaining('incerto'), findsNothing);
+  });
+
+  testWidgets('Cancelar fecha a folha sem confirmar nada', (tester) async {
+    // Precisa de rota de verdade: a folha chama `maybePop`, e com ela montada
+    // direto no `body` não há o que desempilhar, então o teste passaria sem
+    // provar nada. Aqui ela sobe como modal, do jeito que `_confirmarLote`
+    // sobe em produção.
+    var confirmou = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showModalBottomSheet<BatchPlan>(
+              context: context,
+              builder: (_) => BatchConfirmSheet(
+                plan: BatchPlan(picks: [_pick('a.zip', 1024)]),
+                onConfirm: (_) => confirmou++,
+                onRemove: (_) {},
+              ),
+            ),
+            child: const Text('abrir'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BatchConfirmSheet), findsOneWidget);
+
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BatchConfirmSheet), findsNothing);
+    expect(confirmou, 0);
+  });
+
+  testWidgets('só com falhas o cabeçalho diz zero jogos, e a folha continua aberta', (tester) async {
+    // A folha não se fecha sozinha quando nada pode ser baixado: ela existe
+    // justamente para mostrar o motivo (seção 6). O cabeçalho tem que dizer a
+    // verdade nesse estado, e o plural de zero é "jogos".
+    await tester.pumpWidget(_host(const BatchPlan(
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+    )));
+
+    expect(find.text('0 jogos, 0 B'), findsOneWidget);
+    expect(find.text('sem fonte'), findsOneWidget);
+  });
 }
 ```
+
+> **Os três últimos casos entraram depois**, numa ressalva de QA aceita quando a fatia já estava na Task 13. Eles cobriam três coisas que a folha fazia e nenhum teste afirmava: a contagem de incertezas no cabeçalho, o botão `Cancelar` e o cabeçalho no estado "só falhas". Quem executa a Task 5 do zero escreve os onze de uma vez; o acumulado da tabela no fim do plano já conta os onze.
 
 - [ ] **Step 2: Rode e veja falhar**
 
@@ -1148,7 +1219,7 @@ class BatchConfirmSheet extends StatelessWidget {
 flutter test test/batch_confirm_sheet_test.dart
 ```
 
-Esperado: `+8`, zero falha.
+Esperado: `+11`, zero falha.
 
 Se `2 jogos, 2.0 MB` falhar por causa do formato, confira `formatBytes` em `lib/utils/formatters.dart:6-13`: ele usa uma casa decimal por padrão e a escala 1024. **Ajuste o teste ao `formatBytes`, não o `formatBytes` ao teste**: ele já é usado em outras telas e mudá-lo é regressão fora de escopo.
 
@@ -3316,7 +3387,11 @@ E acrescente os dois testes no fim de `main`:
 flutter test test/pack_grid_test.dart
 ```
 
-Esperado: `+7 -2`. Os sete da Task 12 continuam passando, e os dois novos falham porque `PackGrid` ainda não lê o provider: `Expected: true / Actual: <false>`.
+Esperado: `+8 -1`. Os sete da Task 12 continuam passando, e **um** dos dois novos falha, o da borda, porque `PackGrid` ainda não lê o provider: `Expected: true / Actual: <false>`.
+
+O outro, "enquanto a varredura não termina ninguém vai marcado", **passa antes da ligação existir**, e isso é esperado. Ele afirma `isOwned == false`, e `false` é justamente o padrão que a Task 12 deixou. Um teste que passa na fase vermelha não está provando nada hoje; ele está guardando o amanhã, para o caso de alguém trocar o `valueOrNull ?? {}` por um `.value` ou por um padrão otimista. Mantenha-o e não tente fazê-lo falhar de propósito: forçá-lo a falhar exigiria inverter a asserção, e aí ele passaria a afirmar o contrário da seção 3.1.
+
+A primeira versão deste plano dizia `+7 -2` aqui. Estava errada, e quem pegou foi o implementador da Task 13 ao reportar a divergência em vez de engolir o número.
 
 - [ ] **Step 8: Ligue a grade ao provider**
 
@@ -3356,7 +3431,7 @@ Agora a suíte inteira, porque esta Task fecha o Grupo 3:
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+256 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Esperado: `+259 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 10: Commit da ligação**
 
@@ -4721,7 +4796,7 @@ Se os dois testes de `tap` falharem com `Actual: _TextFinder:<zero widgets>` log
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+287 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 109 das dezesseis Tasks.
+Esperado: `+290 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 112 das dezesseis Tasks.
 
 - [ ] **Step 7: Commit**
 
@@ -6251,7 +6326,7 @@ Se `o Baixar da linha devolve aquela fonte` pegar o botão errado, confira a ord
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+321 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
+Esperado: `+324 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
 
 - [ ] **Step 11: Commit**
 
@@ -7255,7 +7330,7 @@ O suspeito mais provável é `use_build_context_synchronously` em `home_screen.d
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+334 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Esperado: `+337 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
 
 A conta dos 334, para o caso de o número não bater e você precisar saber onde procurar:
 
@@ -7266,23 +7341,23 @@ A conta dos 334, para o caso de o número não bater e você precisar saber onde
 | 2, `SelectionBar` | 5 | 185 |
 | 3, fiação | 0 | 185 |
 | 4, `BatchPlan` | 6 | 191 |
-| 5, folha de lote | 8 | 199 |
-| 6, `planFromGames` | 4 | 203 |
-| 7, `PackGridEntry` | 4 | 207 |
-| 8, `SourceIndex` | 7 | 214 |
-| 9, `filterPackEntries` | 7 | 221 |
-| 10, providers | 7 | 228 |
-| 11, `PackGridItem` | 11 | 239 |
-| 12, `PackGrid` | 7 | 246 |
-| 13, jogos no disco | 10 | 256 |
-| 14, `planFromEntries` | 11 | 267 |
-| 15, tela de detalhe | 9 | 276 |
-| 16, sem fonte e outras fontes | 11 | 287 |
-| 17, verificação por CRC | 16 | 303 |
-| 18, CRC na tela de detalhe | 18 | 321 |
-| 19, roteamento de modo | 2 | 323 |
-| 20, lote de MODO PACK | 8 | 331 |
-| 21, barra na tela de detalhe | 3 | 334 |
+| 5, folha de lote | 11 | 202 |
+| 6, `planFromGames` | 4 | 206 |
+| 7, `PackGridEntry` | 4 | 210 |
+| 8, `SourceIndex` | 7 | 217 |
+| 9, `filterPackEntries` | 7 | 224 |
+| 10, providers | 7 | 231 |
+| 11, `PackGridItem` | 11 | 242 |
+| 12, `PackGrid` | 7 | 249 |
+| 13, jogos no disco | 10 | 259 |
+| 14, `planFromEntries` | 11 | 270 |
+| 15, tela de detalhe | 9 | 279 |
+| 16, sem fonte e outras fontes | 11 | 290 |
+| 17, verificação por CRC | 16 | 306 |
+| 18, CRC na tela de detalhe | 18 | 324 |
+| 19, roteamento de modo | 2 | 326 |
+| 20, lote de MODO PACK | 8 | 334 |
+| 21, barra na tela de detalhe | 3 | 337 |
 
 - [ ] **Step 6: Regressão de MODO FONTE, à mão**
 

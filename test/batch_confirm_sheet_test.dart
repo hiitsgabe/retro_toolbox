@@ -101,4 +101,73 @@ void main() {
     final botao = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Baixar'));
     expect(botao.onPressed, isNull);
   });
+
+  testWidgets('o cabeçalho conta as incertezas, e some quando não há nenhuma', (tester) async {
+    // O selo por linha já tinha teste; a contagem do cabeçalho não tinha, e
+    // ela tem plural próprio. Os três ramos num caso só de propósito: é uma
+    // regra de texto, e três casos separados custariam três vezes o mesmo
+    // cenário para provar a mesma frase.
+    await tester.pumpWidget(_host(BatchPlan(picks: [
+      _pick('certo.zip', 1024),
+      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('outra.zip', 1024, uncertain: true),
+    ])));
+    expect(find.text('2 incertos'), findsOneWidget);
+
+    await tester.pumpWidget(_host(BatchPlan(picks: [
+      _pick('certo.zip', 1024),
+      _pick('duvida.zip', 1024, uncertain: true),
+    ])));
+    expect(find.text('1 incerto'), findsOneWidget);
+
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certo.zip', 1024)])));
+    expect(find.textContaining('incerto'), findsNothing);
+  });
+
+  testWidgets('Cancelar fecha a folha sem confirmar nada', (tester) async {
+    // Precisa de rota de verdade: a folha chama `maybePop`, e com ela montada
+    // direto no `body` não há o que desempilhar, então o teste passaria sem
+    // provar nada. Aqui ela sobe como modal, do jeito que `_confirmarLote`
+    // sobe em produção.
+    var confirmou = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showModalBottomSheet<BatchPlan>(
+              context: context,
+              builder: (_) => BatchConfirmSheet(
+                plan: BatchPlan(picks: [_pick('a.zip', 1024)]),
+                onConfirm: (_) => confirmou++,
+                onRemove: (_) {},
+              ),
+            ),
+            child: const Text('abrir'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('abrir'));
+    await tester.pumpAndSettle();
+    expect(find.byType(BatchConfirmSheet), findsOneWidget);
+
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BatchConfirmSheet), findsNothing);
+    expect(confirmou, 0);
+  });
+
+  testWidgets('só com falhas o cabeçalho diz zero jogos, e a folha continua aberta', (tester) async {
+    // A folha não se fecha sozinha quando nada pode ser baixado: ela existe
+    // justamente para mostrar o motivo (seção 6). O cabeçalho tem que dizer a
+    // verdade nesse estado, e o plural de zero é "jogos".
+    await tester.pumpWidget(_host(const BatchPlan(
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+    )));
+
+    expect(find.text('0 jogos, 0 B'), findsOneWidget);
+    expect(find.text('sem fonte'), findsOneWidget);
+  });
 }
