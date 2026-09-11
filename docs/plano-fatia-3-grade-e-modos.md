@@ -597,7 +597,9 @@ E troque a linha 96, que hoje é só `Footer(),`, por:
           Footer(),
 ```
 
-O `select` sobre `selectedGames.length` é de propósito: a barra só reconstrói quando o **número** muda, não a cada mexida no catálogo.
+O `select` sobre `selectedGames.length` é de propósito: ele corta as reconstruções a cada mexida no catálogo e deixa passar só as em que o **número** muda.
+
+**Mas diga isso com precisão, porque a primeira versão deste parágrafo estava errada e uma revisão de QA pegou.** O `watch` está dentro do `build` de `_HomeScreenState`, então quem reconstrói quando o número muda é o `HomeScreen` inteiro, não a barra sozinha. Um `select` estreita o gatilho, nunca o alvo: o alvo é sempre o widget que chamou o `watch`. Estreitar o alvo de verdade seria pôr um `Consumer` em volta da barra, e isso esta fatia não faz: a Task 21 mexe na barra de novo e a decisão de onde ela mora fica para lá.
 
 O corpo do `onDownload` é o mesmo que estava no header (`header.dart:190-191`), com **uma** troca obrigatória: lá o console vem de `widget.selectedConsole?.id`, porque `Header` recebe o console por parâmetro; aqui vem de `appState.selectedConsole?.id`, porque `HomeScreen` já lê o `appStateProvider`. Copiar `widget.selectedConsole` para dentro do `HomeScreen` não compila. Fora isso é a mesma linha. Na Task 5 ela passa a chamar a folha de confirmação; aqui ela só muda de lugar, para o commit ser uma coisa só.
 
@@ -6382,10 +6384,33 @@ E na assinatura de `_buildActionWidgets`, troque `required bool canDownload,` po
 A Task 3 apagou o botão "Download Selected", mas `canDownload` sobreviveu, porque parâmetro de método sem uso **não** é apontado pelo `flutter analyze` com as regras deste repositório. O Step 3 acabou de tirar o último uso dele. Apague agora, nesta ordem:
 
 1. Em `build`, a linha `final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();` (hoje a 46).
-2. Em `build`, a linha `final downloadNotifier = ref.read(downloadProvider.notifier);` (hoje a 36), que existia só para alimentar a de cima.
-3. O import `package:roms_downloader/providers/download_provider.dart` (hoje a linha 7).
+2. Em `build`, a linha `final downloadNotifier = ref.read(downloadProvider.notifier);` (hoje a 36), **trocada pela linha abaixo, não apagada**. Leia o parágrafo "A linha 36 não é lixo" antes de mexer nela.
+3. O import `package:roms_downloader/providers/download_provider.dart` (hoje a linha 7): **fica**, porque a linha nova ainda o usa.
 
 > **Confira o conteúdo da linha antes de apagar, não o número.** Esses três números foram medidos depois que a Task 3 fechou (commit `b31f052`), que encurtou `header.dart` em 14 linhas. A primeira versão deste plano dizia 47 e 37, medidos antes da Task 3, e estava errada em duas das três. Se o arquivo mudar de novo antes de você chegar aqui, o `grep -n "canDownload\|downloadNotifier\|download_provider" lib/widgets/header/header.dart` é a fonte da verdade, e este parágrafo é só uma pista.
+
+**A linha 36 não é lixo, é a partida do app.**
+
+Ela parece leitura morta depois que o item 1 sai, e a primeira versão deste plano mandava apagá-la. Estava errado, e uma revisão de QA pegou. `ref.read(downloadProvider.notifier)` é a **única construção adiantada de `downloadProvider` no app inteiro**, e o construtor de `DownloadNotifier` faz trabalho de partida: assina o stream de `updates` do `background_downloader`, chama `resumeFromBackground()`, `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()` (`download_provider.dart:37-58`).
+
+Conferido com `grep -rn "downloadProvider" lib/`, que dá seis ocorrências além da declaração. Cinco são `ref.read` dentro de método, em `task_queue_service.dart:69,83,88,118`, e um `ref.watch` em `sport_patcher_wizard_screen.dart:743`. Nenhuma delas roda na abertura: as cinco primeiras só rodam depois de o usuário mandar baixar alguma coisa, e a sexta só se ele abrir o wizard do sport patcher. Tarde demais para retomar o download que ficou pela metade no processo anterior, e tarde demais para a assinatura do stream existir quando a primeira tarefa é enfileirada.
+
+Então o item 2 é uma **troca**, não uma exclusão. Ponha no lugar:
+
+```dart
+    // Não é leitura morta: é a única construção adiantada de `downloadProvider`
+    // no app. O construtor de `DownloadNotifier` assina o stream de updates do
+    // `background_downloader`, chama `resumeFromBackground()`,
+    // `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()`
+    // (`download_provider.dart:37-58`). Os outros seis leitores são `read`
+    // dentro de método ou de uma tela secundária, e nenhum roda na abertura.
+    // O jeito certo de arrumar isto é mover a partida para fora do header, mas
+    // isso é `download_provider.dart`, que a fatia 3 não toca (ver a tabela de
+    // intocados que a Task 22 confere). Fica aqui, agora com o motivo escrito.
+    ref.read(downloadProvider.notifier);
+```
+
+É `read` e não `watch` de propósito: `watch` reconstruiria o header a cada evento de progresso, que chega várias vezes por segundo durante um download. `downloadProvider` não é `autoDispose`, então uma leitura só, na primeira construção, basta para ele viver o resto da sessão.
 
 Depois rode:
 
@@ -6763,7 +6788,9 @@ No `build`, logo depois de `final errorMessage = ...`, hoiste o modo e filtre a 
     );
 ```
 
-O `select` agora entrega o `Set` em vez do `length` que a Task 3 escreveu. Continua reconstruindo só quando a seleção muda: `CatalogNotifier` monta um `Set` novo a cada mexida (`catalog_provider.dart:229-237`) e devolve o mesmo objeto quando não mexe, e o `select` do Riverpod compara com `==`, que para `Set` é identidade.
+O `select` agora entrega o `Set` em vez do `length` que a Task 3 escreveu. O gatilho continua estreito: `CatalogNotifier` monta um `Set` novo a cada mexida (`catalog_provider.dart:229-237`) e devolve o mesmo objeto quando não mexe, e o `select` do Riverpod compara com `==`, que para `Set` é identidade.
+
+Repare que o gatilho ficou **mais largo** que o da Task 3, e de propósito: `length` não distinguia trocar um jogo por outro, e a barra agora precisa saber quais são, não quantos. Como antes, quem reconstrói é o `HomeScreen` inteiro, porque é lá que o `watch` mora. Não escreva "só a barra reconstrói" aqui; a frase é falsa e já foi corrigida uma vez na Task 3.
 
 A `SelectionBar` passa a contar a seleção filtrada e a mandar ela para o lote:
 
