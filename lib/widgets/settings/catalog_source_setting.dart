@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/settings_service.dart';
 
 class CatalogSourceSetting extends ConsumerStatefulWidget {
   const CatalogSourceSetting({super.key});
@@ -71,7 +73,13 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
     final path = result?.files.single.path;
     if (path == null) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
-    await _run(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()),
+    final vault = (await ref.read(vaultProvider.future)).vault;
+    await _run(
+        () => _catalogService.setCatalogFromJson(
+              File(path).readAsStringSync(),
+              vault: vault,
+              addonId: SettingsService.builtinAddonId,
+            ),
         'Catalog imported.');
   }
 
@@ -79,7 +87,14 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(url);
-    await _run(() => _catalogService.setCatalogFromUrl(url), 'Catalog loaded from URL.');
+    final vault = (await ref.read(vaultProvider.future)).vault;
+    await _run(
+        () => _catalogService.setCatalogFromUrl(
+              url,
+              vault: vault,
+              addonId: SettingsService.builtinAddonId,
+            ),
+        'Catalog loaded from URL.');
   }
 
   Future<void> _reset() async {

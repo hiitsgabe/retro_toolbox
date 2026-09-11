@@ -55,7 +55,12 @@ class Console {
   bool get hasTokenAuth {
     if (auth == null) return false;
     if (auth!['type'] == 'ia_s3') return false;
-    return auth!.containsKey('token') || auth!.containsKey('auth_message');
+    // `requires_token` é o que a colheita da instalação deixa no lugar do
+    // token que tirou (`CatalogService.harvestAuthTokens`). Sem ele, um
+    // catálogo privado cujo bloco de auth era só o token ficaria sem nenhuma
+    // marca depois de instalado, e este getter passaria a responder "não pede
+    // token" para o console que mais pede.
+    return auth!['requires_token'] == true || auth!.containsKey('token') || auth!.containsKey('auth_message');
   }
 
   /// Human-readable instructions for obtaining the auth token.

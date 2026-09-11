@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/utils/title_metadata_parser.dart';
 import 'package:roms_downloader/services/boxart_service.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
 
 const _iaMetadataBase = 'https://archive.org/metadata/';
 const _iaDownloadBase = 'https://archive.org/download/';
@@ -104,21 +106,81 @@ class CatalogService {
     return File(path.join(supportDir.path, 'config', consolesFilePath));
   }
 
+  /// Tira `auth.token` de todo o catálogo e guarda o que achou no cofre.
+  ///
+  /// O catálogo é o arquivo que o usuário compartilha com outra pessoa. O
+  /// formato permite token lá dentro, e a seção 6.3 do spec manda mover para o
+  /// cofre na instalação. Esta é a metade da correção que vale em toda
+  /// plataforma: tirar do arquivo não depende de haver chaveiro.
+  ///
+  /// Onde havia `token`, deixa `requires_token: true`. A marca não é segredo:
+  /// ela diz que o console pede token, não qual é, e o arquivo que descreve o
+  /// console é exatamente o lugar dela. Sem a marca, [Console.hasTokenAuth]
+  /// viraria falso e o usuário perderia a tela onde digitaria o token.
+  ///
+  /// Devolve o JSON limpo. Não valida formato: quem valida é
+  /// [setCatalogFromJson], que tem mensagem de erro própria, e levantar aqui
+  /// trocaria essa mensagem por um stack trace.
+  static Future<String> harvestAuthTokens(String jsonStr, {required SecretVault vault, required String addonId}) async {
+    final decoded = jsonDecode(jsonStr);
+
+    Future<void> colher(String id, Map<dynamic, dynamic> item) async {
+      final auth = item['auth'];
+      if (auth is! Map) return;
+      if (!auth.containsKey('token')) return;
+      final token = auth.remove('token');
+      // A marca entra mesmo quando o token vem vazio, porque é o `containsKey`
+      // que ela substitui, não o valor. `{'token': ''}` é como um catálogo
+      // compartilhado diz "este console pede token e eu não estou te dando o
+      // meu": quem lê tem que continuar sabendo disso.
+      auth['requires_token'] = true;
+      if (token is! String || token.isEmpty) return;
+      final chave = SecretRef.addonToken(addonId, id);
+      // O que já está no cofre é o mais novo: reinstalar um catálogo velho não
+      // pode devolver ao usuário um token que ele já trocou.
+      if (await vault.read(chave) != null) return;
+      await vault.write(chave, token);
+    }
+
+    if (decoded is List) {
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final name = item['name'] as String? ?? '';
+        if (name.isEmpty) continue;
+        // As entradas de descoberta (`list_systems`) não viram console, e ainda
+        // assim entram aqui: o arquivo compartilhado é o mesmo e o token lá
+        // dentro vaza igual.
+        await colher(_nameToId(name), item);
+      }
+    } else if (decoded is Map) {
+      for (final entrada in decoded.entries) {
+        final valor = entrada.value;
+        if (valor is! Map) continue;
+        await colher(entrada.key.toString(), valor);
+      }
+    } else {
+      return jsonStr;
+    }
+
+    return jsonEncode(decoded);
+  }
+
   /// Validates [jsonStr] parses into at least one console, saves it as the
   /// active catalog source, and clears caches. Throws on invalid content.
-  Future<void> setCatalogFromJson(String jsonStr) async {
-    final consoles = _parseConsoles(jsonStr);
+  Future<void> setCatalogFromJson(String jsonStr, {required SecretVault vault, required String addonId}) async {
+    final limpo = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
+    final consoles = _parseConsoles(limpo);
     if (consoles.isEmpty) {
       throw const FormatException('No consoles found in the provided catalog.');
     }
     final file = await _userConsolesFile();
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonStr);
+    await file.writeAsString(limpo);
     _consolesCache.clear();
   }
 
   /// Fetches a catalog from [url] and installs it. Throws on network/format error.
-  Future<void> setCatalogFromUrl(String url) async {
+  Future<void> setCatalogFromUrl(String url, {required SecretVault vault, required String addonId}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     try {
@@ -128,7 +190,7 @@ class CatalogService {
         throw HttpException('HTTP ${response.statusCode} fetching catalog');
       }
       final body = await response.transform(utf8.decoder).join();
-      await setCatalogFromJson(body);
+      await setCatalogFromJson(body, vault: vault, addonId: addonId);
     } finally {
       client.close();
     }
