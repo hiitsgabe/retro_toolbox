@@ -1426,7 +1426,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+203 -1` na suíte. A conta: 178 da linha de base, mais 2 da Task 1, 5 da Task 2, 6 da Task 4, 8 da Task 5 e 4 desta.
+Esperado: 22 findings e zero erro; `+206 -1` na suíte. A conta: 178 da linha de base, mais 2 da Task 1, 5 da Task 2, 6 da Task 4, 11 da Task 5 e 4 desta.
 
 Confira à mão, porque nenhum teste cobre isso: rode o app, marque três jogos, aperte "Baixar", tire um da folha, confirme, e veja que dois entram na fila e a barra roxa apaga.
 
@@ -1848,8 +1848,8 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 
-PackGridEntry _e(String title, {bool comFonte = true}) => PackGridEntry(
-      game: PackGame(id: 'snes/${title.toLowerCase()}', title: title, dumps: const []),
+PackGridEntry _e(String title, {bool comFonte = true, String? id}) => PackGridEntry(
+      game: PackGame(id: id ?? 'snes/${title.toLowerCase()}', title: title, dumps: const []),
       sources: comFonte
           ? [const MatchedSource(filename: 'a.zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1)]
           : const [],
@@ -1894,6 +1894,22 @@ void main() {
     final saida = filterPackEntries([_e('Super Metroid', comFonte: false)], '');
 
     expect(saida.single.hasSource, isFalse);
+  });
+
+  test('títulos iguais saem sempre na mesma ordem, desempatados pelo id', () {
+    // Todo outro teste de ordenação usa títulos distintos, então `byTitle != 0`
+    // é sempre verdadeiro e o ramo do desempate nunca roda. Sem este caso,
+    // apagar o desempate ou invertê-lo não deixa nenhum teste vermelho.
+    //
+    // As duas chamadas são o ponto: a entrada vai nas duas ordens possíveis e a
+    // saída tem que ser a mesma. Uma chamada só passaria por acaso, porque em
+    // lista de dois elementos o `sort` do Dart cai em inserção, que preserva a
+    // ordem de entrada quando o comparador devolve 0.
+    final usa = _e('Final Fantasy', id: 'snes/ff-usa');
+    final eur = _e('Final Fantasy', id: 'snes/ff-eur');
+
+    expect(filterPackEntries([usa, eur], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
+    expect(filterPackEntries([eur, usa], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
   });
 
   test('espaço em volta da busca não conta', () {
@@ -1959,7 +1975,7 @@ Uma nota sobre `norm`, conferida rodando e não por leitura: ele apara extensão
 flutter test test/pack_grid_filter_test.dart
 ```
 
-Esperado: `+7`, zero falha.
+Esperado: `+8`, zero falha.
 
 - [ ] **Step 5: Commit**
 
@@ -3431,7 +3447,7 @@ Agora a suíte inteira, porque esta Task fecha a grade. (Quem fecha o Grupo 3 é
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+259 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Esperado: `+260 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 10: Commit da ligação**
 
@@ -3857,7 +3873,7 @@ Agora a suíte inteira, porque esta Task fecha o Grupo 3:
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+270 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Esperado: `+271 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 5: Commit**
 
@@ -4804,7 +4820,7 @@ Se os dois testes de `tap` falharem com `Actual: _TextFinder:<zero widgets>` log
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+290 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 112 das dezesseis Tasks.
+Esperado: `+291 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 113 das dezesseis Tasks.
 
 - [ ] **Step 7: Commit**
 
@@ -6334,7 +6350,7 @@ Se `o Baixar da linha devolve aquela fonte` pegar o botão errado, confira a ord
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+324 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
+Esperado: `+325 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
 
 - [ ] **Step 11: Commit**
 
@@ -6599,7 +6615,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+323 -1` na suíte, sendo os 321 da Task 18 mais os 2 desta.
+Esperado: 22 findings e zero erro no analyze; `+327 -1` na suíte, sendo os 325 da Task 18 mais os 2 desta.
 
 - [ ] **Step 9: Commit**
 
@@ -6956,7 +6972,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+331 -1` na suíte, sendo os 323 da Task 19 mais os 8 desta.
+Esperado: 22 findings e zero erro no analyze; `+335 -1` na suíte, sendo os 327 da Task 19 mais os 8 desta.
 
 - [ ] **Step 13: Commit**
 
@@ -7199,7 +7215,7 @@ flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+334 -1` na suíte, sendo os 331 da Task 20 mais os 3 desta.
+Esperado: 22 findings e zero erro; `+338 -1` na suíte, sendo os 335 da Task 20 mais os 3 desta.
 
 - [ ] **Step 8: Commit**
 
@@ -7338,9 +7354,9 @@ O suspeito mais provável é `use_build_context_synchronously` em `home_screen.d
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+337 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Esperado: `+338 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
 
-A conta dos 334, para o caso de o número não bater e você precisar saber onde procurar:
+A conta dos 338, para o caso de o número não bater e você precisar saber onde procurar:
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
@@ -7353,19 +7369,19 @@ A conta dos 334, para o caso de o número não bater e você precisar saber onde
 | 6, `planFromGames` | 4 | 206 |
 | 7, `PackGridEntry` | 4 | 210 |
 | 8, `SourceIndex` | 7 | 217 |
-| 9, `filterPackEntries` | 7 | 224 |
-| 10, providers | 7 | 231 |
-| 11, `PackGridItem` | 11 | 242 |
-| 12, `PackGrid` | 7 | 249 |
-| 13, jogos no disco | 10 | 259 |
-| 14, `planFromEntries` | 11 | 270 |
-| 15, tela de detalhe | 9 | 279 |
-| 16, sem fonte e outras fontes | 11 | 290 |
-| 17, verificação por CRC | 16 | 306 |
-| 18, CRC na tela de detalhe | 18 | 324 |
-| 19, roteamento de modo | 2 | 326 |
-| 20, lote de MODO PACK | 8 | 334 |
-| 21, barra na tela de detalhe | 3 | 337 |
+| 9, `filterPackEntries` | 8 | 225 |
+| 10, providers | 7 | 232 |
+| 11, `PackGridItem` | 11 | 243 |
+| 12, `PackGrid` | 7 | 250 |
+| 13, jogos no disco | 10 | 260 |
+| 14, `planFromEntries` | 11 | 271 |
+| 15, tela de detalhe | 9 | 280 |
+| 16, sem fonte e outras fontes | 11 | 291 |
+| 17, verificação por CRC | 16 | 307 |
+| 18, CRC na tela de detalhe | 18 | 325 |
+| 19, roteamento de modo | 2 | 327 |
+| 20, lote de MODO PACK | 8 | 335 |
+| 21, barra na tela de detalhe | 3 | 338 |
 
 - [ ] **Step 6: Regressão de MODO FONTE, à mão**
 
