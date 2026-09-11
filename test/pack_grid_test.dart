@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/providers/owned_games_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 import 'package:roms_downloader/services/source_index.dart';
@@ -41,12 +44,24 @@ Widget _host(
   List<PackGridEntry> entradas, {
   SourceIndex? indice,
   void Function(PackGridEntry)? onOpenGame,
+  Set<String>? baixados,
+  bool varrendo = false,
 }) {
   return ProviderScope(
     overrides: [
+      // Continua aqui, e é a linha mais fácil de perder nesta troca: o
+      // `catalogProvider` deste teste é o de verdade, e o construtor dele
+      // escuta `favoritesProvider`, que vai ao disco. Sem o stub o caso do
+      // toque longo estoura com `MissingPluginException` **depois** de ter
+      // passado. Ver a "Sexta decisão travada".
       semDiscoDeFavoritos,
       packGridEntriesProvider.overrideWithValue(entradas),
       sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
+      ownedGameIdsProvider.overrideWith(
+        // Um `Completer` que ninguém completa é a varredura em curso. Um
+        // `Future.delayed` deixaria timer pendente e o teste falharia no fim.
+        (ref) => varrendo ? Completer<Set<String>>().future : Future.value(baixados ?? const <String>{}),
+      ),
     ],
     child: MaterialApp(
       home: Scaffold(body: PackGrid(onOpenGame: onOpenGame ?? (_) {})),
@@ -130,5 +145,33 @@ void main() {
       tester.widgetList<Checkbox>(find.byType(Checkbox)).where((c) => c.value == true).length,
       1,
     );
+  });
+
+  testWidgets('o jogo que já está no disco vai marcado para o tile', (tester) async {
+    await tester.pumpWidget(_host(
+      [
+        _entrada('snes/chrono-trigger', 'Chrono Trigger'),
+        _entrada('snes/super-metroid', 'Super Metroid'),
+      ],
+      baixados: {'snes/chrono-trigger'},
+    ));
+    await tester.pump();
+
+    final tiles = tester.widgetList<PackGridItem>(find.byType(PackGridItem)).toList();
+    expect(tiles.firstWhere((t) => t.title == 'Chrono Trigger').isOwned, isTrue);
+    expect(tiles.firstWhere((t) => t.title == 'Super Metroid').isOwned, isFalse);
+  });
+
+  testWidgets('enquanto a varredura não termina ninguém vai marcado', (tester) async {
+    await tester.pumpWidget(_host(
+      [_entrada('snes/chrono-trigger', 'Chrono Trigger')],
+      baixados: {'snes/chrono-trigger'},
+      varrendo: true,
+    ));
+    await tester.pump();
+
+    // Seção 3.1: nada de borda enquanto o scan roda. Borda errada é pior que
+    // borda ausente, e neste instante a resposta ainda não existe.
+    expect(tester.widget<PackGridItem>(find.byType(PackGridItem)).isOwned, isFalse);
   });
 }
