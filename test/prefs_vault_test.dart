@@ -17,9 +17,10 @@ void main() {
 
   test('o segredo não encosta na chave que guarda as settings', () async {
     // O ganho real desta implementação não é cifrar, porque ela não cifra. É
-    // tirar o segredo de dentro do `app_settings`, que o app serializa
-    // inteiro, imprime em `debugPrint` no caminho de erro
-    // (`settings_service.dart:21`) e vai ganhar exportação na Grupo 3.
+    // tirar o segredo de dentro do `app_settings`, cujo erro de leitura
+    // imprime o próprio JSON de volta: a `FormatException` do `jsonDecode`
+    // embute o trecho da fonte, e o `debugPrint` do caminho de erro
+    // (`settings_service.dart:21`) manda isso para o log com o segredo dentro.
     SharedPreferences.setMockInitialValues({'app_settings': '{"nszDecompressEnabled":true}'});
     SharedPreferences.resetStatic();
     final prefs = await SharedPreferences.getInstance();
