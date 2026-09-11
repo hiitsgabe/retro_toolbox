@@ -3236,7 +3236,7 @@ git commit -m "feat(grade): varredura da biblioteca devolve os jogos ja baixados
 
 - [ ] **Step 6: Escreva os testes da grade com borda**
 
-Em `test/pack_grid_test.dart`, troque o helper `_host` inteiro por esta versão, que ganha um parâmetro de jogos já baixados:
+Em `test/pack_grid_test.dart`, troque o helper `_host` inteiro por esta versão, que ganha um parâmetro de jogos já baixados. **Repare que `semDiscoDeFavoritos` continua na lista de `overrides`**: ele veio da Task 12 e perdê-lo nesta troca quebra o caso do toque longo, que usa o `catalogProvider` de verdade.
 
 ```dart
 Widget _host(
@@ -3248,6 +3248,12 @@ Widget _host(
 }) {
   return ProviderScope(
     overrides: [
+      // Continua aqui, e é a linha mais fácil de perder nesta troca: o
+      // `catalogProvider` deste teste é o de verdade, e o construtor dele
+      // escuta `favoritesProvider`, que vai ao disco. Sem o stub o caso do
+      // toque longo estoura com `MissingPluginException` **depois** de ter
+      // passado. Ver a "Sexta decisão travada".
+      semDiscoDeFavoritos,
       packGridEntriesProvider.overrideWithValue(entradas),
       sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
       ownedGameIdsProvider.overrideWith(
