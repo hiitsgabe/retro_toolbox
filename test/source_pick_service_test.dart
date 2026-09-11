@@ -180,6 +180,30 @@ void main() {
     expect(plan.picks.single.reason, 'vem do addon de maior prioridade');
   });
 
+  test('a prioridade do addon escolhe a fonte, não só escreve o motivo', () {
+    // O caso acima afirma só o `reason`, e o `reason` sai de `_reason`, que
+    // recalcula `_priorityRank` por conta própria. Com isso, neutralizar o
+    // eixo de addon dentro de `_compare` não deixa nenhum teste vermelho, e o
+    // estrago é pior que um ramo morto: o desempate cairia na ordem de
+    // chegada, o lote baixaria da fonte lenta, e o motivo continuaria dizendo
+    // que ela veio do addon de maior prioridade. Texto certo, arquivo errado.
+    //
+    // As duas fontes diferem no `size`, que não entra em `_compare`, então
+    // quem ganhou o `sort` fica observável. A lenta vem primeiro de propósito:
+    // é ela que venceria pela ordem de chegada.
+    final plan = _plano(
+      [
+        _entrada('Chrono Trigger', [
+          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento', size: 10),
+          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido', size: 20),
+        ]),
+      ],
+      prioridade: const ['rapido', 'lento'],
+    );
+
+    expect(plan.picks.single.size, 20);
+  });
+
   test('empate em tudo fica com a primeira, e o motivo admite o empate', () {
     final plan = _plano([
       _entrada('Chrono Trigger', [
