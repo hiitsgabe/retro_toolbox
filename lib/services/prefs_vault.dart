@@ -42,8 +42,13 @@ class PrefsVault implements SecretVault {
   @override
   Future<void> deleteWithPrefix(String prefix) async {
     final alvo = '$keyPrefix$prefix';
-    // `toList()` porque `getKeys()` devolve a visão viva do mapa, e remover
-    // enquanto itera lança `ConcurrentModificationError`.
+    // `toList()` é defesa barata, não necessidade: nesta versão do plugin,
+    // `getKeys()` já devolve cópia (`Set<String>.from(_preferenceCache.keys)`,
+    // `shared_preferences_legacy.dart:111`), então remover enquanto itera
+    // **não** lança `ConcurrentModificationError`. Medido, tirando o `toList()`
+    // e rodando. Fica porque a versão do plugin pode mudar, e porque `where`
+    // é preguiçoso: sem materializar, a iteração e as remoções se intercalam,
+    // e é essa intercalação que dependeria da cópia continuar existindo.
     final chaves = _prefs.getKeys().where((chave) => chave.startsWith(alvo)).toList();
     for (final chave in chaves) {
       await _prefs.remove(chave);
