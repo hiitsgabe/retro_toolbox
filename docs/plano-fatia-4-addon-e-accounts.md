@@ -3142,7 +3142,7 @@ List<Addon> reorderAddons(List<Addon> lista, int from, int to) {
 
 A Task 6 precisou de `'builtin'` antes de esta Task existir e o pôs em `SettingsService.builtinAddonId`. Agora há dois nomes para o mesmo valor, e dois nomes para o mesmo valor é um bug esperando alguém mudar um só. O canônico é o `kBuiltinAddonId` deste arquivo, porque ele mora com o conceito.
 
-Em `lib/services/settings_service.dart`, apague a constante **com o doc dela**, que são seis linhas:
+Em `lib/services/settings_service.dart`, apague a constante **com o doc dela**, que são oito linhas:
 
 ```dart
   /// O addon a que pertencem os consoles do catálogo de hoje.
@@ -3180,7 +3180,7 @@ Os outros quatro arquivos que citam a constante trocam junto. **Esta lista foi r
 | `test/settings_service_test.dart` | 3 | idem |
 | `test/settings_hydrate_test.dart` | 1 | idem |
 
-**Em nenhum dos quatro o import de `settings_service.dart` sai.** Isto foi medido, não suposto: os dois arquivos de teste instanciam `SettingsService()` para valer (`settings_service_test.dart:39` e outras nove, `settings_hydrate_test.dart:39, 48, 60, 74`), e os dois de `lib/` já precisavam dele por outros motivos. Em todos os quatro, o import de `addon_model.dart` **se soma** ao que já está lá. Uma versão anterior deste texto mandava trocar o import nos arquivos de teste, o que deixaria os quatro sem compilar.
+**Nos dois arquivos de teste o import de `settings_service.dart` fica; nos dois de `lib/` ele sai.** Os dois de teste instanciam `SettingsService()` para valer (`settings_service_test.dart:39` e outras nove, `settings_hydrate_test.dart:39, 48, 60, 74`), então lá o import de `addon_model.dart` **se soma** ao que já está. Nos dois de `lib/` não: `SettingsService` aparece neles **só** como `SettingsService.builtinAddonId`, três vezes no wizard e duas no widget, e mais nada. Depois da troca o import fica morto e o `flutter analyze` sobe de 22 para 24, com dois `unused_import`, que são warning. Confira em vez de confiar nesta frase: depois da troca, `grep -n "SettingsService" lib/screens/setup_wizard_screen.dart lib/widgets/settings/catalog_source_setting.dart` tem que devolver zero. Duas versões deste texto erraram aqui, em direções opostas: a primeira mandava trocar o import nos arquivos de teste, o que deixaria os quatro sem compilar; a segunda dizia que em nenhum dos quatro o import saía e afirmava que isso tinha sido medido, quando só os dois de teste tinham sido medidos e os dois de `lib/` foram supostos. Medido nos quatro pelo implementador da Task 9, e conferido contra `git show 824434e:` depois.
 
 - [ ] **Step 5: Rode para ver passar**
 
@@ -3204,7 +3204,7 @@ Esperado: `+440`, zero falha. Se `test/settings_service_test.dart` ou `test/sett
 flutter analyze
 ```
 
-Esperado: `22 issues found`, nenhum em `lib/models/addon_model.dart` nem em `test/addon_model_test.dart`. Um `unused_import` aqui quer dizer que sobrou um import de `settings_service.dart` num arquivo de teste que só o usava pela constante.
+Esperado: `22 issues found`, nenhum em `lib/models/addon_model.dart` nem em `test/addon_model_test.dart`. Um `unused_import` aqui quer dizer que sobrou o import de `settings_service.dart` num dos dois arquivos de `lib/` que só o usavam pela constante, e não num arquivo de teste: os de teste continuam precisando dele.
 
 - [ ] **Step 8: Commit**
 
