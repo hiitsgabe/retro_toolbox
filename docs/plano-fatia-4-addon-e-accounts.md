@@ -2935,7 +2935,7 @@ git commit -m "feat(cofre): hidratar o token nao pode inventar configuracao de c
 **Files:**
 - Create: `lib/models/addon_model.dart`
 - Modify: `lib/services/settings_service.dart` (perde a constante duplicada), `lib/screens/setup_wizard_screen.dart`, `lib/widgets/settings/catalog_source_setting.dart`
-- Test: `test/addon_model_test.dart`, e ajuste em `test/settings_service_test.dart` e `test/catalog_auth_token_test.dart`
+- Test: `test/addon_model_test.dart`, e ajuste em `test/settings_service_test.dart` e `test/settings_hydrate_test.dart`
 
 O addon é deliberadamente magro: id, nome e a url de origem. Nada de "habilitado", porque a seção 9 do spec de UI não especifica interruptor nenhum (`docs/stremio-de-jogos-ui.md:220-263` lista ícone, nome, cobertura, chip de conta, alça de arrasto e seta, e mais nada), e nada de data de instalação, porque não há tela que a mostre e ela só serviria para atrapalhar teste.
 
@@ -3163,7 +3163,7 @@ acrescente ao topo
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-e troque os cinco usos internos de `builtinAddonId` por `kBuiltinAddonId`. Confira com:
+e troque os quatro usos internos de `builtinAddonId` por `kBuiltinAddonId`, nas linhas 31, 62, 97 e 113. São quatro usos, e não cinco: o `grep` devolve cinco linhas neste arquivo, mas a primeira é a declaração que você acabou de apagar. Na linha 31 repare que `builtinAddonId: builtinAddonId` tem o nome duas vezes, e só o segundo é uso: o primeiro é o rótulo do parâmetro de `SecretMigration` e não muda. Confira com:
 
 ```bash
 grep -rn "builtinAddonId" lib/ test/
@@ -3171,16 +3171,16 @@ grep -rn "builtinAddonId" lib/ test/
 
 Devem sobrar só ocorrências de `kBuiltinAddonId`, mais o parâmetro `builtinAddonId` de `SecretMigration` (`lib/services/secret_migration.dart`), que é nome de parâmetro e não de constante, e continua entrando por injeção.
 
-Os outros quatro arquivos que citam a constante trocam junto:
+Os outros quatro arquivos que citam a constante trocam junto. **Esta lista foi remedida depois que a Task 8b entrou**, e mudou: `test/catalog_auth_token_test.dart` estava aqui por engano e saiu, porque ele passa `addonId: 'ultranx'` como literal e nunca citou a constante; `test/settings_hydrate_test.dart`, que a Task 8b criou depois de este texto ser escrito, entrou, porque cita na linha 29. Confira você mesmo com o `grep` acima antes de editar, em vez de confiar na tabela: a Task 8b é recente e outra Task pode ter mexido de novo.
 
-| Arquivo | Troca |
-| --- | --- |
-| `lib/screens/setup_wizard_screen.dart` | `SettingsService.builtinAddonId` vira `kBuiltinAddonId` |
-| `lib/widgets/settings/catalog_source_setting.dart` | idem |
-| `test/settings_service_test.dart` | idem |
-| `test/catalog_auth_token_test.dart` | idem |
+| Arquivo | Ocorrências medidas | Troca |
+| --- | --- | --- |
+| `lib/screens/setup_wizard_screen.dart` | 3 | `SettingsService.builtinAddonId` vira `kBuiltinAddonId` |
+| `lib/widgets/settings/catalog_source_setting.dart` | 2 | idem |
+| `test/settings_service_test.dart` | 3 | idem |
+| `test/settings_hydrate_test.dart` | 1 | idem |
 
-Nos dois arquivos de teste, troque também o import de `settings_service.dart` por `addon_model.dart` quando ele só servia para a constante. Nos dois de `lib/`, o import de `settings_service.dart` continua sendo necessário por outros motivos; acrescente o de `addon_model.dart` sem tirar o que já está lá.
+**Em nenhum dos quatro o import de `settings_service.dart` sai.** Isto foi medido, não suposto: os dois arquivos de teste instanciam `SettingsService()` para valer (`settings_service_test.dart:39` e outras nove, `settings_hydrate_test.dart:39, 48, 60, 74`), e os dois de `lib/` já precisavam dele por outros motivos. Em todos os quatro, o import de `addon_model.dart` **se soma** ao que já está lá. Uma versão anterior deste texto mandava trocar o import nos arquivos de teste, o que deixaria os quatro sem compilar.
 
 - [ ] **Step 5: Rode para ver passar**
 
@@ -3188,7 +3188,7 @@ Nos dois arquivos de teste, troque também o import de `settings_service.dart` p
 flutter test test/addon_model_test.dart
 ```
 
-Esperado: `+13`, zero falha.
+Esperado: `+15`, zero falha.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
@@ -3196,7 +3196,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+438`, zero falha. Se `test/settings_service_test.dart` ou `test/catalog_auth_token_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos seis arquivos, não só nos de `lib/`.
+Esperado: `+440`, zero falha. Se `test/settings_service_test.dart` ou `test/settings_hydrate_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos cinco arquivos, não só nos de `lib/`.
 
 - [ ] **Step 7: Analise**
 
@@ -3209,7 +3209,7 @@ Esperado: `22 issues found`, nenhum em `lib/models/addon_model.dart` nem em `tes
 - [ ] **Step 8: Commit**
 
 ```bash
-git add test/addon_model_test.dart test/settings_service_test.dart test/catalog_auth_token_test.dart
+git add test/addon_model_test.dart test/settings_service_test.dart test/settings_hydrate_test.dart
 git commit -m "test(addon): modelo de addon, id estavel por url e as operacoes da lista ordenada"
 git add lib/models/addon_model.dart lib/services/settings_service.dart lib/screens/setup_wizard_screen.dart lib/widgets/settings/catalog_source_setting.dart
 git commit -m "feat(addon): modelo de addon, id estavel por url e as operacoes da lista ordenada"
@@ -3479,7 +3479,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+449`, zero falha.
+Esperado: `+451`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3804,7 +3804,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+462`, zero falha.
+Esperado: `+464`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3959,7 +3959,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+468`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Esperado: `+470`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
 
 - [ ] **Step 6: Analise**
 
@@ -4579,7 +4579,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+478`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+480`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4854,7 +4854,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+488`, zero falha.
+Esperado: `+490`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4878,12 +4878,12 @@ git commit -m "feat(addon): provider da lista de addons e a prioridade derivada 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
 | 8b, hidratação sem inventar config | 4 | 425 |
-| 9, modelo de addon | 13 | 438 |
-| 10, fusão de catálogos | 11 | 449 |
-| 11, persistência | 13 | 462 |
-| 12, `Game.sourceId` | 6 | 468 |
-| 13, catálogo de N addons | 10 | 478 |
-| 14, provider e prioridade | 10 | 488 |
+| 9, modelo de addon | 15 | 440 |
+| 10, fusão de catálogos | 11 | 451 |
+| 11, persistência | 13 | 464 |
+| 12, `Game.sourceId` | 6 | 470 |
+| 13, catálogo de N addons | 10 | 480 |
+| 14, provider e prioridade | 10 | 490 |
 
 ---
 
@@ -5078,7 +5078,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+491`, zero falha.
+Esperado: `+493`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5287,7 +5287,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+494`, zero falha.
+Esperado: `+496`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5557,7 +5557,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+498`, zero falha.
+Esperado: `+500`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5580,9 +5580,9 @@ git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id c
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 491 |
-| 16, a prioridade chega nas telas | 3 | 494 |
-| 17, o nome do addon na tela | 4 | 498 |
+| 15, o id do addon na grade e no lote | 3 | 493 |
+| 16, a prioridade chega nas telas | 3 | 496 |
+| 17, o nome do addon na tela | 4 | 500 |
 
 ---
 
@@ -5944,7 +5944,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+515`, zero falha.
+Esperado: `+517`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6436,7 +6436,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+528`, zero falha.
+Esperado: `+530`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6759,7 +6759,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+534`, zero falha.
+Esperado: `+536`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -7045,7 +7045,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+540`, zero falha.
+Esperado: `+542`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7480,7 +7480,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+548`, zero falha.
+Esperado: `+550`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7912,7 +7912,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+557`, zero falha.
+Esperado: `+559`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8287,7 +8287,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+563`, zero falha.
+Esperado: `+565`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8749,7 +8749,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+570`, zero falha, `22 issues found`.
+Esperado: `+572`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8768,14 +8768,14 @@ O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com a
 
 | Task | Casos | Acumulado |
 | --- | --- | --- |
-| 18 | 17 | `+509` |
-| 19 | 13 | `+522` |
-| 20 | 6 | `+528` |
-| 21 | 6 | `+534` |
-| 22 | 8 | `+542` |
-| 23 | 9 | `+551` |
-| 24 | 6 | `+557` |
-| 25 | 7 | `+564` |
+| 18 | 17 | `+517` |
+| 19 | 13 | `+530` |
+| 20 | 6 | `+536` |
+| 21 | 6 | `+542` |
+| 22 | 8 | `+550` |
+| 23 | 9 | `+559` |
+| 24 | 6 | `+565` |
+| 25 | 7 | `+572` |
 
 ---
 
@@ -8892,7 +8892,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+575`, zero falha.
+Esperado: `+577`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -9061,7 +9061,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+575`, zero falha.
+Esperado: `+577`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
