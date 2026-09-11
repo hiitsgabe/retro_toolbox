@@ -791,14 +791,24 @@ Três coisas que valem saber antes:
 
 1. **`flutter_secure_storage` não é testável direto.** Ele fala com o plugin por canal de plataforma, que num `flutter test` não existe. Por isso entra uma interface fina, `SecureStorageBackend`, com os quatro métodos que este app usa. O `SecureStorageVault` conversa com a interface, os testes injetam um falso, e a implementação real é três linhas de delegação que nenhum teste cobre e nem precisa.
 2. **A sonda escreve, lê de volta e apaga.** "A escrita não lançou" **não** é prova de que o chaveiro funciona: existe backend que aceita a escrita e não guarda. Só a leitura de volta prova.
-3. **O plugin exige minSdk 24 no Android** (`flutter_secure_storage-11.1.0/android/build.gradle:30`). Este projeto usa `minSdk = flutter.minSdkVersion` (`android/app/build.gradle.kts:43`), que no Flutter 3.35 é 24. Bate na trave, e nada precisa mudar. No Linux, ele exige `libsecret-1-dev` em tempo de compilação, que já está instalado nesta VM (`pkg-config --modversion libsecret-1` dá `0.21.4`).
+3. **A versão é a 10.x, e isso não é conservadorismo, é a única que resolve.** A 11.x não entra neste `pubspec`, e a tentativa custou uma Task travada: `flutter_secure_storage >=11.0.0-beta.1` puxa `flutter_secure_storage_windows ^4.2.2`, que exige `win32 ^6.0.1`, enquanto o `package_info_plus: ^9.0.0` já pinado aqui (`pubspec.yaml:29`) exige `win32 ^5.5.3`. As duas restrições se excluem e o solver recusa. Saída literal:
+
+   ```
+   Because package_info_plus >=8.0.3 <10.0.0 depends on win32 ^5.5.3 and flutter_secure_storage_windows >=4.2.0 depends on win32 ^6.0.1, package_info_plus >=8.0.3 <10.0.0 is incompatible with flutter_secure_storage_windows >=4.2.0.
+   So, because roms_downloader depends on both package_info_plus ^9.0.0 and flutter_secure_storage ^11.1.0, version solving failed.
+   ```
+
+   A saída seria subir o `package_info_plus` para `^10`, e **não é para fazer isso**: ele é usado em dois arquivos de produção (`about_screen.dart` e `zerox0_service.dart`), o `win32` saltaria de 5 para 6 numa dependência que esta fatia não tem motivo nenhum para tocar, e o risco cairia na tela Sobre e no user agent. Fatia de segurança não arrasta dependência alheia junto. Se alguém "atualizar" isto para a 11.x depois, o `pub get` quebra de novo, e o motivo está escrito aqui.
+
+   Medido na 10.3.3, e o código desta Task não muda uma vírgula por causa disso: `read(key:)`, `write(key:, value:)`, `delete(key:)`, `readAll()` e o construtor `const FlutterSecureStorage()` existem iguais (`flutter_secure_storage-10.3.3/lib/flutter_secure_storage.dart:35`, `:134`, `:185`, `:249`, `:293`).
+4. **O plugin exige minSdk 23 no Android** (`flutter_secure_storage-10.3.3/android/build.gradle:46`). Este projeto usa `minSdk = flutter.minSdkVersion` (`android/app/build.gradle.kts:43`), que no Flutter 3.35 é 24. Sobra folga, e nada precisa mudar. No Linux, ele exige `libsecret-1-dev` em tempo de compilação, que já está instalado nesta VM (`pkg-config --modversion libsecret-1` dá `0.21.4`).
 
 - [ ] **Step 1: Some a dependência**
 
 Em `pubspec.yaml`, na última linha da lista `dependencies:`, depois de `ftp_server: ^2.3.2`:
 
 ```yaml
-  flutter_secure_storage: ^11.1.0
+  flutter_secure_storage: ^10.3.3
 ```
 
 Depois:
@@ -808,7 +818,7 @@ export PATH=/home/exedev/flutter/bin:$PATH
 flutter pub get
 ```
 
-Esperado: `Got dependencies!` ou `Changed N dependencies!`. O `pubspec.lock` vai mudar. **Não o adicione ao commit**: ele já vive sujo neste repositório porque o Flutter local resolve versões transitivas mais velhas, e commitá-lo mistura ruído com a mudança.
+Esperado: `Changed 6 dependencies!`, medido. Se vier `version solving failed` falando de `win32`, você escreveu `^11` em vez de `^10.3.3`: leia o item 3 acima. O `pubspec.lock` vai mudar. **Não o adicione ao commit**: ele já vive sujo neste repositório porque o Flutter local resolve versões transitivas mais velhas, e commitá-lo mistura ruído com a mudança.
 
 - [ ] **Step 2: Escreva o teste do cofre de sistema**
 
