@@ -5231,12 +5231,12 @@ Três coisas faltam, e cada uma é uma Task:
 2. **A prioridade não chega em quem escolhe.** `planFromEntries` aceita `sourcePriority` desde a fatia 3 (`source_pick_service.dart:54`) e os dois chamadores, `home_screen.dart:43` e `game_detail_screen.dart:74`, não passam nada. O parâmetro tem valor padrão, então isso compila hoje e continuaria compilando para sempre. A Task 16 liga os dois.
 3. **A tela mostra o id, e o usuário não escolheu um id.** A seção 7 do spec de UI pede "4.0 MB, Myrient". Depois da Task 15 o campo passa a valer `myrient_org_files`, que é chave de cofre e de disco, não texto de tela. A Task 17 resolve o id para o nome do addon nos dois lugares onde ele é desenhado.
 
-**Uma regra para as trocas de `kBuiltinSourceId` nos testes, porque ela decide seis arquivos.** A constante morre na Task 15, e onze linhas de teste a citam pelo nome. Elas não são todas a mesma coisa:
+**Uma regra para as trocas de `kBuiltinSourceId` nos testes, porque ela decide quatro arquivos.** A constante morre na Task 15. Onze linhas a citam pelo nome, e **sete delas estão em teste**, espalhadas por quatro arquivos: `game_detail_screen_test.dart:46`, `pack_grid_provider_test.dart:108`, `:126` e `:141`, `source_pick_service_test.dart:50`, e `pack_grid_test.dart:24` e `:39`. As outras quatro estão em produção (`source_pick_service.dart:27`, `pack_grid_provider.dart:75`, e a declaração mais o doc do campo em `source_pick_model.dart:17` e `:35`), e essas a Task 15 resolve sem regra nenhuma. As sete de teste não são todas a mesma coisa:
 
 - Onde o teste **afirma o que a produção calculou**, a troca é por `kBuiltinAddonId`. É um sítio só: `test/pack_grid_provider_test.dart:108`, que lê o `sourceId` que o `sourceIndexProvider` montou a partir de um `Game`.
 - Onde o id é **dado de entrada inventado pelo teste**, a troca é pelo literal `'listagem'`, que é o que oito outras linhas da suíte já usam (`source_verification_provider_test.dart:18`, `source_pick_model_test.dart:17`, `pack_grid_filter_test.dart:10`, `batch_confirm_sheet_test.dart:12`, `source_pick_service_test.dart:20`, `source_index_test.dart:25` e `:67`, `grid_entry_model_test.dart:9`). Nesses sítios o id é opaco: qualquer string não vazia serve, e nenhuma asserção depende de qual é.
 
-**Não faça um `sed` do literal `'listagem'` para `'builtin'`.** Parece a limpeza óbvia e custa caro por nada: em `test/game_detail_screen_test.dart` o `sourceId` da fonte é desenhado na tela, e dez expectativas do arquivo carregam a string (`'4.0 MB, listagem'` na linha 121, e mais nove entre as linhas 269 e 462). Trocar o literal obrigaria a reescrever as dez, num commit que é sobre apagar uma constante. O literal fica.
+**Não faça um `sed` do literal `'listagem'` para `'builtin'`.** Parece a limpeza óbvia e custa caro por nada: em `test/game_detail_screen_test.dart` o `sourceId` da fonte é desenhado na tela, e nove expectativas do arquivo carregam a string (`'4.0 MB, listagem'` na linha 121, e mais oito entre as linhas 269 e 462). Trocar o literal obrigaria a reescrever as nove, num commit que é sobre apagar uma constante. O literal fica. A linha 206 também diz "listagem", mas em prosa (`'a fonte saiu da listagem antes de a fila começar'`): essa não é `sourceId` e não entra na conta.
 
 ### Task 15: o id do addon chega na grade e no lote
 
@@ -5270,7 +5270,7 @@ Game _game(String filename, {String sourceId = kBuiltinAddonId}) => Game(
     );
 ```
 
-troque as três citações de `kBuiltinSourceId` do arquivo (linhas 108, 126 e 141) por `kBuiltinAddonId`, e acrescente este caso logo depois do teste `'a fonte casada carrega o tamanho e o id de fonte embutido'`:
+troque as três citações de `kBuiltinSourceId` do arquivo **pela regra do topo do grupo, que as separa**: a da linha 108 vira `kBuiltinAddonId`, porque ali o teste afirma o `sourceId` que a produção calculou; as das linhas 126 e 141 viram o literal `'listagem'`, porque ali o id é `MatchedSource` de entrada, inventado pelo teste, e nenhuma asserção dos dois casos o lê (uma lê `achado?.filename`, a outra lê `achado, isNull`). Depois acrescente este caso logo depois do teste `'a fonte casada carrega o tamanho e o id de fonte embutido'`:
 
 ```dart
   test('cada fonte carrega o id do addon do jogo que a originou', () async {
