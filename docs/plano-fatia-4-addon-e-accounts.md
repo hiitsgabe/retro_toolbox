@@ -2900,7 +2900,7 @@ Em `test/settings_service_test.dart`, o caso "carregar não reescreve o app_sett
 flutter test test/settings_hydrate_test.dart test/settings_service_test.dart
 ```
 
-Esperado: `+17`, zero falha. São os 4 deste arquivo mais os 13 da Task 6.
+Esperado: `+13`, zero falha. São os 4 deste arquivo mais os 9 que `test/settings_service_test.dart` já tem. Este número já esteve escrito como `+17`, somando os 13 da Task 6 inteira; errado, porque 4 daqueles 13 estão em `test/settings_model_secrets_test.dart` (`git show --stat e7829f4`), que este comando não roda. Corrigido depois de medir `+13: All tests passed!`.
 
 - [ ] **Step 7: Rode a suíte inteira**
 
