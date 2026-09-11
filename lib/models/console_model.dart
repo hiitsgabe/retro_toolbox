@@ -50,6 +50,37 @@ class Console {
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
 
+  /// Uma cópia com outra lista de urls, e mais nada diferente.
+  ///
+  /// Existe só para `mergeCatalogs` (`console_merge.dart`), que acrescenta as
+  /// urls de outro addon ao console sem tocar em mais nenhum campo. É um
+  /// `copyWith` de um campo só de propósito: um `copyWith` completo de vinte e
+  /// um campos seria vinte parâmetros que ninguém passa e um lugar a mais para
+  /// esquecer de atualizar quando o `Console` crescer.
+  Console withUrls(List<String> novas) => Console(
+        id: id,
+        name: name,
+        urls: novas,
+        regex: regex,
+        boxarts: boxarts,
+        fileFormat: fileFormat,
+        romsFolder: romsFolder,
+        shouldUnzip: shouldUnzip,
+        extractContents: extractContents,
+        shouldFilterUsa: shouldFilterUsa,
+        usaRegex: usaRegex,
+        shouldDecompressNsz: shouldDecompressNsz,
+        ignoreExtensionFiltering: ignoreExtensionFiltering,
+        downloadUrl: downloadUrl,
+        auth: auth,
+        listUrl: listUrl,
+        listJsonFileLocation: listJsonFileLocation,
+        listItemId: listItemId,
+        listSystems: listSystems,
+        added: added,
+        convert3dsToCia: convert3dsToCia,
+      );
+
   /// True when this console uses a user-editable bearer/cookie token for auth.
   /// IA S3 auth is managed separately via the Internet Archive login flow.
   bool get hasTokenAuth {
