@@ -15,6 +15,7 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/providers/source_verification_provider.dart';
 import 'package:roms_downloader/screens/game_detail_screen.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
+import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 
 import 'support/favorites_stub.dart';
 
@@ -62,6 +63,7 @@ Game? _resolvePadrao(MatchedSource source) => _game(source.filename);
 Widget _host(
   PackGridEntry entrada, {
   void Function(SourcePick)? onDownload,
+  VoidCallback? onBatchDownload,
   GameResolver? resolver,
   SourceVerification Function(String filename)? verificacao,
 }) {
@@ -86,7 +88,11 @@ Widget _host(
       }),
     ],
     child: MaterialApp(
-      home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
+      home: GameDetailScreen(
+        entry: entrada,
+        onDownload: onDownload ?? (_) {},
+        onBatchDownload: onBatchDownload ?? () {},
+      ),
     ),
   );
 }
@@ -166,6 +172,7 @@ void main() {
           return GameDetailScreen(
             entry: _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
             onDownload: (_) {},
+            onBatchDownload: () {},
           );
         }),
       ),
@@ -455,5 +462,47 @@ void main() {
       find.text('4.0 MB, listagem, HTTP, casamento provável, sem como verificar'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('sem seleção a tela de detalhe não mostra barra', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+
+    // A `SelectionBar` está sempre montada e se encolhe até zero quando a
+    // seleção está vazia (Task 2). Por isso o teste mede a altura em vez de
+    // procurar o widget.
+    expect(tester.getSize(find.byType(SelectionBar)).height, 0);
+  });
+
+  testWidgets('marcar pelo checkbox faz a barra aparecer com a contagem', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+
+    expect(find.text('1 selecionado'), findsOneWidget);
+    expect(tester.getSize(find.byType(SelectionBar)).height, greaterThan(0));
+  });
+
+  testWidgets('o Baixar da barra é o do lote, não o do destaque', (tester) async {
+    // Os dois botões dizem "Baixar" e fazem coisas diferentes: o do card
+    // enfileira este jogo, o da barra abre a folha do lote. Trocar um pelo
+    // outro é o erro que este teste tranca.
+    final chamados = <String>[];
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      onDownload: (_) => chamados.add('destaque'),
+      onBatchDownload: () => chamados.add('lote'),
+    ));
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+
+    await tester.tap(find.descendant(
+      of: find.byType(SelectionBar),
+      matching: find.text('Baixar'),
+    ));
+    await tester.pump();
+
+    expect(chamados, ['lote']);
   });
 }
