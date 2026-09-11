@@ -35,6 +35,16 @@ void main() {
     expect(find.text('3 selecionados'), findsOneWidget);
   });
 
+  testWidgets('ocupa exatamente 48 de altura com seleção', (tester) async {
+    await tester.pumpWidget(_host(count: 3));
+
+    // O contrário do primeiro caso, e não uma redundância dele: o `IconButton`
+    // e o `FilledButton` medem 48 sozinhos por causa do alvo de toque padrão
+    // do Material, então o `SizedBox(height: 48)` não tem folga nenhuma.
+    // Qualquer padding a mais estoura a faixa, e sem este caso nada avisa.
+    expect(tester.getSize(find.byType(SelectionBar)).height, 48);
+  });
+
   testWidgets('o × chama onClear e o botão chama onDownload', (tester) async {
     final fired = <String>[];
     await tester.pumpWidget(_host(
