@@ -3425,7 +3425,7 @@ flutter test test/pack_grid_test.dart
 
 Esperado: `+9`, zero falha.
 
-Agora a suíte inteira, porque esta Task fecha o Grupo 3:
+Agora a suíte inteira, porque esta Task fecha a grade. (Quem fecha o Grupo 3 é a Task 14; a grade em si está de pé aqui.)
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
@@ -3850,6 +3850,14 @@ flutter test test/source_pick_service_test.dart
 Esperado: `+15`, zero falha. São os 4 da Task 6 mais os 11 desta.
 
 Se o teste do empate total falhar escolhendo a segunda fonte, o culpado é o desempate por `order`: confira que ele é a **última** linha de `_compare` e que `order` é o índice do laço, não o índice depois do `sort`.
+
+Agora a suíte inteira, porque esta Task fecha o Grupo 3:
+
+```bash
+flutter test 2>&1 | tr '\r' '\n' | tail -5
+```
+
+Esperado: `+270 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
 
 - [ ] **Step 5: Commit**
 
