@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
@@ -112,5 +114,38 @@ void main() {
     await _pronto(container);
 
     expect(container.read(packGridEntriesProvider).single.game.id, 'snes/super-metroid');
+  });
+
+  test('o resolvedor acha o jogo do catálogo pelo nome do arquivo', () async {
+    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
+    await _pronto(container);
+
+    final resolver = container.read(gameResolverProvider);
+    final achado = resolver(const MatchedSource(
+      filename: 'Chrono Trigger (USA).zip',
+      sourceId: kBuiltinSourceId,
+      confidence: MatchConfidence.likely,
+      size: 2048,
+    ));
+
+    expect(achado?.filename, 'Chrono Trigger (USA).zip');
+  });
+
+  test('o resolvedor devolve nulo para uma fonte que não está no catálogo', () async {
+    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
+    await _pronto(container);
+
+    final resolver = container.read(gameResolverProvider);
+    final achado = resolver(const MatchedSource(
+      filename: 'Um Jogo Que Saiu Da Listagem.zip',
+      sourceId: kBuiltinSourceId,
+      confidence: MatchConfidence.likely,
+      size: 10,
+    ));
+
+    // É o caminho que vira `PickFailure` na Task 14, e ele tem que existir de
+    // verdade, senão o lote quebraria com um `null check` no primeiro catálogo
+    // recarregado durante uma seleção.
+    expect(achado, isNull);
   });
 }
