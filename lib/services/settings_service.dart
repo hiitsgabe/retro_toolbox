@@ -9,14 +9,17 @@ import 'package:roms_downloader/services/secret_migration.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
 class SettingsService {
-  static const String _settingsKey = 'app_settings';
+  /// A chave única onde o app guarda as settings. Pública porque a migração de
+  /// addons (`addon_store.dart`) precisa ler o `catalogSourceUrl` de antes da
+  /// fatia 4, e uma string literal repetida nos dois arquivos seria pior.
+  static const String settingsKey = 'app_settings';
 
   final DirectoryService _directoryService = DirectoryService();
 
   Future<AppSettings> loadSettings(SecretVault vault) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final settingsJson = prefs.getString(_settingsKey);
+      final settingsJson = prefs.getString(settingsKey);
 
       if (settingsJson != null) {
         final cru = jsonDecode(settingsJson) as Map<String, dynamic>;
@@ -28,7 +31,7 @@ class SettingsService {
         // recebeu.
         final limpoJson = jsonEncode(limpo);
         if (limpoJson != jsonEncode(cru)) {
-          await prefs.setString(_settingsKey, limpoJson);
+          await prefs.setString(settingsKey, limpoJson);
         }
 
         final hidratado = await _hydrate(AppSettings.fromJson(limpo), vault);
@@ -67,7 +70,7 @@ class SettingsService {
     try {
       await _writeSecrets(settings, vault);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_settingsKey, jsonEncode(settings.toJson()));
+      await prefs.setString(settingsKey, jsonEncode(settings.toJson()));
     } catch (e) {
       debugPrint('Error saving settings: $e');
     }
