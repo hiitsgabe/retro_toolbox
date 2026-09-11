@@ -746,8 +746,9 @@ flutter test test/prefs_vault_test.dart
 
 Esperado: `+9`, zero falha.
 
-**Tropeço provável:** o contrato falhar em "chave que nunca foi escrita devolve null" a partir do segundo caso. `SharedPreferences.getInstance()` guarda um singleton interno, então `setMockInitialValues({})` sozinho não basta para zerar entre os casos: é o `resetStatic()` logo depois que limpa o `_completer`
-(`shared_preferences-2.5.3/lib/src/shared_preferences_legacy.dart:68`). Os dois, nessa ordem, ou o contrato vira dependente de ordem.
+**Tropeço provável:** o contrato falhar em "chave que nunca foi escrita devolve null" a partir do segundo caso, porque `SharedPreferences.getInstance()` guarda um singleton interno e cada `build()` do contrato pede uma instância nova.
+
+Quem zera o singleton, medido no `shared_preferences-2.5.3`, é o **`setMockInitialValues`**: ele mesmo faz `_completer = null` (`lib/src/shared_preferences_legacy.dart:290`, comentário "If the singleton instance has been initialized already, it is nullified"). O `resetStatic()` logo depois é redundante nesta versão: tirá-lo de `_prefsVazio` deixa os 9 passando igual, conferido. Mantenha os dois assim mesmo, porque é defesa barata contra `setPrefix` e contra troca de versão do plugin, mas **não escreva em lugar nenhum que é o `resetStatic()` que limpa o singleton**: se a Task 4 acreditar nisso ao decidir entre os dois cofres, vai defender a fronteira errada.
 
 - [ ] **Step 5: Rode a suíte inteira**
 
