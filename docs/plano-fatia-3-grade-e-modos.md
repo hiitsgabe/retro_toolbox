@@ -1770,6 +1770,7 @@ Crie `test/pack_grid_filter_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
