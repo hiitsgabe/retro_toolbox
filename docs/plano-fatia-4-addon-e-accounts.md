@@ -1549,9 +1549,9 @@ git commit -m "feat(cofre): migracao unica que esvazia os segredos do app_settin
 | linha de base | 0 | 340 |
 | 1, `SecretRef` | 7 | 347 |
 | 2, `SecretVault` e contrato | 8 | 355 |
-| 3, `PrefsVault` | 9 | 364 |
-| 4, `SecureStorageVault` e escolha | 14 | 378 |
-| 5, migração | 9 | 387 |
+| 3, `PrefsVault` | 11 | 366 |
+| 4, `SecureStorageVault` e escolha | 14 | 380 |
+| 5, migração | 9 | 389 |
 
 ---
 
@@ -2647,9 +2647,9 @@ com a chamada interna virando `await setCatalogFromJson(body, vault: vault, addo
 
 Repare na ordem: **colhe antes de validar**. Se validasse primeiro, um catálogo inválido com token dentro deixaria o token passar batido pelas mãos do app sem ir para lugar nenhum, e o usuário reinstalaria a versão corrigida já sem ele.
 
-- [ ] **Step 6: Ajuste os quatro chamadores**
+- [ ] **Step 6: Ajuste os cinco chamadores**
 
-São quatro, todos em widget com `ref` à mão. Em `lib/screens/setup_wizard_screen.dart:94` e `:108`, e em `lib/widgets/settings/catalog_source_setting.dart:74` e `:82`, cada chamada ganha o cofre:
+São cinco, todos em widget com `ref` à mão. Em `lib/screens/setup_wizard_screen.dart:94`, `:101` e `:108`, e em `lib/widgets/settings/catalog_source_setting.dart:74` e `:82`, cada chamada ganha o cofre. O `:101` é o `setCatalogFromUrl` do wizard: o Step 5 troca a assinatura dele, então esse sítio não compila sem o cofre, não é opcional. Uma versão anterior deste texto dizia "quatro" e omitia ele.
 
 ```dart
 final vault = (await ref.read(vaultProvider.future)).vault;
@@ -2709,9 +2709,9 @@ git commit -m "feat(seguranca): instalar catalogo colhe o token para o cofre e l
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 6, segredo no cofre | 13 | 400 |
-| 7, quatro sítios | 9 | 409 |
-| 8, colheita na instalação | 10 | 419 |
+| 6, segredo no cofre | 13 | 402 |
+| 7, quatro sítios | 9 | 411 |
+| 8, colheita na instalação | 10 | 421 |
 
 ---
 
@@ -4877,12 +4877,13 @@ git commit -m "feat(addon): provider da lista de addons e a prioridade derivada 
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 9, modelo de addon | 13 | 432 |
-| 10, fusão de catálogos | 11 | 443 |
-| 11, persistência | 13 | 456 |
-| 12, `Game.sourceId` | 6 | 462 |
-| 13, catálogo de N addons | 10 | 472 |
-| 14, provider e prioridade | 10 | 482 |
+| 8b, hidratação sem inventar config | 4 | 425 |
+| 9, modelo de addon | 13 | 438 |
+| 10, fusão de catálogos | 11 | 449 |
+| 11, persistência | 13 | 462 |
+| 12, `Game.sourceId` | 6 | 468 |
+| 13, catálogo de N addons | 10 | 478 |
+| 14, provider e prioridade | 10 | 488 |
 
 ---
 
@@ -5579,9 +5580,9 @@ git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id c
 
 | Task | Novos | Acumulado |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 485 |
-| 16, a prioridade chega nas telas | 3 | 488 |
-| 17, o nome do addon na tela | 4 | 492 |
+| 15, o id do addon na grade e no lote | 3 | 491 |
+| 16, a prioridade chega nas telas | 3 | 494 |
+| 17, o nome do addon na tela | 4 | 498 |
 
 ---
 
