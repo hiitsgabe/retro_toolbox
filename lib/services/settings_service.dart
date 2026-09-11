@@ -60,7 +60,7 @@ class SettingsService {
     final consoles = <String, BaseSettings>{};
     for (final entrada in settings.consoleSettings.entries) {
       final token = await vault.read(SecretRef.addonToken(builtinAddonId, entrada.key));
-      consoles[entrada.key] = token == null ? entrada.value : entrada.value.copyWith(authToken: token);
+      consoles[entrada.key] = token == null ? entrada.value : entrada.value.withAuthToken(token);
     }
 
     return settings.copyWith(
