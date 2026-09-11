@@ -8762,7 +8762,7 @@ git commit -m "feat(accounts): reunir as contas de addon na tela de Accounts"
 
 ---
 
-Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+492` para `+564`.
+Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+501` para `+573`. Os dois extremos já estiveram escritos como `+492` e `+564`, nove a menos cada um. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+501` e a linha da Task 25 na tabela fecha em `+573`.
 
 O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com alça de arrasto, o detalhe por addon com origem, conta, cobertura, prioridade e remoção, a instalação por URL, o Accounts consolidado com uma linha por par (addon, console) e o estado de conexão, e o token deixando de ser do console para ser do par. O que ele não entregou, e está declarado na Task 22: a contagem de itens por console na cobertura, que custaria uma requisição de listagem por console ao abrir uma tela de leitura.
 
