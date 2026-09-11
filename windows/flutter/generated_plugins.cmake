@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   disk_space_2
+  flutter_secure_storage_windows
   permission_handler_windows
   serious_python_windows
   url_launcher_windows
