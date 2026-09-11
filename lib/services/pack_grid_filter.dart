@@ -30,3 +30,31 @@ List<PackGridEntry> filterPackEntries(List<PackGridEntry> entries, String query)
   });
   return out;
 }
+
+/// As entradas que o usuário marcou, na ordem em que [entries] veio.
+///
+/// A ordem é a da grade, e não a ordem em que o usuário tocou os tiles,
+/// porque é a lista da grade que ele acabou de ver.
+///
+/// Ignora chave desconhecida em silêncio. É o comportamento certo aqui: as
+/// duas causas reais, um pacote republicado com slug novo e uma chave do
+/// outro modo, não são erro do usuário e não têm o que ser dito sobre elas.
+List<PackGridEntry> entriesForSelection(List<PackGridEntry> entries, Set<String> keys) =>
+    [for (final entry in entries) if (keys.contains(entry.selectionKey)) entry];
+
+/// As chaves de seleção que pertencem ao modo corrente.
+///
+/// A seleção é um `Set<String>` único para os dois modos (ver "Quarta decisão
+/// travada"), e existe uma janela real em que os dois convivem no mesmo
+/// console: o catálogo carrega do disco em milissegundos e o pacote chega da
+/// rede segundos depois. Quem marcou arquivos nesse intervalo vê a grade
+/// virar MODO PACK com as chaves de MODO FONTE ainda lá dentro. Sem esta
+/// função a barra roxa diria "3 selecionados" e o botão Baixar não faria
+/// nada, em silêncio.
+///
+/// **Não** limpa a seleção do outro modo, de propósito: o console é o mesmo,
+/// e se o pacote falhar e o modo cair de volta para FONTE a marcação do
+/// usuário ainda está lá. Quem limpa de verdade é a troca de console, em
+/// `CatalogNotifier.loadCatalog` (`catalog_provider.dart:53`).
+Set<String> selectionKeysFor(Set<String> keys, {required bool pack}) =>
+    {for (final key in keys) if (key.startsWith(kPackSelectionPrefix) == pack) key};

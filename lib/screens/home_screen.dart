@@ -17,6 +17,7 @@ import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/widgets/common/hammer_loader.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
+import 'package:roms_downloader/services/pack_grid_filter.dart';
 import 'package:roms_downloader/screens/game_detail_screen.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid.dart';
 
@@ -28,17 +29,35 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
-  Future<void> _confirmarLote() async {
-    final catalogState = ref.read(catalogProvider);
-    final selecionados =
-        catalogState.games.where((g) => catalogState.selectedGames.contains(g.gameId)).toList();
-    if (selecionados.isEmpty) return;
+  /// O plano do lote, pelo modo corrente.
+  ///
+  /// Os dois ramos devolvem o mesmo tipo e caem na mesma folha, no mesmo
+  /// enfileiramento e na mesma limpeza de seleção. Se você se pegar
+  /// escrevendo um segundo `showModalBottomSheet` aqui, parou no lugar
+  /// errado: o que varia entre os modos é só como o `BatchPlan` nasce.
+  BatchPlan _planoDaSelecao(Set<String> selecionadas) {
+    if (ref.read(gridModeProvider) == GridMode.pack) {
+      // A regra da seção 6, a mesma que escolhe o destaque da tela de
+      // detalhe. `allPackEntriesProvider` e não `packGridEntriesProvider`:
+      // ver o Problema 1 no topo desta Task.
+      return planFromEntries(
+        entriesForSelection(ref.read(allPackEntriesProvider), selecionadas),
+        preferredRegions: ref.read(preferredRegionsProvider),
+        resolveGame: ref.read(gameResolverProvider),
+      );
+    }
+    // MODO FONTE: cada chave já é um arquivo, nada a escolher.
+    final games = ref.read(catalogProvider).games;
+    return planFromGames(games.where((game) => selecionadas.contains(game.gameId)).toList());
+  }
 
-    // O plano corrente vive aqui, e não dentro da folha, porque a folha é um
-    // widget puro (Task 5): ela avisa que uma linha saiu e quem guarda o
-    // resultado é este método.
-    var plano = planFromGames(selecionados);
+  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
+  Future<void> _confirmarLote(Set<String> selecionadas) async {
+    var plano = _planoDaSelecao(selecionadas);
+    // Um plano só de falhas **não** é vazio: a folha abre para dizer por que
+    // nada vai ser baixado. Ver `BatchPlan.isEmpty`, na Task 4.
+    if (plano.isEmpty) return;
+
     final confirmado = await showModalBottomSheet<BatchPlan>(
       context: context,
       isScrollControlled: true,
@@ -96,6 +115,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
+    final gridMode = ref.watch(gridModeProvider);
+    final selecionadas = selectionKeysFor(
+      ref.watch(catalogProvider.select((s) => s.selectedGames)),
+      pack: gridMode == GridMode.pack,
+    );
 
     return Scaffold(
       body: Column(
@@ -158,7 +182,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ),
                         ),
                       )
-                    : switch (ref.watch(gridModeProvider)) {
+                    : switch (gridMode) {
                         GridMode.pack => PackGrid(onOpenGame: _abrirDetalhe),
                         GridMode.source => switch (appState.viewMode) {
                             ViewMode.grid => GameGrid(),
@@ -168,9 +192,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       },
           ),
           SelectionBar(
-            count: ref.watch(catalogProvider.select((s) => s.selectedGames.length)),
+            count: selecionadas.length,
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: _confirmarLote,
+            onDownload: () => _confirmarLote(selecionadas),
           ),
           Footer(),
         ],

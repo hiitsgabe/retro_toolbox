@@ -31,6 +31,13 @@ class MatchedSource {
   });
 }
 
+/// O prefixo da chave de seleção de MODO PACK.
+///
+/// Ver "Quarta decisão travada" no plano da fatia 3: o `:` não pode sair de
+/// `CatalogService._nameToId`, então uma chave com este prefixo nunca colide
+/// com um `Game.gameId`.
+const kPackSelectionPrefix = 'pack:';
+
 /// Uma entrada da grade em MODO PACK: um jogo canônico e as fontes dele.
 ///
 /// A grade desenha isto, e não `Game`. Ver "Terceira decisão travada" no
@@ -51,5 +58,5 @@ class PackGridEntry {
   /// A chave de seleção em MODO PACK. O prefixo `pack:` é obrigatório porque
   /// `Game.gameId` e `PackGame.id` não são provadamente disjuntos, e `:` não
   /// pode aparecer num id gerado por `_nameToId` (`catalog_service.dart:61-63`).
-  String get selectionKey => 'pack:${game.id}';
+  String get selectionKey => '$kPackSelectionPrefix${game.id}';
 }

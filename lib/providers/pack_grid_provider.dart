@@ -76,21 +76,41 @@ final sourceIndexProvider = Provider<SourceIndex?>((ref) {
   ]);
 });
 
-/// O que a grade de MODO PACK desenha, já filtrado e ordenado.
+/// Todos os jogos do pacote com as fontes casadas, ordenados, **sem** a busca
+/// aplicada.
 ///
-/// Em MODO FONTE ninguém lê este provider, e ele devolve lista vazia sem
-/// custo, porque `metadataPackProvider` já resolveu para null.
-final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
+/// É daqui que o lote lê. A grade lê do filtrado logo abaixo. A separação não
+/// é enfeite: a seleção não é a tela, e um lote que lesse da lista filtrada
+/// perderia os jogos que o usuário marcou antes de digitar na busca.
+///
+/// Como não depende de `gridSearchQueryProvider`, este provider é construído
+/// uma vez por carga de catálogo e não a cada tecla digitada. O filtro por
+/// tecla passa a rodar sobre uma lista já ordenada, o que é mais barato que
+/// a versão anterior, que remontava as entradas do zero a cada letra.
+final allPackEntriesProvider = Provider<List<PackGridEntry>>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return const [];
   final pack = ref.watch(metadataPackProvider(target)).valueOrNull;
   if (pack == null) return const [];
 
   final index = ref.watch(sourceIndexProvider);
+  // Busca vazia: `filterPackEntries` não filtra nada e serve só para ordenar.
+  // A ordenação mora lá porque a grade e o lote têm que concordar sobre ela.
   return filterPackEntries([
     for (final game in pack.games)
       PackGridEntry(game: game, sources: index?.sourcesFor(game.id) ?? const []),
-  ], ref.watch(gridSearchQueryProvider));
+  ], '');
+});
+
+/// O que a grade de MODO PACK desenha: o de cima, com a busca do header.
+///
+/// Em MODO FONTE ninguém lê este provider, e ele devolve lista vazia sem
+/// custo, porque `metadataPackProvider` já resolveu para null.
+final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
+  return filterPackEntries(
+    ref.watch(allPackEntriesProvider),
+    ref.watch(gridSearchQueryProvider),
+  );
 });
 
 /// A região preferida do usuário, lida do filtro que já existe.
