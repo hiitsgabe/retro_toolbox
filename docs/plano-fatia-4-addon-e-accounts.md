@@ -628,6 +628,7 @@ Crie `test/prefs_vault_test.dart`:
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/services/prefs_vault.dart';
 
 import 'vault_contract.dart';
@@ -668,8 +669,46 @@ void main() {
 
     expect(await PrefsVault(prefs).read('ia/accessKey'), 'ABCDEF');
   });
+
+  test('apagar um addon inteiro não encosta em quem não é segredo', () async {
+    // A única propriedade que **só** esta implementação tem. O contrato
+    // compartilhado exercita a fronteira entre dois addons, mas roda igual
+    // para `MemoryVault`, que não divide store com ninguém. Este cofre divide:
+    // ele varre o mesmo `shared_preferences` onde mora o `app_settings`.
+    SharedPreferences.setMockInitialValues({'app_settings': '{"downloadDir":"/casa/roms"}'});
+    SharedPreferences.resetStatic();
+    final prefs = await SharedPreferences.getInstance();
+    final vault = PrefsVault(prefs);
+    await vault.write(SecretRef.addonToken('ultranx', 'snes'), 'AAA');
+    await vault.write(SecretRef.addonToken('ultranx_2', 'snes'), 'BBB');
+
+    await vault.deleteWithPrefix(SecretRef.addonPrefix('ultranx'));
+
+    expect(prefs.getString('app_settings'), '{"downloadDir":"/casa/roms"}');
+    expect(await vault.read(SecretRef.addonToken('ultranx_2', 'snes')), 'BBB');
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'snes')), isNull);
+  });
+
+  test('`open()` abre sobre o prefs de verdade, que é o caminho da produção', () async {
+    // Os outros casos constroem pelo construtor, e `vault_provider.dart:39`
+    // liga `PrefsVault.open` como reserva. Sem este caso, o único caminho que
+    // a produção percorre é o único sem teste.
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.resetStatic();
+
+    final vault = await PrefsVault.open();
+    await vault.write(SecretRef.iaAccessKey, 'ABCDEF');
+
+    expect(await vault.read(SecretRef.iaAccessKey), 'ABCDEF');
+  });
 }
 ```
+
+Os dois últimos casos são a razão de este arquivo existir além do contrato compartilhado, e valem o parágrafo:
+
+O de apagar prova a única propriedade que **só** esta implementação tem. O contrato já exercita a fronteira entre `addon:ultranx/` e `addon:ultranx_2/`, mas ele roda igual para o `MemoryVault`, que tem store próprio. Este cofre não tem: ele varre o mesmo `shared_preferences` onde mora o `app_settings`. O caso monta as chaves com `SecretRef`, e não com string na mão, de propósito, porque é a barra final de `addonPrefix` que separa `ultranx` de `ultranx_2`, e um chamador que montasse `'addon:ultranx'` sem ela derrubaria o login do addon vizinho.
+
+O de `open()` cobre o único caminho que a produção percorre: `vault_provider.dart` liga `PrefsVault.open` como reserva, e todos os outros casos constroem pelo construtor. Custa quatro linhas porque `setMockInitialValues({})` já basta, sem override de provider e sem falso.
 
 - [ ] **Step 2: Rode para ver falhar**
 
@@ -728,8 +767,13 @@ class PrefsVault implements SecretVault {
   @override
   Future<void> deleteWithPrefix(String prefix) async {
     final alvo = '$keyPrefix$prefix';
-    // `toList()` porque `getKeys()` devolve a visão viva do mapa, e remover
-    // enquanto itera lança `ConcurrentModificationError`.
+    // `toList()` é defesa barata, não necessidade: nesta versão do plugin,
+    // `getKeys()` já devolve cópia (`Set<String>.from(_preferenceCache.keys)`,
+    // `shared_preferences_legacy.dart:111`), então remover enquanto itera
+    // **não** lança `ConcurrentModificationError`. Medido, tirando o `toList()`
+    // e rodando. Fica porque a versão do plugin pode mudar, e porque `where`
+    // é preguiçoso: sem materializar, a iteração e as remoções se intercalam,
+    // e é essa intercalação que dependeria da cópia continuar existindo.
     final chaves = _prefs.getKeys().where((chave) => chave.startsWith(alvo)).toList();
     for (final chave in chaves) {
       await _prefs.remove(chave);
@@ -744,11 +788,11 @@ class PrefsVault implements SecretVault {
 flutter test test/prefs_vault_test.dart
 ```
 
-Esperado: `+9`, zero falha.
+Esperado: `+11`, zero falha. São os sete do contrato mais os quatro deste arquivo.
 
 **Tropeço provável:** o contrato falhar em "chave que nunca foi escrita devolve null" a partir do segundo caso, porque `SharedPreferences.getInstance()` guarda um singleton interno e cada `build()` do contrato pede uma instância nova.
 
-Quem zera o singleton, medido no `shared_preferences-2.5.3`, é o **`setMockInitialValues`**: ele mesmo faz `_completer = null` (`lib/src/shared_preferences_legacy.dart:290`, comentário "If the singleton instance has been initialized already, it is nullified"). O `resetStatic()` logo depois é redundante nesta versão: tirá-lo de `_prefsVazio` deixa os 9 passando igual, conferido. Mantenha os dois assim mesmo, porque é defesa barata contra `setPrefix` e contra troca de versão do plugin, mas **não escreva em lugar nenhum que é o `resetStatic()` que limpa o singleton**: se a Task 4 acreditar nisso ao decidir entre os dois cofres, vai defender a fronteira errada.
+Quem zera o singleton, medido no `shared_preferences-2.5.3`, é o **`setMockInitialValues`**: ele mesmo faz `_completer = null` (`lib/src/shared_preferences_legacy.dart:290`, comentário "If the singleton instance has been initialized already, it is nullified"). O `resetStatic()` logo depois é redundante nesta versão: tirá-lo de `_prefsVazio` deixa os casos do contrato passando igual, conferido. Mantenha os dois assim mesmo, porque é defesa barata contra `setPrefix` e contra troca de versão do plugin, mas **não escreva em lugar nenhum que é o `resetStatic()` que limpa o singleton**: se a Task 4 acreditar nisso ao decidir entre os dois cofres, vai defender a fronteira errada.
 
 - [ ] **Step 5: Rode a suíte inteira**
 
@@ -756,7 +800,7 @@ Quem zera o singleton, medido no `shared_preferences-2.5.3`, é o **`setMockInit
 flutter test
 ```
 
-Esperado: `+364`, zero falha.
+Esperado: `+366`, zero falha.
 
 - [ ] **Step 6: Analise**
 
@@ -1153,7 +1197,7 @@ Esperado: `+14`, zero falha. São sete do contrato, quatro da sonda e três da e
 flutter test
 ```
 
-Esperado: `+378`, zero falha.
+Esperado: `+380`, zero falha.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -1467,7 +1511,7 @@ class SecretMigration {
 flutter test test/secret_migration_test.dart
 ```
 
-Esperado: `+9`, zero falha.
+Esperado: `+11`, zero falha.
 
 **Tropeço provável:** o caso "não muta o mapa que recebeu" falha se você escrever `final limpo = Map<String, dynamic>.from(raw)` e mexer direto em `consoles`. O `Map.from` é raso: o `consoleSettings` da cópia é **o mesmo objeto** do original. Copiar cada mapa de console é o que fecha isso, e é por isso que o laço monta um `novos` em vez de editar no lugar.
 
@@ -1477,7 +1521,7 @@ Esperado: `+9`, zero falha.
 flutter test
 ```
 
-Esperado: `+387`, zero falha.
+Esperado: `+389`, zero falha.
 
 - [ ] **Step 6: Analise**
 
@@ -2010,7 +2054,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+400`, zero falha.
+Esperado: `+402`, zero falha.
 
 Se algum teste **antigo** quebrar aqui, leia antes de consertar: pode ser teste que afirmava que o token ia no JSON, e aí ele estava certo ontem e está errado hoje. Conserte o teste dizendo por quê no commit. Se for teste que não fala de segredo, é regressão sua.
 
@@ -2213,7 +2257,7 @@ Esperado: nenhuma linha. Se aparecer alguma em `console_model.dart`, é o `toJso
 flutter test test/console_auth_test.dart
 ```
 
-Esperado: `+9`, zero falha.
+Esperado: `+11`, zero falha.
 
 **Tropeço provável:** `flutter analyze` acusando `unused_local_variable` para o `settings` do `setup_wizard_screen.dart`, se as duas telas usavam `settings` só dentro do `authed`. Se acontecer, `consoleHasToken(settings, c.id)` continua precisando dele, então o aviso quer dizer que você trocou por outra coisa.
 
@@ -2223,7 +2267,7 @@ Esperado: `+9`, zero falha.
 flutter test
 ```
 
-Esperado: `+409`, zero falha.
+Esperado: `+411`, zero falha.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -2633,7 +2677,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+419`, zero falha. `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam nesse caminho: se quebrarem por causa da assinatura nova, o conserto é passar um `MemoryVault()`, não afrouxar a assinatura.
+Esperado: `+421`, zero falha. `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam nesse caminho: se quebrarem por causa da assinatura nova, o conserto é passar um `MemoryVault()`, não afrouxar a assinatura.
 
 **Tropeço provável:** um teste antigo de `Console` que afirme igualdade do mapa `auth` inteiro depois de uma instalação passa a ver a chave `requires_token` a mais. Confira com `grep -rn "requires_token\|'auth'" test/ | grep -v catalog_auth_token`. Se aparecer, o conserto é somar a chave na expectativa, não parar de gravá-la: sem ela o console perde a tela de login.
 
@@ -2939,7 +2983,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+432`, zero falha. Se `test/settings_service_test.dart` ou `test/catalog_auth_token_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos seis arquivos, não só nos de `lib/`.
+Esperado: `+434`, zero falha. Se `test/settings_service_test.dart` ou `test/catalog_auth_token_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos seis arquivos, não só nos de `lib/`.
 
 - [ ] **Step 7: Analise**
 
@@ -3222,7 +3266,7 @@ Esperado: `+11`, zero falha.
 flutter test
 ```
 
-Esperado: `+443`, zero falha.
+Esperado: `+445`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3547,7 +3591,7 @@ Esperado: `+13`, zero falha.
 flutter test
 ```
 
-Esperado: `+456`, zero falha.
+Esperado: `+458`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -3702,7 +3746,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+462`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Esperado: `+464`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
 
 - [ ] **Step 6: Analise**
 
@@ -4322,7 +4366,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+472`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Esperado: `+474`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
 
 - [ ] **Step 9: Analise e compile**
 
@@ -4597,7 +4641,7 @@ Esperado: `+10`, zero falha.
 flutter test
 ```
 
-Esperado: `+482`, zero falha.
+Esperado: `+484`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -4820,7 +4864,7 @@ Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de 
 flutter test
 ```
 
-Esperado: `+485`, zero falha.
+Esperado: `+487`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5029,7 +5073,7 @@ Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_sc
 flutter test
 ```
 
-Esperado: `+488`, zero falha.
+Esperado: `+490`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -5299,7 +5343,7 @@ Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verd
 flutter test
 ```
 
-Esperado: `+492`, zero falha.
+Esperado: `+494`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -5686,7 +5730,7 @@ Esperado: `+17`, zero falha.
 flutter test
 ```
 
-Esperado: `+509`, zero falha.
+Esperado: `+511`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -6178,7 +6222,7 @@ Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, 
 flutter test
 ```
 
-Esperado: `+522`, zero falha.
+Esperado: `+524`, zero falha.
 
 - [ ] **Step 11: Analise e compile**
 
@@ -6501,7 +6545,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+528`, zero falha.
+Esperado: `+530`, zero falha.
 
 - [ ] **Step 7: Analise e compile**
 
@@ -6787,7 +6831,7 @@ Esperado: `+6`, zero falha.
 flutter test
 ```
 
-Esperado: `+534`, zero falha.
+Esperado: `+536`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7222,7 +7266,7 @@ Esperado: `+8`, zero falha.
 flutter test
 ```
 
-Esperado: `+542`, zero falha.
+Esperado: `+544`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -7646,7 +7690,7 @@ class _Linha extends StatelessWidget {
 flutter test test/addons_screen_test.dart
 ```
 
-Esperado: `+9`, zero falha.
+Esperado: `+11`, zero falha.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
@@ -7654,7 +7698,7 @@ Esperado: `+9`, zero falha.
 flutter test
 ```
 
-Esperado: `+551`, zero falha.
+Esperado: `+553`, zero falha.
 
 - [ ] **Step 7: Analise**
 
@@ -8021,7 +8065,7 @@ Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que
 flutter test
 ```
 
-Esperado: `+557`, zero falha.
+Esperado: `+559`, zero falha.
 
 - [ ] **Step 8: Analise**
 
@@ -8483,7 +8527,7 @@ flutter test
 flutter analyze
 ```
 
-Esperado: `+564`, zero falha, `22 issues found`.
+Esperado: `+566`, zero falha, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -8626,7 +8670,7 @@ Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor 
 flutter test
 ```
 
-Esperado: `+569`, zero falha.
+Esperado: `+571`, zero falha.
 
 - [ ] **Step 4: Analise**
 
@@ -8795,7 +8839,7 @@ Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o 
 flutter test
 ```
 
-Esperado: `+569`, zero falha.
+Esperado: `+571`, zero falha.
 
 Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
 
