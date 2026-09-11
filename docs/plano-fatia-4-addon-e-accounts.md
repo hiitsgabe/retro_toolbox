@@ -6877,7 +6877,7 @@ git commit -m "feat(addon): formulario de conta passa a ser do par addon e conso
 
 **Files:**
 - Create: `lib/services/addon_install.dart`
-- Modify: `lib/services/catalog_service.dart:79` (`_parseConsoles` vira público)
+- Modify: `lib/services/catalog_service.dart` (`_parseConsoles` vira público; sem número de linha de propósito, pela mesma razão da Task 22: a Task 13 reescreve este arquivo)
 - Test: `test/addon_install_test.dart`
 
 Esta é a porta de entrada da seção 9: "**Adicionar addon**: um campo de URL e um botão". Tudo que ela precisa já existe em pedaços, e nenhum pedaço sabe dos outros. `Addon.idFromUrl` (Task 9) dá a chave estável, `CatalogService.harvestAuthTokens` (Task 8) tira o token do arquivo e põe no cofre, e `AddonNotifier.install` (Task 14) grava o catálogo e a lista. Esta Task é a costura, e ela mora em arquivo próprio porque não é de nenhum dos três: `CatalogService` não conhece `AddonNotifier`, e é bom que continue assim.
@@ -7028,7 +7028,7 @@ Em `lib/services/catalog_service.dart`, linha 79, tire o underscore:
   static Map<String, Console> parseConsoles(String jsonStr) {
 ```
 
-E troque as três chamadas internas (`catalog_service.dart:41`, `:110`, e a de `buildCatalog` que a Task 13 criou) de `_parseConsoles(` para `parseConsoles(`.
+E troque as três chamadas internas (as duas que `grep -n "_parseConsoles(" lib/services/catalog_service.dart` acha fora da declaração, mais a que a Task 13 criou dentro de `buildCatalog`) de `_parseConsoles(` para `parseConsoles(`.
 
 Público de propósito e não copiado: validar um catálogo baixado com um parser diferente do que vai lê-lo depois é como o app aceita na instalação um arquivo que ele não consegue abrir no boot. É o mesmo código ou não vale nada.
 
@@ -7103,7 +7103,7 @@ String _nomeDe(String url, String id) {
 }
 
 /// A rede de verdade, igual à de `CatalogService.setCatalogFromUrl`
-/// (`catalog_service.dart:121-135`): mesmo teto de 30 segundos para conectar e
+/// (o corpo de `setCatalogFromUrl`): mesmo teto de 30 segundos para conectar e
 /// mesma recusa de qualquer status que não seja 200.
 Future<String> fetchCatalogByHttp(String url) async {
   final client = HttpClient();
