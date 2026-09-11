@@ -87,10 +87,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   /// dois cabos soltos se encontram aqui, e é o único lugar em que se
   /// encontram.
   void _abrirDetalhe(PackGridEntry entry) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GameDetailScreen(entry: entry, onDownload: _baixarUm)),
-    );
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => GameDetailScreen(
+        entry: entry,
+        onDownload: _baixarUm,
+        onBatchDownload: () => _confirmarLote(_selecaoDoModo),
+      ),
+    ));
   }
+
+  /// A seleção do modo corrente, lida na hora do toque.
+  ///
+  /// O `build` calcula a mesma coisa para a contagem da barra, mas o lote lê
+  /// aqui, e não daquele valor, porque a folha pode ser aberta pela tela de
+  /// detalhe, que fica **em cima** desta. Ler no momento do toque tira a
+  /// pergunta "aquele valor ainda é o de agora" do caminho.
+  Set<String> get _selecaoDoModo => selectionKeysFor(
+        ref.read(catalogProvider).selectedGames,
+        pack: ref.read(gridModeProvider) == GridMode.pack,
+      );
 
   /// Uma escolha só, vinda da tela de detalhe, vai direto para a fila.
   ///
@@ -194,7 +209,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           SelectionBar(
             count: selecionadas.length,
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: () => _confirmarLote(selecionadas),
+            onDownload: () => _confirmarLote(_selecaoDoModo),
           ),
           Footer(),
         ],

@@ -10,8 +10,10 @@ import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/providers/source_verification_provider.dart';
+import 'package:roms_downloader/services/pack_grid_filter.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
+import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 
 /// O tipo de fonte, que nesta fatia é um só.
 ///
@@ -35,14 +37,27 @@ class GameDetailScreen extends ConsumerWidget {
   /// o `HomeScreen`.
   final void Function(SourcePick pick) onDownload;
 
-  const GameDetailScreen({super.key, required this.entry, required this.onDownload});
+  /// O que fazer quando o usuário aperta Baixar **na barra do rodapé**, que é
+  /// o lote e não este jogo.
+  ///
+  /// Callback pelo mesmo motivo de [onDownload]: esta tela não conhece a fila
+  /// nem a folha de confirmação. Quem liga é o `HomeScreen`.
+  final VoidCallback onBatchDownload;
+
+  const GameDetailScreen({
+    super.key,
+    required this.entry,
+    required this.onDownload,
+    required this.onBatchDownload,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final game = entry.game;
     final chave = entry.selectionKey;
     final favorito = ref.watch(favoritesProvider).isFavorite(chave);
-    final selecionado = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(chave);
+    final selecionadas = ref.watch(catalogProvider.select((s) => s.selectedGames));
+    final selecionado = selecionadas.contains(chave);
     final resolver = ref.watch(gameResolverProvider);
 
     // Os vereditos são resolvidos **aqui**, uma vez, e descem como dado. Os
@@ -109,6 +124,14 @@ class GameDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(width: 8),
         ],
+      ),
+      bottomNavigationBar: SelectionBar(
+        // `pack: true` literal, e não lido do `gridModeProvider`: esta tela
+        // só existe em MODO PACK, porque só `PackGrid` a empurra. Ler o modo
+        // aqui daria a impressão falsa de que ela abre em MODO FONTE.
+        count: selectionKeysFor(selecionadas, pack: true).length,
+        onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
+        onDownload: onBatchDownload,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
