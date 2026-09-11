@@ -17,7 +17,7 @@ class TaskQueueService {
 
     if (console.hasTokenAuth) {
       final settings = ref.read(settingsProvider);
-      final token = settings.consoleSettings[console.id]?.authToken ?? console.auth?['token'] as String? ?? '';
+      final token = settings.consoleSettings[console.id]?.authToken ?? '';
       if (token.isEmpty) {
         return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
       }

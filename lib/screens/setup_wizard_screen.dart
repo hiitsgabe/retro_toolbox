@@ -4,11 +4,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/utils/console_auth.dart';
 import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 
@@ -388,8 +388,6 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     // only here in the wizard so users can connect them during onboarding.
     final settings = ref.watch(settingsProvider);
     final signinConsoles = ref.watch(appStateProvider).consolesList.where((c) => c.authSignin != null).toList();
-    bool authed(Console c) =>
-        (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,14 +406,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: ExpansionTile(
-                key: ValueKey('signin_${c.id}_${authed(c)}'),
+                key: ValueKey('signin_${c.id}_${consoleHasToken(settings, c.id)}'),
                 initiallyExpanded: false,
                 shape: const Border(),
                 collapsedShape: const Border(),
                 tilePadding: EdgeInsets.zero,
                 leading: const Icon(Icons.vpn_key_outlined),
                 title: Text(c.name),
-                subtitle: Text(authed(c) ? 'Connected' : 'Not connected'),
+                subtitle: Text(consoleHasToken(settings, c.id) ? 'Connected' : 'Not connected'),
                 childrenPadding: const EdgeInsets.only(bottom: 8),
                 children: [ConsoleAuthSetting(console: c)],
               ),
