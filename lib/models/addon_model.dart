@@ -37,9 +37,22 @@ class Addon {
   /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
   /// fonte tem que reencontrar o token que já está no cofre, e o token está
   /// guardado sob o id.
+  ///
+  /// **A porta entra no id, e não é normalização esquecida.** `Uri.host` a
+  /// descarta, então sem isto `192.168.0.10:8080/f/0/` e `192.168.0.10:8081/f/0/`
+  /// seriam o mesmo addon, dividindo chave de cofre e arquivo de catálogo. Dois
+  /// servidores de LAN no mesmo aparelho é o caso comum aqui, não o exótico.
+  /// Uso `hasPort` e não `port` porque `port` resolve o padrão do esquema: com
+  /// ele, `http://e.com/c` daria 80 e `https://e.com/c` daria 443, e a estabilidade
+  /// entre esquemas, que é a primeira promessa deste método, iria embora. O preço
+  /// é que uma url que escreve `:80` à toa vira um id diferente da que não escreve.
+  /// Esse erro cria um addon duplicado, que se vê na lista; o erro oposto apagaria
+  /// um token em silêncio.
   static String idFromUrl(String url) {
     final uri = Uri.tryParse(url.trim());
-    final cru = (uri == null || uri.host.isEmpty) ? url : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.path}';
+    final cru = (uri == null || uri.host.isEmpty)
+        ? url
+        : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.hasPort ? ':${uri.port}' : ''}${uri.path}';
     final slug = _slug(cru);
     // Uma url cujo slug bata no embutido roubaria o token dele. Não é caso
     // realista; é barato de impedir e caro de descobrir depois.
