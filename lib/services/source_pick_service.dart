@@ -3,6 +3,7 @@ import 'package:roms_downloader/models/game_metadata_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/utils/title_metadata_parser.dart';
 
 /// O plano de lote do MODO FONTE.
@@ -191,4 +192,68 @@ String _reason(
   }
 
   return 'empate entre ${ordered.length} fontes, ficou a primeira';
+}
+
+/// Uma fonte com o veredito de CRC dela já resolvido.
+///
+/// A tela resolve os vereditos uma vez, no `build` do `ConsumerWidget`, e
+/// passa isto para baixo. Assim esta função não conhece Riverpod e os testes
+/// dela não sobem widget.
+typedef VerifiedSource = ({MatchedSource source, SourceVerification state});
+
+/// Como a verificação por CRC reorganiza as fontes de um jogo (seção 8).
+typedef VerificationSplit = ({
+  /// Quem pode disputar o destaque: só as confirmadas quando existe alguma
+  /// confirmada, senão tudo que não foi descartado.
+  List<VerifiedSource> eligible,
+
+  /// Quem saiu da disputa porque o CRC desmentiu o nome.
+  List<VerifiedSource> discarded,
+
+  /// Alguma leitura ainda no ar.
+  bool verifying,
+
+  /// Alguma fonte confirmada por CRC.
+  bool confirmed,
+
+  /// Sobrou fonte, nenhuma confirmada, e **todas** as que sobraram são
+  /// impossíveis de verificar. É o "não tenho certeza de nenhuma" da seção 8.
+  bool noCertainty,
+});
+
+/// A regra da seção 8, na ordem dela. Pura, e é de propósito: a tela de
+/// detalhe fica só com o desenho.
+VerificationSplit splitByVerification(List<VerifiedSource> sources) {
+  final ok = <VerifiedSource>[];
+  final discarded = <VerifiedSource>[];
+  final rest = <VerifiedSource>[];
+  var verifying = false;
+  var impossible = 0;
+
+  for (final item in sources) {
+    switch (item.state) {
+      case SourceVerification.crcOk:
+        ok.add(item);
+      case SourceVerification.crcDiscarded:
+        discarded.add(item);
+      case SourceVerification.verifying:
+        verifying = true;
+        rest.add(item);
+      case SourceVerification.impossible:
+        impossible++;
+        rest.add(item);
+      case SourceVerification.notVerified:
+        rest.add(item);
+    }
+  }
+
+  return (
+    eligible: ok.isNotEmpty ? ok : rest,
+    discarded: discarded,
+    verifying: verifying,
+    confirmed: ok.isNotEmpty,
+    // `impossible == rest.length` e não `!verifying`: uma fonte que ninguém
+    // perguntou ainda não desistiu, e desistir por ela seria desistir cedo.
+    noCertainty: ok.isEmpty && rest.isNotEmpty && impossible == rest.length,
+  );
 }

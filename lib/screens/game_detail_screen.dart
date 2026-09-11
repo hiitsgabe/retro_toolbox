@@ -5,14 +5,23 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
+import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
+import 'package:roms_downloader/providers/source_verification_provider.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 
-/// A tela da seção 7 do spec de UI: um jogo, as fontes dele e o motivo da
-/// escolha.
+/// O tipo de fonte, que nesta fatia é um só.
+///
+/// Toda fonte vem da listagem HTTP do console. `SEED` e `RD` da seção 7 do
+/// spec de UI chegam quando o addon declarar o tipo (fatia 4 e fatia 6). É
+/// constante em vez de literal solto para o dia em que virar campo.
+const _kTipoFonte = 'HTTP';
+
+/// A tela das seções 7 e 8 do spec de UI: um jogo, as fontes dele, o motivo da
+/// escolha e o que a verificação por CRC disse sobre cada uma.
 ///
 /// Não é bottom sheet e não é expansão inline. É rota.
 class GameDetailScreen extends ConsumerWidget {
@@ -34,20 +43,53 @@ class GameDetailScreen extends ConsumerWidget {
     final chave = entry.selectionKey;
     final favorito = ref.watch(favoritesProvider).isFavorite(chave);
     final selecionado = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(chave);
+    final resolver = ref.watch(gameResolverProvider);
 
-    // A mesma regra do lote, com uma entrada só. Seção 6: uma regra só, dois
-    // lugares. Não escreva uma escolha diferente aqui.
+    // Os vereditos são resolvidos **aqui**, uma vez, e descem como dado. Os
+    // widgets filhos não veem `ref`: eles são burros como todo o resto desta
+    // fatia. O `watch` por fonte é barato porque a família do Riverpod cacheia
+    // por (fonte, arquivo).
+    final verificadas = <VerifiedSource>[
+      for (final source in entry.sources) (source: source, state: _estadoDe(ref, game.id, source)),
+    ];
+    final split = splitByVerification(verificadas);
+
+    // A mesma regra do lote, com uma entrada só, sobre quem sobrou da
+    // verificação. Seção 6: uma regra só, dois lugares.
     final plan = planFromEntries(
-      [entry],
+      [PackGridEntry(game: game, sources: [for (final v in split.eligible) v.source])],
       preferredRegions: ref.watch(preferredRegionsProvider),
-      resolveGame: ref.watch(gameResolverProvider),
+      resolveGame: resolver,
     );
-    final pick = plan.picks.firstOrNull;
-    // Uma entrada só entra em `planFromEntries`, e ela sai como exatamente uma
-    // escolha ou exatamente uma falha. O `else if` lá embaixo existe para não
-    // haver um `.first` numa lista que o compilador não garante.
-    final falha = plan.failures.firstOrNull;
-    final outras = _outrasFontes(entry, pick);
+
+    final escolha = split.noCertainty ? null : plan.picks.firstOrNull;
+    final vencedora = _vencedora(split.eligible, escolha);
+    final outras = [
+      for (final v in verificadas)
+        if (!identical(v.source, vencedora?.source)) v,
+    ];
+
+    // A única string desta tela que não sai de `PickFailure`, e tem que ser: o
+    // lote não verifica CRC, então a regra de lote não conhece este estado.
+    // Não "conserte" isso movendo a string para o serviço.
+    final faixa = split.eligible.isEmpty && split.discarded.isNotEmpty
+        ? 'nenhuma fonte passou na verificação por CRC'
+        : (split.noCertainty ? null : plan.failures.firstOrNull?.reason);
+
+    void baixarFonte(VerifiedSource item) {
+      final jogo = resolver(item.source);
+      if (jogo == null) return;
+      onDownload(SourcePick(
+        gameId: chave,
+        title: game.title,
+        filename: item.source.filename,
+        size: item.source.size,
+        sourceId: item.source.sourceId,
+        reason: 'escolhida por você, sem verificação possível',
+        uncertain: true,
+        game: jogo,
+      ));
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -76,21 +118,86 @@ class GameDetailScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
           ],
-          if (pick != null) ...[
+          if (escolha != null && vencedora != null) ...[
             const SizedBox(height: 16),
-            _Destaque(pick: pick, onDownload: () => onDownload(pick)),
-          ] else if (falha != null) ...[
+            _Destaque(
+              pick: escolha,
+              verification: vencedora.state,
+              confirmadoPorCrc: split.confirmed,
+              // Hesita só enquanto a hesitação pode mudar alguma coisa.
+              hesita: split.verifying && !split.confirmed,
+              onDownload: () => onDownload(escolha),
+            ),
+          ] else if (split.noCertainty) ...[
             const SizedBox(height: 16),
-            _SemFonte(reason: falha.reason),
+            const _SemCerteza(),
+          ] else if (faixa != null) ...[
+            const SizedBox(height: 16),
+            _SemFonte(reason: faixa),
           ],
           if (outras.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _OutrasFontes(sources: outras),
+            _OutrasFontes(
+              sources: outras,
+              descartadas: split.discarded.length,
+              comecaAberta: split.noCertainty,
+              onDownload: split.noCertainty ? baixarFonte : null,
+            ),
           ],
         ],
       ),
     );
   }
+}
+
+/// O veredito de uma fonte.
+///
+/// Um match de tier `checksum` já nasceu de um CRC batido contra o pacote, e
+/// por isso ele não passa por `verifying`: perguntar de novo seria gastar duas
+/// requisições para reconfirmar o que já se sabe. Ver a "Segunda decisão
+/// travada" do plano da fatia 3.
+SourceVerification _estadoDe(WidgetRef ref, String gameId, MatchedSource source) {
+  if (source.confidence == MatchConfidence.confirmed) return SourceVerification.crcOk;
+  return verificationOf(ref.watch(sourceVerificationProvider((
+    sourceId: source.sourceId,
+    filename: source.filename,
+    url: source.url,
+    gameId: gameId,
+  ))));
+}
+
+/// Qual objeto da lista de elegíveis virou a escolha.
+///
+/// Compara os três campos e devolve a **instância**, porque quem chama tira a
+/// vencedora da lista por identidade. Duas fontes podem servir arquivos de
+/// mesmo nome, e tirar as duas esconderia uma fonte real.
+VerifiedSource? _vencedora(List<VerifiedSource> eligible, SourcePick? pick) {
+  if (pick == null) return null;
+  for (final item in eligible) {
+    if (item.source.filename == pick.filename &&
+        item.source.size == pick.size &&
+        item.source.sourceId == pick.sourceId) {
+      return item;
+    }
+  }
+  return null;
+}
+
+/// Null quando não há o que dizer, e aí a linha fica igual à da Task 16.
+String? _rotuloVerificacao(SourceVerification state) => switch (state) {
+      SourceVerification.notVerified => null,
+      SourceVerification.verifying => 'verificando',
+      SourceVerification.crcOk => 'CRC ok',
+      SourceVerification.crcDiscarded => 'descartada pelo CRC',
+      SourceVerification.impossible => 'sem como verificar',
+    };
+
+String _rotuloOutras(int quantas, int descartadas) {
+  final base = quantas == 1 ? 'outra fonte' : 'outras $quantas fontes';
+  if (descartadas == 0) return base;
+  // As descartadas estão **dentro** de [quantas]: elas desceram para a lista,
+  // não sumiram (seção 8).
+  return descartadas == 1 ? '$base, 1 descartada' : '$base, $descartadas descartadas';
 }
 
 class _Topo extends StatelessWidget {
@@ -159,13 +266,27 @@ class _Topo extends StatelessWidget {
 /// O card da versão escolhida. O motivo é a linha que não pode faltar.
 class _Destaque extends StatelessWidget {
   final SourcePick pick;
+  final SourceVerification verification;
+  final bool confirmadoPorCrc;
+  final bool hesita;
   final VoidCallback onDownload;
 
-  const _Destaque({required this.pick, required this.onDownload});
+  const _Destaque({
+    required this.pick,
+    required this.verification,
+    required this.confirmadoPorCrc,
+    required this.hesita,
+    required this.onDownload,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final selo = _rotuloVerificacao(verification);
+    final motivo = confirmadoPorCrc
+        ? 'confirmado pelo CRC, é exatamente este dump'
+        : pick.reason;
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -197,15 +318,18 @@ class _Destaque extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${formatBytes(pick.size)}, ${pick.sourceId}',
+            '${formatBytes(pick.size)}, ${pick.sourceId}${selo == null ? '' : ', $selo'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 2),
-          Text(pick.reason, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          Text(motivo, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(onPressed: onDownload, child: const Text('Baixar')),
+            child: FilledButton(
+              onPressed: onDownload,
+              child: Text(hesita ? 'Baixar mesmo assim' : 'Baixar'),
+            ),
           ),
         ],
       ),
@@ -213,56 +337,11 @@ class _Destaque extends StatelessWidget {
   }
 }
 
-/// O tipo de fonte, que nesta fatia é um só.
-///
-/// Toda fonte vem da listagem HTTP do console. `SEED` e `RD` da seção 7 do
-/// spec de UI chegam quando o addon declarar o tipo (fatia 4 e fatia 6). É
-/// constante em vez de literal solto para o dia em que virar campo.
-const _kTipoFonte = 'HTTP';
-
-/// As fontes que não ganharam o destaque, na ordem em que a fonte as deu.
-///
-/// Tira **uma** cópia da vencedora, não todas as de mesmo nome: duas fontes
-/// podem servir arquivos homônimos de tamanhos diferentes, e sumir com as duas
-/// esconderia uma fonte real. Sem escolha nenhuma, devolve tudo, porque aí
-/// nenhuma delas é "a outra" e esconder o que existe deixaria a faixa de
-/// "sem fonte" parecendo mentira.
-List<MatchedSource> _outrasFontes(PackGridEntry entry, SourcePick? pick) {
-  if (pick == null) return entry.sources;
-
-  final outras = <MatchedSource>[];
-  var jaTirou = false;
-  for (final source in entry.sources) {
-    final ehAVencedora = !jaTirou &&
-        source.filename == pick.filename &&
-        source.size == pick.size &&
-        source.sourceId == pick.sourceId;
-    if (ehAVencedora) {
-      jaTirou = true;
-      continue;
-    }
-    outras.add(source);
-  }
-  return outras;
-}
-
-String _rotuloOutras(int quantas) => quantas == 1 ? 'outra fonte' : 'outras $quantas fontes';
-
-/// A confiança do **casamento**, que não é a verificação por CRC.
-///
-/// Ver a "Segunda decisão travada" do plano da fatia 3: são dois eixos e eles
-/// não se misturam. A Task 18 acrescenta o estado de CRC como mais um pedaço
-/// da mesma linha, sem tirar este.
-String _rotuloConfianca(MatchConfidence confidence) => switch (confidence) {
-      MatchConfidence.confirmed => 'casamento confirmado',
-      MatchConfidence.likely => 'casamento provável',
-      MatchConfidence.guess => 'casamento no chute',
-    };
-
 /// A faixa que substitui o card quando não há o que baixar.
 ///
-/// O texto vem de `PickFailure.reason`, ou seja da mesma regra que a folha de
-/// lote usa. A tela não inventa motivo próprio.
+/// O texto vem de `PickFailure.reason` na maioria dos casos, ou seja da mesma
+/// regra que a folha de lote usa. A tela não inventa motivo próprio, com a
+/// única exceção anotada no `build` da tela.
 ///
 /// Falta aqui o atalho para a tela de addons que a seção 7 pede. A tela de
 /// addons é a fatia 4; quando ela existir, o botão entra neste widget.
@@ -294,12 +373,54 @@ class _SemFonte extends StatelessWidget {
   }
 }
 
-/// A lista colapsada da seção 7. Informativa: o botão Baixar por linha é o
-/// estado "verificação impossível" da seção 8, que é a Task 18.
-class _OutrasFontes extends StatelessWidget {
-  final List<MatchedSource> sources;
+/// O card do estado "verificação impossível" da seção 8. Nunca finge certeza.
+class _SemCerteza extends StatelessWidget {
+  const _SemCerteza();
 
-  const _OutrasFontes({required this.sources});
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'não tenho certeza de nenhuma',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: scheme.onSurface),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Nenhuma das fontes deixou ler o CRC. Escolha uma abaixo.',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A lista da seção 7, com o contador da seção 8.
+class _OutrasFontes extends StatelessWidget {
+  final List<VerifiedSource> sources;
+  final int descartadas;
+  final bool comecaAberta;
+
+  /// Null na maioria das vezes: o botão por linha é só o estado "verificação
+  /// impossível" da seção 8.
+  final void Function(VerifiedSource item)? onDownload;
+
+  const _OutrasFontes({
+    required this.sources,
+    required this.descartadas,
+    required this.comecaAberta,
+    required this.onDownload,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -310,42 +431,73 @@ class _OutrasFontes extends StatelessWidget {
       // soltas no meio da tela.
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
+        initiallyExpanded: comecaAberta,
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         title: Text(
-          _rotuloOutras(sources.length),
+          _rotuloOutras(sources.length, descartadas),
           style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
         ),
-        children: [for (final source in sources) _LinhaFonte(source: source)],
+        children: [
+          for (final item in sources)
+            _LinhaFonte(
+              item: item,
+              onDownload: onDownload == null ? null : () => onDownload!(item),
+            ),
+        ],
       ),
     );
   }
 }
 
 class _LinhaFonte extends StatelessWidget {
-  final MatchedSource source;
+  final VerifiedSource item;
+  final VoidCallback? onDownload;
 
-  const _LinhaFonte({required this.source});
+  const _LinhaFonte({required this.item, required this.onDownload});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final selo = _rotuloVerificacao(item.state);
+    final baixar = onDownload;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(source.filename, style: const TextStyle(fontSize: 13)),
+          Text(item.source.filename, style: const TextStyle(fontSize: 13)),
           const SizedBox(height: 2),
           Text(
-            // Os cinco pedaços que a seção 7 pede, nesta ordem.
-            '${formatBytes(source.size)}, ${source.sourceId}, '
-            '$_kTipoFonte, ${_rotuloConfianca(source.confidence)}',
+            // Os cinco pedaços que a seção 7 pede, mais o veredito da seção 8
+            // quando existe um.
+            '${formatBytes(item.source.size)}, ${item.source.sourceId}, '
+            '$_kTipoFonte, ${_rotuloConfianca(item.source.confidence)}'
+            '${selo == null ? '' : ', $selo'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
+          if (baixar != null) ...[
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(onPressed: baixar, child: const Text('Baixar')),
+            ),
+          ],
         ],
       ),
     );
   }
 }
+
+/// A confiança do **casamento**, que não é a verificação por CRC.
+///
+/// Ver a "Segunda decisão travada" do plano da fatia 3: são dois eixos e eles
+/// não se misturam. O veredito de CRC entra na mesma linha, depois deste, como
+/// um pedaço à parte.
+String _rotuloConfianca(MatchConfidence confidence) => switch (confidence) {
+      MatchConfidence.confirmed => 'casamento confirmado',
+      MatchConfidence.likely => 'casamento provável',
+      MatchConfidence.guess => 'casamento no chute',
+    };
