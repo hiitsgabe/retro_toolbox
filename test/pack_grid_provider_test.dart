@@ -148,4 +148,37 @@ void main() {
     // recarregado durante uma seleção.
     expect(achado, isNull);
   });
+
+  test('a busca do header não encolhe a lista que o lote lê', () async {
+    // O bug que este teste tranca: marcar três jogos, digitar no header e
+    // apertar Baixar enfileirando só os que sobraram na tela.
+    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')], busca: 'metroid');
+    await _pronto(container);
+
+    expect(container.read(packGridEntriesProvider).map((e) => e.game.id), ['snes/super-metroid']);
+    expect(
+      container.read(allPackEntriesProvider).map((e) => e.game.id),
+      ['snes/chrono-trigger', 'snes/super-metroid'],
+    );
+  });
+
+  test('a lista do lote sai ordenada por título, não na ordem do pacote', () async {
+    final container = _container(
+      pacote: Future.value(MetadataPack(
+        pack: 'snes',
+        system: 'Super Nintendo',
+        built: '2026-01-01',
+        games: [
+          _pg('snes/super-metroid', 'Super Metroid (USA)'),
+          _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
+        ],
+      )),
+    );
+    await _pronto(container);
+
+    expect(
+      container.read(allPackEntriesProvider).map((e) => e.game.id),
+      ['snes/chrono-trigger', 'snes/super-metroid'],
+    );
+  });
 }

@@ -73,4 +73,45 @@ void main() {
 
     expect(saida.length, 1);
   });
+
+  test('a seleção devolve as entradas na ordem da lista, não na ordem em que foram marcadas', () {
+    final entradas = [_e('Chrono Trigger'), _e('EarthBound'), _e('Super Metroid')];
+
+    final saida = entriesForSelection(entradas, {entradas[2].selectionKey, entradas[0].selectionKey});
+
+    expect(saida.map((e) => e.game.title), ['Chrono Trigger', 'Super Metroid']);
+  });
+
+  test('chave que não existe mais no pacote é ignorada, sem explodir', () {
+    // Acontece quando o pacote é republicado com um slug diferente enquanto a
+    // seleção do usuário ainda aponta para o antigo.
+    expect(entriesForSelection([_e('Chrono Trigger')], {'pack:snes/jogo-que-sumiu'}), isEmpty);
+  });
+
+  test('chave de MODO FONTE não traz entrada de pack nenhuma', () {
+    expect(entriesForSelection([_e('Chrono Trigger')], {'snes/Chrono Trigger (USA).zip'}), isEmpty);
+  });
+
+  test('em MODO PACK só as chaves com prefixo pack: contam', () {
+    final saida = selectionKeysFor(
+      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+      pack: true,
+    );
+
+    expect(saida, {'pack:snes/chrono-trigger'});
+  });
+
+  test('em MODO FONTE só as chaves sem prefixo contam', () {
+    final saida = selectionKeysFor(
+      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+      pack: false,
+    );
+
+    expect(saida, {'snes/Chrono Trigger (USA).zip'});
+  });
+
+  test('seleção vazia devolve conjunto vazio nos dois modos', () {
+    expect(selectionKeysFor(const {}, pack: true), isEmpty);
+    expect(selectionKeysFor(const {}, pack: false), isEmpty);
+  });
 }
