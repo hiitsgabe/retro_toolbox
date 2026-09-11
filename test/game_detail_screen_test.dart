@@ -10,6 +10,7 @@ import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/screens/game_detail_screen.dart';
+import 'package:roms_downloader/services/source_pick_service.dart';
 
 import 'support/favorites_stub.dart';
 
@@ -30,10 +31,15 @@ PackGame _pg() => const PackGame(
 PackGridEntry _entrada({List<MatchedSource> fontes = const []}) =>
     PackGridEntry(game: _pg(), sources: fontes);
 
-MatchedSource _fonte(String filename, {int size = 4 * 1024 * 1024}) => MatchedSource(
+MatchedSource _fonte(
+  String filename, {
+  int size = 4 * 1024 * 1024,
+  MatchConfidence confianca = MatchConfidence.likely,
+}) =>
+    MatchedSource(
       filename: filename,
       sourceId: kBuiltinSourceId,
-      confidence: MatchConfidence.likely,
+      confidence: confianca,
       size: size,
     );
 
@@ -44,16 +50,22 @@ Game _game(String filename) => Game(
       consoleId: 'snes',
     );
 
+// Função de topo, e não variável com lambda, por causa do lint
+// `prefer_function_declarations_over_variables`, que vem ligado no
+// `flutter_lints`.
+Game? _resolvePadrao(MatchedSource source) => _game(source.filename);
+
 Widget _host(
   PackGridEntry entrada, {
   void Function(SourcePick)? onDownload,
+  GameResolver? resolver,
 }) {
   return ProviderScope(
     overrides: [
       semDiscoDeFavoritos,
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
-      gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
+      gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
     ],
     child: MaterialApp(
       home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
@@ -147,5 +159,124 @@ void main() {
       capturado.read(catalogProvider).selectedGames,
       contains('pack:snes/chrono-trigger'),
     );
+  });
+
+  testWidgets('sem fonte, a faixa diz por que não há de onde baixar', (tester) async {
+    await tester.pumpWidget(_host(_entrada()));
+
+    // A mesma string que a folha de lote mostra para o mesmo jogo. Se você
+    // acabou de escrever um texto novo aqui, ele já existe em
+    // `source_pick_service.dart` e tem que sair de lá.
+    expect(find.text('nenhuma fonte instalada tem este jogo'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+  });
+
+  testWidgets('quando a fonte não resolve, a faixa usa o outro motivo', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      resolver: (_) => null,
+    ));
+
+    expect(find.text('a fonte saiu da listagem antes de a fila começar'), findsOneWidget);
+  });
+
+  testWidgets('sem pick, a fonte que não resolveu ainda aparece na lista', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      resolver: (_) => null,
+    ));
+
+    // Nada foi escolhido, então nenhuma fonte é "a outra". Mesmo assim a
+    // lista abre: esconder o que existe deixaria a faixa parecendo mentira.
+    expect(find.text('outra fonte'), findsOneWidget);
+  });
+
+  testWidgets('com uma fonte só, não existe lista de outras fontes', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+
+    // Este teste passa antes e depois da implementação. Ele não é uma trava
+    // de implementação, é uma trava contra a lista aparecer vazia depois.
+    expect(find.byType(ExpansionTile), findsNothing);
+  });
+
+  testWidgets('com três fontes, o contador diz outras 2 fontes', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (Japan).zip'),
+      _fonte('Chrono Trigger (USA).zip'),
+      _fonte('Chrono Trigger (Europe).zip'),
+    ])));
+
+    expect(find.text('outras 2 fontes'), findsOneWidget);
+  });
+
+  testWidgets('com duas fontes, o contador vai no singular', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (Japan).zip'),
+      _fonte('Chrono Trigger (USA).zip'),
+    ])));
+
+    // "outras 1 fontes" seria o texto que sai de um contador escrito sem
+    // pensar, e o spec de UI escreve contadores em português.
+    expect(find.text('outra fonte'), findsOneWidget);
+  });
+
+  testWidgets('a lista começa fechada', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (Japan).zip'),
+      _fonte('Chrono Trigger (USA).zip'),
+    ])));
+
+    expect(find.text('outra fonte'), findsOneWidget);
+    expect(find.text('Chrono Trigger (Japan).zip'), findsNothing);
+  });
+
+  testWidgets('expandida, cada linha traz arquivo, tamanho, addon, tipo e confiança', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (Japan).zip'),
+      _fonte('Chrono Trigger (USA).zip'),
+    ])));
+
+    await tester.tap(find.text('outra fonte'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
+    expect(find.text('4.0 MB, listagem, HTTP, casamento provável'), findsOneWidget);
+  });
+
+  testWidgets('a linha de palpite mostra o casamento no chute', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (USA).zip'),
+      _fonte('Chrono Trigger (Japan).zip', confianca: MatchConfidence.guess),
+    ])));
+
+    await tester.tap(find.text('outra fonte'));
+    await tester.pumpAndSettle();
+
+    // É a confiança do casamento, não o CRC. Ver a "Segunda decisão travada".
+    expect(find.text('4.0 MB, listagem, HTTP, casamento no chute'), findsOneWidget);
+  });
+
+  testWidgets('duas fontes idênticas: a escolhida sai da lista uma vez só', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [
+      _fonte('Chrono Trigger (USA).zip', size: 10),
+      _fonte('Chrono Trigger (USA).zip', size: 20),
+    ])));
+
+    await tester.tap(find.text('outra fonte'));
+    await tester.pumpAndSettle();
+
+    // A de 10 bytes venceu pelo desempate de ordem (Task 14). Se a lista
+    // tirasse todas as fontes de mesmo nome, a de 20 sumiria junto e o
+    // usuário perderia uma fonte real de vista.
+    expect(find.text('10.0 B, listagem'), findsOneWidget);
+    expect(find.text('20.0 B, listagem, HTTP, casamento provável'), findsOneWidget);
+  });
+
+  testWidgets('o card de destaque marca o tipo da fonte', (tester) async {
+    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+
+    // O `HTTP` do canto direito do mockup da seção 7. Com uma fonte só não há
+    // lista, então este é o único `HTTP` da tela.
+    expect(find.text('HTTP'), findsOneWidget);
   });
 }
