@@ -67,7 +67,12 @@ void main() {
 
   test('carregar não reescreve o app_settings quando não havia segredo', () async {
     // A carga roda em toda abertura. Reescrever sempre é escrita em disco por
-    // nada, e some com a pista de quando a migração de fato aconteceu.
+    // nada. ATENÇÃO ao que este caso tranca e ao que não tranca: ele compara o
+    // conteúdo, e quando não há segredo o JSON limpo é idêntico ao cru, então
+    // ele fica verde tanto para "não reescreveu" quanto para "reescreveu igual".
+    // Medido por mutação: tirar o `if` de `settings_service.dart:38` não o
+    // derruba. Trancar o ato de escrever exigiria injetar o `SharedPreferences`
+    // no `SettingsService`, que hoje o chama direto; está anotado para a fatia 5.
     final semSegredo = _appSettings();
     final prefs = await _prefsCom({'app_settings': semSegredo});
 
