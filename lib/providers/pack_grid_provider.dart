@@ -9,6 +9,7 @@ import 'package:roms_downloader/providers/identity_provider.dart';
 import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 import 'package:roms_downloader/services/source_index.dart';
+import 'package:roms_downloader/services/source_pick_service.dart';
 
 /// Os dois modos de grade da seção 7 do spec de arquitetura.
 enum GridMode {
@@ -90,4 +91,29 @@ final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
     for (final game in pack.games)
       PackGridEntry(game: game, sources: index?.sourcesFor(game.id) ?? const []),
   ], ref.watch(gridSearchQueryProvider));
+});
+
+/// A região preferida do usuário, lida do filtro que já existe.
+///
+/// É seam de teste, como `catalogGamesProvider` e `gridSearchQueryProvider`:
+/// sobrescreva **este** provider nos testes, nunca o `catalogProvider`.
+final preferredRegionsProvider = Provider<Set<String>>((ref) {
+  return ref.watch(catalogProvider.select((state) => state.filter.regions));
+});
+
+/// Como uma fonte vira o `Game` que entra na fila.
+///
+/// Nesta fatia toda fonte veio da listagem do console, então resolver é achar
+/// de volta o `Game` pelo nome do arquivo. Na fatia 4 quem responde é o addon,
+/// e este provider passa a consultá-lo. `planFromEntries` não precisa saber
+/// de nenhum dos dois.
+final gameResolverProvider = Provider<GameResolver>((ref) {
+  final byFilename = <String, Game>{};
+  for (final game in ref.watch(catalogGamesProvider)) {
+    // `putIfAbsent`: se dois arquivos da listagem tiverem o mesmo nome, o
+    // primeiro do catálogo vence, que é a mesma ordem que `SourceIndex.build`
+    // já usa. Duas respostas diferentes para o mesmo nome seria pior.
+    byFilename.putIfAbsent(game.filename, () => game);
+  }
+  return (source) => byFilename[source.filename];
 });
