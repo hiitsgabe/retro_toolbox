@@ -12,7 +12,17 @@ class ConsoleAuthSetting extends ConsumerStatefulWidget {
   /// addons, com credenciais diferentes, e o formulário é de um deles.
   final String addonId;
 
-  const ConsoleAuthSetting({super.key, required this.console, required this.addonId});
+  /// Chamado depois de o token ir para o cofre, com o valor novo (vazio quando
+  /// o usuário deslogou).
+  ///
+  /// Existe porque quem desenha o estado de conexão **fora** deste formulário
+  /// não tem como saber que ele gravou: o cofre não notifica, e para addon de
+  /// terceiro `setAddonToken` nem chega a mexer em `settingsProvider`
+  /// (Task 19). Opcional, porque os dois outros chamadores desenham o estado
+  /// aqui dentro.
+  final void Function(String token)? onSaved;
+
+  const ConsoleAuthSetting({super.key, required this.console, required this.addonId, this.onSaved});
 
   @override
   ConsumerState<ConsoleAuthSetting> createState() => _ConsoleAuthSettingState();
@@ -70,6 +80,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
       _saved = token;
       _dirty = false;
     });
+    widget.onSaved?.call(token);
   }
 
   Future<void> _signin() async {
