@@ -5702,6 +5702,8 @@ A seção 7 do spec de UI pede "4.0 MB, Myrient". Depois da Task 15, `SourcePick
 
 Os dois sítios que desenham o id são `game_detail_screen.dart:344`, dentro de `_Destaque`, e `:499`, dentro de `_LinhaFonte`. Os dois são `StatelessWidget`, e o arquivo tem uma regra escrita sobre isso: *"Os widgets filhos não veem `ref`: eles são burros como todo o resto desta fatia"* (`game_detail_screen.dart:63-65`). Então o mapa desce como dado, igual a todo o resto. Não transforme `_Destaque` em `ConsumerWidget`.
 
+**De quando são os números de linha desta Task.** Todo `game_detail_screen.dart:NNN` daqui foi conferido contra a árvore de **hoje**, antes da Task 16. A Task 16 acrescenta duas linhas a este arquivo, o import de `addon_provider.dart` e o argumento `sourcePriority:` dentro da chamada das linhas 74 a 78, e as duas ficam acima de tudo que esta Task cita. Quando você chegar aqui, some 2. Isso é aritmética e não medição: confira pelo conteúdo citado, que é o que não se mexe.
+
 - [ ] **Step 1: Escreva os testes que falham**
 
 Em `test/addon_provider_test.dart`, acrescente o caso no fim do `main`:
@@ -5742,7 +5744,7 @@ com a sobrescrita logo abaixo da de prioridade, pela mesma razão dela (o provid
 
 e a mesma linha, com `const {}`, no `ProviderScope` solto do teste `'o checkbox alterna a seleção pela chave de pack'`.
 
-Repare que o padrão é mapa vazio, e é ele que mantém verdes as dez expectativas de `'... listagem ...'` do arquivo: sem nome conhecido, a tela desenha o id, e o id nesses testes é `'listagem'`.
+Repare que o padrão é mapa vazio, e é ele que mantém verdes as nove expectativas de `'... listagem ...'` do arquivo: sem nome conhecido, a tela desenha o id, e o id nesses testes é `'listagem'`.
 
 Acrescente os três casos no fim do `main`:
 
@@ -5818,7 +5820,7 @@ Em `lib/screens/game_detail_screen.dart`, dentro do `build`, logo depois de `fin
     final nomesDeAddon = ref.watch(addonNamesProvider);
 ```
 
-passe para o `_Destaque` (linhas 145 a 152):
+passe para o `_Destaque` (linhas 146 a 153):
 
 ```dart
             _Destaque(
@@ -5832,7 +5834,7 @@ passe para o `_Destaque` (linhas 145 a 152):
             ),
 ```
 
-e para o `_OutrasFontes` (linhas 161 a 166):
+e para o `_OutrasFontes` (linhas 163 a 168):
 
 ```dart
             _OutrasFontes(
@@ -5934,7 +5936,7 @@ e troque a linha 499:
 flutter test test/addon_provider_test.dart test/game_detail_screen_test.dart
 ```
 
-Esperado: zero falha. As dez expectativas de `'... listagem ...'` continuam verdes, porque o mapa padrão do `_host` é vazio e a tela cai no id.
+Esperado: zero falha. As nove expectativas de `'... listagem ...'` continuam verdes, porque o mapa padrão do `_host` é vazio e a tela cai no id.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
