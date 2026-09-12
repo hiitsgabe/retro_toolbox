@@ -10,6 +10,7 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/models/source_verification_model.dart';
+import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/providers/source_verification_provider.dart';
@@ -40,10 +41,11 @@ MatchedSource _fonte(
   String filename, {
   int size = 4 * 1024 * 1024,
   MatchConfidence confianca = MatchConfidence.likely,
+  String sourceId = 'listagem',
 }) =>
     MatchedSource(
       filename: filename,
-      sourceId: 'listagem',
+      sourceId: sourceId,
       confidence: confianca,
       size: size,
     );
@@ -66,6 +68,7 @@ Widget _host(
   VoidCallback? onBatchDownload,
   GameResolver? resolver,
   SourceVerification Function(String filename)? verificacao,
+  List<String> prioridade = const [],
 }) {
   return ProviderScope(
     overrides: [
@@ -73,6 +76,11 @@ Widget _host(
       packTargetProvider.overrideWithValue(_alvo),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
+      // Obrigatória, e não conveniência: sem ela o provider de verdade seria
+      // construído, e ele lê `addonProvider`, que abre `AddonStore` por
+      // `path_provider`. Num teste de widget sem plataforma isso lança
+      // `MissingPluginException` dentro de um `Future` que ninguém espera.
+      sourcePriorityProvider.overrideWithValue(prioridade),
       // Sobrescrita da família inteira, que vale para qualquer argumento.
       // Conferido que compila no Riverpod 2.6: `familia.overrideWith((ref,
       // arg) => ...)`, sem parênteses de argumento antes do `overrideWith`.
@@ -165,6 +173,7 @@ void main() {
         preferredRegionsProvider.overrideWithValue(const {'USA'}),
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
         sourceVerificationProvider.overrideWith((ref, pedido) => SourceVerification.notVerified),
+        sourcePriorityProvider.overrideWithValue(const []),
       ],
       child: MaterialApp(
         home: Consumer(builder: (context, ref, _) {
@@ -504,5 +513,51 @@ void main() {
     await tester.pump();
 
     expect(chamados, ['lote']);
+  });
+
+  testWidgets('a prioridade do usuário decide o destaque entre fontes empatadas', (tester) async {
+    // Mesmo nome de arquivo nas duas, então região, revisão e confiança
+    // empatam e sobra só o eixo de addon. O `size` difere porque ele não
+    // entra no desempate e serve de observável: é ele que diz qual das duas
+    // ganhou, e não só o que o motivo escreveu.
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
+        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      ]),
+      prioridade: const ['rapido', 'lento'],
+    ));
+
+    // Pela ordem de chegada venceria a de 10 bytes. Venceu a de 20.
+    expect(find.text('20.0 B, rapido'), findsOneWidget);
+  });
+
+  testWidgets('invertida a ordem dos addons, o destaque troca', (tester) async {
+    // O par do caso acima, com a ordem de chegada invertida junto com a
+    // prioridade. Os dois juntos são o que separa "a tela passa a lista do
+    // usuário" de "a tela passa uma lista qualquer que por sorte acertou".
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
+      ]),
+      prioridade: const ['lento', 'rapido'],
+    ));
+
+    expect(find.text('10.0 B, lento'), findsOneWidget);
+  });
+
+  testWidgets('sem addon na lista, o desempate volta para a ordem de chegada', (tester) async {
+    // O estado de um usuário que removeu todos os addons e ficou só com o
+    // cache. Lista vazia não pode virar exceção nem sumir com o destaque.
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
+        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      ]),
+      prioridade: const [],
+    ));
+
+    expect(find.text('10.0 B, lento'), findsOneWidget);
   });
 }
