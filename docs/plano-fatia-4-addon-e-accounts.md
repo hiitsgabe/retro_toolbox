@@ -8626,11 +8626,19 @@ void main() {
     expect(find.text(_aviso), findsNothing);
   });
 
-  testWidgets('chaveiro que não abriu avisa', (tester) async {
-    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('sem D-Bus'))));
+  testWidgets('cofre nenhum abriu avisa, e avisa pior', (tester) async {
+    // O ramo de `error` **não** é o chaveiro falhando. Chaveiro que não abre é
+    // o caminho previsto: a sonda engole a exceção, devolve `false`, e a
+    // escolha cai para a reserva, o que chega aqui como `data` com
+    // `encryptedAtRest: false`, que é o primeiro caso deste arquivo. Para o
+    // `error` acontecer é preciso a **reserva** levantar, ou seja
+    // `PrefsVault.open()` (`vault_provider.dart:33`, fora de qualquer `try`).
+    // Por isso o que se espera fala em cofre e não em chaveiro, e por isso o
+    // erro levantado aqui não é "sem D-Bus": sem D-Bus não chega neste ramo.
+    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('nem a reserva abriu'))));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Não deu para abrir o chaveiro'), findsOneWidget);
+    expect(find.textContaining('Não deu para abrir cofre nenhum'), findsOneWidget);
   });
 
   testWidgets('o detalhe do addon avisa junto do formulário de conta', (tester) async {
@@ -8666,6 +8674,10 @@ void main() {
 Repare na linha `import 'support/fake_addon_store.dart';` do bloco do Step 1, separada das outras por uma linha em branco. Ela é relativa e não `package:`, que é a convenção que os sete arquivos de teste que já usam `test/support/` seguem (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, e os outros). Uma versão anterior deste Step **não trazia essa linha**, e o bloco usa `FakeAddonStore` no quinto caso: sem ela o Step 2 falha por `Undefined name 'FakeAddonStore'` em vez de falhar pelo `vault_warning.dart` que ainda não existe, e o Step 6 não compila de jeito nenhum. É erro de compilação, não de lint.
 
 O arquivo em si não se escreve aqui: ele já está no repositório desde a Task 22, que o criou porque IO de disco de verdade trava dentro de um corpo `testWidgets`. Este Step só chama `load()` dele.
+
+**O quarto caso já esteve escrito contra o widget errado, em duas camadas.** A asserção procurava `'Não deu para abrir o chaveiro'` e o widget do Step 3 emite `'Não deu para abrir cofre nenhum, nem o do sistema nem a reserva: $e'`. Uma não é substring da outra, então o caso caía com `Found 0 widgets`, e caía **só ele**: os outros quatro passavam, o que faz o defeito parecer bug de produção. Quem tem razão é o widget, e o próprio doc comment dele, três blocos abaixo, argumenta por quê: "culpar o chaveiro aqui mandaria o usuário procurar o problema no lugar errado".
+
+A camada de baixo é pior que a string, e é a razão de o nome do caso ter mudado junto: ele se chamava "chaveiro que não abriu avisa" e **não é isso que ele monta**. Chaveiro que não abre não produz `error` nenhum, produz `data` com `encryptedAtRest: false`, que é o primeiro caso do arquivo. O quarto caso é o da reserva levantando, e o `StateError('sem D-Bus')` que ele lançava descrevia justamente a situação que não passa por ali. Consertar só a string deixaria de pé um teste cujo nome contradiz o doc comment do widget que ele testa, e um dia alguém iria acreditar no nome.
 
 **O `_semearPrefs()` do quinto caso não é redundância.** Os quatro primeiros casos semeiam pelo `_host`, e o quinto monta o próprio `ProviderScope`, sem passar por ele. Como `setMockInitialValues` instala um mock **global** que sobrevive de um caso para o outro, o quinto passaria de graça na ordem do arquivo e falharia sozinho num `--plain-name`, que é a pior forma de teste verde. Ele precisa disso porque a `AddonDetailScreen` monta `ConsoleAuthSetting`, que lê `settingsProvider` em `console_auth_setting.dart:48`. O Step 6 ganhou uma verificação a mais por causa disso.
 
