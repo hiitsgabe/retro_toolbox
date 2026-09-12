@@ -5369,7 +5369,13 @@ troque o `kBuiltinSourceId` da linha 50, dentro do helper `_v`, pelo literal `'l
     // `catalog_<id>.json` gravado antes desta fatia entra aqui sem carimbo.
     // Ele não pode virar string vazia: fonte sem id some da prioridade e
     // apareceria na tela como ", " entre o tamanho e o selo.
-    final plan = planFromGames([_game('Chrono Trigger (USA).zip', 1024)]);
+    //
+    // O `Game` é montado à mão, sem o `_game`, de propósito: o helper tem
+    // padrão próprio, então ele passaria `sourceId` explícito e este caso
+    // exercitaria o padrão do helper, não o de `Game`.
+    final plan = planFromGames([
+      Game(title: 'Chrono Trigger (USA)', url: 'https://exemplo.org/snes/Chrono Trigger (USA).zip', size: 1024, consoleId: 'snes'),
+    ]);
 
     expect(plan.picks.single.sourceId, kBuiltinAddonId);
   });
@@ -5445,7 +5451,7 @@ Esperado: nenhuma linha.
 flutter test test/pack_grid_provider_test.dart test/source_pick_service_test.dart test/pack_grid_test.dart test/game_detail_screen_test.dart
 ```
 
-Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de resultado, inclusive as dez expectativas de `'... listagem ...'` da tela de detalhe, que continuam valendo porque o literal ficou.
+Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de resultado, inclusive as nove expectativas de `'... listagem ...'` da tela de detalhe, que continuam valendo porque o literal ficou.
 
 **Tropeço provável:** apagar o import da linha 5 de `pack_grid_provider.dart` e não apagar, ou apagar um import que ainda é usado em `pack_grid_test.dart` e `game_detail_screen_test.dart`. Os dois erros são pegos pelo `flutter analyze` do Step 8, um como `unused_import` e o outro como erro de compilação, mas o primeiro é `info` e passa batido numa leitura apressada da saída. O critério é o `grep` de cada arquivo, não o olho.
 
