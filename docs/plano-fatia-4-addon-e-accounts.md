@@ -8428,6 +8428,8 @@ import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 
+import 'support/fake_addon_store.dart';
+
 const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
 
 Widget _host(Override cofre, {Widget child = const VaultWarning()}) {
@@ -8538,6 +8540,8 @@ class FakeAddonStore implements AddonStore {
 ```
 
 `noSuchMethod` com `implements` é o jeito de não reescrever os seis outros métodos do store, e o `throw` é o que diferencia este duplo de um mock permissivo: se alguém usá-lo num caso que grava, o teste morre dizendo qual método foi chamado, em vez de passar em silêncio.
+
+Repare na linha `import 'support/fake_addon_store.dart';` do bloco do Step 1, separada das outras por uma linha em branco. Ela é relativa e não `package:`, que é a convenção que os sete arquivos de teste que já usam `test/support/` seguem (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, e os outros). Uma versão anterior deste Step **não trazia essa linha**, e o bloco usa `FakeAddonStore` no quinto caso: sem ela o Step 2 falha por `Undefined name 'FakeAddonStore'` em vez de falhar pelo `vault_warning.dart` que ainda não existe, e o Step 6 não compila de jeito nenhum. É erro de compilação, não de lint.
 
 E acrescente um caso a `test/menu_grid_test.dart`, dentro do `main` existente:
 
