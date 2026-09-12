@@ -8053,9 +8053,17 @@ O `catalogFetcherProvider` existe por um motivo de teste e um de produção. De 
 
 Crie `test/addons_screen_test.dart`. O `FakeAddonStore` é o da Task 22 (`test/support/fake_addon_store.dart`), já commitado; aqui só se importa. O import é relativo e não `package:`, que é a convenção dos arquivos que já usam `test/support/`. E não há `import 'dart:io'` nem `import '.../services/addon_store.dart'`: a única razão para os dois era o store de disco, e import órfão é `unused_import`, que é **warning** e levaria o Step 7 de 22 para 24.
 
+**Dois imports desta lista não são óbvios, e sem eles o bloco não compila.** A primeira versão deste bloco não os tinha, e o `flutter test` parou antes de rodar caso nenhum, com `Type 'CatalogFetcher' not found` e `Undefined name 'kLongPressTimeout'`:
+
+- `package:roms_downloader/services/addon_install.dart` é onde vive `typedef CatalogFetcher` (`addon_install.dart:14`), usado no parâmetro `CatalogFetcher? fetch` de `_abrir`. Não existe `export` em lugar nenhum de `lib/` (medido: `grep -rn '^export ' lib/` não acha nada), então typedef só enxerga quem importa o arquivo dele. Este import ficou de fora junto com o corte do `addon_store.dart`, e o corte passou um a mais.
+- `package:flutter/gestures.dart` é onde vive `kLongPressTimeout` (`gestures/constants.dart:29`), usado no teste do arrasto. `material.dart` **não** reexporta `gestures.dart`, e `widgets.dart` e `flutter_test.dart` também não (medido nos três). É o primeiro arquivo do repo a importar `gestures.dart`, então não há precedente para copiar.
+
+Nenhum dos dois vira `unused_import`: os dois símbolos são usados no próprio bloco, e o alvo de 22 do Step 7 não muda.
+
 ```dart
 import 'dart:convert';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8066,6 +8074,7 @@ import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/screens/addon_detail_screen.dart';
 import 'package:roms_downloader/screens/addons_screen.dart';
+import 'package:roms_downloader/services/addon_install.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
