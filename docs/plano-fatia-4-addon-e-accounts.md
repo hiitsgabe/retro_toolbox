@@ -4438,6 +4438,17 @@ void main() {
   group('fetchSources', () {
     const console = Console(id: 'snes', name: 'SNES', urls: [], fileFormat: ['.zip']);
 
+    // Este grupo fala com um servidor de verdade em loopback, e o
+    // `TestWidgetsFlutterBinding` do `main` instala um `HttpOverrides` que
+    // devolve 400 em toda requisição. O binding não é opcional: o grupo de cima
+    // usa `SharedPreferences.setMockInitialValues`, que sem ele não existe. A
+    // saída é suspender o override só aqui. É por isso que
+    // `tinfoil_server_proxy_test.dart` faz HTTP real sem nada disso: aquele
+    // arquivo não chama binding nenhum.
+    final overridesDoBinding = HttpOverrides.current;
+    setUp(() => HttpOverrides.global = null);
+    tearDown(() => HttpOverrides.global = overridesDoBinding);
+
     test('cada fonte é buscada com a auth do SEU addon', () async {
       final a = await _servidor(_listagem(['A (USA).zip']));
       final b = await _servidor(_listagem(['B (USA).zip']));
@@ -4827,7 +4838,7 @@ import 'package:roms_downloader/models/settings_model.dart';
 
 O de `settings_model.dart` é obrigatório e fácil de esquecer: nenhum dos dois arquivos o importa hoje, eles chegam em `settings.consoleSettings` pelo tipo inferido de `_ref.read(settingsProvider)`, e **não existe um único `export` em `lib/`**, então escrever `AppSettings` na assinatura sem o import é erro de compilação.
 
-Depois, o método privado:
+Depois, o método privado. Ele vai nos **dois** arquivos, mas o parágrafo do meio do doc **não é o mesmo nos dois**, porque o mecanismo não é o mesmo. Conferido agora: `TinfoilServerService.start` recebe `authHeaders` como `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`) e o provider o passa em `:121`; `FbiServerService.start` não recebe `authHeaders` nenhum, leva só `port` e `cacheDir` (`fbi_server_service.dart:72`). Copiar a frase do Tinfoil para o FBI põe uma afirmação falsa sobre uma assinatura, que é o tipo de doc que ninguém desconfia depois. Em `lib/providers/tinfoil_server_provider.dart`:
 
 ```dart
   /// O token do addon embutido para este console, no formato que
@@ -4836,13 +4847,50 @@ Depois, o método privado:
   /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
   /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
   /// A razão é o `_authHeaders` daqui: ele é síncrono, porque
-  /// `TinfoilServerService.start` o recebe como `Map<String, String>
-  /// Function(Console)`, e só tem um `Console` em mãos, sem o `Game` que diria
-  /// de qual addon o arquivo veio. Ler o cofre de lá exigiria mudar o contrato
+  /// `TinfoilServerService.start` o recebe como
+  /// `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`),
+  /// e só tem um `Console` em mãos, sem o `Game` que diria de qual addon o
+  /// arquivo veio. Ler o cofre de lá exigiria mudar o contrato
   /// do servidor HTTP, que não é assunto desta fatia. Consequência honesta:
   /// um console servido por um addon de terceiro com auth aparece na listagem
   /// do Tinfoil e falha ao baixar. O caminho normal do app, que é a grade e o
   /// download pelo `download_provider`, usa o token certo por addon.
+  ///
+  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
+  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
+  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
+  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
+  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
+  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
+  Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
+    final token = settings.consoleSettings[consoleId]?.authToken ?? '';
+    return token.isEmpty ? const {} : {kBuiltinAddonId: token};
+  }
+```
+
+**Não requebre a linha do `Map<String, String> Function(Console)`.** Ela cabe inteira numa linha de doc de propósito: com o tipo partido em duas, o span de crase fica aberto no fim da primeira e o `unintended_html_in_doc_comment` acusa o `<String,` como HTML. Medido: o analyze sobe de 22 para 23 com um `info` em `tinfoil_server_provider.dart`. É o único motivo da citação `tinfoil_server_service.dart:80` estar ali dentro, a reboque, em vez de na prosa.
+
+E em `lib/providers/fbi_server_provider.dart`, o mesmo método com o parágrafo do meio trocado:
+
+```dart
+  /// O token do addon embutido para este console, no formato que
+  /// `loadCatalog` espera.
+  ///
+  /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
+  /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
+  /// A razão aqui **não é a mesma do Tinfoil**, e por isso está escrita por
+  /// extenso em vez de copiada de lá. `FbiServerService.start` não recebe
+  /// `authHeaders` nenhum: leva só `port` e `cacheDir`. Quem chama
+  /// `_authHeaders` é o `prepareCatalog` (linha 214), e ele **tem** o `Game`
+  /// em mãos, porque `FbiGame` é `({Game game, Console console})`. O que falta
+  /// aqui é só que `_authHeaders` é síncrono e a leitura do cofre é assíncrona.
+  /// Ou seja: a limitação do FBI é mais estreita e mais barata de levantar que
+  /// a do Tinfoil, onde o `Console` é mesmo tudo o que existe. Levantar
+  /// qualquer uma das duas não é desta Task. Consequência honesta, e essa é
+  /// igual nos dois: um console servido por um addon de terceiro com auth
+  /// aparece na listagem do FBI e falha ao baixar. O caminho normal do app,
+  /// que é a grade e o download pelo `download_provider`, usa o token certo
+  /// por addon.
   ///
   /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
   /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
