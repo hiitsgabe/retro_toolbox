@@ -144,7 +144,7 @@ void main() {
     await vault.write(_chaveDoSnes(), 'tok-snes');
     await vault.write(SecretRef.addonToken(kBuiltinAddonId, 'n64'), 'tok-n64');
 
-    await SettingsService().clearConsoleToken('snes', vault);
+    await SettingsService().writeAddonToken(kBuiltinAddonId, 'snes', '', vault);
 
     expect(await vault.read(_chaveDoSnes()), isNull);
     expect(await vault.read(SecretRef.addonToken(kBuiltinAddonId, 'n64')), 'tok-n64');
