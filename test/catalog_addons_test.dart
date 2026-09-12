@@ -50,7 +50,15 @@ String _catalogo(String nomeDoConsole, String url, {Map<String, dynamic>? auth})
     ]);
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  // Sem `TestWidgetsFlutterBinding.ensureInitialized()` de propósito, e não é
+  // esquecimento: o binding instala um `HttpOverrides` que devolve 400 em toda
+  // requisição, e o grupo `fetchSources` fala com um `HttpServer` de verdade em
+  // loopback. Os outros cinco arquivos que usam `setMockInitialValues` chamam o
+  // binding, mas nenhum deles precisa: `setMockInitialValues` só troca
+  // `SharedPreferencesStorePlatform.instance` por um store em memória
+  // (`shared_preferences_legacy.dart:279`), sem passar pelo binary messenger.
+  // `tinfoil_server_proxy_test.dart`, o outro arquivo da suíte que sobe um
+  // `HttpServer`, também não chama binding nenhum.
 
   group('buildCatalog', () {
     test('dois addons com arquivo entram os dois, na ordem da lista', () async {
@@ -107,17 +115,6 @@ void main() {
 
   group('fetchSources', () {
     const console = Console(id: 'snes', name: 'SNES', urls: [], fileFormat: ['.zip']);
-
-    // Este grupo fala com um servidor de verdade em loopback, e o
-    // `TestWidgetsFlutterBinding` do `main` instala um `HttpOverrides` que
-    // devolve 400 em toda requisição. O binding não é opcional: o grupo de cima
-    // usa `SharedPreferences.setMockInitialValues`, que sem ele não existe. A
-    // saída é suspender o override só aqui. É por isso que
-    // `tinfoil_server_proxy_test.dart` faz HTTP real sem nada disso: aquele
-    // arquivo não chama binding nenhum.
-    final overridesDoBinding = HttpOverrides.current;
-    setUp(() => HttpOverrides.global = null);
-    tearDown(() => HttpOverrides.global = overridesDoBinding);
 
     test('cada fonte é buscada com a auth do SEU addon', () async {
       final a = await _servidor(_listagem(['A (USA).zip']));
