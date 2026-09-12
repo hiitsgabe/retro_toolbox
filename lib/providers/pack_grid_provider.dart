@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
-import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/identity_provider.dart';
@@ -72,7 +71,7 @@ final sourceIndexProvider = Provider<SourceIndex?>((ref) {
   if (matcher == null) return null;
   return SourceIndex.build(matcher, <SourceFile>[
     for (final game in ref.watch(catalogGamesProvider))
-      (filename: game.filename, sourceId: kBuiltinSourceId, size: game.size, url: game.url),
+      (filename: game.filename, sourceId: game.sourceId, size: game.size, url: game.url),
   ]);
 });
 

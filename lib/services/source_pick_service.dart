@@ -13,8 +13,8 @@ import 'package:roms_downloader/utils/title_metadata_parser.dart';
 /// de falhas é sempre vazia.
 ///
 /// A regra de verdade da seção 6 do spec de UI, com região, revisão,
-/// confiança e prioridade de addon, mora em `planFromEntries` (Task 14) e só
-/// tem sujeito em MODO PACK, onde existe mais de uma versão do mesmo jogo.
+/// confiança e prioridade de addon, mora em `planFromEntries` e só tem
+/// sujeito em MODO PACK, onde existe mais de uma versão do mesmo jogo.
 BatchPlan planFromGames(List<Game> games) {
   return BatchPlan(
     picks: [
@@ -24,7 +24,7 @@ BatchPlan planFromGames(List<Game> games) {
           title: game.displayTitle,
           filename: game.filename,
           size: game.size,
-          sourceId: kBuiltinSourceId,
+          sourceId: game.sourceId,
           reason: 'você escolheu este arquivo',
           game: game,
         ),

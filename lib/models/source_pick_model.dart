@@ -1,21 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/game_model.dart';
 
-/// O id de fonte das listagens que já vêm no `consoles.json`.
-///
-/// Nesta fatia só existe uma fonte por console, então o valor é constante. Na
-/// fatia 4 ele vira o id do addon que serviu o arquivo, e é por isso que
-/// [SourcePick.sourceId] e `MatchedSource.sourceId` são campos em vez de
-/// serem implícitos.
-///
-/// Mora neste arquivo por uma razão de ordem, não de gosto: ele é o primeiro
-/// arquivo Dart puro desta fatia a existir, e tanto `source_pick_service.dart`
-/// (Task 6) quanto `pack_grid_provider.dart` (Task 10) precisam da constante.
-/// Pô-la no provider arrastaria Riverpod para dentro de um serviço que roda
-/// fora do Flutter; pô-la em `grid_entry_model.dart` a faria nascer três
-/// Tasks depois do primeiro uso.
-const kBuiltinSourceId = 'listagem';
-
 /// Uma versão escolhida para um jogo, com o motivo escrito por extenso.
 ///
 /// O motivo é obrigatório e não é decorativo: ele é a única coisa que separa
@@ -32,9 +17,10 @@ class SourcePick {
   /// mostra o total como aproximado.
   final int size;
 
-  /// De qual fonte veio. Nesta fatia é sempre [kBuiltinSourceId] e na fatia 4
-  /// é o id do addon. É o que a linha "4.0 MB, Myrient" da seção 7 mostra, e
-  /// é por isso que ele nasce aqui em vez de nascer na fatia 4.
+  /// De qual addon veio, pelo id de [Addon]. É o que a linha "4.0 MB,
+  /// Myrient" da seção 7 mostra, depois de a tela resolver o id para o nome
+  /// (Task 17). Vem de `Game.sourceId`, carimbado pelo `CatalogService` na
+  /// hora de buscar a listagem.
   final String sourceId;
   final String reason;
 
