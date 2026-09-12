@@ -8305,7 +8305,9 @@ class _Linha extends StatelessWidget {
 flutter test test/addons_screen_test.dart
 ```
 
-Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o número isolado e o que a Task acrescenta à suíte são o mesmo. Este número já esteve escrito como `+11`, e estava errado: contei os casos do bloco do Step 1 e são nove. A cadeia de totais do Step 6 sempre esteve certa, `551 + 9 = 560`, então só esta linha muda.
+Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o número isolado e o que a Task acrescenta à suíte são o mesmo. Este número já esteve escrito como `+11`, e estava errado: contei os casos do bloco do Step 1 e são nove. A cadeia de totais do Step 6 sempre esteve certa: `554 + 9 = 563`.
+
+**A frase acima já citou `551 + 9 = 560`**, que era a cadeia de antes das Tasks 8b, 11b e 12b. Ela não bate mais com base nenhuma: o total depois da Task 22 é 554, não 551, e o desta Task é 563, não 560. Os `+9` e `+563` dos Steps 5 e 6 são os números medidos; era só a aritmética explicativa que estava velha.
 
 - [ ] **Step 6: Rode a suíte inteira**
 
@@ -9488,7 +9490,9 @@ grep -rnE "auth\??\['token'\]" lib/
 
 O `-E` é obrigatório, e se você rodar a versão BRE deste mesmo grep a varredura mente para você: sem `-E` o `\?` vira quantificador e o segundo `?` vira literal, o padrão passa a exigir uma `?` depois de `auth`, e o único dos quatro que escreve `auth['token']` sem `?` é justamente `network.dart:41`, o sítio que a 6.3 lista. Medido antes da Task 7 rodar: BRE achou três, `-E` achou quatro.
 
-Esperado: duas classes de linha, e nenhuma outra. Primeira, dentro de `harvestAuthTokens`, que é quem **tira** o token. Segunda, **o comentário em `lib/utils/network.dart:41`**, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali antes; é texto, não leitura, e confirmado por inspeção da linha. Qualquer terceira linha é sítio vivo. Os quatro sítios de partida eram `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91` e `lib/screens/setup_wizard_screen.dart:392`. Os dois últimos não montavam header: decidiam se o console "tem auth configurada" com `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, e por isso passam despercebidos num grep por `buildConsoleAuthHeaders`. Se eles sobrarem, o app continua dizendo "este console tem auth" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface.
+Esperado: **uma única linha**, e nenhuma outra: **o comentário em `lib/utils/network.dart:41`**, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali antes; é texto, não leitura, e confirmado por inspeção da linha. Qualquer segunda linha é sítio vivo.
+
+Uma versão anterior deste Step dizia "duas classes de linha", contando `harvestAuthTokens` como a primeira. Está errado, e a correção é medida: a Task 7 escreveu `harvestAuthTokens` com `auth.containsKey('token')` e `auth.remove('token')`, nunca com um subscrito `auth['token']`, então este primeiro grep não tem como achá-la. Quem acha `harvestAuthTokens` é o **segundo** grep, o de `'token'` em `catalog_service.dart`, logo abaixo. As duas classes existem, mas uma em cada varredura, não as duas na primeira. Os quatro sítios de partida eram `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91` e `lib/screens/setup_wizard_screen.dart:392`. Os dois últimos não montavam header: decidiam se o console "tem auth configurada" com `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, e por isso passam despercebidos num grep por `buildConsoleAuthHeaders`. Se eles sobrarem, o app continua dizendo "este console tem auth" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface.
 
 Depois, o arquivo compartilhável em si:
 
