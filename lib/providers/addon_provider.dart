@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/addon_model.dart';
+import 'package:roms_downloader/services/addon_install.dart';
 import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/console_merge.dart';
@@ -40,6 +41,13 @@ final mergedCatalogProvider = FutureProvider<MergedCatalog>((ref) async {
   ref.watch(addonProvider);
   return CatalogService().mergedCatalog();
 });
+
+/// Como a tela de addons baixa um catálogo.
+///
+/// Existe porque `installAddonFromUrl` só é injetável por parâmetro e um
+/// `onPressed` não recebe parâmetro. Em produção é sempre
+/// `fetchCatalogByHttp`; em teste, uma função que devolve uma string.
+final catalogFetcherProvider = Provider<CatalogFetcher>((ref) => fetchCatalogByHttp);
 
 /// De cada addon para o que ele cobre.
 ///
