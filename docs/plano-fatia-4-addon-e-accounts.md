@@ -7646,6 +7646,19 @@ MergedCatalog _catalogo() => const MergedCatalog(
 /// disco, porque IO de disco trava dentro de `testWidgets`, e `remove` chama
 /// `deleteCatalog` de dentro do `pumpAndSettle`.
 ///
+/// **Sem `addTearDown(notifier.dispose)`, e isso é deliberado.** Quem descarta
+/// é o Riverpod: `addonProvider` é um `StateNotifierProvider`, e um
+/// `StateNotifierProvider` assume o ciclo de vida do notifier que o `create`
+/// devolve, inclusive quando o `create` só repassa um que veio de fora. Ao fim
+/// de um `testWidgets` o `flutter_test` desmonta a árvore, o `ProviderScope`
+/// do `_abrir` cai junto e o `dispose` acontece ali. Um `addTearDown` seria o
+/// segundo, e os oito casos morrem com `Bad state: Tried to use AddonNotifier
+/// after dispose was called`.
+///
+/// `addon_install_test._notifier` **tem** essa linha e está certo, porque lá o
+/// notifier não passa por provider nenhum. Este helper nasceu de uma cópia
+/// daquele, e a linha é o que sobrou da cópia.
+///
 /// O `app_settings` semeado com `{}` é pelo mesmo motivo do
 /// `console_auth_setting_test`: sem a chave, a carga das settings cai no ramo
 /// que pergunta diretório por plugin.
@@ -7653,7 +7666,6 @@ Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
   final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
-  addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
 }
@@ -8087,11 +8099,14 @@ Future<String> _fetchPadrao(String url) async => _catalogoBaixado;
 /// O notifier é o de verdade, sobre um store de memória: o arrasto e a
 /// instalação têm que atravessar `reorder` e `install`, que chamam `save` e
 /// `writeCatalog`. Falso é só o disco, que trava dentro de `testWidgets`.
+///
+/// Sem `addTearDown(notifier.dispose)` pelo mesmo motivo da Task 22: quem
+/// descarta é o `StateNotifierProvider` quando a árvore cai, e um segundo
+/// `dispose` mata todos os casos.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
   final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
-  addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
 }
@@ -8879,12 +8894,13 @@ MergedCatalog _semConta() => const MergedCatalog(
     );
 
 /// Store de memória, e não `AddonStore` em `Directory.systemTemp`: IO de disco
-/// trava dentro de `testWidgets`. Ver a Task 22.
+/// trava dentro de `testWidgets`. E sem `addTearDown(notifier.dispose)`, que
+/// seria o segundo descarte depois do que o `StateNotifierProvider` já faz
+/// quando a árvore cai. Ver a Task 22 para os dois.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
   final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
-  addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
 }
