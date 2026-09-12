@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
-import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/providers/identity_provider.dart';
 import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
@@ -25,11 +25,12 @@ MetadataPack _pack() => MetadataPack(
       ],
     );
 
-Game _game(String filename) => Game(
+Game _game(String filename, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename,
       url: 'https://exemplo.org/snes/$filename',
       size: 2048,
       consoleId: 'snes',
+      sourceId: sourceId,
     );
 
 ProviderContainer _container({
@@ -105,8 +106,23 @@ void main() {
     final fonte = container.read(packGridEntriesProvider).first.sources.single;
     expect(fonte.filename, 'Chrono Trigger (USA).zip');
     expect(fonte.size, 2048);
-    expect(fonte.sourceId, kBuiltinSourceId);
+    expect(fonte.sourceId, kBuiltinAddonId);
     expect(fonte.url, 'https://exemplo.org/snes/Chrono Trigger (USA).zip');
+  });
+
+  test('cada fonte carrega o id do addon do jogo que a originou', () async {
+    final container = _container(jogos: [
+      _game('Chrono Trigger (USA).zip', sourceId: 'myrient'),
+      _game('Super Metroid (USA).zip', sourceId: 'arquivo-do-fulano'),
+    ]);
+    await _pronto(container);
+
+    // Mapa e não lista: o que está sendo afirmado é que cada fonte ficou com
+    // o id do **seu** jogo, e isso não depende da ordem da grade.
+    expect(
+      {for (final e in container.read(packGridEntriesProvider)) e.game.id: e.sources.single.sourceId},
+      {'snes/chrono-trigger': 'myrient', 'snes/super-metroid': 'arquivo-do-fulano'},
+    );
   });
 
   test('a busca do header filtra a grade de pack', () async {
@@ -123,7 +139,7 @@ void main() {
     final resolver = container.read(gameResolverProvider);
     final achado = resolver(const MatchedSource(
       filename: 'Chrono Trigger (USA).zip',
-      sourceId: kBuiltinSourceId,
+      sourceId: 'listagem',
       confidence: MatchConfidence.likely,
       size: 2048,
     ));
@@ -138,7 +154,7 @@ void main() {
     final resolver = container.read(gameResolverProvider);
     final achado = resolver(const MatchedSource(
       filename: 'Um Jogo Que Saiu Da Listagem.zip',
-      sourceId: kBuiltinSourceId,
+      sourceId: 'listagem',
       confidence: MatchConfidence.likely,
       size: 10,
     ));

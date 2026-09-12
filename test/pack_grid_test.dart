@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
-import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/providers/owned_games_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
@@ -21,7 +20,7 @@ PackGame _pg(String id, String title) => PackGame(id: id, title: title, dumps: [
 PackGridEntry _entrada(String id, String title, {bool comFonte = true}) => PackGridEntry(
       game: _pg(id, title),
       sources: comFonte
-          ? [MatchedSource(filename: '$title (USA).zip', sourceId: kBuiltinSourceId, confidence: MatchConfidence.likely, size: 1024)]
+          ? [MatchedSource(filename: '$title (USA).zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1024)]
           : const [],
     );
 
@@ -36,7 +35,7 @@ SourceIndex _indice({required bool casaAlgo}) {
   ));
   return SourceIndex.build(matcher, [
     if (casaAlgo)
-      (filename: 'Chrono Trigger (USA).zip', sourceId: kBuiltinSourceId, size: 1024, url: null),
+      (filename: 'Chrono Trigger (USA).zip', sourceId: 'listagem', size: 1024, url: null),
   ]);
 }
 

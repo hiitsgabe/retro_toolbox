@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
@@ -7,11 +8,12 @@ import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 
-Game _game(String filename, int size) => Game(
+Game _game(String filename, int size, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename.replaceAll('.zip', ''),
       url: 'https://exemplo.org/snes/$filename',
       size: size,
       consoleId: 'snes',
+      sourceId: sourceId,
     );
 
 MatchedSource _fonte(
@@ -47,7 +49,7 @@ BatchPlan _plano(
 VerifiedSource _v(String filename, SourceVerification state) => (
       source: MatchedSource(
         filename: filename,
-        sourceId: kBuiltinSourceId,
+        sourceId: 'listagem',
         confidence: MatchConfidence.likely,
         size: 100,
       ),
@@ -64,6 +66,31 @@ void main() {
     expect(plan.picks.map((p) => p.filename),
         ['Chrono Trigger (USA).zip', 'Super Metroid (USA).zip']);
     expect(plan.totalBytes, 7 * 1024 * 1024);
+  });
+
+  test('planFromGames carrega o id do addon de cada jogo', () {
+    final plan = planFromGames([
+      _game('Chrono Trigger (USA).zip', 4 * 1024 * 1024, sourceId: 'myrient'),
+      _game('Super Metroid (USA).zip', 2 * 1024 * 1024, sourceId: 'arquivo-do-fulano'),
+    ]);
+
+    expect(plan.picks.map((p) => p.sourceId), ['myrient', 'arquivo-do-fulano']);
+  });
+
+  test('jogo de cache antigo, sem addon declarado, vira o embutido', () {
+    // `Game.sourceId` tem padrão (Task 12), então um `Game` vindo de um
+    // `catalog_<id>.json` gravado antes desta fatia entra aqui sem carimbo.
+    // Ele não pode virar string vazia: fonte sem id some da prioridade e
+    // apareceria na tela como ", " entre o tamanho e o selo.
+    //
+    // O `Game` é montado à mão, sem o `_game`, de propósito: o helper tem
+    // padrão próprio, então ele passaria `sourceId` explícito e este caso
+    // exercitaria o padrão do helper, não o de `Game`.
+    final plan = planFromGames([
+      Game(title: 'Chrono Trigger (USA)', url: 'https://exemplo.org/snes/Chrono Trigger (USA).zip', size: 1024, consoleId: 'snes'),
+    ]);
+
+    expect(plan.picks.single.sourceId, kBuiltinAddonId);
   });
 
   test('a chave e o Game inteiro viajam junto, porque é o que vai para a fila', () {
