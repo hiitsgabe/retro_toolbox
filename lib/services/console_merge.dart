@@ -4,10 +4,16 @@ import 'package:roms_downloader/models/console_model.dart';
 /// Uma url de catálogo, com de qual addon ela veio e com que auth ela fala.
 ///
 /// Existe porque `Console.auth` é um mapa só e `_fetchCatalog` passava um
-/// `authToken` só para todas as urls do console (`catalog_service.dart:304` e
-/// `:344`). Com dois addons servindo o mesmo console, isso mandaria o token do
-/// primeiro para o servidor do segundo. A auth não pertence ao console: ela
-/// pertence à url.
+/// `authToken` só para todas as urls do console. Com dois addons servindo o
+/// mesmo console, isso mandaria o token do primeiro para o servidor do segundo.
+/// A auth não pertence ao console: ela pertence à url.
+///
+/// Sem número de linha, de propósito. A frase acima descreve o código de
+/// **antes** desta classe existir, e a citação que estava aqui
+/// (`catalog_service.dart:304` e `:344`) apodreceu: hoje aquelas linhas são
+/// outra coisa, e o que existe é `authToken: tokens[source.addonId]`, que já é
+/// por fonte. Citar a linha de hoje seria pior que não citar, porque ela prova
+/// o contrário do que a frase conta.
 @immutable
 class ConsoleSource {
   final String addonId;
