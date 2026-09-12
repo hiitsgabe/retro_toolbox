@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
@@ -35,8 +36,16 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
   final Future<SecretVault> _vault;
 
+  /// Resolve quando a carga inicial chegou do prefs e do cofre.
+  ///
+  /// Existe pelo teste, e não é enfeite: sem ela, um teste que leia o estado
+  /// logo depois de construir o container lê `const AppSettings()` e passa por
+  /// acidente, inclusive depois de a carga quebrar. Mesma saída do
+  /// `AddonNotifier.ready` da Task 14.
+  late final Future<void> ready;
+
   SettingsNotifier(this._vault) : super(const AppSettings()) {
-    _loadSettings();
+    ready = _loadSettings();
   }
 
   Future<void> _loadSettings() async {
@@ -128,20 +137,37 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return await _settingsService.selectDownloadDirectory();
   }
 
-  Future<void> setConsoleAuthToken(String consoleId, String token) async {
+  /// Guarda, ou apaga, o token de um par (addon, console).
+  ///
+  /// **O espelho em `AppSettings.consoleSettings` só é mexido para o addon
+  /// embutido, e isso não é economia.** `consoleHasToken` (as duas telas da
+  /// Task 7) e os dois `_authHeaders` de LAN leem esse espelho de forma
+  /// síncrona e sem saber de addon. Espelhar ali o token de um terceiro faria
+  /// o servidor de LAN mandar a credencial de um servidor para outro, que é o
+  /// vazamento que a Task 13 acabou de fechar.
+  ///
+  /// O token de terceiro mora só no cofre. Ele não pode ser hidratado em
+  /// `AppSettings` porque `SecretVault` não enumera: não existe `readAll`, de
+  /// propósito (Task 2), então o app não descobre para quais pares existe
+  /// segredo sem já saber a lista. Quem precisa lê sob demanda, por
+  /// [readAddonToken].
+  Future<void> setAddonToken(String addonId, String consoleId, String token) async {
+    await _settingsService.writeAddonToken(addonId, consoleId, token, await _vault);
+    if (addonId != kBuiltinAddonId) return;
+
     final current = state.consoleSettings[consoleId] ?? const BaseSettings();
-    final updated = token.isEmpty
-        ? current.copyWith(clearAuthToken: true)
-        : current.copyWith(authToken: token);
-    if (token.isEmpty) {
-      // `saveSettings` de propósito não apaga o que está null. Sair da conta
-      // tem que apagar, e é aqui que isso é dito.
-      await _settingsService.clearConsoleToken(consoleId, await _vault);
-    }
+    final updated = token.isEmpty ? current.copyWith(clearAuthToken: true) : current.copyWith(authToken: token);
     await _persist(state.copyWith(
       consoleSettings: {...state.consoleSettings, consoleId: updated},
     ));
   }
+
+  Future<String> readAddonToken(String addonId, String consoleId) async =>
+      _settingsService.readAddonToken(addonId, consoleId, await _vault);
+
+  /// O caso particular do addon embutido. Continua existindo com este nome
+  /// porque quatro telas o chamam.
+  Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
 
   String? getConsoleAuthToken(String consoleId) {
     return state.consoleSettings[consoleId]?.authToken;

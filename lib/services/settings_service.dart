@@ -82,8 +82,8 @@ class SettingsService {
   /// de ação do usuário enquanto a carga ainda está no ar, e nesse instante o
   /// estado é `const AppSettings()`, tudo `null`. Salvar apagando transformaria
   /// um clique apressado no boot em perda de todas as credenciais, sem erro na
-  /// tela. Quem apaga são [clearIaSecrets] e [clearConsoleToken], chamados de
-  /// propósito.
+  /// tela. Quem apaga são [clearIaSecrets] e [writeAddonToken] com valor
+  /// vazio, chamados de propósito.
   Future<void> _writeSecrets(AppSettings settings, SecretVault vault) async {
     await _writeIfPresent(vault, SecretRef.iaAccessKey, settings.iaAccessKey);
     await _writeIfPresent(vault, SecretRef.iaSecretKey, settings.iaSecretKey);
@@ -104,9 +104,26 @@ class SettingsService {
     await vault.delete(SecretRef.iaCookies);
   }
 
-  Future<void> clearConsoleToken(String consoleId, SecretVault vault) async {
-    await vault.delete(SecretRef.addonToken(kBuiltinAddonId, consoleId));
+  /// O token de um par (addon, console) no cofre. Valor vazio **apaga**.
+  ///
+  /// Era `clearConsoleToken(consoleId, vault)`, que sabia apagar e não sabia
+  /// gravar, e que assumia o embutido. O addon vira parâmetro porque dois
+  /// addons servindo o mesmo console têm tokens diferentes, e misturá-los é
+  /// mandar a credencial de um servidor para o outro.
+  ///
+  /// Continua morando nesta classe, e não no notifier, porque ela é a única
+  /// dona do formato da chave: [_hydrate] e [_writeSecrets] leem e escrevem a
+  /// mesma `SecretRef.addonToken`.
+  Future<void> writeAddonToken(String addonId, String consoleId, String token, SecretVault vault) async {
+    final chave = SecretRef.addonToken(addonId, consoleId);
+    if (token.isEmpty) return vault.delete(chave);
+    return vault.write(chave, token);
   }
+
+  /// O token do par, ou string vazia. A tradução de `null` para `''` acontece
+  /// aqui, uma vez só, porque todo chamador pergunta `isEmpty`.
+  Future<String> readAddonToken(String addonId, String consoleId, SecretVault vault) async =>
+      await vault.read(SecretRef.addonToken(addonId, consoleId)) ?? '';
 
   T? getGeneralSetting<T>(AppSettings settings, String key) {
     assert(AppSettings.settingsSchema.containsKey(key), 'Invalid setting key: $key');

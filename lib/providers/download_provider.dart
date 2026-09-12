@@ -15,6 +15,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/app.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
@@ -426,12 +427,18 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     debugPrint('Executing download task for: $taskId -> $downloadDir/$fileName');
 
-    // Same auth as catalog fetches: console token (cookie/bearer) or IA S3 keys.
+    // Same auth as catalog fetches, agora pela fonte que serviu este arquivo.
     final settings = _ref.read(settingsProvider);
-    final console = (await CatalogService().getConsoles())[game.consoleId];
+    final catalogService = CatalogService();
     final isIaUrl = game.url.contains('archive.org/download/');
+    // A auth é da fonte e não do console: `console.auth` é a do primeiro addon
+    // que declarou o console, então usá-la aqui mandaria o cookie de um
+    // servidor junto com o token de outro. `null` quando o addon que serviu o
+    // arquivo não serve mais este console, e aí não vai header nenhum.
+    final auth = authForAddon(await catalogService.sourcesFor(game.consoleId), game.sourceId);
+    final token = await _ref.read(settingsProvider.notifier).readAddonToken(game.sourceId, game.consoleId);
     final headers = <String, String>{
-      ...buildConsoleAuthHeaders(console?.auth, tokenOverride: settings.consoleSettings[game.consoleId]?.authToken),
+      ...buildConsoleAuthHeaders(auth, tokenOverride: token.isEmpty ? null : token),
       // Restricted ("loggedin") IA items only accept session cookies; S3 keys
       // are kept as a fallback for older flows.
       if (isIaUrl && (settings.iaCookies?.isNotEmpty ?? false))
