@@ -23,7 +23,10 @@ const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
 /// Função de topo e não duas linhas dentro do `_host` porque o último caso não
 /// usa o `_host` e precisa disto do mesmo jeito: ele monta a
 /// `AddonDetailScreen`, que monta `ConsoleAuthSetting`, que lê
-/// `settingsProvider` (`console_auth_setting.dart:48`). Sem semear, aquele caso
+/// `settingsProvider` no `_carregarToken` de `console_auth_setting.dart`. Sem
+/// número de linha de propósito: a Task 25 inseriu o campo `onSaved` acima dele
+/// e o `48` que estava escrito aqui virou `58` num commit que não tocou neste
+/// arquivo. Sem semear, aquele caso
 /// só passa porque os quatro anteriores rodaram antes e deixaram o mock de pé,
 /// e quebra quando alguém o roda sozinho com `--plain-name`.
 void _semearPrefs() {

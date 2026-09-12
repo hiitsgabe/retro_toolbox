@@ -8574,7 +8574,10 @@ const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
 /// Função de topo e não duas linhas dentro do `_host` porque o último caso não
 /// usa o `_host` e precisa disto do mesmo jeito: ele monta a
 /// `AddonDetailScreen`, que monta `ConsoleAuthSetting`, que lê
-/// `settingsProvider` (`console_auth_setting.dart:48`). Sem semear, aquele caso
+/// `settingsProvider` no `_carregarToken` de `console_auth_setting.dart`. Sem
+/// número de linha de propósito: a Task 25 inseriu o campo `onSaved` acima dele
+/// e o `48` que estava escrito aqui virou `58` num commit que não tocou neste
+/// arquivo. Sem semear, aquele caso
 /// só passa porque os quatro anteriores rodaram antes e deixaram o mock de pé,
 /// e quebra quando alguém o roda sozinho com `--plain-name`.
 void _semearPrefs() {
@@ -8679,7 +8682,9 @@ O arquivo em si não se escreve aqui: ele já está no repositório desde a Task
 
 A camada de baixo é pior que a string, e é a razão de o nome do caso ter mudado junto: ele se chamava "chaveiro que não abriu avisa" e **não é isso que ele monta**. Chaveiro que não abre não produz `error` nenhum, produz `data` com `encryptedAtRest: false`, que é o primeiro caso do arquivo. O quarto caso é o da reserva levantando, e o `StateError('sem D-Bus')` que ele lançava descrevia justamente a situação que não passa por ali. Consertar só a string deixaria de pé um teste cujo nome contradiz o doc comment do widget que ele testa, e um dia alguém iria acreditar no nome.
 
-**O `_semearPrefs()` do quinto caso não é redundância.** Os quatro primeiros casos semeiam pelo `_host`, e o quinto monta o próprio `ProviderScope`, sem passar por ele. Como `setMockInitialValues` instala um mock **global** que sobrevive de um caso para o outro, o quinto passaria de graça na ordem do arquivo e falharia sozinho num `--plain-name`, que é a pior forma de teste verde. Ele precisa disso porque a `AddonDetailScreen` monta `ConsoleAuthSetting`, que lê `settingsProvider` em `console_auth_setting.dart:48`. O Step 6 ganhou uma verificação a mais por causa disso.
+**O `_semearPrefs()` do quinto caso não é redundância.** Os quatro primeiros casos semeiam pelo `_host`, e o quinto monta o próprio `ProviderScope`, sem passar por ele. Como `setMockInitialValues` instala um mock **global** que sobrevive de um caso para o outro, o quinto passaria de graça na ordem do arquivo e falharia sozinho num `--plain-name`, que é a pior forma de teste verde. Ele precisa disso porque a `AddonDetailScreen` monta `ConsoleAuthSetting`, que lê `settingsProvider` no `_carregarToken`. O Step 6 ganhou uma verificação a mais por causa disso.
+
+O doc comment do `_semearPrefs` citava `console_auth_setting.dart:48` e a citação estava **certa** quando foi escrita. A Task 25, três Tasks depois, inseriu o campo `onSaved` acima daquela linha, e ela virou a `58` sem que ninguém tocasse em `test/vault_warning_test.dart`. Foi medido, não previsto: `grep -n readAddonToken` depois de `c61cf99`. A correção troca o número pelo nome do método, que é único no arquivo e não anda, e o bloco acima já sai assim. Vale como regra para o resto do plano: **quando a citação aponta para um arquivo que outra Task da mesma fatia vai editar acima do ponto citado, cite o símbolo.** O número só se defende quando o alvo está estável.
 
 E acrescente um caso a `test/menu_grid_test.dart`, dentro do `main` existente:
 
