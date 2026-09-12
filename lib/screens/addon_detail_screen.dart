@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
+import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 
 /// Os cinco blocos que a seção 9 do spec de UI pede para um addon:
 /// identificação, conta, cobertura, prioridade e remover.
@@ -51,6 +52,7 @@ class AddonDetailScreen extends ConsumerWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (cobertura.authConsoles.isNotEmpty) const VaultWarning(),
                   for (final consoleId in cobertura.authConsoles)
                     if (fundido.consoles[consoleId] != null)
                       _Secao(

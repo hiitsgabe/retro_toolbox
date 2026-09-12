@@ -13,6 +13,7 @@ import 'package:roms_downloader/screens/tinfoil_server_screen.dart';
 import 'package:roms_downloader/screens/jdkv_server_screen.dart';
 import 'package:roms_downloader/screens/smb_screen.dart';
 import 'package:roms_downloader/screens/ftp_screen.dart';
+import 'package:roms_downloader/screens/addons_screen.dart';
 import 'package:roms_downloader/screens/nsz_decompress_screen.dart';
 import 'package:roms_downloader/screens/steam_shortcut_screen.dart';
 import 'package:roms_downloader/screens/add_catalog_source_screen.dart';
@@ -24,6 +25,23 @@ import 'package:roms_downloader/screens/chd_convert_screen.dart';
 import 'package:roms_downloader/screens/rts_server_screen.dart';
 import 'package:roms_downloader/screens/fbi_server_screen.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
+
+/// As tiles de Tools, fora do `build` para terem teste.
+///
+/// [push] entra por parâmetro porque a navegação de dentro do `MenuScreen`
+/// depende do `context` dele, e um teste que precisasse desse context teria
+/// que montar a tela inteira, com fila de tarefas e tudo.
+List<MenuTile> toolsTiles(void Function(Widget tela) push) => [
+      MenuTile(label: 'Addons', icon: Icons.extension, accentColor: const Color(0xFF2E7D5B), onTap: () => push(const AddonsScreen())),
+      MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => push(const NszDecompressScreen())),
+      MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => push(SteamShortcutScreen())),
+      MenuTile(label: 'New Catalog Source', icon: Icons.playlist_add, accentColor: const Color(0xFF2E7D5B), onTap: () => push(const AddCatalogSourceScreen())),
+      MenuTile(label: 'Collection Clean', icon: Icons.cleaning_services, accentColor: const Color(0xFF9C4DA0), onTap: () => push(const CollectionCleanScreen())),
+      MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => push(const RarDecompressScreen())),
+      MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => push(const M3uScreen())),
+      MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => push(const ChdConvertScreen())),
+      MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => push(const CiaConvertScreen())),
+    ];
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
 class MenuScreen extends ConsumerStatefulWidget {
@@ -81,16 +99,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         label: 'Tools',
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
-        onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
-          MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => _push(const NszDecompressScreen())),
-          MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(SteamShortcutScreen())),
-          MenuTile(label: 'New Catalog Source', icon: Icons.playlist_add, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const AddCatalogSourceScreen())),
-          MenuTile(label: 'Collection Clean', icon: Icons.cleaning_services, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CollectionCleanScreen())),
-          MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
-          MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
-          MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
-          MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
-        ])),
+        onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: toolsTiles(_push))),
       ),
       MenuTile(
         label: 'Sports',
