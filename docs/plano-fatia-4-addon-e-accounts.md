@@ -6363,7 +6363,7 @@ git commit -m "feat(addon): auth por fonte e cobertura por addon sobre o catalog
 - Modify: `lib/providers/settings_provider.dart` (`ready`, `setAddonToken`, `readAddonToken`, `setConsoleAuthToken` delega)
 - Modify: `lib/utils/console_auth.dart` (ganha `addonsThatNeedToken`)
 - Modify: `lib/providers/download_provider.dart:429-441`
-- Modify: `lib/services/task_queue_service.dart:14-24`
+- Modify: `lib/services/task_queue_service.dart:15-26`
 - Modify: `test/settings_service_test.dart` (um caso muda de método, e a contagem do arquivo não muda)
 - Test: `test/addon_token_test.dart`
 
@@ -6746,7 +6746,7 @@ import 'package:roms_downloader/services/console_merge.dart';
 
 - [ ] **Step 7: O lote cobra por fonte**
 
-Em `lib/services/task_queue_service.dart`, troque o corpo de `_downloadBlockReason` até o bloco do NSZ (linhas 15 a 25) por:
+Em `lib/services/task_queue_service.dart`, troque as **linhas 15 a 26** por:
 
 ```dart
     final catalogService = CatalogService();
@@ -6765,7 +6765,9 @@ Em `lib/services/task_queue_service.dart`, troque o corpo de `_downloadBlockReas
     }
 ```
 
-O `final settingsNotifier = ref.read(settingsProvider.notifier);` da linha 26 sai, porque agora está acima. O bloco do NSZ continua igual, usando o mesmo `settingsNotifier`. Os imports mudam: entra
+**Confira o intervalo antes de apagar**, porque a versão anterior desta Task dizia `14-24` e a linha 14 é a **assinatura** de `_downloadBlockReason`, que não sai. Medido na árvore: a linha 15 é `final console = (await CatalogService().getConsoles())[consoleId];`, a 24 é o `}` que fecha o `if (console.hasTokenAuth)`, a 25 é em branco e a 26 é `final settingsNotifier = ref.read(settingsProvider.notifier);`. As doze saem juntas: o `settingsNotifier` da linha 26 não some, ele sobe para dentro do bloco acima, e o bloco do NSZ, que começa na linha 27, continua igual e continua usando esse mesmo `settingsNotifier`. Deixe uma linha em branco entre o `}` do `for` e o `if` do NSZ.
+
+Os imports mudam: entra
 
 ```dart
 import 'package:roms_downloader/utils/console_auth.dart';
@@ -7321,13 +7323,21 @@ Esperado: falha de compilação, `Error: Couldn't resolve the package 'roms_down
 
 - [ ] **Step 3: Abra o parser do catálogo**
 
-Em `lib/services/catalog_service.dart`, linha 79, tire o underscore:
+Em `lib/services/catalog_service.dart`, na declaração de `_parseConsoles`, tire o underscore:
 
 ```dart
   static Map<String, Console> parseConsoles(String jsonStr) {
 ```
 
-E troque as três chamadas internas (as duas que `grep -n "_parseConsoles(" lib/services/catalog_service.dart` acha fora da declaração, mais a que a Task 13 criou dentro de `buildCatalog`) de `_parseConsoles(` para `parseConsoles(`.
+**A declaração está na linha 112, e não na 79.** O 79 era a posição contra `ef5ee57`, e a Task 13 reescreveu este arquivo, que é exatamente o motivo pelo qual a lista de **Files** desta Task não dá número de linha. Confira com o grep abaixo antes de editar, em vez de confiar no 112.
+
+E troque as **duas** chamadas internas de `_parseConsoles(` para `parseConsoles(`:
+
+```bash
+grep -n "_parseConsoles(" lib/services/catalog_service.dart
+```
+
+Medido agora: linha 61, dentro de `buildCatalog`, que é a chamada que a Task 13 criou, e linha 203, dentro de `setCatalogFromJson`. São duas, e não três: a versão anterior deste Step dizia "as duas que o grep acha fora da declaração, mais a que a Task 13 criou", e contava a da Task 13 duas vezes, porque ela é uma das que o grep acha.
 
 Público de propósito e não copiado: validar um catálogo baixado com um parser diferente do que vai lê-lo depois é como o app aceita na instalação um arquivo que ele não consegue abrir no boot. É o mesmo código ou não vale nada.
 
