@@ -28,21 +28,26 @@ final addonNamesProvider = Provider<Map<String, String>>(
   (ref) => {for (final addon in ref.watch(addonProvider)) addon.id: addon.name},
 );
 
-/// A cobertura de cada addon, recalculada toda vez que a lista muda.
-///
-/// `ref.watch(addonProvider)` está ali pelo efeito e não pelo valor: a fusão
-/// mora dentro do `CatalogService`, e é ela que muda quando o usuário instala,
-/// remove ou arrasta.
+/// O catálogo fundido de todos os addons instalados, na ordem deles.
 ///
 /// **Sem teste, e de propósito.** `mergedCatalog()` chega em disco por
-/// `path_provider`, que num teste sem plataforma não falha: ele devolve vazio
-/// em silêncio. Um teste aqui afirmaria cobertura zero e passaria para sempre,
-/// inclusive depois de a regra quebrar. O que tem teste é
-/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22
-/// e 23 sobrescrevem este provider.
-final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
+/// `path_provider`, que num teste sem plataforma não falha: devolve vazio em
+/// silêncio. Um teste aqui afirmaria catálogo vazio e passaria para sempre,
+/// inclusive depois de a regra quebrar. O que tem teste é `mergeCatalogs` e
+/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22,
+/// 23 e 25 sobrescrevem este provider.
+final mergedCatalogProvider = FutureProvider<MergedCatalog>((ref) async {
   ref.watch(addonProvider);
-  return (await CatalogService().mergedCatalog()).coverage();
+  return CatalogService().mergedCatalog();
+});
+
+/// De cada addon para o que ele cobre.
+///
+/// Deriva do fundido em vez de montá-lo de novo: a tela de detalhe precisa dos
+/// dois, e duas leituras de disco para a mesma resposta é o tipo de custo que
+/// ninguém vê até a lista de addons ficar grande.
+final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
+  return (await ref.watch(mergedCatalogProvider.future)).coverage();
 });
 
 class AddonNotifier extends StateNotifier<List<Addon>> {
