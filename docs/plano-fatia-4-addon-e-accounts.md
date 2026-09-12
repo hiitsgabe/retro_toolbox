@@ -8060,6 +8060,8 @@ Crie `test/addons_screen_test.dart`. O `FakeAddonStore` é o da Task 22 (`test/s
 
 Nenhum dos dois vira `unused_import`: os dois símbolos são usados no próprio bloco, e o alvo de 22 do Step 7 não muda.
 
+**O `moveBy(Offset(0, 300))` do caso do arrasto é medido, não escolhido a olho.** A primeira versão deste bloco movia 100 px e o caso falhava sem erro nenhum, só com a lista na ordem original, que é o defeito mais caro de diagnosticar aqui: parece bug de produção e é gesto curto. Medido nesta tela, com as linhas de 74 e 72 px: 100, 120 e 137 px não trocam nada, 150 px troca. O valor ficou folgado de propósito, e com duas linhas passar do fim dá no mesmo que trocar. Quem encurtar isso não vai ver um erro, vai ver a asserção da ordem.
+
 ```dart
 import 'dart:convert';
 
@@ -8229,10 +8231,18 @@ void main() {
     // `ImmediateMultiDragGestureRecognizer`, que precisa do `moveBy` em um
     // quadro próprio para o reorder começar. Com `drag` o teste passa ou falha
     // conforme o tamanho da linha, que é a pior espécie de teste.
+    //
+    // A distância é folgada de propósito. Medido nesta tela: 100, 120 e 137 px
+    // não trocam nada e 150 px troca, porque o `ReorderableListView` só
+    // remaneja quando o item arrastado ultrapassa o vizinho inteiro, e as duas
+    // linhas têm 74 e 72 px. Um gesto curto falha sem erro nenhum: a lista fica
+    // intacta e a asserção acusa a ordem original, sem dizer que o gesto é que
+    // foi curto. Com duas linhas, passar do fim dá no mesmo que trocar, então a
+    // folga não custa precisão.
     final alca = find.byIcon(Icons.drag_handle).first;
     final gesto = await tester.startGesture(tester.getCenter(alca));
     await tester.pump(kLongPressTimeout);
-    await gesto.moveBy(const Offset(0, 100));
+    await gesto.moveBy(const Offset(0, 300));
     await tester.pump();
     await gesto.up();
     await tester.pumpAndSettle();
@@ -8358,23 +8368,7 @@ class AddonsScreen extends ConsumerWidget {
   }
 
   Future<void> _dialogoDeInstalacao(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final url = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Instalar de URL'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Endereço do catálogo', hintText: 'https://exemplo.org/catalogo.json'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(controller.text.trim()), child: const Text('Instalar')),
-        ],
-      ),
-    );
-    controller.dispose();
+    final url = await showDialog<String>(context: context, builder: (_) => const _DialogoDeUrl());
     if (url == null || url.isEmpty || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -8391,6 +8385,47 @@ class AddonsScreen extends ConsumerWidget {
       // e servidor que devolve página de login, e nenhum dos dois é bug.
       messenger.showSnackBar(SnackBar(content: Text('Não deu para instalar: $e')));
     }
+  }
+}
+
+/// O diálogo do "Instalar de URL". Tem estado só por causa do `dispose`.
+///
+/// O `TextEditingController` precisa viver enquanto o `TextField` viver, e o
+/// `showDialog` devolve assim que a rota é desempilhada, com a animação de
+/// saída ainda rodando. Descartar o controller ali é descartá-lo num quadro em
+/// que o `TextField` ainda está na árvore, e a transição reinscreve nele:
+/// `A TextEditingController was used after being disposed`. Com o controller no
+/// `State`, quem escolhe a hora é o framework, depois que a rota sai de fato.
+class _DialogoDeUrl extends StatefulWidget {
+  const _DialogoDeUrl();
+
+  @override
+  State<_DialogoDeUrl> createState() => _DialogoDeUrlState();
+}
+
+class _DialogoDeUrlState extends State<_DialogoDeUrl> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Instalar de URL'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'Endereço do catálogo', hintText: 'https://exemplo.org/catalogo.json'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        FilledButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: const Text('Instalar')),
+      ],
+    );
   }
 }
 
@@ -8443,6 +8478,16 @@ class _Linha extends StatelessWidget {
 **Tropeço provável:** deixar `buildDefaultDragHandles` no padrão, que é `true`. A tela fica funcionando e o teste do toque passa, porque em desktop o `ReorderableListView` só põe alça própria em mobile. O que quebra é no celular, onde a linha inteira vira arrastável e o toque que abre o detalhe compete com o arrasto. O par `buildDefaultDragHandles: false` mais `ReorderableDragStartListener` é o que dá as duas coisas em toda plataforma.
 
 **Segundo tropeço:** `ValueKey(i)` em vez de `ValueKey(addon.id)`. O `ReorderableListView` exige chave e o índice satisfaz o requisito, então nada reclama. Só que a chave passa a mudar exatamente quando a lista reordena, que é quando ela precisava ser estável, e a animação troca o conteúdo das linhas erradas.
+
+**Terceiro tropeço, e este já aconteceu:** montar o `TextEditingController` dentro de `_dialogoDeInstalacao` e descartá-lo na linha seguinte ao `await showDialog(...)`. É o que a primeira versão deste bloco fazia, e os dois casos de diálogo do Step 5 caíam com
+
+```
+A TextEditingController was used after being disposed.
+  The relevant error-causing widget was:
+    TextField TextField:.../lib/screens/addons_screen.dart:70:18
+```
+
+O `showDialog` devolve quando a rota é desempilhada, e a animação de saída ainda roda depois disso: no quadro seguinte a transição reinscreve no `TextField`, que ainda está na árvore, e acha um controller morto. A cascata de assertions impede a instalação de completar, então o `SnackBar` do caso de erro também nunca aparece e os **dois** casos falham pela mesma causa. Por isso o diálogo é um `_DialogoDeUrl extends StatefulWidget` com o controller no `State`: quem escolhe a hora do `dispose` passa a ser o framework, depois que a rota sai de fato.
 
 - [ ] **Step 5: Rode para ver passar**
 
