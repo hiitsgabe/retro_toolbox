@@ -8569,9 +8569,21 @@ import 'support/fake_addon_store.dart';
 
 const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
 
-Widget _host(Override cofre, {Widget child = const VaultWarning()}) {
+/// Semeia as prefs antes de montar qualquer coisa que leia `settingsProvider`.
+///
+/// Função de topo e não duas linhas dentro do `_host` porque o último caso não
+/// usa o `_host` e precisa disto do mesmo jeito: ele monta a
+/// `AddonDetailScreen`, que monta `ConsoleAuthSetting`, que lê
+/// `settingsProvider` (`console_auth_setting.dart:48`). Sem semear, aquele caso
+/// só passa porque os quatro anteriores rodaram antes e deixaram o mock de pé,
+/// e quebra quando alguém o roda sozinho com `--plain-name`.
+void _semearPrefs() {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
+}
+
+Widget _host(Override cofre, {Widget child = const VaultWarning()}) {
+  _semearPrefs();
   return ProviderScope(
     overrides: [cofre],
     child: MaterialApp(home: Scaffold(body: child)),
@@ -8624,6 +8636,7 @@ void main() {
   testWidgets('o detalhe do addon avisa junto do formulário de conta', (tester) async {
     // O aviso tem que estar onde o segredo é digitado. Só em Accounts, ele não
     // alcança quem configura o token pela tela do addon, que é o caminho novo.
+    _semearPrefs();
     const console = Console(id: 'switch', name: 'Switch', urls: ['https://m/switch/'], auth: {'requires_token': true});
     const fundido = MergedCatalog(
       consoles: {'switch': console},
@@ -8653,6 +8666,8 @@ void main() {
 Repare na linha `import 'support/fake_addon_store.dart';` do bloco do Step 1, separada das outras por uma linha em branco. Ela é relativa e não `package:`, que é a convenção que os sete arquivos de teste que já usam `test/support/` seguem (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, e os outros). Uma versão anterior deste Step **não trazia essa linha**, e o bloco usa `FakeAddonStore` no quinto caso: sem ela o Step 2 falha por `Undefined name 'FakeAddonStore'` em vez de falhar pelo `vault_warning.dart` que ainda não existe, e o Step 6 não compila de jeito nenhum. É erro de compilação, não de lint.
 
 O arquivo em si não se escreve aqui: ele já está no repositório desde a Task 22, que o criou porque IO de disco de verdade trava dentro de um corpo `testWidgets`. Este Step só chama `load()` dele.
+
+**O `_semearPrefs()` do quinto caso não é redundância.** Os quatro primeiros casos semeiam pelo `_host`, e o quinto monta o próprio `ProviderScope`, sem passar por ele. Como `setMockInitialValues` instala um mock **global** que sobrevive de um caso para o outro, o quinto passaria de graça na ordem do arquivo e falharia sozinho num `--plain-name`, que é a pior forma de teste verde. Ele precisa disso porque a `AddonDetailScreen` monta `ConsoleAuthSetting`, que lê `settingsProvider` em `console_auth_setting.dart:48`. O Step 6 ganhou uma verificação a mais por causa disso.
 
 E acrescente um caso a `test/menu_grid_test.dart`, dentro do `main` existente:
 
@@ -8852,6 +8867,14 @@ flutter test test/vault_warning_test.dart test/menu_grid_test.dart
 ```
 
 Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que já tinha um.
+
+E rode o quinto caso **sozinho**, que é a verificação que o `_semearPrefs()` existe para passar:
+
+```bash
+flutter test test/vault_warning_test.dart --plain-name "o detalhe do addon avisa junto do formulário de conta"
+```
+
+Esperado: `+1`, zero falha. Se este comando falhar enquanto o de cima passa, o caso está vivendo do mock que outro caso deixou, e o conserto é onde o `_semearPrefs()` é chamado, não no caso.
 
 - [ ] **Step 7: Rode a suíte inteira**
 
