@@ -6856,6 +6856,8 @@ git commit -m "feat(seguranca): token por par addon e console, e bloqueio de lot
 **Files:**
 - Modify: `lib/widgets/settings/console_auth_setting.dart` (ganha `addonId` e lê do cofre)
 - Modify: `lib/widgets/settings/settings_content.dart:158`
+- Modify: `lib/screens/tinfoil_server_screen.dart:106` (o segundo chamador, mais o import)
+- Modify: `lib/screens/setup_wizard_screen.dart:435` (o terceiro chamador)
 - Test: `test/console_auth_setting_test.dart`
 
 `ConsoleAuthSetting` é o formulário que a seção 9 pede dentro do detalhe do addon ("**Conta**: o formulário de credencial"). Ele já existe e já sabe fazer login por usuário e senha, colar token cru, mostrar a mensagem do catálogo e deslogar. O que ele não sabe é de qual addon é o token: ele lê `settingsProvider.consoleSettings[id].authToken`, que depois da Task 19 é o espelho do embutido e mais nada.
@@ -7138,6 +7140,32 @@ com o import novo:
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
+- [ ] **Step 4b: Os outros dois chamadores, ou nada compila**
+
+`ConsoleAuthSetting` tem **três** chamadores em `lib/`, não um. O Step 4 conserta só o das settings. Como o Step 3 declara `required this.addonId`, os outros dois param de compilar na hora, com `The named parameter 'addonId' is required`. Isso não é lint: é erro, então o Step 6 falha, o `flutter analyze` do Step 7 sai de 22 para 24 **com dois erros**, e o `flutter build linux --debug` nem termina. Uma versão anterior desta Task listava só `settings_content.dart` em **Files** e omitia os dois.
+
+Os três são `lib/widgets/settings/settings_content.dart:158`, `lib/screens/tinfoil_server_screen.dart:106` e `lib/screens/setup_wizard_screen.dart:435` (medido com `grep -rn "ConsoleAuthSetting" lib/`, que também acha as quatro linhas da própria declaração). Nos dois novos o addon é o embutido, pelo mesmo motivo do Step 4 e pelo que a Task 19 já decidiu: o caminho de LAN e o do wizard leem o espelho síncrono, que é do embutido e de mais ninguém.
+
+Em `lib/screens/tinfoil_server_screen.dart`, linha 106:
+
+```dart
+            children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
+```
+
+Este arquivo **não** importa `addon_model.dart` hoje (medido), então ganha o import junto:
+
+```dart
+import 'package:roms_downloader/models/addon_model.dart';
+```
+
+Em `lib/screens/setup_wizard_screen.dart`, linha 435:
+
+```dart
+                children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
+```
+
+Aqui o import **já existe**, na linha 7, posto pela Task 9: o arquivo já escreve `kBuiltinAddonId` três vezes, nas linhas 100, 112 e 124. Não duplique.
+
 - [ ] **Step 5: Rode para ver passar**
 
 ```bash
@@ -7168,7 +7196,7 @@ Esperado: `22 issues found`, build ok.
 ```bash
 git add test/console_auth_setting_test.dart
 git commit -m "test(addon): formulario de conta passa a ser do par addon e console"
-git add lib/widgets/settings/console_auth_setting.dart lib/widgets/settings/settings_content.dart
+git add lib/widgets/settings/console_auth_setting.dart lib/widgets/settings/settings_content.dart lib/screens/tinfoil_server_screen.dart lib/screens/setup_wizard_screen.dart
 git commit -m "feat(addon): formulario de conta passa a ser do par addon e console"
 ```
 
