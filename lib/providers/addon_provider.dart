@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/console_merge.dart';
 
 final addonProvider = StateNotifierProvider<AddonNotifier, List<Addon>>((ref) {
   return AddonNotifier(AddonStore.open());
@@ -26,6 +27,23 @@ final sourcePriorityProvider = Provider<List<String>>((ref) => [for (final addon
 final addonNamesProvider = Provider<Map<String, String>>(
   (ref) => {for (final addon in ref.watch(addonProvider)) addon.id: addon.name},
 );
+
+/// A cobertura de cada addon, recalculada toda vez que a lista muda.
+///
+/// `ref.watch(addonProvider)` está ali pelo efeito e não pelo valor: a fusão
+/// mora dentro do `CatalogService`, e é ela que muda quando o usuário instala,
+/// remove ou arrasta.
+///
+/// **Sem teste, e de propósito.** `mergedCatalog()` chega em disco por
+/// `path_provider`, que num teste sem plataforma não falha: ele devolve vazio
+/// em silêncio. Um teste aqui afirmaria cobertura zero e passaria para sempre,
+/// inclusive depois de a regra quebrar. O que tem teste é
+/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22
+/// e 23 sobrescrevem este provider.
+final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
+  ref.watch(addonProvider);
+  return (await CatalogService().mergedCatalog()).coverage();
+});
 
 class AddonNotifier extends StateNotifier<List<Addon>> {
   final Future<AddonStore> _store;

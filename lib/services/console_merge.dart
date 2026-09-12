@@ -32,10 +32,68 @@ class MergedCatalog {
   const MergedCatalog({this.consoles = const {}, this.sources = const {}});
 
   bool get isEmpty => consoles.isEmpty;
+
+  /// De cada addon para o que ele cobre.
+  ///
+  /// Percorre `sources` e não `consoles` porque é `sources` que sabe de qual
+  /// addon veio cada url. Um addon que serve o mesmo console por duas urls
+  /// conta uma vez.
+  ///
+  /// Addon que não serve console nenhum **não aparece no mapa**, e isso é o
+  /// caso normal de um addon recém instalado cujo catálogo ainda não foi lido.
+  /// Quem lê trata ausente como cobertura zero.
+  Map<String, AddonCoverage> coverage() {
+    final porAddon = <String, List<String>>{};
+    final comConta = <String, List<String>>{};
+
+    for (final entrada in sources.entries) {
+      final vistos = <String>{};
+      for (final fonte in entrada.value) {
+        // Só a primeira fonte de cada addon neste console conta, e ela é a
+        // mesma que `authForAddon` devolve. As duas concordam de propósito:
+        // a tela que diz "pede conta" e a que monta o header têm que estar
+        // olhando para o mesmo bloco de auth.
+        if (!vistos.add(fonte.addonId)) continue;
+        porAddon.putIfAbsent(fonte.addonId, () => <String>[]).add(entrada.key);
+        if (authNeedsToken(fonte.auth)) {
+          comConta.putIfAbsent(fonte.addonId, () => <String>[]).add(entrada.key);
+        }
+      }
+    }
+
+    return {
+      for (final entrada in porAddon.entries)
+        entrada.key: (consoles: entrada.value, authConsoles: comConta[entrada.key] ?? const <String>[]),
+    };
+  }
 }
 
 /// O catálogo de um addon, já parseado.
 typedef AddonCatalog = ({String addonId, Map<String, Console> consoles});
+
+/// A auth com que [addonId] fala neste console, ou `null` se ele não o serve.
+///
+/// Recebe a lista e não um `MergedCatalog` porque o chamador de produção é o
+/// `download_provider`, que tem em mãos o retorno de
+/// `CatalogService.sourcesFor(consoleId)` e nenhum catálogo fundido.
+///
+/// Duas ausências viram o mesmo `null`: o addon não serve este console, e o
+/// addon serve e não declara auth. Quem lê faz a mesma coisa nos dois casos,
+/// que é não mandar header.
+Map<String, dynamic>? authForAddon(List<ConsoleSource> sources, String addonId) {
+  for (final fonte in sources) {
+    if (fonte.addonId == addonId) return fonte.auth;
+  }
+  return null;
+}
+
+/// O que um addon cobre: os consoles que ele serve, e quais deles pedem conta.
+///
+/// Uma estrutura só para as duas perguntas da linha da seção 9 do spec de UI:
+/// o `"25 consoles"` é `consoles.length`, e o chip de conta é
+/// `authConsoles.isNotEmpty`. Duas listas e não uma lista mais um contador
+/// porque a tela de detalhe desenha os nomes, e a lista desenha o número.
+typedef AddonCoverage = ({List<String> consoles, List<String> authConsoles});
 
 /// Funde os catálogos na ordem em que vierem, que é a ordem de prioridade que
 /// o usuário arrastou na tela de addons.
