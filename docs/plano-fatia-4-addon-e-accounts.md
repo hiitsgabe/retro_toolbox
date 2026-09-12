@@ -7527,6 +7527,7 @@ git commit -m "feat(addon): instalar addon a partir de uma url"
 - Create: `lib/screens/addon_detail_screen.dart`
 - Modify: `lib/providers/addon_provider.dart` (ganha `mergedCatalogProvider`, e `addonCoverageProvider` passa a derivar dele)
 - Test: `test/addon_detail_screen_test.dart`
+- Test: `test/support/fake_addon_store.dart` (novo, ajuda compartilhada, sem `main`; as Tasks 23, 24 e 25 reusam)
 
 A seção 9 pede cinco blocos nesta tela, nesta ordem: identificação, conta, cobertura, prioridade e remover. Quatro deles já têm a resposta pronta em provider: `addonProvider` dá nome, url e posição, `MergedCatalog.coverage()` dá os consoles e quais pedem conta (Task 18), e `ConsoleAuthSetting(console:, addonId:)` é o formulário de conta (Task 20). Esta Task só monta.
 
@@ -7534,13 +7535,79 @@ A seção 9 pede cinco blocos nesta tela, nesta ordem: identificação, conta, c
 
 A mudança em `addon_provider.dart` é para a tela não ler o disco duas vezes. Hoje `addonCoverageProvider` monta o `MergedCatalog` inteiro e devolve só a cobertura, e esta tela também precisa dos `Console` em si, para dar o nome de tela do console e para passar ao formulário de conta. Em vez de um segundo provider que refaz o mesmo trabalho, o fundido vira o provider e a cobertura passa a derivar dele.
 
+**Disco de verdade não serve aqui, e o motivo é medido.** O corpo de um `testWidgets` roda dentro de um `FakeAsync`: os temporizadores são falsos e o laço de eventos real não avança ali. Qualquer resposta que venha do sistema de arquivos, portanto, nunca chega, e o `await` fica pendurado para sempre. Medido neste repositório, com quatro sondas:
+
+| dentro de `testWidgets` | resultado |
+| --- | --- |
+| `await Directory.systemTemp.createTemp(...)` | **trava** |
+| `await File('/tmp/nao_existe').exists()` | **trava** |
+| `await SharedPreferences.getInstance()` e `setString`, com `setMockInitialValues` | passa |
+| `await tester.runAsync(() => createTemp(...))` | passa |
+
+Não é o `createTemp`: é IO de disco de qualquer tipo. O `shared_preferences` mockado passa porque é memória, e é por isso que `console_auth_setting_test` nunca esbarrou nisso. Os testes de serviço que montam `AddonStore` em `Directory.systemTemp` (`addon_store_test`, `addon_provider_test`, `catalog_addons_test`, `addon_install_test`) continuam certos e não mudam: eles são `test()` comum, onde o laço real roda, e exercitar disco de verdade é exatamente o que se quer deles.
+
+**E `tester.runAsync` não resolve este caso.** Ele salvaria a montagem do store, mas o caminho do "Remover" chama `AddonNotifier.remove` → `AddonStore.deleteCatalog` → `File.exists()` de dentro do `pumpAndSettle`, disparado por um `onPressed`. Ali não existe ponto onde embrulhar nada. Por isso a saída é um store de memória, e não um embrulho.
+
+Crie primeiro `test/support/fake_addon_store.dart`. Ele não termina em `_test.dart` de propósito: é ajuda compartilhada, sem `main`, e as Tasks 23, 24 e 25 importam este mesmo arquivo em vez de cada uma escrever o seu.
+
+```dart
+import 'package:roms_downloader/models/addon_model.dart';
+import 'package:roms_downloader/services/addon_store.dart';
+
+/// Um `AddonStore` inteiro em memória, para os testes de widget.
+///
+/// Existe porque IO de disco **trava** dentro de um corpo `testWidgets`: o
+/// corpo roda num `FakeAsync` e a resposta do sistema de arquivos chega pelo
+/// laço de eventos real, que não avança ali. Quem exercita disco de verdade é
+/// `addon_store_test`, em `test()` comum, e é lá que isso tem que ser provado.
+///
+/// `noSuchMethod` com `implements` evita reescrever `catalogFile`, o único
+/// membro que sobra, e o `throw` é o que diferencia este duplo de um mock
+/// permissivo: se um caso futuro chamar o que não existe aqui, ele morre
+/// dizendo qual método foi, em vez de passar em silêncio.
+class FakeAddonStore implements AddonStore {
+  List<Addon> _addons;
+
+  /// O que `writeCatalog` gravou, por addon. Público para um caso poder afirmar
+  /// que a instalação escreveu o catálogo, e não só que mexeu na lista.
+  final Map<String, String> catalogos = {};
+
+  FakeAddonStore(List<Addon> addons) : _addons = List.of(addons);
+
+  @override
+  List<Addon> load() => List.of(_addons);
+
+  @override
+  Future<void> save(List<Addon> lista) async {
+    _addons = List.of(lista);
+  }
+
+  @override
+  Future<String?> readCatalog(String addonId) async => catalogos[addonId];
+
+  @override
+  Future<void> writeCatalog(String addonId, String jsonStr) async {
+    catalogos[addonId] = jsonStr;
+  }
+
+  @override
+  Future<void> deleteCatalog(String addonId) async {
+    catalogos.remove(addonId);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
+        'FakeAddonStore não responde ${invocation.memberName}.',
+      );
+}
+```
+
 - [ ] **Step 1: Escreva os testes que falham**
 
-Crie `test/addon_detail_screen_test.dart`:
+Crie `test/addon_detail_screen_test.dart`. Repare que **não** há `import 'dart:io'` nem `import '.../services/addon_store.dart'`: nos dois casos a única razão para eles era o store de disco que saiu, e import órfão é `unused_import`, que é **warning**, não `info`. Deixar os dois levaria o Step 7 de 22 para 24.
 
 ```dart
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7551,10 +7618,11 @@ import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/screens/addon_detail_screen.dart';
-import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
+
+import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
@@ -7571,8 +7639,12 @@ MergedCatalog _catalogo() => const MergedCatalog(
       },
     );
 
-/// Um notifier de verdade, com store em diretório temporário: o caso do
-/// "Remover" precisa que a remoção chegue no disco e volte pela lista.
+/// Um `AddonNotifier` de verdade sobre um store de memória.
+///
+/// O notifier é o real de propósito: o caso do "Remover" precisa que a remoção
+/// atravesse `AddonNotifier.remove` e volte pela lista. O que é falso é só o
+/// disco, porque IO de disco trava dentro de `testWidgets`, e `remove` chama
+/// `deleteCatalog` de dentro do `pumpAndSettle`.
 ///
 /// O `app_settings` semeado com `{}` é pelo mesmo motivo do
 /// `console_auth_setting_test`: sem a chave, a carga das settings cai no ramo
@@ -7580,11 +7652,7 @@ MergedCatalog _catalogo() => const MergedCatalog(
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('addon_detail_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
-  await store.save(addons);
-  final notifier = AddonNotifier(Future.value(store), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
   addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
@@ -7948,7 +8016,7 @@ Esperado: `22 issues found`, e nenhum deles em `addon_detail_screen.dart`, `addo
 - [ ] **Step 8: Commit**
 
 ```bash
-git add test/addon_detail_screen_test.dart
+git add test/addon_detail_screen_test.dart test/support/fake_addon_store.dart
 git commit -m "test(addon): tela de detalhe do addon"
 git add lib/screens/addon_detail_screen.dart lib/providers/addon_provider.dart
 git commit -m "feat(addon): tela de detalhe com origem, conta, cobertura e prioridade"
@@ -7971,11 +8039,10 @@ O `catalogFetcherProvider` existe por um motivo de teste e um de produção. De 
 
 - [ ] **Step 1: Escreva os testes que falham**
 
-Crie `test/addons_screen_test.dart`:
+Crie `test/addons_screen_test.dart`. O `FakeAddonStore` é o da Task 22 (`test/support/fake_addon_store.dart`), já commitado; aqui só se importa. O import é relativo e não `package:`, que é a convenção dos arquivos que já usam `test/support/`. E não há `import 'dart:io'` nem `import '.../services/addon_store.dart'`: a única razão para os dois era o store de disco, e import órfão é `unused_import`, que é **warning** e levaria o Step 7 de 22 para 24.
 
 ```dart
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7987,9 +8054,10 @@ import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/screens/addon_detail_screen.dart';
 import 'package:roms_downloader/screens/addons_screen.dart';
-import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
+
+import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
@@ -8016,14 +8084,13 @@ MergedCatalog _catalogo() => const MergedCatalog(
 /// parseia como se lê, porque o `=>` come o resto da expressão.
 Future<String> _fetchPadrao(String url) async => _catalogoBaixado;
 
+/// O notifier é o de verdade, sobre um store de memória: o arrasto e a
+/// instalação têm que atravessar `reorder` e `install`, que chamam `save` e
+/// `writeCatalog`. Falso é só o disco, que trava dentro de `testWidgets`.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('addons_screen_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
-  await store.save(addons);
-  final notifier = AddonNotifier(Future.value(store), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
   addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
@@ -8398,8 +8465,9 @@ git commit -m "feat(addon): lista de addons com prioridade arrastavel"
 - Modify: `lib/widgets/settings/accounts_setting.dart` (o aviso entra no topo)
 - Modify: `lib/screens/menu_screen.dart` (as tiles de Tools viram função de topo e ganham "Addons")
 - Test: `test/vault_warning_test.dart` (novo, 5 casos)
-- Test: `test/support/fake_addon_store.dart` (novo, ajuda compartilhada, sem `main`)
 - Test: `test/menu_grid_test.dart` (existente, +1 caso)
+
+`test/support/fake_addon_store.dart` **não** entra aqui: ele foi criado e commitado na Task 22, e esta Task só o importa.
 
 Duas coisas pequenas que fecham o Grupo 5: a tela de addons ainda não é alcançável por ninguém, e a decisão travada do cofre ainda não apareceu em pixel nenhum.
 
@@ -8513,35 +8581,9 @@ void main() {
 }
 ```
 
-Repare no `FakeAddonStore`: os testes das Tasks 22 e 23 montam um `AddonStore` de verdade em `Directory.systemTemp`, e aqui isso seria cerimônia de dez linhas para um caso que não escreve nada. `test/support/` já existe no repositório, e é lá que ele mora. Crie `test/support/fake_addon_store.dart`:
-
-```dart
-import 'package:roms_downloader/models/addon_model.dart';
-import 'package:roms_downloader/services/addon_store.dart';
-
-/// Um `AddonStore` que só sabe devolver a lista que recebeu.
-///
-/// Para casos que leem e não escrevem. Quem exercita gravação usa o store de
-/// verdade num diretório temporário, como nas Tasks 22 e 23: um duplo que
-/// finge gravar provaria que a tela chamou o método, não que o dado sobreviveu.
-class FakeAddonStore implements AddonStore {
-  final List<Addon> _addons;
-
-  const FakeAddonStore(this._addons);
-
-  @override
-  List<Addon> load() => _addons;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
-        'FakeAddonStore só responde load(). Chamado: ${invocation.memberName}',
-      );
-}
-```
-
-`noSuchMethod` com `implements` é o jeito de não reescrever os seis outros métodos do store, e o `throw` é o que diferencia este duplo de um mock permissivo: se alguém usá-lo num caso que grava, o teste morre dizendo qual método foi chamado, em vez de passar em silêncio.
-
 Repare na linha `import 'support/fake_addon_store.dart';` do bloco do Step 1, separada das outras por uma linha em branco. Ela é relativa e não `package:`, que é a convenção que os sete arquivos de teste que já usam `test/support/` seguem (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, e os outros). Uma versão anterior deste Step **não trazia essa linha**, e o bloco usa `FakeAddonStore` no quinto caso: sem ela o Step 2 falha por `Undefined name 'FakeAddonStore'` em vez de falhar pelo `vault_warning.dart` que ainda não existe, e o Step 6 não compila de jeito nenhum. É erro de compilação, não de lint.
+
+O arquivo em si não se escreve aqui: ele já está no repositório desde a Task 22, que o criou porque IO de disco de verdade trava dentro de um corpo `testWidgets`. Este Step só chama `load()` dele.
 
 E acrescente um caso a `test/menu_grid_test.dart`, dentro do `main` existente:
 
@@ -8762,7 +8804,7 @@ Esperado: `22 issues found`, build ok.
 - [ ] **Step 9: Commit**
 
 ```bash
-git add test/vault_warning_test.dart test/support/fake_addon_store.dart test/menu_grid_test.dart
+git add test/vault_warning_test.dart test/menu_grid_test.dart
 git commit -m "test(cofre): aviso de texto puro e porta para a tela de addons"
 git add lib/widgets/settings/vault_warning.dart lib/screens/addon_detail_screen.dart lib/widgets/settings/accounts_setting.dart lib/screens/menu_screen.dart
 git commit -m "feat(cofre): avisar quando o segredo fica em texto puro"
@@ -8789,11 +8831,10 @@ As três peças já existem. `MergedCatalog.coverage()` diz, por addon, quais co
 
 - [ ] **Step 1: Escreva o teste que falha**
 
-Crie `test/accounts_setting_test.dart`:
+Crie `test/accounts_setting_test.dart`. O `FakeAddonStore` é o da Task 22, já commitado, e entra por import relativo. Sem `dart:io` e sem `services/addon_store.dart` pelo mesmo motivo das Tasks 22 e 23: os dois só existiam para o store de disco, e import órfão é `unused_import`, que é **warning**.
 
 ```dart
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8805,11 +8846,12 @@ import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
-import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
+
+import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
@@ -8836,14 +8878,12 @@ MergedCatalog _semConta() => const MergedCatalog(
       },
     );
 
+/// Store de memória, e não `AddonStore` em `Directory.systemTemp`: IO de disco
+/// trava dentro de `testWidgets`. Ver a Task 22.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('accounts_setting_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
-  await store.save(addons);
-  final notifier = AddonNotifier(Future.value(store), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
   addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
