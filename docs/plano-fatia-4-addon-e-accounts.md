@@ -9091,6 +9091,16 @@ void main() {
     await tester.tap(find.text('myrient.erista.me'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'tok-novo');
+    // Este quadro é obrigatório, e não é estilo. `enterText` não constrói
+    // quadro nenhum: ele chama `showKeyboard`, manda o texto e termina em
+    // `idle()`, que só completa um `Timer.run`. Quem marca `_dirty` é o
+    // `onChanged` do campo, por `setState`, e o botão de Save é
+    // `onPressed: _dirty ? _save : null`. Sem este `pump`, a árvore que o
+    // `tap` encontra ainda foi construída com `_dirty` falso, o botão está
+    // desabilitado, e **`tap` em botão desabilitado não levanta: não faz
+    // nada**. O cofre ficaria vazio e a asserção de baixo acusaria a produção
+    // por um defeito do teste.
+    await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -9120,6 +9130,12 @@ void main() {
 O último caso é o que justifica a lista ser derivada e não guardada. `mergedCatalogProvider` já observa `addonProvider` (Task 22), então remover o addon reconstrói a fusão, a fusão reconstrói os pares, e a linha some sozinha. Se alguém trocar o `ref.watch` por um `ref.read`, é este caso que cai.
 
 `'Save'` e `'Not connected'` ficam em inglês porque são os textos que já existem nos widgets (`console_auth_setting.dart` e `accounts_setting.dart`). Esta Task não traduz tela.
+
+O `await tester.pump()` do sexto caso já esteve faltando aqui, e o modo como o caso caía é a razão de o comentário ser tão comprido. O sintoma era `Expected: 'tok-novo' / Actual: <null>` na leitura do cofre, ou seja, **o teste apontava para a produção**: parecia que `_guardar` não gravava, ou que o `onSaved` da Task 19 não chegava. Não era nada disso. O `tap` caía num botão desabilitado e virava no-op silencioso, então nenhuma linha de produção chegou a rodar, e é por isso que o erro não tinha stack de produção nenhuma: só a asserção. Um `tap` que não levanta e não faz nada é o pior vizinho de um `expect` que lê `null`.
+
+A convenção já existia no próprio repositório, e é onde conferir se a dúvida voltar: `test/console_auth_setting_test.dart`, no caso `'salvar grava na chave do par (addon, console)'`, faz exatamente `enterText` → `pump()` → `tap('Save')`, e passa desde a Task 19. Um caso novo que mexe no mesmo formulário e larga o `pump` não está simplificando: está saindo da convenção que faz o formulário ser testável.
+
+O comentário cita `onChanged` e `onPressed` **pelo nome e sem número de linha**, de propósito. O Step 4 desta mesma Task insere um bloco de campo novo acima dos dois, então qualquer `console_auth_setting.dart:NNN` escrito aqui nasceria apontando para a linha errada: para quem escreve o teste o arquivo ainda é o de antes do Step 4, e para quem o lê depois já é o de depois. Nome de símbolo não tem esse problema, e `onChanged` e o `onPressed` do Save são únicos naquele arquivo.
 
 - [ ] **Step 2: Rode para ver falhar**
 
