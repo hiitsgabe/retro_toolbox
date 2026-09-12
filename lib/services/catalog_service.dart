@@ -476,6 +476,19 @@ class CatalogService {
       debugPrint('Error clearing catalog cache: $e');
     }
   }
+
+  /// Esquece tudo que dependia da lista de addons: os arquivos de cache de
+  /// jogo de cada console **e depois** a fusão de catálogos.
+  ///
+  /// A ordem não é estilo. `clearCatalogCache` descobre quais arquivos apagar
+  /// iterando `getConsoles()`, então ela precisa do catálogo **antigo**.
+  /// Invertida, a varredura rodaria com a lista nova e deixaria para trás o
+  /// cache de um console que só o addon removido servia, e esse arquivo
+  /// continuaria alimentando a grade depois da remoção.
+  Future<void> invalidateForAddonChange() async {
+    await clearCatalogCache();
+    clearCache();
+  }
 }
 
 // Top-level isolate functions — cannot be instance methods.
