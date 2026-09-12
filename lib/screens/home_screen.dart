@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/app_state_model.dart';
+import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/widgets/header/header.dart';
@@ -44,6 +45,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         entriesForSelection(ref.read(allPackEntriesProvider), selecionadas),
         preferredRegions: ref.read(preferredRegionsProvider),
         resolveGame: ref.read(gameResolverProvider),
+        sourcePriority: ref.read(sourcePriorityProvider),
       );
     }
     // MODO FONTE: cada chave já é um arquivo, nada a escolher.

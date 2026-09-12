@@ -6,6 +6,7 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/models/source_verification_model.dart';
+import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
@@ -75,6 +76,7 @@ class GameDetailScreen extends ConsumerWidget {
       [PackGridEntry(game: game, sources: [for (final v in split.eligible) v.source])],
       preferredRegions: ref.watch(preferredRegionsProvider),
       resolveGame: resolver,
+      sourcePriority: ref.watch(sourcePriorityProvider),
     );
 
     final escolha = split.noCertainty ? null : plan.picks.firstOrNull;
