@@ -9440,6 +9440,8 @@ Esta fatia mexeu no formato: `harvestAuthTokens` tira `auth.token` e põe `requi
 Crie `test/rts_addon_contract_test.dart`:
 
 ```dart
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
@@ -9468,13 +9470,28 @@ void main() {
   });
 
   test('o id que o RTS gera é o id que o consumidor calcula', () {
-    // O RTS emite `name` e o consumidor deriva o id com
-    // `CatalogService.consoleId(name)`. Se as duas regras divergirem, a pasta
-    // compartilhada vira um console com id que nenhuma outra fonte casa, e o
-    // MODO PACK para de reconhecer a pasta local como fonte do mesmo jogo.
-    for (final pasta in _pastas) {
-      expect(CatalogService.parseConsoles(_emitido()).containsKey(CatalogService.consoleId(pasta.name)), isTrue);
-    }
+    // Se as duas pontas divergirem, a pasta compartilhada vira um console com
+    // id que nenhuma outra fonte casa, e o MODO PACK para de reconhecer a pasta
+    // local como fonte do mesmo jogo.
+    //
+    // As duas asserções têm um lado **literal** de propósito. A primeira versão
+    // deste caso escrevia `parseConsoles(_emitido()).containsKey(consoleId(
+    // pasta.name))`, e isso não prova nada: `consoleId` é `_nameToId`
+    // (`catalog_service.dart`), e `parseConsoles` chaveia com `_nameToId` do
+    // mesmo `name` que o produtor emitiu verbatim. Os dois lados eram a mesma
+    // chamada, então a asserção era verdadeira para **qualquer** implementação
+    // da regra, inclusive uma quebrada, que é o oposto do que o nome do caso
+    // promete. É o mesmo vício que o último caso deste arquivo evita de
+    // propósito ao escrever o id do addon por extenso.
+    final emitido = (jsonDecode(_emitido()) as List).cast<Map<String, dynamic>>();
+
+    // O produtor manda o nome **cru** da pasta, não um slug já pronto. No dia
+    // em que ele mandar pronto, o consumidor deriva em cima de derivado e o id
+    // muda sem ninguém ter mexido na regra de id.
+    expect(emitido.map((c) => c['name']).toList(), <String>['PSP', 'SNES']);
+    // E o consumidor chaveia pelo slug, escrito por extenso. Se a regra de id
+    // mudar, é aqui que cai.
+    expect(CatalogService.parseConsoles(_emitido()).keys.toList(), <String>['psp', 'snes']);
   });
 
   test('o RTS não emite token, então a colheita não muda o que ele mandou', () async {
@@ -9512,7 +9529,9 @@ void main() {
 
 O último caso fixa o id por extenso, e não por `Addon.idFromUrl(...)` dos dois lados, porque uma asserção que chama a mesma função que produziu o valor passa mesmo quando a função está errada. `192_168_0_10_8080_consoles_json` é feio e é o ponto: esse é o nome do arquivo que vai para `config/addons/`, e vê-lo escrito uma vez no teste é o que impede alguém de "melhorar" o slug sem perceber que ele é chave de cofre.
 
-`_pastas` aparece nos três casos de laço de propósito: a lista de pastas é a entrada do produtor, então varrer ela é varrer exatamente o que o RTS emitiu, sem depender de o consumidor ter parseado certo.
+`_pastas` é varrida em laço no terceiro caso de propósito: a lista de pastas é a entrada do produtor, então varrer ela é varrer exatamente o que o RTS emitiu, sem depender de o consumidor ter parseado certo.
+
+O segundo caso também era um laço sobre `_pastas`, e a versão que ele tinha é o registro de que este vício reincide. O último caso deste arquivo se gaba, com razão, de escrever `192_168_0_10_8080_consoles_json` por extenso em vez de chamar `Addon.idFromUrl` dos dois lados; três casos acima, o segundo fazia exatamente o que o último evita. Ele escrevia `parseConsoles(_emitido()).containsKey(consoleId(pasta.name))`, e os dois lados disso são `_nameToId` do mesmo nome: o produtor emite `'name': f.name` verbatim e `parseConsoles` chaveia com `_nameToId(name)`, enquanto `consoleId` é `_nameToId`. A asserção era verdadeira para qualquer regra de id, inclusive uma quebrada, e o comentário vendia justamente a garantia que o código não dava. Pior que não ter o caso: um caso que promete detecção e não detecta faz a próxima pessoa confiar. A versão de agora ancora cada asserção num literal, e cobre uma coisa que o primeiro caso não cobre, que é o produtor mandar o nome cru em vez de um slug já pronto.
 
 - [ ] **Step 2: Rode**
 

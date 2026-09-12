@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
@@ -26,13 +28,28 @@ void main() {
   });
 
   test('o id que o RTS gera é o id que o consumidor calcula', () {
-    // O RTS emite `name` e o consumidor deriva o id com
-    // `CatalogService.consoleId(name)`. Se as duas regras divergirem, a pasta
-    // compartilhada vira um console com id que nenhuma outra fonte casa, e o
-    // MODO PACK para de reconhecer a pasta local como fonte do mesmo jogo.
-    for (final pasta in _pastas) {
-      expect(CatalogService.parseConsoles(_emitido()).containsKey(CatalogService.consoleId(pasta.name)), isTrue);
-    }
+    // Se as duas pontas divergirem, a pasta compartilhada vira um console com
+    // id que nenhuma outra fonte casa, e o MODO PACK para de reconhecer a pasta
+    // local como fonte do mesmo jogo.
+    //
+    // As duas asserções têm um lado **literal** de propósito. A primeira versão
+    // deste caso escrevia `parseConsoles(_emitido()).containsKey(consoleId(
+    // pasta.name))`, e isso não prova nada: `consoleId` é `_nameToId`
+    // (`catalog_service.dart`), e `parseConsoles` chaveia com `_nameToId` do
+    // mesmo `name` que o produtor emitiu verbatim. Os dois lados eram a mesma
+    // chamada, então a asserção era verdadeira para **qualquer** implementação
+    // da regra, inclusive uma quebrada, que é o oposto do que o nome do caso
+    // promete. É o mesmo vício que o último caso deste arquivo evita de
+    // propósito ao escrever o id do addon por extenso.
+    final emitido = (jsonDecode(_emitido()) as List).cast<Map<String, dynamic>>();
+
+    // O produtor manda o nome **cru** da pasta, não um slug já pronto. No dia
+    // em que ele mandar pronto, o consumidor deriva em cima de derivado e o id
+    // muda sem ninguém ter mexido na regra de id.
+    expect(emitido.map((c) => c['name']).toList(), <String>['PSP', 'SNES']);
+    // E o consumidor chaveia pelo slug, escrito por extenso. Se a regra de id
+    // mudar, é aqui que cai.
+    expect(CatalogService.parseConsoles(_emitido()).keys.toList(), <String>['psp', 'snes']);
   });
 
   test('o RTS não emite token, então a colheita não muda o que ele mandou', () async {
