@@ -117,8 +117,14 @@ void main() {
     });
 
     test('setConsoleAuthToken é o caso particular do embutido', () async {
-      // Quatro telas ainda chamam o nome antigo. Ele não pode virar outra
-      // coisa por baixo.
+      // Nenhuma tela chama mais este nome: medido, `setConsoleAuthToken` só
+      // aparece na própria definição (`settings_provider.dart:172`), no doc
+      // comment dela e neste arquivo. O caso fica de pé assim mesmo, porque é
+      // ele que tranca a equivalência com `setAddonToken(kBuiltinAddonId, ...)`
+      // para o dia em que um chamador voltar.
+      //
+      // Esta linha já afirmou "quatro telas ainda chamam o nome antigo", e era
+      // falsa: é a gêmea da contagem que a Task 20 corrigiu do lado de `lib/`.
       final m = await _montar();
 
       await m.container.read(settingsProvider.notifier).setConsoleAuthToken('snes', 'tok');
