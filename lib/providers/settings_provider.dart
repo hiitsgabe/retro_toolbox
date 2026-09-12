@@ -165,10 +165,15 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<String> readAddonToken(String addonId, String consoleId) async =>
       _settingsService.readAddonToken(addonId, consoleId, await _vault);
 
-  /// O caso particular do addon embutido. Continua existindo com este nome
-  /// porque quatro telas o chamam.
+  /// O caso particular do addon embutido: escreve no par (embutido, console).
+  /// Depois da Task 20 nenhum sítio de `lib/` chama, e o que o segura é o caso
+  /// `'setConsoleAuthToken é o caso particular do embutido'`, que trava a
+  /// equivalência com `setAddonToken(kBuiltinAddonId, ...)`.
   Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
 
+  /// O espelho síncrono do embutido, e só dele. Sem leitor desde a Task 20:
+  /// para addon de terceiro devolve `null` mesmo havendo token no cofre, então
+  /// quem for usar isto provavelmente quer `readAddonToken`.
   String? getConsoleAuthToken(String consoleId) {
     return state.consoleSettings[consoleId]?.authToken;
   }

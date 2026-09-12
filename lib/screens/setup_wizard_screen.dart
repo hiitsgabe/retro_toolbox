@@ -432,7 +432,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 title: Text(c.name),
                 subtitle: Text(consoleHasToken(settings, c.id) ? 'Connected' : 'Not connected'),
                 childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: [ConsoleAuthSetting(console: c)],
+                children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
               ),
             ),
           ),

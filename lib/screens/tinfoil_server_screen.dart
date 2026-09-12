@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
@@ -103,7 +104,7 @@ class TinfoilServerScreen extends ConsumerWidget {
             title: Text('${c.name} sign-in'),
             subtitle: Text(consoleHasToken(settings, c.id) ? 'Authenticated' : 'Required to download'),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [ConsoleAuthSetting(console: c)],
+            children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
           ),
         ),
         const SizedBox(height: 12),
