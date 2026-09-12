@@ -107,4 +107,16 @@ void main() {
     await m.container.read(addonProvider.notifier).reorder(1, 0);
     expect(m.container.read(sourcePriorityProvider), ['b', 'a']);
   });
+
+  test('addonNames mapeia cada id para o nome do addon', () async {
+    final m = await _montar(const [
+      Addon(id: 'myrient', name: 'Myrient'),
+      Addon(id: kBuiltinAddonId, name: 'Catálogo embutido'),
+    ]);
+
+    expect(m.container.read(addonNamesProvider), {
+      'myrient': 'Myrient',
+      kBuiltinAddonId: 'Catálogo embutido',
+    });
+  });
 }

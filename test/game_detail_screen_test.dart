@@ -69,6 +69,7 @@ Widget _host(
   GameResolver? resolver,
   SourceVerification Function(String filename)? verificacao,
   List<String> prioridade = const [],
+  Map<String, String> nomes = const {},
 }) {
   return ProviderScope(
     overrides: [
@@ -81,6 +82,7 @@ Widget _host(
       // `path_provider`. Num teste de widget sem plataforma isso lança
       // `MissingPluginException` dentro de um `Future` que ninguém espera.
       sourcePriorityProvider.overrideWithValue(prioridade),
+      addonNamesProvider.overrideWithValue(nomes),
       // Sobrescrita da família inteira, que vale para qualquer argumento.
       // Conferido que compila no Riverpod 2.6: `familia.overrideWith((ref,
       // arg) => ...)`, sem parênteses de argumento antes do `overrideWith`.
@@ -174,6 +176,7 @@ void main() {
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
         sourceVerificationProvider.overrideWith((ref, pedido) => SourceVerification.notVerified),
         sourcePriorityProvider.overrideWithValue(const []),
+        addonNamesProvider.overrideWithValue(const {}),
       ],
       child: MaterialApp(
         home: Consumer(builder: (context, ref, _) {
@@ -559,5 +562,41 @@ void main() {
     ));
 
     expect(find.text('10.0 B, lento'), findsOneWidget);
+  });
+
+  testWidgets('o destaque mostra o nome do addon, não o id', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'myrient_org_files')]),
+      nomes: const {'myrient_org_files': 'Myrient'},
+    ));
+
+    expect(find.text('4.0 MB, Myrient'), findsOneWidget);
+  });
+
+  testWidgets('a lista de outras fontes também mostra o nome', (tester) async {
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [
+        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'myrient_org_files'),
+        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'arquivo_do_fulano'),
+      ]),
+      nomes: const {'myrient_org_files': 'Myrient', 'arquivo_do_fulano': 'Arquivo do Fulano'},
+    ));
+
+    await tester.tap(find.text('outra fonte'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('20.0 B, Arquivo do Fulano, HTTP, casamento provável'), findsOneWidget);
+  });
+
+  testWidgets('addon que não está mais na lista cai no id, e não em branco', (tester) async {
+    // O usuário removeu o addon e o cache de jogo dele ainda está em disco.
+    // A informação vira ruim, e tem que continuar existindo: "4.0 MB, " com
+    // a vírgula pendurada é pior que um id feio.
+    await tester.pumpWidget(_host(
+      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'addon_removido')]),
+      nomes: const {},
+    ));
+
+    expect(find.text('4.0 MB, addon_removido'), findsOneWidget);
   });
 }
