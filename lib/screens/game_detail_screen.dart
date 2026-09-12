@@ -60,6 +60,7 @@ class GameDetailScreen extends ConsumerWidget {
     final selecionadas = ref.watch(catalogProvider.select((s) => s.selectedGames));
     final selecionado = selecionadas.contains(chave);
     final resolver = ref.watch(gameResolverProvider);
+    final nomesDeAddon = ref.watch(addonNamesProvider);
 
     // Os vereditos são resolvidos **aqui**, uma vez, e descem como dado. Os
     // widgets filhos não veem `ref`: eles são burros como todo o resto desta
@@ -147,6 +148,7 @@ class GameDetailScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             _Destaque(
               pick: escolha,
+              addonNames: nomesDeAddon,
               verification: vencedora.state,
               confirmadoPorCrc: split.confirmed,
               // Hesita só enquanto a hesitação pode mudar alguma coisa.
@@ -164,6 +166,7 @@ class GameDetailScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             _OutrasFontes(
               sources: outras,
+              addonNames: nomesDeAddon,
               descartadas: split.discarded.length,
               comecaAberta: split.noCertainty,
               onDownload: split.noCertainty ? baixarFonte : null,
@@ -291,6 +294,10 @@ class _Topo extends StatelessWidget {
 /// O card da versão escolhida. O motivo é a linha que não pode faltar.
 class _Destaque extends StatelessWidget {
   final SourcePick pick;
+
+  /// Id do addon para nome. Vazio é estado legítimo: quem não estiver no mapa
+  /// é desenhado pelo id.
+  final Map<String, String> addonNames;
   final SourceVerification verification;
   final bool confirmadoPorCrc;
   final bool hesita;
@@ -298,6 +305,7 @@ class _Destaque extends StatelessWidget {
 
   const _Destaque({
     required this.pick,
+    required this.addonNames,
     required this.verification,
     required this.confirmadoPorCrc,
     required this.hesita,
@@ -343,7 +351,8 @@ class _Destaque extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${formatBytes(pick.size)}, ${pick.sourceId}${selo == null ? '' : ', $selo'}',
+            '${formatBytes(pick.size)}, ${addonNames[pick.sourceId] ?? pick.sourceId}'
+            '${selo == null ? '' : ', $selo'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 2),
@@ -433,6 +442,7 @@ class _SemCerteza extends StatelessWidget {
 /// A lista da seção 7, com o contador da seção 8.
 class _OutrasFontes extends StatelessWidget {
   final List<VerifiedSource> sources;
+  final Map<String, String> addonNames;
   final int descartadas;
   final bool comecaAberta;
 
@@ -442,6 +452,7 @@ class _OutrasFontes extends StatelessWidget {
 
   const _OutrasFontes({
     required this.sources,
+    required this.addonNames,
     required this.descartadas,
     required this.comecaAberta,
     required this.onDownload,
@@ -468,6 +479,7 @@ class _OutrasFontes extends StatelessWidget {
           for (final item in sources)
             _LinhaFonte(
               item: item,
+              addonNames: addonNames,
               onDownload: onDownload == null ? null : () => onDownload!(item),
             ),
         ],
@@ -478,9 +490,10 @@ class _OutrasFontes extends StatelessWidget {
 
 class _LinhaFonte extends StatelessWidget {
   final VerifiedSource item;
+  final Map<String, String> addonNames;
   final VoidCallback? onDownload;
 
-  const _LinhaFonte({required this.item, required this.onDownload});
+  const _LinhaFonte({required this.item, required this.addonNames, required this.onDownload});
 
   @override
   Widget build(BuildContext context) {
@@ -498,7 +511,8 @@ class _LinhaFonte extends StatelessWidget {
           Text(
             // Os cinco pedaços que a seção 7 pede, mais o veredito da seção 8
             // quando existe um.
-            '${formatBytes(item.source.size)}, ${item.source.sourceId}, '
+            '${formatBytes(item.source.size)}, '
+            '${addonNames[item.source.sourceId] ?? item.source.sourceId}, '
             '$_kTipoFonte, ${_rotuloConfianca(item.source.confidence)}'
             '${selo == null ? '' : ', $selo'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),

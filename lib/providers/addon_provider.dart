@@ -15,6 +15,18 @@ final addonProvider = StateNotifierProvider<AddonNotifier, List<Addon>>((ref) {
 /// próprio poderia discordar da ordem que o usuário vê na tela.
 final sourcePriorityProvider = Provider<List<String>>((ref) => [for (final addon in ref.watch(addonProvider)) addon.id]);
 
+/// Do id do addon para o nome que o usuário escreveu ou que o catálogo trouxe.
+///
+/// A seção 7 do spec de UI pede "4.0 MB, Myrient", e `SourcePick.sourceId`
+/// guarda `myrient_org_files`, que é chave de cofre e nome de arquivo. Mapa e
+/// não busca linear porque a lista de outras fontes resolve um nome por linha.
+///
+/// Quem lê tem que tratar id ausente: o cache de jogo de um addon removido
+/// sobrevive à remoção, e o `sourceId` dele não está mais na lista.
+final addonNamesProvider = Provider<Map<String, String>>(
+  (ref) => {for (final addon in ref.watch(addonProvider)) addon.id: addon.name},
+);
+
 class AddonNotifier extends StateNotifier<List<Addon>> {
   final Future<AddonStore> _store;
 
