@@ -6858,6 +6858,7 @@ git commit -m "feat(seguranca): token por par addon e console, e bloqueio de lot
 - Modify: `lib/widgets/settings/settings_content.dart:158`
 - Modify: `lib/screens/tinfoil_server_screen.dart:106` (o segundo chamador, mais o import)
 - Modify: `lib/screens/setup_wizard_screen.dart:435` (o terceiro chamador)
+- Modify: `lib/providers/settings_provider.dart:168-174` (dois docs que ficam sem leitor)
 - Test: `test/console_auth_setting_test.dart`
 
 `ConsoleAuthSetting` é o formulário que a seção 9 pede dentro do detalhe do addon ("**Conta**: o formulário de credencial"). Ele já existe e já sabe fazer login por usuário e senha, colar token cru, mostrar a mensagem do catálogo e deslogar. O que ele não sabe é de qual addon é o token: ele lê `settingsProvider.consoleSettings[id].authToken`, que depois da Task 19 é o espelho do embutido e mais nada.
@@ -7166,6 +7167,31 @@ Em `lib/screens/setup_wizard_screen.dart`, linha 435:
 
 Aqui o import **já existe**, na linha 7, posto pela Task 9: o arquivo já escreve `kBuiltinAddonId` três vezes, nas linhas 100, 112 e 124. Não duplique.
 
+- [ ] **Step 4c: Dois métodos do notifier ficam sem leitor, e um comentário fica mentindo**
+
+Esta Task é a que esvazia os dois, então é aqui que o texto se acerta. Nada disso quebra build nem lint: os dois são públicos, e `unused_element` só pega declaração privada. É higiene de texto, e o motivo de fazer agora é que daqui a seis meses ninguém mais sabe.
+
+`setConsoleAuthToken` (`settings_provider.dart:170`) carrega o doc que a Task 19 escreveu: *"Continua existindo com este nome porque quatro telas o chamam."* **Isso nunca foi verdade.** Medido em `ef5ee57`, antes da fatia começar: são três chamadas, e as três no mesmo arquivo, `console_auth_setting.dart:52`, `:72` e `:86`. Um widget, não quatro telas. O Step 3 troca as três por `_guardar`, então depois desta Task sobram **zero** chamadas em `lib/`, e só a da Task 19 em `test/addon_token_test.dart:124`.
+
+O método fica, porque aquele caso de teste é o contrato do embutido e quem vier depois vai precisar dele. O que sai é a justificativa falsa:
+
+```dart
+  /// O caso particular do addon embutido: escreve no par (embutido, console).
+  /// Depois da Task 20 nenhum sítio de `lib/` chama, e o que o segura é o caso
+  /// `'setConsoleAuthToken é o caso particular do embutido'`, que trava a
+  /// equivalência com `setAddonToken(kBuiltinAddonId, ...)`.
+  Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
+```
+
+`getConsoleAuthToken`, logo abaixo, é o outro: `console_auth_setting.dart:29` era o **único** leitor dele no repositório inteiro (medido em `lib/` e `test/`), e o Step 3 apaga essa linha. Ele lê o espelho síncrono, que agora é só do embutido, e é exatamente a armadilha que o **Tropeço** do Step 3 descreve, com a diferença de que é um método público e não uma linha de `build`. Não apague nesta Task, que não é escopo, e some um método público sem teste que o cubra. Marque:
+
+```dart
+  /// O espelho síncrono do embutido, e só dele. Sem leitor desde a Task 20:
+  /// para addon de terceiro devolve `null` mesmo havendo token no cofre, então
+  /// quem for usar isto provavelmente quer `readAddonToken`.
+  String? getConsoleAuthToken(String consoleId) {
+```
+
 - [ ] **Step 5: Rode para ver passar**
 
 ```bash
@@ -7196,7 +7222,7 @@ Esperado: `22 issues found`, build ok.
 ```bash
 git add test/console_auth_setting_test.dart
 git commit -m "test(addon): formulario de conta passa a ser do par addon e console"
-git add lib/widgets/settings/console_auth_setting.dart lib/widgets/settings/settings_content.dart lib/screens/tinfoil_server_screen.dart lib/screens/setup_wizard_screen.dart
+git add lib/widgets/settings/console_auth_setting.dart lib/widgets/settings/settings_content.dart lib/screens/tinfoil_server_screen.dart lib/screens/setup_wizard_screen.dart lib/providers/settings_provider.dart
 git commit -m "feat(addon): formulario de conta passa a ser do par addon e console"
 ```
 
