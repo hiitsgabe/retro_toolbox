@@ -9590,7 +9590,7 @@ Confira item por item, não só o total: o número bate por acaso quando um arqu
 git diff --name-only ef5ee57 -- test/ | sort
 ```
 
-Esperado: exatamente estes 32 arquivos.
+Esperado: exatamente estes 33 arquivos.
 
 ```
 test/accounts_setting_test.dart
@@ -9618,6 +9618,7 @@ test/secret_migration_test.dart
 test/secret_ref_test.dart
 test/secret_vault_test.dart
 test/secure_storage_vault_test.dart
+test/settings_hydrate_test.dart
 test/settings_model_secrets_test.dart
 test/settings_service_test.dart
 test/source_pick_service_test.dart
@@ -9627,7 +9628,9 @@ test/vault_provider_test.dart
 test/vault_warning_test.dart
 ```
 
-Cinco deles são **antigos** e foram modificados, não criados: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart` e `test/source_pick_service_test.dart`. Qualquer outro arquivo antigo nesta lista é achado, não ruído: quer dizer que a fatia mudou comportamento que ela não declarou mudar. `test/settings_service_test.dart` **não** é antigo: o repositório não tinha teste do `SettingsService` antes desta fatia.
+Cinco deles são **antigos** e foram modificados, não criados: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart` e `test/source_pick_service_test.dart`. Qualquer outro arquivo antigo nesta lista é achado, não ruído: quer dizer que a fatia mudou comportamento que ela não declarou mudar. `test/settings_service_test.dart` **não** é antigo: o repositório não tinha teste do `SettingsService` antes desta fatia. `test/settings_hydrate_test.dart` também não: a Task 8b o criou em `b5553bf` e a Task 9 mexeu nele em `41991eb`.
+
+Este Step já esteve errado, e o erro é o mesmo que o parágrafo da Task 9 conta de outro ângulo: a lista foi escrita antes de a Task 8b existir, e `test/settings_hydrate_test.dart`, que é dela, ficou de fora. O total dizia `32`. Medido com a fatia em `414c43f`, faltando só as Tasks 24 a 26: `git diff --name-only ef5ee57 -- test/ | sort` devolve 30 arquivos, e `comm` contra a lista deste Step acusava três ausências esperadas (`accounts_setting_test`, `rts_addon_contract_test` e `vault_warning_test`, que são das três Tasks que faltam) mais **uma presença não prevista**, o `settings_hydrate_test`. 30 mais as três de fora dá 33, e não 32. A lição é a do próprio Step 2 logo acima, e vale nos dois: confira item por item, porque um total que fecha não prova uma lista que fecha, e aqui o total nem fechava.
 
 `test/vault_contract.dart` e `test/support/fake_addon_store.dart` não terminam em `_test.dart` de propósito: são ajuda compartilhada e não têm `main`, então o runner não os executa sozinhos.
 
