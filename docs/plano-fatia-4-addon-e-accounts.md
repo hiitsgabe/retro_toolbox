@@ -5700,9 +5700,9 @@ git commit -m "feat(addon): as telas passam a ordem de addons do usuario para a 
 
 A seção 7 do spec de UI pede "4.0 MB, Myrient". Depois da Task 15, `SourcePick.sourceId` vale `myrient_org_files`, porque `Addon.idFromUrl` normaliza a url para virar chave de cofre e nome de arquivo. Chave é para máquina. A tela tem que mostrar o `Addon.name`.
 
-Os dois sítios que desenham o id são `game_detail_screen.dart:344`, dentro de `_Destaque`, e `:499`, dentro de `_LinhaFonte`. Os dois são `StatelessWidget`, e o arquivo tem uma regra escrita sobre isso: *"Os widgets filhos não veem `ref`: eles são burros como todo o resto desta fatia"* (`game_detail_screen.dart:63-65`). Então o mapa desce como dado, igual a todo o resto. Não transforme `_Destaque` em `ConsumerWidget`.
+Os dois sítios que desenham o id são `game_detail_screen.dart:346`, dentro de `_Destaque`, e `:501`, dentro de `_LinhaFonte`. Os dois são `StatelessWidget`, e o arquivo tem uma regra escrita sobre isso: *"Os widgets filhos não veem `ref`: eles são burros como todo o resto desta fatia"* (`game_detail_screen.dart:64-66`). Então o mapa desce como dado, igual a todo o resto. Não transforme `_Destaque` em `ConsumerWidget`.
 
-**De quando são os números de linha desta Task.** Todo `game_detail_screen.dart:NNN` daqui foi conferido contra a árvore de **hoje**, antes da Task 16. A Task 16 acrescenta duas linhas a este arquivo, o import de `addon_provider.dart` e o argumento `sourcePriority:` dentro da chamada das linhas 74 a 78, e as duas ficam acima de tudo que esta Task cita. Quando você chegar aqui, some 2. Isso é aritmética e não medição: confira pelo conteúdo citado, que é o que não se mexe.
+**De quando são os números de linha desta Task.** Todo `game_detail_screen.dart:NNN` daqui foi conferido contra a árvore **depois da Task 16**, que é a que você vai encontrar. A Task 16 somou duas linhas a este arquivo, e as duas não deslocam tudo por igual: o import de `addon_provider.dart` fica acima de tudo, mas o argumento `sourcePriority:` cai na linha 79, ou seja **abaixo** do `final resolver` e do comentário dos widgets burros. Por isso esses dois desceram uma linha só e o resto desceu duas. Medido, não calculado: eu escrevi "some 2 em tudo" antes de a Task 16 rodar e estava errado nos dois primeiros.
 
 - [ ] **Step 1: Escreva os testes que falham**
 
@@ -5814,13 +5814,13 @@ final addonNamesProvider = Provider<Map<String, String>>(
 
 - [ ] **Step 4: O mapa desce até quem desenha**
 
-Em `lib/screens/game_detail_screen.dart`, dentro do `build`, logo depois de `final resolver = ref.watch(gameResolverProvider);` (linha 61):
+Em `lib/screens/game_detail_screen.dart`, dentro do `build`, logo depois de `final resolver = ref.watch(gameResolverProvider);` (linha 62):
 
 ```dart
     final nomesDeAddon = ref.watch(addonNamesProvider);
 ```
 
-passe para o `_Destaque` (linhas 146 a 153):
+passe para o `_Destaque` (linhas 148 a 155):
 
 ```dart
             _Destaque(
@@ -5834,7 +5834,7 @@ passe para o `_Destaque` (linhas 146 a 153):
             ),
 ```
 
-e para o `_OutrasFontes` (linhas 163 a 168):
+e para o `_OutrasFontes` (linhas 165 a 170):
 
 ```dart
             _OutrasFontes(
@@ -5846,7 +5846,7 @@ e para o `_OutrasFontes` (linhas 163 a 168):
             ),
 ```
 
-Em `_Destaque` (linha 290), acrescente o campo e o parâmetro:
+Em `_Destaque` (linha 292), acrescente o campo e o parâmetro:
 
 ```dart
 class _Destaque extends StatelessWidget {
@@ -5870,14 +5870,14 @@ class _Destaque extends StatelessWidget {
   });
 ```
 
-e troque a linha 344:
+e troque a linha 346:
 
 ```dart
             '${formatBytes(pick.size)}, ${addonNames[pick.sourceId] ?? pick.sourceId}'
             '${selo == null ? '' : ', $selo'}',
 ```
 
-Em `_OutrasFontes` (linha 432), acrescente o campo, o parâmetro, e o repasse:
+Em `_OutrasFontes` (linha 434), acrescente o campo, o parâmetro, e o repasse:
 
 ```dart
 class _OutrasFontes extends StatelessWidget {
@@ -5908,7 +5908,7 @@ class _OutrasFontes extends StatelessWidget {
             ),
 ```
 
-Em `_LinhaFonte` (linha 477):
+Em `_LinhaFonte` (linha 479):
 
 ```dart
 class _LinhaFonte extends StatelessWidget {
@@ -5919,7 +5919,7 @@ class _LinhaFonte extends StatelessWidget {
   const _LinhaFonte({required this.item, required this.addonNames, required this.onDownload});
 ```
 
-e troque a linha 499:
+e troque a linha 501:
 
 ```dart
             '${formatBytes(item.source.size)}, '
@@ -5928,7 +5928,7 @@ e troque a linha 499:
 
 **Tropeço provável:** trocar o `?? item.source.sourceId` por `?? ''` ou por `?? 'desconhecido'`. O primeiro deixa `"4.0 MB, , HTTP, ..."` na tela, com a vírgula pendurada, e é o que acontece com todo jogo em cache de um addon removido. O segundo apaga a única pista que o usuário tem de onde o arquivo veio. O id feio é a resposta certa aqui.
 
-**Segundo tropeço:** transformar `_Destaque` ou `_LinhaFonte` em `ConsumerWidget` para ler o provider direto. Funciona e quebra a regra escrita em `game_detail_screen.dart:63-65`, que existe por um motivo medido na fatia 3: os widgets filhos são testados pelo `_host`, com dado injetado, e um `ref` dentro deles obrigaria todo teste de widget filho a montar `ProviderScope`.
+**Segundo tropeço:** transformar `_Destaque` ou `_LinhaFonte` em `ConsumerWidget` para ler o provider direto. Funciona e quebra a regra escrita em `game_detail_screen.dart:64-66`, que existe por um motivo medido na fatia 3: os widgets filhos são testados pelo `_host`, com dado injetado, e um `ref` dentro deles obrigaria todo teste de widget filho a montar `ProviderScope`.
 
 - [ ] **Step 5: Rode para ver passar**
 
