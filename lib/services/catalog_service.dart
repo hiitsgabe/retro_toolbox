@@ -58,7 +58,7 @@ class CatalogService {
       final cru = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
       if (cru == null) continue;
       try {
-        catalogos.add((addonId: addon.id, consoles: _parseConsoles(cru)));
+        catalogos.add((addonId: addon.id, consoles: parseConsoles(cru)));
       } catch (e) {
         // Um addon com JSON quebrado não pode derrubar os outros: o usuário
         // perderia a biblioteca inteira por causa de uma fonte de terceiro.
@@ -109,7 +109,7 @@ class CatalogService {
     return RegExp(r'archive\.org/(?:download|details)/([^/]+)').firstMatch(s)?.group(1);
   }
 
-  static Map<String, Console> _parseConsoles(String jsonStr) {
+  static Map<String, Console> parseConsoles(String jsonStr) {
     final decoded = jsonDecode(jsonStr);
     final consoles = <String, Console>{};
     if (decoded is List) {
@@ -200,7 +200,7 @@ class CatalogService {
   /// active catalog source, and clears caches. Throws on invalid content.
   Future<void> setCatalogFromJson(String jsonStr, {required SecretVault vault, required String addonId}) async {
     final limpo = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
-    final consoles = _parseConsoles(limpo);
+    final consoles = parseConsoles(limpo);
     if (consoles.isEmpty) {
       throw const FormatException('No consoles found in the provided catalog.');
     }
