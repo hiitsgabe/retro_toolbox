@@ -9053,7 +9053,17 @@ void main() {
     await _abrir(tester, notifier: notifier);
 
     final titulos = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).whereType<String>().toList();
-    expect(titulos.indexOf('outro.org') < titulos.indexOf('myrient.erista.me'), isTrue);
+    final primeiro = titulos.indexOf('outro.org');
+    final segundo = titulos.indexOf('myrient.erista.me');
+    // Os dois `isNonNegative` não são zelo: `indexOf` devolve `-1` para ausente,
+    // e `-1` é menor que qualquer índice válido. Sem eles, comparar os dois
+    // direto faz o caso **passar justamente quando o bloco que deveria vir
+    // primeiro sumiu da árvore**, que é metade do defeito que ele existe para
+    // pegar. Quem tranca a presença é o caso anterior, mas ele é outro caso: um
+    // `--plain-name` neste aqui o roda sozinho.
+    expect(primeiro, isNonNegative);
+    expect(segundo, isNonNegative);
+    expect(primeiro < segundo, isTrue);
   });
 
   testWidgets('o formulário de dentro recebe o par certo', (tester) async {
@@ -9135,6 +9145,8 @@ void main() {
 O último caso é o que justifica a lista ser derivada e não guardada. `mergedCatalogProvider` já observa `addonProvider` (Task 22), então remover o addon reconstrói a fusão, a fusão reconstrói os pares, e a linha some sozinha. Se alguém trocar o `ref.watch` por um `ref.read`, é este caso que cai.
 
 `'Save'` e `'Not connected'` ficam em inglês porque são os textos que já existem nos widgets (`console_auth_setting.dart` e `accounts_setting.dart`). Esta Task não traduz tela.
+
+Os dois `isNonNegative` do caso de ordem chegaram depois, por revisão de qualidade, e a versão anterior mostra um jeito de um caso verde não provar nada. Ela era uma linha: `expect(titulos.indexOf('outro.org') < titulos.indexOf('myrient.erista.me'), isTrue)`. O nome do caso fala de **ordem**, mas `indexOf` responde `-1` para ausente, e `-1` é menor que zero, então o caso também ficava verde no cenário em que o primeiro bloco simplesmente não estava na árvore. Ou seja, ele passava tanto na ordem certa quanto numa das duas quebras que deveria pegar. A defesa que existia era acidental e de fora: o caso anterior tranca a presença dos dois nomes com `findsOneWidget`, então a **suíte** acusaria o sumiço. Mas caso é unidade, e `--plain-name` roda um sozinho; um caso que só está são por causa do vizinho está são por sorte. A lição vale além deste arquivo: **toda comparação sobre o retorno de uma busca que sinaliza ausência por valor especial precisa afirmar a presença antes de comparar**, porque o valor de ausência quase sempre satisfaz metade das comparações que você ia escrever.
 
 O `await tester.pump()` do sexto caso já esteve faltando aqui, e o modo como o caso caía é a razão de o comentário ser tão comprido. O sintoma era `Expected: 'tok-novo' / Actual: <null>` na leitura do cofre, ou seja, **o teste apontava para a produção**: parecia que `_guardar` não gravava, ou que o `onSaved` da Task 19 não chegava. Não era nada disso. O `tap` caía num botão desabilitado e virava no-op silencioso, então nenhuma linha de produção chegou a rodar, e é por isso que o erro não tinha stack de produção nenhuma: só a asserção. Um `tap` que não levanta e não faz nada é o pior vizinho de um `expect` que lê `null`.
 

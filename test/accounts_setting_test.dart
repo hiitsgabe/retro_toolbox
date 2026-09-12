@@ -108,7 +108,17 @@ void main() {
     await _abrir(tester, notifier: notifier);
 
     final titulos = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).whereType<String>().toList();
-    expect(titulos.indexOf('outro.org') < titulos.indexOf('myrient.erista.me'), isTrue);
+    final primeiro = titulos.indexOf('outro.org');
+    final segundo = titulos.indexOf('myrient.erista.me');
+    // Os dois `isNonNegative` não são zelo: `indexOf` devolve `-1` para ausente,
+    // e `-1` é menor que qualquer índice válido. Sem eles, comparar os dois
+    // direto faz o caso **passar justamente quando o bloco que deveria vir
+    // primeiro sumiu da árvore**, que é metade do defeito que ele existe para
+    // pegar. Quem tranca a presença é o caso anterior, mas ele é outro caso: um
+    // `--plain-name` neste aqui o roda sozinho.
+    expect(primeiro, isNonNegative);
+    expect(segundo, isNonNegative);
+    expect(primeiro < segundo, isTrue);
   });
 
   testWidgets('o formulário de dentro recebe o par certo', (tester) async {
