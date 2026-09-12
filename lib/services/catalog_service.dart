@@ -4,58 +4,91 @@ import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
+import 'package:roms_downloader/services/addon_store.dart';
+import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/utils/title_metadata_parser.dart';
 import 'package:roms_downloader/services/boxart_service.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
 
 const _iaMetadataBase = 'https://archive.org/metadata/';
 const _iaDownloadBase = 'https://archive.org/download/';
 
 class CatalogService {
-  static final Map<String, Map<String, Console>> _consolesCache = {};
+  /// O catálogo fundido de todos os addons instalados. Um só, porque a lista
+  /// de addons é uma só. Invalidado por `clearCache`, que toda escrita de
+  /// catálogo chama.
+  static MergedCatalog? _merged;
   final BoxartService _boxartService = BoxartService();
 
-  Future<Map<String, Console>> getConsoles([String consolesFilePath = 'consoles.json']) async {
-    if (_consolesCache.containsKey(consolesFilePath) && _consolesCache[consolesFilePath]!.isNotEmpty) {
-      return _consolesCache[consolesFilePath]!;
-    }
+  /// Os consoles de todos os addons instalados, fundidos.
+  ///
+  /// O parâmetro `consolesFilePath` que este método tinha nunca foi usado com
+  /// valor diferente do padrão pelos nove chamadores, e não sobreviveria à
+  /// lista de addons, onde não existe "o arquivo".
+  Future<Map<String, Console>> getConsoles() async => (await mergedCatalog()).consoles;
 
-    String jsonStr = '';
+  /// De onde vem cada url de um console, na mesma ordem de `console.urls`.
+  Future<List<ConsoleSource>> sourcesFor(String consoleId) async => (await mergedCatalog()).sources[consoleId] ?? const [];
+
+  Future<MergedCatalog> mergedCatalog() async {
+    final cache = _merged;
+    if (cache != null && !cache.isEmpty) return cache;
     try {
-      // Precedence: user-provided config (imported file / URL) → optional
-      // bundled catalog (assets/catalog/, git-ignored) → none.
-      final supportDir = await getApplicationSupportDirectory();
-      final consolesFile = File(path.join(supportDir.path, 'config', consolesFilePath));
-      if (await consolesFile.exists()) {
-        jsonStr = await consolesFile.readAsString();
-      } else {
-        jsonStr = await rootBundle.loadString('assets/catalog/$consolesFilePath');
-      }
+      return buildCatalog(await AddonStore.open());
     } catch (e) {
       debugPrint('No catalog source configured yet: $e');
-      return {};
+      return const MergedCatalog();
     }
-
-    final consoles = _parseConsoles(jsonStr);
-
-    if (consoles.isNotEmpty) {
-      _consolesCache[consolesFilePath] = consoles;
-    }
-
-    return consoles;
   }
 
-  /// Synchronous lookup from the in-memory consoles cache (populated on the
-  /// first getConsoles call at startup). Null before that or for unknown ids.
+  /// Lê e funde os catálogos dos addons de [store].
+  ///
+  /// Público porque `AddonStore.open()` passa por `path_provider`, que num
+  /// teste sem plataforma lança `MissingPluginException`. Com o store entrando
+  /// por parâmetro, o teste monta uma raiz em `Directory.systemTemp` e
+  /// exercita disco de verdade.
+  Future<MergedCatalog> buildCatalog(AddonStore store) async {
+    final catalogos = <AddonCatalog>[];
+    for (final addon in store.load()) {
+      final cru = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
+      if (cru == null) continue;
+      try {
+        catalogos.add((addonId: addon.id, consoles: parseConsoles(cru)));
+      } catch (e) {
+        // Um addon com JSON quebrado não pode derrubar os outros: o usuário
+        // perderia a biblioteca inteira por causa de uma fonte de terceiro.
+        debugPrint('Catálogo ilegível do addon ${addon.id}: $e');
+      }
+    }
+    final merged = mergeCatalogs(catalogos);
+    if (!merged.isEmpty) _merged = merged;
+    return merged;
+  }
+
+  /// O catálogo de exemplo empacotado no app (`assets/catalog/`, git-ignored).
+  ///
+  /// Só o embutido tem um, e é a terceira e última precedência dele: arquivo
+  /// do usuário, asset, nada. É a mesma precedência de antes da fatia 4.
+  static Future<String?> _bundledCatalog(String addonId) async {
+    if (addonId != kBuiltinAddonId) return null;
+    try {
+      return await rootBundle.loadString('assets/catalog/consoles.json');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Esquece o catálogo fundido. Toda escrita de catálogo chama.
+  static void clearCache() => _merged = null;
+
   static Console? consoleByIdSync(String? id) {
     if (id == null) return null;
-    for (final consoles in _consolesCache.values) {
-      final console = consoles[id];
-      if (console != null) return console;
-    }
-    return null;
+    return _merged?.consoles[id];
   }
 
   static String _nameToId(String name) {
@@ -76,7 +109,7 @@ class CatalogService {
     return RegExp(r'archive\.org/(?:download|details)/([^/]+)').firstMatch(s)?.group(1);
   }
 
-  static Map<String, Console> _parseConsoles(String jsonStr) {
+  static Map<String, Console> parseConsoles(String jsonStr) {
     final decoded = jsonDecode(jsonStr);
     final consoles = <String, Console>{};
     if (decoded is List) {
@@ -104,21 +137,81 @@ class CatalogService {
     return File(path.join(supportDir.path, 'config', consolesFilePath));
   }
 
+  /// Tira `auth.token` de todo o catálogo e guarda o que achou no cofre.
+  ///
+  /// O catálogo é o arquivo que o usuário compartilha com outra pessoa. O
+  /// formato permite token lá dentro, e a seção 6.3 do spec manda mover para o
+  /// cofre na instalação. Esta é a metade da correção que vale em toda
+  /// plataforma: tirar do arquivo não depende de haver chaveiro.
+  ///
+  /// Onde havia `token`, deixa `requires_token: true`. A marca não é segredo:
+  /// ela diz que o console pede token, não qual é, e o arquivo que descreve o
+  /// console é exatamente o lugar dela. Sem a marca, [Console.hasTokenAuth]
+  /// viraria falso e o usuário perderia a tela onde digitaria o token.
+  ///
+  /// Devolve o JSON limpo. Não valida formato: quem valida é
+  /// [setCatalogFromJson], que tem mensagem de erro própria, e levantar aqui
+  /// trocaria essa mensagem por um stack trace.
+  static Future<String> harvestAuthTokens(String jsonStr, {required SecretVault vault, required String addonId}) async {
+    final decoded = jsonDecode(jsonStr);
+
+    Future<void> colher(String id, Map<dynamic, dynamic> item) async {
+      final auth = item['auth'];
+      if (auth is! Map) return;
+      if (!auth.containsKey('token')) return;
+      final token = auth.remove('token');
+      // A marca entra mesmo quando o token vem vazio, porque é o `containsKey`
+      // que ela substitui, não o valor. `{'token': ''}` é como um catálogo
+      // compartilhado diz "este console pede token e eu não estou te dando o
+      // meu": quem lê tem que continuar sabendo disso.
+      auth['requires_token'] = true;
+      if (token is! String || token.isEmpty) return;
+      final chave = SecretRef.addonToken(addonId, id);
+      // O que já está no cofre é o mais novo: reinstalar um catálogo velho não
+      // pode devolver ao usuário um token que ele já trocou.
+      if (await vault.read(chave) != null) return;
+      await vault.write(chave, token);
+    }
+
+    if (decoded is List) {
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final name = item['name'] as String? ?? '';
+        if (name.isEmpty) continue;
+        // As entradas de descoberta (`list_systems`) não viram console, e ainda
+        // assim entram aqui: o arquivo compartilhado é o mesmo e o token lá
+        // dentro vaza igual.
+        await colher(_nameToId(name), item);
+      }
+    } else if (decoded is Map) {
+      for (final entrada in decoded.entries) {
+        final valor = entrada.value;
+        if (valor is! Map) continue;
+        await colher(entrada.key.toString(), valor);
+      }
+    } else {
+      return jsonStr;
+    }
+
+    return jsonEncode(decoded);
+  }
+
   /// Validates [jsonStr] parses into at least one console, saves it as the
   /// active catalog source, and clears caches. Throws on invalid content.
-  Future<void> setCatalogFromJson(String jsonStr) async {
-    final consoles = _parseConsoles(jsonStr);
+  Future<void> setCatalogFromJson(String jsonStr, {required SecretVault vault, required String addonId}) async {
+    final limpo = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
+    final consoles = parseConsoles(limpo);
     if (consoles.isEmpty) {
       throw const FormatException('No consoles found in the provided catalog.');
     }
     final file = await _userConsolesFile();
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonStr);
-    _consolesCache.clear();
+    await file.writeAsString(limpo);
+    clearCache();
   }
 
   /// Fetches a catalog from [url] and installs it. Throws on network/format error.
-  Future<void> setCatalogFromUrl(String url) async {
+  Future<void> setCatalogFromUrl(String url, {required SecretVault vault, required String addonId}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     try {
@@ -128,7 +221,7 @@ class CatalogService {
         throw HttpException('HTTP ${response.statusCode} fetching catalog');
       }
       final body = await response.transform(utf8.decoder).join();
-      await setCatalogFromJson(body);
+      await setCatalogFromJson(body, vault: vault, addonId: addonId);
     } finally {
       client.close();
     }
@@ -180,28 +273,30 @@ class CatalogService {
     final merged = appendConsoleToRaw(raw, id, {...console.toJson(), 'added': true});
     await file.parent.create(recursive: true);
     await file.writeAsString(merged);
-    _consolesCache.clear();
+    clearCache();
   }
 
   /// Removes the user catalog, reverting to the bundled example (if any).
   Future<void> resetCatalog() async {
     final file = await _userConsolesFile();
     if (await file.exists()) await file.delete();
-    _consolesCache.clear();
+    clearCache();
   }
 
   Future<bool> hasUserCatalog() async => (await _userConsolesFile()).exists();
 
   Future<List<Game>> loadCatalog(String consoleId,
-      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
-    final consoles = await getConsoles();
+      {String? iaAccessKey,
+      String? iaSecretKey,
+      Map<String, String> tokens = const {},
+      void Function(int done, int total)? onProgress}) async {
+    final merged = await mergedCatalog();
+    final console = merged.consoles[consoleId];
 
-    if (!consoles.containsKey(consoleId)) {
+    if (console == null) {
       debugPrint("Console with id '$consoleId' not found");
       return [];
     }
-
-    Console console = consoles[consoleId]!;
 
     final cacheFile = await _getCacheFile(console.cacheFile);
     if (await cacheFile.exists()) {
@@ -224,42 +319,23 @@ class CatalogService {
       }
     }
 
-    return _fetchCatalog(console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken, onProgress: onProgress);
+    return _fetchCatalog(console, merged.sources[consoleId] ?? const [],
+        iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, tokens: tokens, onProgress: onProgress);
   }
 
-  Future<List<Game>> _fetchCatalog(Console console,
-      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
+  Future<List<Game>> _fetchCatalog(Console console, List<ConsoleSource> sources,
+      {String? iaAccessKey,
+      String? iaSecretKey,
+      Map<String, String> tokens = const {},
+      void Function(int done, int total)? onProgress}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
 
     List<Game> catalog = [];
 
     try {
-      final total = console.urls.length;
-      var done = 0;
-      Object? firstError;
-      onProgress?.call(0, total);
-      final results = await Future.wait(
-        console.urls.map((url) =>
-            _fetchFromUrl(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken).then((games) {
-          onProgress?.call(++done, total);
-          return games;
-        }).catchError((Object e) {
-          // Keep partial results when only some pages fail; surface the
-          // error only when every page failed (e.g. auth required).
-          firstError ??= e;
-          onProgress?.call(++done, total);
-          return <Game>[];
-        })),
-      );
-      if (firstError != null && results.every((r) => r.isEmpty)) {
-        throw firstError!;
-      }
-
-      // Merge all results, sort alphabetically by title.
-      catalog = results.expand((games) => games).toList()
-        ..sort((a, b) => a.title.compareTo(b.title));
-
+      catalog = await fetchSources(client, console, sources,
+          iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, tokens: tokens, onProgress: onProgress);
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
       final cacheFile = await _getCacheFile(console.cacheFile);
       await cacheFile.writeAsString(jsonEncode(catalog.map((g) => g.toJson()).toList()));
@@ -273,13 +349,58 @@ class CatalogService {
     return catalog;
   }
 
-  Future<List<Game>> _fetchFromUrl(HttpClient client, String url, Console console, {String? iaAccessKey, String? iaSecretKey, String? authToken}) async {
+  /// Busca todas as [sources] em paralelo e devolve os jogos de todas, cada um
+  /// já marcado com o addon que o serviu, ordenados por título.
+  ///
+  /// Público e sem disco por uma razão de teste: `_fetchCatalog` grava o cache
+  /// por `getApplicationCacheDirectory`, que é `path_provider`, e num teste sem
+  /// plataforma lança. Aqui entra um `HttpClient` e sai uma lista.
+  ///
+  /// Cada fonte fala com a auth do addon que a declarou e com o token daquele
+  /// addon (`tokens[addonId]`). Antes da fatia 4 era uma auth e um token para
+  /// todas as urls do console, o que, com dois addons, mandaria o token do
+  /// primeiro para o servidor do segundo.
+  Future<List<Game>> fetchSources(HttpClient client, Console console, List<ConsoleSource> sources,
+      {String? iaAccessKey,
+      String? iaSecretKey,
+      Map<String, String> tokens = const {},
+      void Function(int done, int total)? onProgress}) async {
+    final total = sources.length;
+    var done = 0;
+    Object? firstError;
+    onProgress?.call(0, total);
+    final results = await Future.wait(
+      sources.map((source) => _fetchFromUrl(client, source, console,
+                  iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: tokens[source.addonId])
+              .then((games) {
+            onProgress?.call(++done, total);
+            return games;
+          }).catchError((Object e) {
+            // Mantém o resultado parcial quando só algumas páginas falham;
+            // o erro só sobe quando nenhuma entregou nada (ex.: auth exigida).
+            firstError ??= e;
+            onProgress?.call(++done, total);
+            return <Game>[];
+          })),
+    );
+    if (firstError != null && results.every((r) => r.isEmpty)) {
+      throw firstError!;
+    }
+
+    return results.expand((games) => games).toList()..sort((a, b) => a.title.compareTo(b.title));
+  }
+
+  Future<List<Game>> _fetchFromUrl(HttpClient client, ConsoleSource source, Console console,
+      {String? iaAccessKey, String? iaSecretKey, String? authToken}) async {
+    final url = source.url;
     if (_isArchiveOrgUrl(url)) {
-      return _fetchFromUrlIA(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey);
+      return _fetchFromUrlIA(client, source, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey);
     }
 
     final request = await client.getUrl(Uri.parse(url));
-    final headers = buildDownloadHeaders(url, buildConsoleAuthHeaders(console.auth, tokenOverride: authToken));
+    // `source.auth` e não `console.auth`: a auth pertence à url, não ao
+    // console, porque dois addons podem servir o mesmo console.
+    final headers = buildDownloadHeaders(url, buildConsoleAuthHeaders(source.auth, tokenOverride: authToken));
     headers.forEach(request.headers.set);
 
     final response = await request.close();
@@ -293,18 +414,19 @@ class CatalogService {
     final parsed = (trimmed.startsWith('[') || trimmed.startsWith('{'))
         ? _parseJsonListing(body, console, url)
         : await compute(_parseHtmlIsolate, [body, console.toJson(), url]);
-    return parsed.map((entry) => Game.fromJson(entry)).toList();
+    return parsed.map((entry) => Game.fromJson(entry).copyWith(sourceId: source.addonId)).toList();
   }
 
-  Future<List<Game>> _fetchFromUrlIA(HttpClient client, String url, Console console, {String? iaAccessKey, String? iaSecretKey}) async {
-    final itemId = _extractIAItemId(url);
+  Future<List<Game>> _fetchFromUrlIA(HttpClient client, ConsoleSource source, Console console,
+      {String? iaAccessKey, String? iaSecretKey}) async {
+    final itemId = _extractIAItemId(source.url);
     if (itemId == null) return [];
 
     final request = await client.getUrl(Uri.parse('$_iaMetadataBase$itemId'));
 
     // User-saved credentials take precedence over per-system auth config.
-    final resolvedKey = iaAccessKey ?? (console.auth?['type'] == 'ia_s3' ? console.auth!['access_key'] as String? : null);
-    final resolvedSecret = iaSecretKey ?? (console.auth?['type'] == 'ia_s3' ? console.auth!['secret_key'] as String? : null);
+    final resolvedKey = iaAccessKey ?? (source.auth?['type'] == 'ia_s3' ? source.auth!['access_key'] as String? : null);
+    final resolvedSecret = iaSecretKey ?? (source.auth?['type'] == 'ia_s3' ? source.auth!['secret_key'] as String? : null);
     if (resolvedKey != null && resolvedKey.isNotEmpty && resolvedSecret != null && resolvedSecret.isNotEmpty) {
       request.headers.set('Authorization', 'LOW $resolvedKey:$resolvedSecret');
     }
@@ -317,7 +439,7 @@ class CatalogService {
     final body = await response.transform(utf8.decoder).join();
     final parsed = await compute(_parseIAMetadataIsolate, [body, console.toJson(), itemId]);
     debugPrint('IA $itemId: body=${body.length}b parsed=${parsed.length} shouldUnzip=${console.shouldUnzip} fmts=${console.fileFormat}');
-    return parsed.map((entry) => Game.fromJson(entry)).toList();
+    return parsed.map((entry) => Game.fromJson(entry).copyWith(sourceId: source.addonId)).toList();
   }
 
   static bool _isArchiveOrgUrl(String url) => url.contains('archive.org/download/');
@@ -353,6 +475,19 @@ class CatalogService {
     } catch (e) {
       debugPrint('Error clearing catalog cache: $e');
     }
+  }
+
+  /// Esquece tudo que dependia da lista de addons: os arquivos de cache de
+  /// jogo de cada console **e depois** a fusão de catálogos.
+  ///
+  /// A ordem não é estilo. `clearCatalogCache` descobre quais arquivos apagar
+  /// iterando `getConsoles()`, então ela precisa do catálogo **antigo**.
+  /// Invertida, a varredura rodaria com a lista nova e deixaria para trás o
+  /// cache de um console que só o addon removido servia, e esse arquivo
+  /// continuaria alimentando a grade depois da remoção.
+  Future<void> invalidateForAddonChange() async {
+    await clearCatalogCache();
+    clearCache();
   }
 }
 

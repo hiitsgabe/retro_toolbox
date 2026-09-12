@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/console_model.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:roms_downloader/utils/console_auth.dart';
 import 'package:roms_downloader/utils/network.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
@@ -87,26 +88,23 @@ class TinfoilServerScreen extends ConsumerWidget {
         );
     if (consoles.isEmpty) return const [];
 
-    bool authed(Console c) =>
-        (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
-
     return [
       for (final c in consoles) ...[
         Card(
           margin: EdgeInsets.zero,
           child: ExpansionTile(
             // Rebuild the tile when auth flips so it collapses on sign-in.
-            key: ValueKey('auth_${c.id}_${authed(c)}'),
-            initiallyExpanded: !authed(c),
+            key: ValueKey('auth_${c.id}_${consoleHasToken(settings, c.id)}'),
+            initiallyExpanded: !consoleHasToken(settings, c.id),
             shape: const Border(),
             leading: Icon(
-              authed(c) ? Icons.check_circle : Icons.lock_outline,
-              color: authed(c) ? Colors.green : theme.colorScheme.error,
+              consoleHasToken(settings, c.id) ? Icons.check_circle : Icons.lock_outline,
+              color: consoleHasToken(settings, c.id) ? Colors.green : theme.colorScheme.error,
             ),
             title: Text('${c.name} sign-in'),
-            subtitle: Text(authed(c) ? 'Authenticated' : 'Required to download'),
+            subtitle: Text(consoleHasToken(settings, c.id) ? 'Authenticated' : 'Required to download'),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [ConsoleAuthSetting(console: c)],
+            children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
           ),
         ),
         const SizedBox(height: 12),

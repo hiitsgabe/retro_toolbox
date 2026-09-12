@@ -1,0 +1,54 @@
+name: Metadata Packs
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Todo dia 3 às 05:00 UTC, alguns dias depois do libretro-database
+    # publicar os DATs do mês.
+    - cron: '0 5 3 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run builder tests
+        working-directory: tool
+        run: python3 -m unittest discover -s . -p 'test_*.py' -v
+
+      - name: Build packs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 tool/build_metadata_pack.py \
+            --out dist/packs \
+            --built "$(date -u +%Y-%m-%d)"
+
+      - name: Check the output
+        run: |
+          test -f dist/packs/index.json
+          count=$(python3 -c "import json;print(len(json.load(open('dist/packs/index.json'))['packs']))")
+          test "$count" -eq 24 || { echo "esperava 24 pacotes, veio $count"; exit 1; }
+          ls -lh dist/packs
+
+      - name: Publish the packs release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          built=$(date -u +%Y-%m-%d)
+          if gh release view packs >/dev/null 2>&1; then
+            gh release edit packs --notes "Metadata packs de $built"
+          else
+            gh release create packs \
+              --title "Metadata packs" \
+              --notes "Metadata packs de $built"
+          fi
+          gh release upload packs dist/packs/* --clobber

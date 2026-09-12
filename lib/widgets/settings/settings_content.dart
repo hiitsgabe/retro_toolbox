@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
@@ -155,7 +156,11 @@ class SettingsContent extends StatelessWidget {
               context,
               icon: Icons.lock_outline,
               title: 'Authentication',
-              child: ConsoleAuthSetting(console: selectedConsole!),
+              // O painel de settings de um console é a porta do catálogo
+              // embutido. A conta de um addon de terceiro se edita em Accounts
+              // (Task 25) ou no detalhe do addon (Task 22), e as duas gravam na
+              // mesma chave de cofre.
+              child: ConsoleAuthSetting(console: selectedConsole!, addonId: kBuiltinAddonId),
             ),
           ],
           const SizedBox(height: 8),

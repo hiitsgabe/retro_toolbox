@@ -8,7 +8,9 @@ import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/favorites_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/models/library_snapshot_model.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/providers/library_snapshot_provider.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/filtering_service.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
@@ -55,11 +57,22 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     try {
       final settings = _ref.read(settingsProvider);
+      // Um token por addon que serve este console, não um token por console.
+      // A lista de addons não entra aqui: quem sabe quais addons servem este
+      // console é a fusão, e ler só esses evita ida ao cofre por addon que
+      // não tem nada a ver com o console aberto.
+      final vault = (await _ref.read(vaultProvider.future)).vault;
+      final tokens = <String, String>{};
+      for (final addonId in {for (final fonte in await catalogService.sourcesFor(console.id)) fonte.addonId}) {
+        final token = await vault.read(SecretRef.addonToken(addonId, console.id));
+        if (token != null && token.isNotEmpty) tokens[addonId] = token;
+      }
+
       final games = await catalogService.loadCatalog(
         console.id,
         iaAccessKey: settings.iaAccessKey,
         iaSecretKey: settings.iaSecretKey,
-        authToken: settings.consoleSettings[console.id]?.authToken,
+        tokens: tokens,
         onProgress: (done, total) {
           if (mounted && gen == _loadGeneration && total > 1) {
             state = state.copyWith(loadingStatus: 'Reading page $done of $total');
@@ -247,6 +260,15 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final selectedGames = Set<String>.from(state.selectedGames);
     selectedGames.remove(gameId);
     state = state.copyWith(selectedGames: selectedGames);
+  }
+
+  /// Limpa a seleção inteira. É o `×` da barra do rodapé.
+  ///
+  /// A guarda de vazio não é micro-otimização: toda a grade escuta
+  /// `catalogProvider`, então emitir estado igual custa um rebuild da tela.
+  void clearSelection() {
+    if (state.selectedGames.isEmpty) return;
+    state = state.copyWith(selectedGames: {});
   }
 
   void updateFilter(CatalogFilter filter) {

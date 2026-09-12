@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier();
+  return SettingsNotifier(ref.watch(vaultProvider.future).then((escolha) => escolha.vault));
 });
 
 final settingProvider = Provider.family<dynamic, ({String key, String? consoleId})>((ref, params) {
@@ -31,22 +34,37 @@ final settingWatcherProvider = Provider.family<Map<String, dynamic>, String>((re
 
 class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
+  final Future<SecretVault> _vault;
 
-  SettingsNotifier() : super(const AppSettings()) {
-    _loadSettings();
+  /// Resolve quando a carga inicial chegou do prefs e do cofre.
+  ///
+  /// Existe pelo teste, e não é enfeite: sem ela, um teste que leia o estado
+  /// logo depois de construir o container lê `const AppSettings()` e passa por
+  /// acidente, inclusive depois de a carga quebrar. Mesma saída do
+  /// `AddonNotifier.ready` da Task 14.
+  late final Future<void> ready;
+
+  SettingsNotifier(this._vault) : super(const AppSettings()) {
+    ready = _loadSettings();
   }
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
+    final settings = await _settingsService.loadSettings(await _vault);
     state = settings;
+  }
+
+  /// Troca o estado e salva. Existe porque onze métodos faziam as duas linhas
+  /// na mão, e agora cada um deles precisaria também esperar o cofre.
+  Future<void> _persist(AppSettings novo) async {
+    state = novo;
+    await _settingsService.saveSettings(novo, await _vault);
   }
 
   Future<void> setGeneralSetting<T>(String key, T value) async {
     final newState = state.copyWith(
       generalSettings: state.generalSettings.setSetting(key, value),
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setConsoleSetting<T>(String consoleId, String key, T? value) async {
@@ -59,8 +77,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       },
     );
 
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setSetting<T>(String key, T value, [String? consoleId]) async {
@@ -120,40 +137,62 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return await _settingsService.selectDownloadDirectory();
   }
 
-  Future<void> setConsoleAuthToken(String consoleId, String token) async {
+  /// Guarda, ou apaga, o token de um par (addon, console).
+  ///
+  /// **O espelho em `AppSettings.consoleSettings` só é mexido para o addon
+  /// embutido, e isso não é economia.** `consoleHasToken` (as duas telas da
+  /// Task 7) e os dois `_authHeaders` de LAN leem esse espelho de forma
+  /// síncrona e sem saber de addon. Espelhar ali o token de um terceiro faria
+  /// o servidor de LAN mandar a credencial de um servidor para outro, que é o
+  /// vazamento que a Task 13 acabou de fechar.
+  ///
+  /// O token de terceiro mora só no cofre. Ele não pode ser hidratado em
+  /// `AppSettings` porque `SecretVault` não enumera: não existe `readAll`, de
+  /// propósito (Task 2), então o app não descobre para quais pares existe
+  /// segredo sem já saber a lista. Quem precisa lê sob demanda, por
+  /// [readAddonToken].
+  Future<void> setAddonToken(String addonId, String consoleId, String token) async {
+    await _settingsService.writeAddonToken(addonId, consoleId, token, await _vault);
+    if (addonId != kBuiltinAddonId) return;
+
     final current = state.consoleSettings[consoleId] ?? const BaseSettings();
-    final updated = token.isEmpty
-        ? current.copyWith(clearAuthToken: true)
-        : current.copyWith(authToken: token);
-    final newState = state.copyWith(
+    final updated = token.isEmpty ? current.copyWith(clearAuthToken: true) : current.copyWith(authToken: token);
+    await _persist(state.copyWith(
       consoleSettings: {...state.consoleSettings, consoleId: updated},
-    );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    ));
   }
 
+  Future<String> readAddonToken(String addonId, String consoleId) async =>
+      _settingsService.readAddonToken(addonId, consoleId, await _vault);
+
+  /// O caso particular do addon embutido: escreve no par (embutido, console).
+  /// Depois da Task 20 nenhum sítio de `lib/` chama, e o que o segura é o caso
+  /// `'setConsoleAuthToken é o caso particular do embutido'`, que trava a
+  /// equivalência com `setAddonToken(kBuiltinAddonId, ...)`.
+  Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
+
+  /// O espelho síncrono do embutido, e só dele. Sem leitor desde a Task 20:
+  /// para addon de terceiro devolve `null` mesmo havendo token no cofre, então
+  /// quem for usar isto provavelmente quer `readAddonToken`.
   String? getConsoleAuthToken(String consoleId) {
     return state.consoleSettings[consoleId]?.authToken;
   }
 
   Future<void> setIaCredentials(String accessKey, String secretKey, {String? cookies}) async {
     final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey, iaCookies: cookies);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> clearIaCredentials() async {
-    final newState = state.copyWith(clearIaCredentials: true);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _settingsService.clearIaSecrets(await _vault);
+    await _persist(state.copyWith(clearIaCredentials: true));
   }
 
   Future<void> setCatalogSourceUrl(String? url) async {
     final newState = url == null || url.isEmpty
         ? state.copyWith(clearCatalogSourceUrl: true)
         : state.copyWith(catalogSourceUrl: url);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   bool getNszDecompressEnabled() => state.nszDecompressEnabled;
@@ -162,8 +201,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setNszDecompressEnabled(bool enabled) async {
     final newState = state.copyWith(nszDecompressEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setNszKeysPath(String keysPath) async {
@@ -171,8 +209,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       nszKeysPath: keysPath.isEmpty ? null : keysPath,
       clearNszKeysPath: keysPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setChdmanPath(String chdmanPath) async {
@@ -180,8 +217,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       chdmanPath: chdmanPath.isEmpty ? null : chdmanPath,
       clearChdmanPath: chdmanPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   String? getBoot9Path() => state.boot9Path;
@@ -191,8 +227,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       boot9Path: path.isEmpty ? null : path,
       clearBoot9Path: path.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setPreferredLocalIp(String? ip) async {
@@ -200,7 +235,6 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       preferredLocalIp: (ip == null || ip.isEmpty) ? null : ip,
       clearPreferredLocalIp: ip == null || ip.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 }

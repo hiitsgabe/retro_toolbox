@@ -8,22 +8,26 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/utils/console_auth.dart';
 
 class TaskQueueService {
   /// Returns a human-readable reason downloads can't start, or null when OK.
   static Future<String?> _downloadBlockReason(WidgetRef ref, List<Game> games, String? consoleId) async {
-    final console = (await CatalogService().getConsoles())[consoleId];
+    final catalogService = CatalogService();
+    final console = (await catalogService.getConsoles())[consoleId];
     if (console == null) return null;
 
-    if (console.hasTokenAuth) {
-      final settings = ref.read(settingsProvider);
-      final token = settings.consoleSettings[console.id]?.authToken ?? console.auth?['token'] as String? ?? '';
-      if (token.isEmpty) {
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+
+    // Por fonte, e não por console. Um console servido por um addon aberto e
+    // por um privado bloquearia o arquivo do aberto por causa da conta do
+    // privado, que é conta que aquele download não usa.
+    for (final addonId in addonsThatNeedToken(games, await catalogService.sourcesFor(console.id))) {
+      if ((await settingsNotifier.readAddonToken(addonId, console.id)).isEmpty) {
         return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
       }
     }
 
-    final settingsNotifier = ref.read(settingsProvider.notifier);
     if (settingsNotifier.getNszDecompressEnabled() &&
         (settingsNotifier.getNszKeysPath() ?? '').isEmpty &&
         games.any((g) => g.filename.toLowerCase().endsWith('.nsz'))) {

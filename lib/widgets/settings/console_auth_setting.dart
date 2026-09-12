@@ -8,15 +8,34 @@ import 'package:url_launcher/url_launcher.dart';
 class ConsoleAuthSetting extends ConsumerStatefulWidget {
   final Console console;
 
-  const ConsoleAuthSetting({super.key, required this.console});
+  /// De qual addon é esta conta. O mesmo console pode ser servido por dois
+  /// addons, com credenciais diferentes, e o formulário é de um deles.
+  final String addonId;
+
+  /// Chamado depois de o token ir para o cofre, com o valor novo (vazio quando
+  /// o usuário deslogou).
+  ///
+  /// Existe porque quem desenha o estado de conexão **fora** deste formulário
+  /// não tem como saber que ele gravou: o cofre não notifica, e para addon de
+  /// terceiro `setAddonToken` nem chega a mexer em `settingsProvider`
+  /// (Task 19). Opcional, porque os dois outros chamadores desenham o estado
+  /// aqui dentro.
+  final void Function(String token)? onSaved;
+
+  const ConsoleAuthSetting({super.key, required this.console, required this.addonId, this.onSaved});
 
   @override
   ConsumerState<ConsoleAuthSetting> createState() => _ConsoleAuthSettingState();
 }
 
 class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
-  late final TextEditingController _tokenController;
+  final TextEditingController _tokenController = TextEditingController();
   final Map<String, TextEditingController> _signinControllers = {};
+
+  /// O que está guardado no cofre agora. Não vem de `settingsProvider`: o
+  /// espelho de lá é só do addon embutido (Task 19).
+  String _saved = '';
+  bool _carregando = true;
   bool _obscure = true;
   bool _dirty = false;
   bool _signingIn = false;
@@ -26,11 +45,23 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   @override
   void initState() {
     super.initState();
-    final saved = ref.read(settingsProvider.notifier).getConsoleAuthToken(widget.console.id);
-    _tokenController = TextEditingController(text: saved ?? '');
     for (final param in _signinParams) {
       _signinControllers[param] = TextEditingController();
     }
+    _carregarToken();
+  }
+
+  /// O cofre é assíncrono e `initState` não é, então o formulário nasce em
+  /// estado de carga. Um quadro com barra é melhor que um quadro com o campo
+  /// vazio: o campo vazio diz "você não tem conta" para quem tem.
+  Future<void> _carregarToken() async {
+    final token = await ref.read(settingsProvider.notifier).readAddonToken(widget.addonId, widget.console.id);
+    if (!mounted) return;
+    setState(() {
+      _saved = token;
+      _tokenController.text = token;
+      _carregando = false;
+    });
   }
 
   @override
@@ -42,6 +73,16 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
     super.dispose();
   }
 
+  Future<void> _guardar(String token) async {
+    await ref.read(settingsProvider.notifier).setAddonToken(widget.addonId, widget.console.id, token);
+    if (!mounted) return;
+    setState(() {
+      _saved = token;
+      _dirty = false;
+    });
+    widget.onSaved?.call(token);
+  }
+
   Future<void> _signin() async {
     setState(() => _signingIn = true);
     try {
@@ -49,10 +90,9 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
         widget.console.authSignin!,
         {for (final e in _signinControllers.entries) e.key: e.value.text.trim()},
       );
-      await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, token);
       _tokenController.text = token;
+      await _guardar(token);
       if (mounted) {
-        setState(() => _dirty = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Signed in, token saved.'), duration: Duration(seconds: 2)),
         );
@@ -69,11 +109,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   }
 
   Future<void> _save() async {
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(
-          widget.console.id,
-          _tokenController.text.trim(),
-        );
-    setState(() => _dirty = false);
+    await _guardar(_tokenController.text.trim());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Auth token saved.'), duration: Duration(seconds: 2)),
@@ -83,14 +119,18 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
 
   Future<void> _clear() async {
     _tokenController.clear();
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, '');
-    setState(() => _dirty = false);
+    await _guardar('');
   }
 
   @override
   Widget build(BuildContext context) {
-    final saved = ref.watch(settingsProvider).consoleSettings[widget.console.id]?.authToken ?? '';
-    final hasToken = saved.isNotEmpty;
+    if (_carregando) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final hasToken = _saved.isNotEmpty;
 
     // Once a token is saved, show a compact "signed in" state (like the IA
     // login) instead of the sign-in form. Log out clears it to reveal inputs.

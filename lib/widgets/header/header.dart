@@ -7,12 +7,26 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
+import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
+
+/// O rótulo do botão de funil, que depende do modo de grade.
+///
+/// "Quinta decisão travada" do plano da fatia 3: em MODO PACK os chips de
+/// região, revisão e qualidade de dump não filtram a grade, porque a grade de
+/// pack não tem versão para filtrar. O que sobrevive daquela folha é a
+/// região, que passa a alimentar a escolha de versão em `planFromEntries`
+/// (Task 14). O rótulo diz isso em vez de prometer um filtro que não
+/// acontece.
+///
+/// O botão **não some** em MODO PACK. Sumir com ele tiraria o único caminho
+/// para a preferência de região, que é justamente o que ainda tem efeito.
+String filterButtonLabel(GridMode mode) =>
+    mode == GridMode.pack ? 'Preferência de região' : 'Filters';
 
 class Header extends ConsumerStatefulWidget {
   final List<Console> consoles;
@@ -34,17 +48,26 @@ class _HeaderState extends ConsumerState<Header> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    final downloadNotifier = ref.read(downloadProvider.notifier);
+    // Não é leitura morta: é a única construção adiantada de `downloadProvider`
+    // no app. O construtor de `DownloadNotifier` assina o stream de updates do
+    // `background_downloader`, chama `resumeFromBackground()`,
+    // `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()`
+    // (`download_provider.dart:37-58`). Os outros seis leitores são `read`
+    // dentro de método ou de uma tela secundária, e nenhum roda na abertura.
+    // O jeito certo de arrumar isto é mover a partida para fora do header, mas
+    // isso é `download_provider.dart`, que a fatia 3 não toca (ver a tabela de
+    // intocados que a Task 22 confere). Fica aqui, agora com o motivo escrito.
+    ref.read(downloadProvider.notifier);
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final taskQueueState = ref.watch(taskQueueProvider);
+    final gridMode = ref.watch(gridModeProvider);
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrow = screenWidth < 600;
     final isMobile = screenWidth < 480;
 
     final canAccessSettings = !appState.loading && !taskQueueState.hasRunningTasks;
-    final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();
 
     return Container(
       height: !isMobile ? (kToolbarHeight - 5) + MediaQuery.of(context).padding.top : null,
@@ -110,7 +133,7 @@ class _HeaderState extends ConsumerState<Header> {
                           context: context,
                           appState: appState,
                           catalogState: catalogState,
-                          canDownload: canDownload,
+                          gridMode: gridMode,
                           canAccessSettings: canAccessSettings,
                         ),
                       ],
@@ -153,7 +176,7 @@ class _HeaderState extends ConsumerState<Header> {
                       context: context,
                       appState: appState,
                       catalogState: catalogState,
-                      canDownload: canDownload,
+                      gridMode: gridMode,
                       canAccessSettings: canAccessSettings,
                     ),
                   ],
@@ -167,7 +190,7 @@ class _HeaderState extends ConsumerState<Header> {
     required BuildContext context,
     required AppState appState,
     required CatalogState catalogState,
-    required bool canDownload,
+    required GridMode gridMode,
     required bool canAccessSettings,
   }) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
@@ -178,20 +201,7 @@ class _HeaderState extends ConsumerState<Header> {
         icon: catalogState.filter.isActive ? Icons.filter_alt : Icons.filter_alt_outlined,
         isActive: catalogState.filter.isActive,
         onPressed: () => FilterModal.show(context),
-        tooltip: 'Filters',
-      ),
-      SizedBox(width: 4),
-      _buildActionButton(
-        context: context,
-        icon: Icons.download_rounded,
-        isActive: canDownload,
-        onPressed: canDownload
-            ? () {
-                final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-                TaskQueueService.startDownloads(ref, context, selectedGames, widget.selectedConsole?.id);
-              }
-            : null,
-        tooltip: 'Download Selected',
+        tooltip: filterButtonLabel(gridMode),
       ),
       SizedBox(width: 4),
       _buildActionButton(

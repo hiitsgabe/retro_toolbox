@@ -1,3 +1,4 @@
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_metadata_model.dart';
 import 'package:roms_downloader/models/game_details_model.dart';
 
@@ -6,6 +7,15 @@ class Game {
   final String url;
   final int size;
   final String consoleId;
+
+  /// O id do addon que serviu este arquivo.
+  ///
+  /// Não-nulável de propósito. O `Game` vai e volta de disco pelo cache de
+  /// catálogo (`catalog_service.dart:327` escreve, `:271` lê), e todo cache
+  /// escrito antes da fatia 4 não tem o campo. Com padrão, a degradação
+  /// acontece uma vez, no `fromJson`; com `null`, ela viraria um `??` em cada
+  /// consumidor e o primeiro esquecido põe um jogo sem fonte na grade.
+  final String sourceId;
   final GameMetadata? metadata;
   final GameDetails? details;
 
@@ -14,6 +24,7 @@ class Game {
     required this.url,
     required this.size,
     required this.consoleId,
+    this.sourceId = kBuiltinAddonId,
     this.metadata,
     this.details,
   });
@@ -23,6 +34,7 @@ class Game {
     String? url,
     int? size,
     String? consoleId,
+    String? sourceId,
     GameMetadata? metadata,
     GameDetails? details,
   }) {
@@ -31,6 +43,7 @@ class Game {
       url: url ?? this.url,
       size: size ?? this.size,
       consoleId: consoleId ?? this.consoleId,
+      sourceId: sourceId ?? this.sourceId,
       metadata: metadata ?? this.metadata,
       details: details ?? this.details,
     );
@@ -42,6 +55,7 @@ class Game {
       url: json['url'],
       size: json['size'],
       consoleId: json['consoleId'],
+      sourceId: json['sourceId'] as String? ?? kBuiltinAddonId,
       metadata: json['metadata'] != null ? GameMetadata.fromJson(json['metadata']) : null,
       details: json['details'] != null ? GameDetails.fromJson(json['details']) : null,
     );
@@ -53,6 +67,7 @@ class Game {
       'url': url,
       'size': size,
       'consoleId': consoleId,
+      'sourceId': sourceId,
       'metadata': metadata?.toJson(),
       'details': details?.toJson(),
     };

@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
@@ -92,11 +94,43 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
           console.id,
           iaAccessKey: settings.iaAccessKey,
           iaSecretKey: settings.iaSecretKey,
-          authToken: settings.consoleSettings[console.id]?.authToken,
+          // Só o embutido. Ver a limitação escrita no doc de `_authHeaders`,
+          // logo abaixo neste mesmo arquivo.
+          tokens: _tokensDoEmbutido(settings, console.id),
         );
       } catch (_) {}
     }
     return result;
+  }
+
+  /// O token do addon embutido para este console, no formato que
+  /// `loadCatalog` espera.
+  ///
+  /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
+  /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
+  /// A razão aqui **não é a mesma do Tinfoil**, e por isso está escrita por
+  /// extenso em vez de copiada de lá. `FbiServerService.start` não recebe
+  /// `authHeaders` nenhum: leva só `port` e `cacheDir`. Quem chama
+  /// `_authHeaders` é o `prepareCatalog` (linha 214), e ele **tem** o `Game`
+  /// em mãos, porque `FbiGame` é `({Game game, Console console})`. O que falta
+  /// aqui é só que `_authHeaders` é síncrono e a leitura do cofre é assíncrona.
+  /// Ou seja: a limitação do FBI é mais estreita e mais barata de levantar que
+  /// a do Tinfoil, onde o `Console` é mesmo tudo o que existe. Levantar
+  /// qualquer uma das duas não é desta Task. Consequência honesta, e essa é
+  /// igual nos dois: um console servido por um addon de terceiro com auth
+  /// aparece na listagem do FBI e falha ao baixar. O caminho normal do app,
+  /// que é a grade e o download pelo `download_provider`, usa o token certo
+  /// por addon.
+  ///
+  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
+  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
+  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
+  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
+  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
+  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
+  Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
+    final token = settings.consoleSettings[consoleId]?.authToken ?? '';
+    return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
 
   Map<String, String> _authHeaders(Console console) {

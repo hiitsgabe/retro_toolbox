@@ -1,3 +1,25 @@
+/// Se este bloco de `auth` diz que o console pede um token do usuário.
+///
+/// Existe como função de topo, e não só como getter, porque desde a Grupo 3 a
+/// auth que importa é a da **fonte** (`ConsoleSource.auth`) e não a do
+/// `Console`: com dois addons servindo o mesmo console, `Console.auth` é a do
+/// primeiro que o declarou. Quem tem uma fonte em mãos não tem um `Console`
+/// para chamar o getter.
+///
+/// `requires_token` é a marca que a colheita da instalação deixa no lugar do
+/// token que tirou (`CatalogService.harvestAuthTokens`). Os outros dois termos
+/// continuam valendo para o catálogo embutido, que nunca passou pela colheita,
+/// e para arquivo aberto na mão.
+bool authNeedsToken(Map<String, dynamic>? auth) {
+  if (auth == null) return false;
+  // O Internet Archive assina de outro jeito, e a conta dele é gerida pelo
+  // fluxo de login próprio, em Accounts. Sai antes dos outros três termos de
+  // propósito: um item do IA colhido com token continua não pedindo campo de
+  // token na tela.
+  if (auth['type'] == 'ia_s3') return false;
+  return auth['requires_token'] == true || auth.containsKey('token') || auth.containsKey('auth_message');
+}
+
 class Console {
   final String id;
   final String name;
@@ -50,13 +72,40 @@ class Console {
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
 
+  /// Uma cópia com outra lista de urls, e mais nada diferente.
+  ///
+  /// Existe só para `mergeCatalogs` (`console_merge.dart`), que acrescenta as
+  /// urls de outro addon ao console sem tocar em mais nenhum campo. É um
+  /// `copyWith` de um campo só de propósito: um `copyWith` completo de vinte e
+  /// um campos seria vinte parâmetros que ninguém passa e um lugar a mais para
+  /// esquecer de atualizar quando o `Console` crescer.
+  Console withUrls(List<String> novas) => Console(
+        id: id,
+        name: name,
+        urls: novas,
+        regex: regex,
+        boxarts: boxarts,
+        fileFormat: fileFormat,
+        romsFolder: romsFolder,
+        shouldUnzip: shouldUnzip,
+        extractContents: extractContents,
+        shouldFilterUsa: shouldFilterUsa,
+        usaRegex: usaRegex,
+        shouldDecompressNsz: shouldDecompressNsz,
+        ignoreExtensionFiltering: ignoreExtensionFiltering,
+        downloadUrl: downloadUrl,
+        auth: auth,
+        listUrl: listUrl,
+        listJsonFileLocation: listJsonFileLocation,
+        listItemId: listItemId,
+        listSystems: listSystems,
+        added: added,
+        convert3dsToCia: convert3dsToCia,
+      );
+
   /// True when this console uses a user-editable bearer/cookie token for auth.
   /// IA S3 auth is managed separately via the Internet Archive login flow.
-  bool get hasTokenAuth {
-    if (auth == null) return false;
-    if (auth!['type'] == 'ia_s3') return false;
-    return auth!.containsKey('token') || auth!.containsKey('auth_message');
-  }
+  bool get hasTokenAuth => authNeedsToken(auth);
 
   /// Human-readable instructions for obtaining the auth token.
   String? get authMessage => auth?['auth_message'] as String?;
