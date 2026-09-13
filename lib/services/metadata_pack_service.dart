@@ -13,12 +13,25 @@ class MetadataPackService {
   final Directory cacheDir;
   final PackFetch fetch;
 
-  MetadataPackService({required this.cacheDir, required this.fetch});
+  /// Where the packs are read from, without a trailing slash. See [defaultBase].
+  final String base;
+
+  MetadataPackService({
+    required this.cacheDir,
+    required this.fetch,
+    this.base = defaultBase,
+  });
 
   /// Fixed-tag release, updated in place by the metadata-packs workflow. A
   /// fixed tag means a stable URL and no GitHub API calls from the app.
   static const releaseBase =
       'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs';
+
+  /// [releaseBase], unless the build defines `PACKS_BASE`. To point a debug
+  /// build at a local pack server, run `tool/packs_local.py` and then
+  /// `flutter run --dart-define=PACKS_BASE=http://localhost:8787`.
+  static const defaultBase =
+      String.fromEnvironment('PACKS_BASE', defaultValue: releaseBase);
 
   /// Time cap on the whole future: `connectionTimeout` only bounds connect, so
   /// a connection that accepts then goes mute would hang the read forever.
@@ -46,8 +59,8 @@ class MetadataPackService {
     }
   }
 
-  Uri packUri(String packId) => Uri.parse('$releaseBase/$packId.json.gz');
-  Uri indexUri() => Uri.parse('$releaseBase/$indexFileName');
+  Uri packUri(String packId) => Uri.parse('$base/$packId.json.gz');
+  Uri indexUri() => Uri.parse('$base/$indexFileName');
 
   Future<MetadataPack> download(String packId) async {
     final compressed = await fetch(packUri(packId));

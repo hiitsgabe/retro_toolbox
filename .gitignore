@@ -354,3 +354,7 @@ docs/superpowers/
 
 # Python bytecode from tool/
 tool/__pycache__/
+
+# Locally built metadata packs. They belong to the packs release, never to a
+# commit: one pack is tens of MB and they are rebuilt every month.
+dist/

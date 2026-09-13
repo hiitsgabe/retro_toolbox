@@ -96,6 +96,16 @@ void main() {
         'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs/index.json');
   });
 
+  test('an explicit base redirects both URIs at a local build', () {
+    final svc = MetadataPackService(
+      cacheDir: tmp,
+      fetch: (uri) async => throw StateError('network not allowed in this test'),
+      base: 'http://localhost:8787',
+    );
+    expect(svc.packUri('snes').toString(), 'http://localhost:8787/snes.json.gz');
+    expect(svc.indexUri().toString(), 'http://localhost:8787/index.json');
+  });
+
   test('download unzips, writes the cache and returns the pack', () async {
     final requests = <Uri>[];
     final svc = MetadataPackService(
