@@ -20,6 +20,14 @@ final appStateProvider = StateNotifierProvider<AppStateNotifier, AppState>((ref)
   return AppStateNotifier(ref, catalogService, catalogNotifier);
 });
 
+/// The catalog view mode alone. A widget that only needs to know grid from list
+/// watches this instead of [appStateProvider], so a test can set it without
+/// building [AppStateNotifier], whose constructor asks for permissions and
+/// reads SharedPreferences.
+final viewModeProvider = Provider<ViewMode>(
+  (ref) => ref.watch(appStateProvider.select((s) => s.viewMode)),
+);
+
 class AppStateNotifier extends StateNotifier<AppState> {
   final Ref _ref;
   final CatalogService catalogService;

@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:roms_downloader/models/app_state_model.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
+import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/owned_games_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 import 'package:roms_downloader/services/source_index.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
+import 'package:roms_downloader/widgets/menu_grid/cover_flow.dart';
 
 import 'support/favorites_stub.dart';
 
@@ -45,9 +48,11 @@ Widget _host(
   void Function(PackGridEntry)? onOpenGame,
   Set<String>? downloaded,
   bool scanning = false,
+  ViewMode viewMode = ViewMode.grid,
 }) {
   return ProviderScope(
     overrides: [
+      viewModeProvider.overrideWithValue(viewMode),
       // The catalogProvider here is the real one, and its constructor listens
       // to favoritesProvider, which hits disk; without the stub the long-press
       // case throws MissingPluginException after already passing.
@@ -170,5 +175,89 @@ void main() {
     // No border while the scan runs: a wrong border is worse than none, and the
     // answer does not exist yet.
     expect(tester.widget<PackGridItem>(find.byType(PackGridItem)).isOwned, isFalse);
+  });
+
+  testWidgets('the list mode draws rows, not tiles', (tester) async {
+    await tester.pumpWidget(_host(
+      [
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
+      ],
+      viewMode: ViewMode.list,
+    ));
+    await tester.pump();
+
+    expect(find.byType(GridView), findsNothing);
+    expect(find.byType(PackGridItem), findsNothing);
+    expect(find.byType(ListTile), findsNWidgets(2));
+    expect(find.text('Crystal Vanguard'), findsOneWidget);
+  });
+
+  testWidgets('a list row without a source says so', (tester) async {
+    await tester.pumpWidget(_host(
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard', withSource: false)],
+      index: _index(matchesSomething: true),
+      viewMode: ViewMode.list,
+    ));
+    await tester.pump();
+
+    expect(find.text('No source has this game'), findsOneWidget);
+  });
+
+  testWidgets('a tap on a list row opens the same entry a tile would', (tester) async {
+    PackGridEntry? opened;
+    await tester.pumpWidget(_host(
+      [
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
+      ],
+      onOpenGame: (entry) => opened = entry,
+      viewMode: ViewMode.list,
+    ));
+    await tester.pump();
+
+    await tester.tap(find.text('Super Vectron'));
+    expect(opened?.game.id, 'snes/super-vectron');
+  });
+
+  testWidgets('a long press on a list row selects it', (tester) async {
+    await tester.pumpWidget(_host(
+      [
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
+      ],
+      viewMode: ViewMode.list,
+    ));
+    await tester.pump();
+
+    await tester.longPress(find.text('Crystal Vanguard'));
+    await tester.pump();
+
+    // A selection being active puts the checkbox on every row, not only the
+    // selected one.
+    expect(find.byType(Checkbox), findsNWidgets(2));
+  });
+
+  testWidgets('the cover flow mode draws the flow', (tester) async {
+    await tester.pumpWidget(_host(
+      [
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
+      ],
+      viewMode: ViewMode.coverflow,
+    ));
+    await tester.pump();
+
+    expect(find.byType(CoverFlow), findsOneWidget);
+    expect(find.byType(GridView), findsNothing);
+  });
+
+  testWidgets('the search empty state wins over every view mode', (tester) async {
+    for (final mode in ViewMode.values) {
+      await tester.pumpWidget(_host(const [], viewMode: mode));
+      await tester.pump();
+
+      expect(find.text('No game with that name'), findsOneWidget, reason: mode.name);
+    }
   });
 }
