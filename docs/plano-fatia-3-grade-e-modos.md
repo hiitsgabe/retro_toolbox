@@ -4632,7 +4632,33 @@ import 'package:roms_downloader/models/game_match_model.dart';
 
 Inside `build`, right below the line `final pick = plan.picks.firstOrNull;`:
 
-_(The intermediate code using `_outrasFontes` was inlined in the live file before this plan was finalised; read `lib/screens/game_detail_screen.dart` directly.)_
+```dart
+    final failure = plan.failures.firstOrNull;
+    final others = _otherSources(entry, pick);
+```
+
+And replace the `ListView`'s whole `children:` list with this one:
+
+```dart
+        children: [
+          _Top(game: game, system: ref.watch(packTargetProvider)?.consoleName ?? ''),
+          if ((game.synopsis ?? '').isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
+          ],
+          if (pick != null) ...[
+            const SizedBox(height: 16),
+            _Highlight(pick: pick, onDownload: () => onDownload(pick)),
+          ] else if (failure != null) ...[
+            const SizedBox(height: 16),
+            _NoSource(reason: failure.reason),
+          ],
+          if (others.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _OtherSources(sources: others),
+          ],
+        ],
+```
 
 In `_Highlight`, replace the first line of the `Column`, currently `Text(pick.filename, ...)`, with this `Row`:
 
@@ -4661,9 +4687,41 @@ In `_Highlight`, replace the first line of the `Column`, currently `Text(pick.fi
 
 And add, at the end of the file:
 
-_(The `_outrasFontes` helper was inlined in the live file before this plan was finalised; read `lib/screens/game_detail_screen.dart` directly.)_
-
 ```dart
+/// The source kind, which in this slice is a single one.
+///
+/// Every source comes from the console's HTTP listing. The `SEED` and `RD` of
+/// section 7 of the UI spec arrive when the addon declares the kind (slice 4
+/// and slice 6). It is a constant instead of a loose literal for the day it
+/// becomes a field.
+const _kSourceKind = 'HTTP';
+
+/// The sources that did not win the highlight, in the order the source gave them.
+///
+/// Removes **one** copy of the winner, not every source with the same name: two
+/// sources can serve homonymous files of different sizes, and dropping both
+/// would hide a real source. With no pick at all it returns everything, because
+/// then none of them is "the other one" and hiding what exists would make the
+/// "no source" banner look like a lie.
+List<MatchedSource> _otherSources(PackGridEntry entry, SourcePick? pick) {
+  if (pick == null) return entry.sources;
+
+  final others = <MatchedSource>[];
+  var alreadyRemoved = false;
+  for (final source in entry.sources) {
+    final isTheWinner = !alreadyRemoved &&
+        source.filename == pick.filename &&
+        source.size == pick.size &&
+        source.sourceId == pick.sourceId;
+    if (isTheWinner) {
+      alreadyRemoved = true;
+      continue;
+    }
+    others.add(source);
+  }
+  return others;
+}
+
 String _otherLabel(int count) => count == 1 ? '1 other source' : '$count other sources';
 
 /// The **match** confidence, which is not the CRC verification.
@@ -6256,7 +6314,7 @@ String _confidenceLabel(MatchConfidence confidence) => switch (confidence) {
     };
 ```
 
-The `_outrasFontes` helper from Task 16 is gone: the identity filter in `build`, over the already-verified list, is now the one that removes the winner. The behavior is the same, including removing only one copy when two sources share the same name. The Task 16 test that proves this keeps working without change.
+The `_otherSources` helper from Task 16 is gone: the identity filter in `build`, over the already-verified list, is now the one that removes the winner. The behavior is the same, including removing only one copy when two sources share the same name. The Task 16 test that proves this keeps working without change.
 
 - [ ] **Step 9: Run and watch it pass**
 

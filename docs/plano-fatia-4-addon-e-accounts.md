@@ -112,7 +112,7 @@ Do not reimplement this, **wire it up**:
 
 - `planFromEntries` (`lib/services/source_pick_service.dart:50-55`) already takes `List<String> sourcePriority = const []`, and `_priorityRank` (`:156-159`) already uses it. **Nobody passes anything today**, so the axis exists and is always empty.
 - `MatchedSource.sourceId` and `SourcePick.sourceId` are already fields, not enums (`source_pick_model.dart:35-38`).
-- Today the value is always `kBuiltinSourceId`, the constant `'listagem'` (`source_pick_model.dart:17`), filled in a single place: `pack_grid_provider.dart:75`.
+- Today the value is always `kBuiltinSourceId`, the constant `'listing'` (`source_pick_model.dart:17`), filled in a single place: `pack_grid_provider.dart:75`.
 
 The draggable priority of section 9 is exactly what fills `sourcePriority`. The comment in `source_pick_model.dart:35` already says "in this slice it is always `kBuiltinSourceId` and in slice 4...". That slice is this one.
 
@@ -3872,7 +3872,7 @@ Two details that decide the shape of the field:
 
 **It is non-nullable, with a default value.** The `Game` goes and comes back from disk: `_fetchCatalog` writes `jsonEncode(catalog.map((g) => g.toJson()))` to the cache file (`catalog_service.dart:327`) and `loadCatalog` reads from there (`:271-273`). Every cache written before this slice exists and does not have the field. If the field were nullable, every consumer would have to remember the `?? something`, and the first that forgot would produce a game with no source in the middle of the grid. Non-nullable with a default resolves the degradation **in a single place**, inside `fromJson`.
 
-**The default is `kBuiltinAddonId` and not `kBuiltinSourceId`.** The `sourceId` is now an addon id, and it is compared against the list of ids the user dragged. A game marked `'listagem'` would never match any addon in the list. The `kBuiltinSourceId` of slice 3 was explicitly provisional (`source_pick_model.dart:4-17`: "In slice 4 it becomes the id of the addon that served the file") and Task 15 removes it.
+**The default is `kBuiltinAddonId` and not `kBuiltinSourceId`.** The `sourceId` is now an addon id, and it is compared against the list of ids the user dragged. A game marked `'listing'` would never match any addon in the list. The `kBuiltinSourceId` of slice 3 was explicitly provisional (`source_pick_model.dart:4-17`: "In slice 4 it becomes the id of the addon that served the file") and Task 15 removes it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5157,9 +5157,9 @@ Three things are missing, and each is a Task:
 **One rule for the `kBuiltinSourceId` replacements in the tests, because it decides four files.** The constant dies in Task 15. Eleven lines name it, and **seven of them are in test**, spread across four files: `game_detail_screen_test.dart:46`, `pack_grid_provider_test.dart:108`, `:126` and `:141`, `source_pick_service_test.dart:50`, and `pack_grid_test.dart:24` and `:39`. The other four are in production (`source_pick_service.dart:27`, `pack_grid_provider.dart:75`, and the declaration plus field doc in `source_pick_model.dart:17` and `:35`), and Task 15 handles those with no special rule. The seven in test are not all the same thing:
 
 - Where the test **asserts what production computed**, the replacement is `kBuiltinAddonId`. That is one site only: `test/pack_grid_provider_test.dart:108`, which reads the `sourceId` that `sourceIndexProvider` built from a `Game`.
-- Where the id is **fixture data invented by the test**, the replacement is the literal `'listagem'`, which is what eight other lines in the suite already use (`source_verification_provider_test.dart:18`, `source_pick_model_test.dart:17`, `pack_grid_filter_test.dart:10`, `batch_confirm_sheet_test.dart:12`, `source_pick_service_test.dart:20`, `source_index_test.dart:25` and `:67`, `grid_entry_model_test.dart:9`). In those sites the id is opaque: any non-empty string works, and no assertion depends on which one it is.
+- Where the id is **fixture data invented by the test**, the replacement is the literal `'listing'`, which is what eight other lines in the suite already use (`source_verification_provider_test.dart:18`, `source_pick_model_test.dart:17`, `pack_grid_filter_test.dart:10`, `batch_confirm_sheet_test.dart:12`, `source_pick_service_test.dart:20`, `source_index_test.dart:25` and `:67`, `grid_entry_model_test.dart:9`). In those sites the id is opaque: any non-empty string works, and no assertion depends on which one it is.
 
-**Do not `sed` the literal `'listagem'` to `'builtin'`.** That looks like the obvious cleanup and costs a lot for nothing: in `test/game_detail_screen_test.dart` the source's `sourceId` is drawn on screen, and nine expectations in the file carry that string (`'4.0 MB, listagem'` on line 121, and eight more between lines 269 and 462). Replacing the literal would require rewriting all nine, in a commit that is about deleting a constant. The literal stays. Line 206 also says "listagem", but in prose (`'the source left the listing before the queue started'`): that is not a `sourceId` and does not count.
+**Do not `sed` the literal `'listing'` to `'builtin'`.** That looks like the obvious cleanup and costs a lot for nothing: in `test/game_detail_screen_test.dart` the source's `sourceId` is drawn on screen, and nine expectations in the file carry that string (`'4.0 MB, listing'` on line 121, and eight more between lines 269 and 462). Replacing the literal would require rewriting all nine, in a commit that is about deleting a constant. The literal stays. Line 206 also says "listing", but in prose (`'the source left the listing before the queue started'`): that is not a `sourceId` and does not count.
 
 ### Task 15: the addon id reaches the grid and the batch
 
@@ -5193,7 +5193,7 @@ Game _game(String filename, {String sourceId = kBuiltinAddonId}) => Game(
     );
 ```
 
-Replace the three `kBuiltinSourceId` references in the file **by the rule at the top of the group, which separates them**: the one at line 108 becomes `kBuiltinAddonId`, because there the test asserts the `sourceId` production computed; the ones at lines 126 and 141 become the literal `'listagem'`, because there the id is a `MatchedSource` fixture invented by the test and neither case's assertion reads it (one reads `found?.filename`, the other reads `found, isNull`). **Also delete `import 'package:roms_downloader/models/source_pick_model.dart';` at line 8 of this file.** It existed only because of the constant: after the replacement, the only remaining mention of that file is a comment phrase at line 146 (``// the path that becomes `PickFailure` in Task 14``), and `PickFailure` in backticks inside a comment is not a symbol. Left behind, it becomes an `unused_import`, which is a **warning**, not an `info`, and analyze rises to 23. Then add this case right after the test `'the matched source carries the size and the built-in source id'`:
+Replace the three `kBuiltinSourceId` references in the file **by the rule at the top of the group, which separates them**: the one at line 108 becomes `kBuiltinAddonId`, because there the test asserts the `sourceId` production computed; the ones at lines 126 and 141 become the literal `'listing'`, because there the id is a `MatchedSource` fixture invented by the test and neither case's assertion reads it (one reads `found?.filename`, the other reads `found, isNull`). **Also delete `import 'package:roms_downloader/models/source_pick_model.dart';` at line 8 of this file.** It existed only because of the constant: after the replacement, the only remaining mention of that file is a comment phrase at line 146 (``// the path that becomes `PickFailure` in Task 14``), and `PickFailure` in backticks inside a comment is not a symbol. Left behind, it becomes an `unused_import`, which is a **warning**, not an `info`, and analyze rises to 23. Then add this case right after the test `'the matched source carries the size and the built-in source id'`:
 
 ```dart
   test('each source carries the addon id of the game that produced it', () async {
@@ -5323,11 +5323,11 @@ Expected: no lines.
 flutter test test/pack_grid_provider_test.dart test/source_pick_service_test.dart test/pack_grid_test.dart test/game_detail_screen_test.dart
 ```
 
-Expected: zero failures. The three new cases pass and none of the old ones changed result, including the nine `'... listagem ...'` expectations in the detail screen, which remain valid because the literal stayed.
+Expected: zero failures. The three new cases pass and none of the old ones changed result, including the nine `'... listing ...'` expectations in the detail screen, which remain valid because the literal stayed.
 
 **Likely pitfall:** deleting the import at line 5 of `pack_grid_provider.dart` but not the right one, or deleting an import still used in `pack_grid_test.dart` and `game_detail_screen_test.dart`. Both errors are caught by `flutter analyze` in Step 8, one as `unused_import` and the other as a compilation error, but the first is an `info` and is easy to miss in a quick read of the output. The criterion is the `grep` for each file, not the eye.
 
-**Second pitfall:** replacing the literal `'listagem'` with `'builtin'` "for consistency." The opening of the group explains why, and the consequence is ten red string expectations in `game_detail_screen_test.dart` in a Task that touched no screen.
+**Second pitfall:** replacing the literal `'listing'` with `'builtin'` "for consistency." The opening of the group explains why, and the consequence is ten red string expectations in `game_detail_screen_test.dart` in a Task that touched no screen.
 
 - [ ] **Step 7: Run the full suite**
 
@@ -5613,7 +5613,7 @@ with the override right below the priority override, for the same reason (the re
 
 and the same line, with `const {}`, in the standalone `ProviderScope` of the test `'the checkbox toggles selection by pack key'`.
 
-Note that the default is an empty map, and it is that default which keeps the nine `'... listagem ...'` expectations in the file green: without a known name, the screen draws the id, and in those tests the id is `'listagem'`.
+Note that the default is an empty map, and it is that default which keeps the nine `'... listing ...'` expectations in the file green: without a known name, the screen draws the id, and in those tests the id is `'listing'`.
 
 Add the three cases at the end of `main`:
 
@@ -5715,6 +5715,9 @@ In `_Highlight` (line 277), add the field and the parameter:
 ```dart
 class _Highlight extends StatelessWidget {
   final SourcePick pick;
+
+  /// Addon id to name. Empty is a legitimate state: whoever is not in the map is
+  /// drawn by id.
   final Map<String, String> addonNames;
   final SourceVerification verification;
   final bool crcConfirmed;
@@ -5794,7 +5797,7 @@ and replace the size/addon line:
 flutter test test/addon_provider_test.dart test/game_detail_screen_test.dart
 ```
 
-Expected: zero failures. The nine `'... listagem ...'` expectations remain green, because the `_host` default map is empty and the screen falls back to the id.
+Expected: zero failures. The nine `'... listing ...'` expectations remain green, because the `_host` default map is empty and the screen falls back to the id.
 
 - [ ] **Step 6: Run the full suite**
 
