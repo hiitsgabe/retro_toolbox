@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,9 +18,8 @@ import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 
-/// The source type, which in this slice is only one. A constant rather than a
-/// loose literal for the day it becomes a field.
-const _kSourceKind = 'HTTP';
+/// The hero band: cover art floating over its own blurred backdrop.
+const _heroHeight = 300.0;
 
 /// One game, its sources, the reason for the pick and what CRC verification said
 /// about each. A route, not a bottom sheet or an inline expansion.
@@ -98,19 +99,26 @@ class GameDetailScreen extends ConsumerWidget {
     }
 
     return Scaffold(
+      // The app bar floats over the hero art instead of sitting on a bar of
+      // its own, so the backdrop reaches the top of the screen.
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(game.title, overflow: TextOverflow.ellipsis),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             tooltip: favorite ? 'Remove from favorites' : 'Add to favorites',
             icon: Icon(
               favorite ? Icons.favorite : Icons.favorite_border,
-              color: favorite ? Colors.red : null,
+              color: favorite ? Colors.red : Colors.white,
             ),
             onPressed: () => ref.read(favoritesProvider.notifier).toggleFavorite(key),
           ),
           Checkbox(
             value: isSelected,
+            side: const BorderSide(color: Colors.white, width: 2),
             onChanged: (_) => ref.read(catalogProvider.notifier).toggleGameSelection(key),
           ),
           const SizedBox(width: 8),
@@ -124,41 +132,52 @@ class GameDetailScreen extends ConsumerWidget {
         onDownload: onBatchDownload,
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.zero,
         children: [
-          _Top(game: game, system: ref.watch(packTargetProvider)?.consoleName ?? ''),
-          if ((game.synopsis ?? '').isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
-          ],
-          if (choice != null && winner != null) ...[
-            const SizedBox(height: 16),
-            _Highlight(
-              pick: choice,
-              addonNames: addonNames,
-              verification: winner.state,
-              crcConfirmed: split.confirmed,
-              // Only hesitate while hesitating can still change something.
-              hesitating: split.verifying && !split.confirmed,
-              onDownload: () => onDownload(choice),
+          _Hero(game: game, system: ref.watch(packTargetProvider)?.consoleName ?? ''),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The download affordance leads, because it is why the screen
+                // was opened. In the "nothing can be verified" state neither
+                // branch draws: the source list below opens instead, with a
+                // button per row.
+                if (choice != null && winner != null)
+                  _Highlight(
+                    pick: choice,
+                    addonNames: addonNames,
+                    verification: winner.state,
+                    crcConfirmed: split.confirmed,
+                    // Only hesitate while hesitating can still change something.
+                    hesitating: split.verifying && !split.confirmed,
+                    onDownload: () => onDownload(choice),
+                  )
+                else if (reason != null)
+                  _NoSource(reason: reason),
+                if ((game.synopsis ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  _Synopsis(text: game.synopsis!),
+                ],
+                if (game.shots.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  _Shots(urls: game.shots),
+                ],
+                if (others.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _OtherSources(
+                    sources: others,
+                    addonNames: addonNames,
+                    discarded: split.discarded.length,
+                    startsOpen: split.noCertainty,
+                    hasHighlight: winner != null,
+                    onDownload: split.noCertainty ? downloadSource : null,
+                  ),
+                ],
+              ],
             ),
-          ] else if (split.noCertainty) ...[
-            const SizedBox(height: 16),
-            const _NoCertainty(),
-          ] else if (reason != null) ...[
-            const SizedBox(height: 16),
-            _NoSource(reason: reason),
-          ],
-          if (others.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _OtherSources(
-              sources: others,
-              addonNames: addonNames,
-              discarded: split.discarded.length,
-              startsOpen: split.noCertainty,
-              onDownload: split.noCertainty ? downloadSource : null,
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -201,57 +220,148 @@ String? _verificationLabel(SourceVerification state) => switch (state) {
       SourceVerification.impossible => 'cannot verify',
     };
 
-String _otherLabel(int count, int discarded) {
-  final base = count == 1 ? 'other source' : '$count other sources';
+String _otherLabel(int count, int discarded, bool hasHighlight) {
+  final base = hasHighlight
+      ? (count == 1 ? 'other source' : '$count other sources')
+      : (count == 1 ? 'source' : '$count sources');
   if (discarded == 0) return base;
   // The discarded ones are inside [count]: they moved down into the list,
   // they did not vanish.
   return discarded == 1 ? '$base, 1 discarded' : '$base, $discarded discarded';
 }
 
-class _Top extends StatelessWidget {
+/// The hero band: the art blurred edge to edge, the cover sharp over it, then
+/// the title and the facts as chips.
+class _Hero extends StatelessWidget {
   final PackGame game;
   final String system;
 
-  const _Top({required this.game, required this.system});
+  const _Hero({required this.game, required this.system});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Only what exists joins the line, else a game with no year or publisher
-    // (most homebrews) leaves a dangling comma.
-    final details = [
-      system,
-      if (game.year != null) '${game.year}',
-      if ((game.publisher ?? '').isNotEmpty) game.publisher!,
-      if ((game.genre ?? '').isNotEmpty) game.genre!,
-    ].where((part) => part.isNotEmpty).join(', ');
+    // A screenshot makes a better backdrop than a cover, because it is already
+    // a wide image; the cover is the fallback and the blur hides the crop.
+    final backdrop = game.shots.firstOrNull ?? game.cover;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 110,
-          child: AspectRatio(
-            aspectRatio: 0.75,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: _cover(context),
+    // Genre arrives comma-separated from OpenVGDB ("Action,Shooter"), so it
+    // becomes one chip per genre rather than one long chip.
+    final chips = [
+      if (system.isNotEmpty) system,
+      if (game.year != null) '${game.year}',
+      for (final genre in (game.genre ?? '').split(','))
+        if (genre.trim().isNotEmpty) genre.trim(),
+    ];
+
+    final byline = [
+      if ((game.developer ?? '').isNotEmpty) game.developer!,
+      if ((game.publisher ?? '').isNotEmpty && game.publisher != game.developer) game.publisher!,
+    ].join(' / ');
+
+    return SizedBox(
+      height: _heroHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Always a dark base, art or not: the app bar icons are white and
+          // have to read against whatever ends up here.
+          Container(color: const Color(0xFF13161B)),
+          if (backdrop != null)
+            ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+              child: CachedNetworkImage(
+                imageUrl: backdrop,
+                fit: BoxFit.cover,
+                errorWidget: (context, _, __) => const SizedBox.shrink(),
+                errorListener: (_) {},
+              ),
+            ),
+          // Two scrims: one darkens the whole band so white text reads, the
+          // other melts the bottom edge into the page below it.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.45),
+                  Colors.black.withValues(alpha: 0.75),
+                  scheme.surface,
+                ],
+                stops: const [0, 0.55, 1],
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(game.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              Text(details, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-            ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                SizedBox(
+                  width: 104,
+                  child: AspectRatio(
+                    aspectRatio: 0.75,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: _cover(context),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        game.title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          height: 1.15,
+                        ),
+                      ),
+                      if (byline.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          byline,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.75)),
+                        ),
+                      ],
+                      if (chips.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [for (final chip in chips) _Chip(label: chip)],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -259,15 +369,142 @@ class _Top extends StatelessWidget {
     final url = game.cover;
     if (url == null) {
       return Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Icon(Icons.videogame_asset_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        color: Colors.white.withValues(alpha: 0.08),
+        child: const Icon(Icons.videogame_asset_outlined, color: Colors.white54),
       );
     }
     return CachedNetworkImage(
       imageUrl: url,
       fit: BoxFit.cover,
-      errorWidget: (context, _, __) => Container(color: Theme.of(context).colorScheme.surfaceContainerHighest),
+      errorWidget: (context, _, __) => Container(color: Colors.white.withValues(alpha: 0.08)),
       errorListener: (_) {},
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+
+  const _Chip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+}
+
+/// The synopsis, clamped until the user asks for the rest. Several packs carry
+/// paragraphs long enough to push everything else off the screen.
+class _Synopsis extends StatefulWidget {
+  final String text;
+
+  const _Synopsis({required this.text});
+
+  @override
+  State<_Synopsis> createState() => _SynopsisState();
+}
+
+class _SynopsisState extends State<_Synopsis> {
+  static const _clampedLines = 4;
+
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedSize(
+          duration: const Duration(milliseconds: 150),
+          alignment: Alignment.topCenter,
+          child: Text(
+            widget.text,
+            maxLines: _expanded ? null : _clampedLines,
+            overflow: _expanded ? null : TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, height: 1.45),
+          ),
+        ),
+        // Always offered rather than measured: a TextPainter pass to decide
+        // whether the text overflows costs more than one extra tappable word.
+        GestureDetector(
+          onTap: () => setState(() => _expanded = !_expanded),
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              _expanded ? 'Show less' : 'Read more',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The captures strip. Tapping one opens it big, because at strip size a
+/// screenshot proves the game is the right one and nothing more.
+/// Roughly 4:3, the shape of a console capture. The strip is a preview, not the
+/// picture: the tap opens the full one.
+const _shotHeight = 110.0;
+const _shotWidth = 146.0;
+
+class _Shots extends StatelessWidget {
+  final List<String> urls;
+
+  const _Shots({required this.urls});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _shotHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: urls.length,
+        separatorBuilder: (context, _) => const SizedBox(width: 8),
+        itemBuilder: (context, i) => GestureDetector(
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (context) => Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(16),
+              child: InteractiveViewer(
+                child: CachedNetworkImage(imageUrl: urls[i], errorListener: (_) {}),
+              ),
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            // An explicit width, not just a height: inside a horizontal list the
+            // cross axis is bounded and the main axis is not, so without one the
+            // thumbnails size themselves off the placeholder and the strip
+            // collapses before the images arrive.
+            child: CachedNetworkImage(
+              imageUrl: urls[i],
+              width: _shotWidth,
+              height: _shotHeight,
+              fit: BoxFit.cover,
+              errorWidget: (context, _, __) => const SizedBox.shrink(),
+              errorListener: (_) {},
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -311,42 +548,41 @@ class _Highlight extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  pick.filename,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            // A plain button with its own Row, not `FilledButton.icon`: that
+            // factory returns a private subclass, and `find.byType` matches the
+            // exact runtime type, so every test that looks for the download
+            // button would stop finding it.
+            child: FilledButton(
+              onPressed: onDownload,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.download_rounded, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    hesitating ? 'Download anyway' : 'Download',
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                _kSourceKind,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            pick.filename,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 2),
           Text(
-            '${formatBytes(pick.size)}, ${addonNames[pick.sourceId] ?? pick.sourceId}'
-            '${badge == null ? '' : ', $badge'}',
+            '${formatBytes(pick.size)} · ${addonNames[pick.sourceId] ?? pick.sourceId}'
+            '${badge == null ? '' : ' · $badge'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 2),
           Text(reason, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: onDownload,
-              child: Text(hesitating ? 'Download anyway' : 'Download'),
-            ),
-          ),
         ],
       ),
     );
@@ -384,44 +620,16 @@ class _NoSource extends StatelessWidget {
   }
 }
 
-/// The card for the "verification impossible" state. It never fakes certainty.
-class _NoCertainty extends StatelessWidget {
-  const _NoCertainty();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'not sure about any of them',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: scheme.onSurface),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'None of the sources let the CRC be read. Pick one below.',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// The list of other sources, with the discarded counter.
 class _OtherSources extends StatelessWidget {
   final List<VerifiedSource> sources;
   final Map<String, String> addonNames;
   final int discarded;
   final bool startsOpen;
+
+  /// Whether a source above already won. With no winner these are not "other"
+  /// sources, they are all of them.
+  final bool hasHighlight;
 
   /// Null most of the time: the per-row button is only for the "verification
   /// impossible" state.
@@ -432,6 +640,7 @@ class _OtherSources extends StatelessWidget {
     required this.addonNames,
     required this.discarded,
     required this.startsOpen,
+    required this.hasHighlight,
     required this.onDownload,
   });
 
@@ -448,7 +657,7 @@ class _OtherSources extends StatelessWidget {
         childrenPadding: EdgeInsets.zero,
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         title: Text(
-          _otherLabel(sources.length, discarded),
+          _otherLabel(sources.length, discarded, hasHighlight),
           style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
         ),
         children: [
@@ -474,24 +683,38 @@ class _SourceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final badge = _verificationLabel(item.state);
     final download = onDownload;
+
+    // Size and source, nothing else. Match confidence is how the matcher found
+    // the file, which says nothing a person can act on, and the CRC verdict is
+    // only worth a row of its own when it is bad news. What survives is the
+    // green check, on the rows CRC actually confirmed.
+    final detail = [
+      formatBytes(item.source.size),
+      addonNames[item.source.sourceId] ?? item.source.sourceId,
+      if (item.state == SourceVerification.crcDiscarded) 'discarded by CRC',
+      if (item.state == SourceVerification.verifying) 'verifying',
+    ].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(item.source.filename, style: const TextStyle(fontSize: 13)),
-          const SizedBox(height: 2),
-          Text(
-            // The five pieces, plus the verification verdict when there is one.
-            '${formatBytes(item.source.size)}, '
-            '${addonNames[item.source.sourceId] ?? item.source.sourceId}, '
-            '$_kSourceKind, ${_confidenceLabel(item.source.confidence)}'
-            '${badge == null ? '' : ', $badge'}',
-            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (item.state == SourceVerification.crcOk) ...[
+                Icon(Icons.verified_rounded, size: 15, color: scheme.primary),
+                const SizedBox(width: 5),
+              ],
+              Expanded(
+                child: Text(item.source.filename, style: const TextStyle(fontSize: 13)),
+              ),
+            ],
           ),
+          const SizedBox(height: 2),
+          Text(detail, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           if (download != null) ...[
             const SizedBox(height: 6),
             SizedBox(
@@ -504,11 +727,3 @@ class _SourceRow extends StatelessWidget {
     );
   }
 }
-
-/// The match confidence, which is not the CRC verification. Two axes that never
-/// mix; the CRC verdict joins the same line, after this, as a separate piece.
-String _confidenceLabel(MatchConfidence confidence) => switch (confidence) {
-      MatchConfidence.confirmed => 'confirmed match',
-      MatchConfidence.likely => 'likely match',
-      MatchConfidence.guess => 'guessed match',
-    };

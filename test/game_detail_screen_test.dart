@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,17 +104,91 @@ Widget _host(
 }
 
 void main() {
-  testWidgets('shows title, system, year, publisher and genre', (tester) async {
+  testWidgets('the hero shows the title, the publisher and one chip per fact', (tester) async {
     await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
     expect(find.text('Crystal Vanguard'), findsWidgets);
-    expect(find.text('Super Nintendo, 1995, Square, RPG'), findsOneWidget);
+    // The publisher is the byline; system, year and genre are chips.
+    expect(find.text('Square'), findsOneWidget);
+    expect(find.text('Super Nintendo'), findsOneWidget);
+    expect(find.text('1995'), findsOneWidget);
+    expect(find.text('RPG'), findsOneWidget);
+  });
+
+  testWidgets('a comma-separated genre becomes one chip per genre', (tester) async {
+    await tester.pumpWidget(_host(PackGridEntry(
+      game: const PackGame(
+        id: 'snes/crystal-vanguard',
+        title: 'Crystal Vanguard',
+        dumps: [PackDump(name: 'Crystal Vanguard (USA)')],
+        genre: 'Action,Shooter,Third-Person',
+      ),
+      sources: [_source('Crystal Vanguard (USA).zip')],
+    )));
+
+    expect(find.text('Action'), findsOneWidget);
+    expect(find.text('Shooter'), findsOneWidget);
+    expect(find.text('Third-Person'), findsOneWidget);
+    expect(find.text('Action,Shooter,Third-Person'), findsNothing);
   });
 
   testWidgets('shows the synopsis', (tester) async {
     await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
     expect(find.text('A boy, a fair and a time machine.'), findsOneWidget);
+    expect(find.text('Read more'), findsOneWidget);
+  });
+
+  testWidgets('Read more opens the synopsis and turns into Show less', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
+
+    await tester.tap(find.text('Read more'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Show less'), findsOneWidget);
+    expect(find.text('Read more'), findsNothing);
+  });
+
+  testWidgets('with no synopsis there is nothing to expand', (tester) async {
+    await tester.pumpWidget(_host(PackGridEntry(
+      game: const PackGame(
+        id: 'snes/crystal-vanguard',
+        title: 'Crystal Vanguard',
+        dumps: [PackDump(name: 'Crystal Vanguard (USA)')],
+      ),
+      sources: [_source('Crystal Vanguard (USA).zip')],
+    )));
+
+    expect(find.text('Read more'), findsNothing);
+  });
+
+  testWidgets('with screenshots, the strip draws one image per shot', (tester) async {
+    await tester.pumpWidget(_host(PackGridEntry(
+      game: const PackGame(
+        id: 'snes/crystal-vanguard',
+        title: 'Crystal Vanguard',
+        dumps: [PackDump(name: 'Crystal Vanguard (USA)')],
+        screenshot: 'https://example.org/shot.png',
+        titleScreen: 'https://example.org/title.png',
+      ),
+      sources: [_source('Crystal Vanguard (USA).zip')],
+    )));
+
+    final urls = tester
+        .widgetList<CachedNetworkImage>(find.byType(CachedNetworkImage))
+        .map((image) => image.imageUrl)
+        .toList();
+
+    // The screenshot appears twice: once in the strip and once behind the hero
+    // blur, because the backdrop reuses the first shot rather than the cover,
+    // which is already a wide image.
+    expect(urls, ['https://example.org/shot.png', 'https://example.org/shot.png', 'https://example.org/title.png']);
+  });
+
+  testWidgets('with no screenshot there is no strip and no backdrop', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
+
+    expect(find.byType(CachedNetworkImage), findsNothing);
   });
 
   testWidgets('the highlight card carries file, size and reason', (tester) async {
@@ -123,7 +198,7 @@ void main() {
     ])));
 
     expect(find.text('Crystal Vanguard (USA).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listing'), findsOneWidget);
+    expect(find.text('4.0 MB · listing'), findsOneWidget);
     // The reason is required, not decorative.
     expect(find.text('chosen by your preferred region (USA)'), findsOneWidget);
   });
@@ -218,9 +293,10 @@ void main() {
       resolver: (_) => null,
     ));
 
-    // Nothing was picked, so no source is "the other". The list still opens:
-    // hiding what exists would make the band look like a lie.
-    expect(find.text('other source'), findsOneWidget);
+    // Nothing was picked, so no source is "the other", and the label drops the
+    // word. The list still opens: hiding what exists would make the band look
+    // like a lie.
+    expect(find.text('source'), findsOneWidget);
   });
 
   testWidgets('with a single source there is no other-sources list', (tester) async {
@@ -260,9 +336,9 @@ void main() {
     expect(find.text('Crystal Vanguard (Japan).zip'), findsNothing);
   });
 
-  testWidgets('expanded, each row carries file, size, addon, type and confidence', (tester) async {
+  testWidgets('expanded, each row carries file, size and addon', (tester) async {
     await tester.pumpWidget(_host(_entry(sources:[
-      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (Japan).zip', size: 20),
       _source('Crystal Vanguard (USA).zip'),
     ])));
 
@@ -270,20 +346,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listing, HTTP, likely match'), findsOneWidget);
+    expect(find.text('20.0 B · listing'), findsOneWidget);
   });
 
-  testWidgets('the guess row shows a guessed match', (tester) async {
+  testWidgets('a guess row reads no differently from a likely one', (tester) async {
     await tester.pumpWidget(_host(_entry(sources:[
       _source('Crystal Vanguard (USA).zip'),
-      _source('Crystal Vanguard (Japan).zip', confidence: MatchConfidence.guess),
+      _source('Crystal Vanguard (Japan).zip', size: 20, confidence: MatchConfidence.guess),
     ])));
 
     await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    // Match confidence, not CRC.
-    expect(find.text('4.0 MB, listing, HTTP, guessed match'), findsOneWidget);
+    // How the matcher found the file is matcher jargon, and nobody can act on
+    // it. Size and source are what stays.
+    expect(find.text('20.0 B · listing'), findsOneWidget);
+    expect(find.textContaining('match'), findsNothing);
   });
 
   testWidgets('two identical sources: the pick leaves the list only once', (tester) async {
@@ -297,15 +375,8 @@ void main() {
 
     // The 10-byte one won on the order tiebreak. Removing every same-named
     // source would drop the 20-byte one too and hide a real source.
-    expect(find.text('10.0 B, listing'), findsOneWidget);
-    expect(find.text('20.0 B, listing, HTTP, likely match'), findsOneWidget);
-  });
-
-  testWidgets('the highlight card marks the source type', (tester) async {
-    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
-
-    // With a single source there is no list, so this is the only `HTTP` on screen.
-    expect(find.text('HTTP'), findsOneWidget);
+    expect(find.text('10.0 B · listing'), findsOneWidget);
+    expect(find.text('20.0 B · listing'), findsOneWidget);
   });
 
   testWidgets('while verifying, the button says Download anyway', (tester) async {
@@ -315,7 +386,7 @@ void main() {
     ));
 
     expect(find.widgetWithText(FilledButton, 'Download anyway'), findsOneWidget);
-    expect(find.text('4.0 MB, listing, verifying'), findsOneWidget);
+    expect(find.text('4.0 MB · listing · verifying'), findsOneWidget);
   });
 
   testWidgets('CRC ok swaps the reason for the CRC reason', (tester) async {
@@ -325,7 +396,7 @@ void main() {
     ));
 
     expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
-    expect(find.text('4.0 MB, listing, CRC ok'), findsOneWidget);
+    expect(find.text('4.0 MB · listing · CRC ok'), findsOneWidget);
     // With certainty given, the button does not hesitate.
     expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
@@ -361,10 +432,9 @@ void main() {
     await tester.tap(find.text('other source, 1 discarded'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('4.0 MB, listing, HTTP, likely match, discarded by CRC'),
-      findsOneWidget,
-    );
+    // The one verdict that survives on a row, because it is the one a person
+    // would want explained: this file is not the dump it claims to be.
+    expect(find.text('4.0 MB · listing · discarded by CRC'), findsOneWidget);
   });
 
   testWidgets('with one confirmed, a still-verifying source does not make the button hesitate', (tester) async {
@@ -384,7 +454,7 @@ void main() {
     expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
   });
 
-  testWidgets('none verifiable: the card says it is not sure about any', (tester) async {
+  testWidgets('none verifiable: no alert, just the list', (tester) async {
     await tester.pumpWidget(_host(
       _entry(sources:[
         _source('Crystal Vanguard (USA).zip'),
@@ -393,9 +463,13 @@ void main() {
       verification: (_) => SourceVerification.impossible,
     ));
 
-    expect(find.text('not sure about any of them'), findsOneWidget);
+    // No warning card. "We could not check any of these" is the normal case for
+    // a pack with no CRC, and a banner on the normal case is noise.
+    expect(find.textContaining('not sure'), findsNothing);
     // Nothing highlighted means no name-based pick reason.
     expect(find.text('chosen by your preferred region (USA)'), findsNothing);
+    // What replaces it is the list, already open.
+    expect(find.text('2 sources'), findsOneWidget);
   });
 
   testWidgets('in that state the list opens and each row has its own Download', (tester) async {
@@ -442,15 +516,15 @@ void main() {
     ));
 
     expect(find.text('no source passed CRC verification'), findsOneWidget);
-    expect(find.text('2 other sources, 2 discarded'), findsOneWidget);
+    expect(find.text('2 sources, 2 discarded'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('the unverifiable source says so on its row', (tester) async {
+  testWidgets('an unverifiable source reads as a plain row', (tester) async {
     await tester.pumpWidget(_host(
       _entry(sources:[
         _source('Crystal Vanguard (USA).zip'),
-        _source('Crystal Vanguard (Japan).zip'),
+        _source('Crystal Vanguard (Japan).zip', size: 20),
       ]),
       verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcOk
@@ -460,10 +534,33 @@ void main() {
     await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('4.0 MB, listing, HTTP, likely match, cannot verify'),
-      findsOneWidget,
-    );
+    // "Cannot verify" is the absence of an answer, not an answer, so it earns
+    // no words.
+    expect(find.text('20.0 B · listing'), findsOneWidget);
+    expect(find.textContaining('cannot verify'), findsNothing);
+  });
+
+  testWidgets('the green check marks the CRC-confirmed row and no other', (tester) async {
+    await tester.pumpWidget(_host(
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip', size: 20),
+        _source('Crystal Vanguard (Europe).zip', size: 30),
+      ]),
+      // USA wins on preferred region and takes the highlight, so the two rows
+      // left are one confirmed and one discarded.
+      verification: (filename) => filename.contains('Europe')
+          ? SourceVerification.crcDiscarded
+          : SourceVerification.crcOk,
+    ));
+
+    await tester.tap(find.text('2 other sources, 1 discarded'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('20.0 B · listing'), findsOneWidget);
+    expect(find.text('30.0 B · listing · discarded by CRC'), findsOneWidget);
+    // The mark is on the confirmed row alone, not on the discarded one.
+    expect(find.byIcon(Icons.verified_rounded), findsOneWidget);
   });
 
   testWidgets('with no selection the detail screen shows no bar', (tester) async {
@@ -519,7 +616,7 @@ void main() {
     ));
 
     // By arrival order the 10-byte one would win. The 20-byte one won.
-    expect(find.text('20.0 B, fast'), findsOneWidget);
+    expect(find.text('20.0 B · fast'), findsOneWidget);
   });
 
   testWidgets('reversing addon order swaps the highlight', (tester) async {
@@ -534,7 +631,7 @@ void main() {
       priority: const ['slow', 'fast'],
     ));
 
-    expect(find.text('10.0 B, slow'), findsOneWidget);
+    expect(find.text('10.0 B · slow'), findsOneWidget);
   });
 
   testWidgets('with no addon in the list, the tiebreak falls back to arrival order', (tester) async {
@@ -548,7 +645,7 @@ void main() {
       priority: const [],
     ));
 
-    expect(find.text('10.0 B, slow'), findsOneWidget);
+    expect(find.text('10.0 B · slow'), findsOneWidget);
   });
 
   testWidgets('the highlight shows the addon name, not the id', (tester) async {
@@ -557,7 +654,7 @@ void main() {
       names: const {'myrient_org_files': 'Myrient'},
     ));
 
-    expect(find.text('4.0 MB, Myrient'), findsOneWidget);
+    expect(find.text('4.0 MB · Myrient'), findsOneWidget);
   });
 
   testWidgets('the other-sources list also shows the name', (tester) async {
@@ -572,7 +669,7 @@ void main() {
     await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    expect(find.text("20.0 B, Someone's Files, HTTP, likely match"), findsOneWidget);
+    expect(find.text("20.0 B · Someone's Files"), findsOneWidget);
   });
 
   testWidgets('an addon no longer in the list falls back to the id, not blank', (tester) async {
@@ -584,6 +681,6 @@ void main() {
       names: const {},
     ));
 
-    expect(find.text('4.0 MB, addon_removed'), findsOneWidget);
+    expect(find.text('4.0 MB · addon_removed'), findsOneWidget);
   });
 }
