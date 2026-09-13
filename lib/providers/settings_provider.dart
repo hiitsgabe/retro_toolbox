@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier();
+  return SettingsNotifier(ref.watch(vaultProvider.future).then((choice) => choice.vault));
 });
 
 final settingProvider = Provider.family<dynamic, ({String key, String? consoleId})>((ref, params) {
@@ -31,22 +34,31 @@ final settingWatcherProvider = Provider.family<Map<String, dynamic>, String>((re
 
 class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
+  final Future<SecretVault> _vault;
 
-  SettingsNotifier() : super(const AppSettings()) {
-    _loadSettings();
+  /// Resolves once the initial load has arrived from prefs and the vault.
+  late final Future<void> ready;
+
+  SettingsNotifier(this._vault) : super(const AppSettings()) {
+    ready = _loadSettings();
   }
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
+    final settings = await _settingsService.loadSettings(await _vault);
     state = settings;
+  }
+
+  /// Swaps the state and saves.
+  Future<void> _persist(AppSettings next) async {
+    state = next;
+    await _settingsService.saveSettings(next, await _vault);
   }
 
   Future<void> setGeneralSetting<T>(String key, T value) async {
     final newState = state.copyWith(
       generalSettings: state.generalSettings.setSetting(key, value),
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setConsoleSetting<T>(String consoleId, String key, T? value) async {
@@ -59,8 +71,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       },
     );
 
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setSetting<T>(String key, T value, [String? consoleId]) async {
@@ -120,40 +131,50 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return await _settingsService.selectDownloadDirectory();
   }
 
-  Future<void> setConsoleAuthToken(String consoleId, String token) async {
+  /// Stores, or clears, the token for an (addon, console) pair.
+  ///
+  /// The `AppSettings.consoleSettings` mirror is written only for the builtin
+  /// addon: mirroring a third-party token there would make a LAN server send
+  /// one server's credential to another. Third-party tokens live only in the
+  /// vault; read them on demand via [readAddonToken].
+  Future<void> setAddonToken(String addonId, String consoleId, String token) async {
+    await _settingsService.writeAddonToken(addonId, consoleId, token, await _vault);
+    if (addonId != kBuiltinAddonId) return;
+
     final current = state.consoleSettings[consoleId] ?? const BaseSettings();
-    final updated = token.isEmpty
-        ? current.copyWith(clearAuthToken: true)
-        : current.copyWith(authToken: token);
-    final newState = state.copyWith(
+    final updated = token.isEmpty ? current.copyWith(clearAuthToken: true) : current.copyWith(authToken: token);
+    await _persist(state.copyWith(
       consoleSettings: {...state.consoleSettings, consoleId: updated},
-    );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    ));
   }
 
+  Future<String> readAddonToken(String addonId, String consoleId) async =>
+      _settingsService.readAddonToken(addonId, consoleId, await _vault);
+
+  /// The builtin-addon special case: writes the (builtin, console) pair.
+  Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
+
+  /// The synchronous mirror of the builtin addon only. Returns `null` for a
+  /// third-party addon even with a token in the vault; use `readAddonToken`.
   String? getConsoleAuthToken(String consoleId) {
     return state.consoleSettings[consoleId]?.authToken;
   }
 
   Future<void> setIaCredentials(String accessKey, String secretKey, {String? cookies}) async {
     final newState = state.copyWith(iaAccessKey: accessKey, iaSecretKey: secretKey, iaCookies: cookies);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> clearIaCredentials() async {
-    final newState = state.copyWith(clearIaCredentials: true);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _settingsService.clearIaSecrets(await _vault);
+    await _persist(state.copyWith(clearIaCredentials: true));
   }
 
   Future<void> setCatalogSourceUrl(String? url) async {
     final newState = url == null || url.isEmpty
         ? state.copyWith(clearCatalogSourceUrl: true)
         : state.copyWith(catalogSourceUrl: url);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   bool getNszDecompressEnabled() => state.nszDecompressEnabled;
@@ -162,8 +183,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setNszDecompressEnabled(bool enabled) async {
     final newState = state.copyWith(nszDecompressEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setNszKeysPath(String keysPath) async {
@@ -171,8 +191,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       nszKeysPath: keysPath.isEmpty ? null : keysPath,
       clearNszKeysPath: keysPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setChdmanPath(String chdmanPath) async {
@@ -180,8 +199,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       chdmanPath: chdmanPath.isEmpty ? null : chdmanPath,
       clearChdmanPath: chdmanPath.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   String? getBoot9Path() => state.boot9Path;
@@ -191,8 +209,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       boot9Path: path.isEmpty ? null : path,
       clearBoot9Path: path.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 
   Future<void> setPreferredLocalIp(String? ip) async {
@@ -200,7 +217,6 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       preferredLocalIp: (ip == null || ip.isEmpty) ? null : ip,
       clearPreferredLocalIp: ip == null || ip.isEmpty,
     );
-    state = newState;
-    await _settingsService.saveSettings(newState);
+    await _persist(newState);
   }
 }

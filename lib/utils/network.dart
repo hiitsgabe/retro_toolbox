@@ -38,7 +38,7 @@ Map<String, String> buildConsoleAuthHeaders(Map<String, dynamic>? auth, {String?
   if (auth == null) return {};
   if (auth['type'] == 'ia_s3') return {};
 
-  final token = tokenOverride ?? auth['token'] as String?;
+  final token = tokenOverride;
   if (token == null || token.isEmpty) return {};
 
   if (auth['cookies'] == true) {

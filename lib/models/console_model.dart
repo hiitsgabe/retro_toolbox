@@ -1,3 +1,13 @@
+/// Whether this `auth` block means the console needs a user token.
+///
+/// A top-level function, not just a getter, so a caller holding a source
+/// (`ConsoleSource.auth`) can ask without a `Console`.
+bool authNeedsToken(Map<String, dynamic>? auth) {
+  if (auth == null) return false;
+  if (auth['type'] == 'ia_s3') return false;
+  return auth['requires_token'] == true || auth.containsKey('token') || auth.containsKey('auth_message');
+}
+
 class Console {
   final String id;
   final String name;
@@ -50,13 +60,34 @@ class Console {
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
 
+  /// A copy with a different url list and nothing else changed.
+  Console withUrls(List<String> next) => Console(
+        id: id,
+        name: name,
+        urls: next,
+        regex: regex,
+        boxarts: boxarts,
+        fileFormat: fileFormat,
+        romsFolder: romsFolder,
+        shouldUnzip: shouldUnzip,
+        extractContents: extractContents,
+        shouldFilterUsa: shouldFilterUsa,
+        usaRegex: usaRegex,
+        shouldDecompressNsz: shouldDecompressNsz,
+        ignoreExtensionFiltering: ignoreExtensionFiltering,
+        downloadUrl: downloadUrl,
+        auth: auth,
+        listUrl: listUrl,
+        listJsonFileLocation: listJsonFileLocation,
+        listItemId: listItemId,
+        listSystems: listSystems,
+        added: added,
+        convert3dsToCia: convert3dsToCia,
+      );
+
   /// True when this console uses a user-editable bearer/cookie token for auth.
   /// IA S3 auth is managed separately via the Internet Archive login flow.
-  bool get hasTokenAuth {
-    if (auth == null) return false;
-    if (auth!['type'] == 'ia_s3') return false;
-    return auth!.containsKey('token') || auth!.containsKey('auth_message');
-  }
+  bool get hasTokenAuth => authNeedsToken(auth);
 
   /// Human-readable instructions for obtaining the auth token.
   String? get authMessage => auth?['auth_message'] as String?;
@@ -133,8 +164,7 @@ class Console {
     };
   }
 
-  // Default regex matches Myrient-style HTML directory listings.
-  // Format: <tr><td class="link"><a href="URL" title="TITLE">TEXT</a></td><td class="size">SIZE</td>...
+  // Matches Myrient-style HTML directory listings.
   String get defaultRegex =>
       '<tr><td class="link"><a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a></td><td class="size">(?<size>[^<]+)</td><td class="date">[^<]*</td></tr>';
 

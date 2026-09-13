@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/fbi_server_service.dart';
@@ -92,11 +94,21 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
           console.id,
           iaAccessKey: settings.iaAccessKey,
           iaSecretKey: settings.iaSecretKey,
-          authToken: settings.consoleSettings[console.id]?.authToken,
+          tokens: _builtinTokens(settings, console.id),
         );
       } catch (_) {}
     }
     return result;
+  }
+
+  /// The builtin addon's token for this console, in the shape `loadCatalog`
+  /// expects.
+  ///
+  /// The LAN servers only serve the builtin addon's credential, so a console
+  /// served by a third-party addon with auth lists here but fails to download.
+  Map<String, String> _builtinTokens(AppSettings settings, String consoleId) {
+    final token = settings.consoleSettings[consoleId]?.authToken ?? '';
+    return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
 
   Map<String, String> _authHeaders(Console console) {
@@ -165,7 +177,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
 
   /// Stages [srcPath] into the served cache as a .cia (copying, unzipping and/or
   /// converting as needed), and returns the URL FBI can install it from.
-  /// [onProgress] reports 0–1 during conversion. Throws on failure.
+  /// [onProgress] reports 0 to 1 during conversion. Throws on failure.
   Future<String> prepareLocalFile(String srcPath, void Function(double) onProgress) async {
     final host = _hostPort;
     final cache = _service.cacheDir;
@@ -175,7 +187,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
   }
 
   /// Downloads a catalog title (with source auth), then stages it like a local
-  /// file. [onProgress] covers download (0–0.5) then conversion (0.5–1).
+  /// file. [onProgress] covers download (0 to 0.5) then conversion (0.5 to 1).
   Future<String> prepareCatalog(FbiGame g, void Function(double) onProgress) async {
     final host = _hostPort;
     final cache = _service.cacheDir;
@@ -266,7 +278,6 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
 
 @pragma('vm:entry-point')
 void fbiKeepAliveCallback() {
-  // ponytail: no-op keep-alive; the HTTP server runs in the main isolate.
   FlutterForegroundTask.setTaskHandler(_FbiKeepAliveHandler());
 }
 

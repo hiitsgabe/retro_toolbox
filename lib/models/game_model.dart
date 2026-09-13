@@ -1,3 +1,4 @@
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_metadata_model.dart';
 import 'package:roms_downloader/models/game_details_model.dart';
 
@@ -6,6 +7,10 @@ class Game {
   final String url;
   final int size;
   final String consoleId;
+
+  /// The id of the addon that served this file. Non-nullable: caches written
+  /// before this field existed degrade to the default once in `fromJson`.
+  final String sourceId;
   final GameMetadata? metadata;
   final GameDetails? details;
 
@@ -14,6 +19,7 @@ class Game {
     required this.url,
     required this.size,
     required this.consoleId,
+    this.sourceId = kBuiltinAddonId,
     this.metadata,
     this.details,
   });
@@ -23,6 +29,7 @@ class Game {
     String? url,
     int? size,
     String? consoleId,
+    String? sourceId,
     GameMetadata? metadata,
     GameDetails? details,
   }) {
@@ -31,6 +38,7 @@ class Game {
       url: url ?? this.url,
       size: size ?? this.size,
       consoleId: consoleId ?? this.consoleId,
+      sourceId: sourceId ?? this.sourceId,
       metadata: metadata ?? this.metadata,
       details: details ?? this.details,
     );
@@ -42,6 +50,7 @@ class Game {
       url: json['url'],
       size: json['size'],
       consoleId: json['consoleId'],
+      sourceId: json['sourceId'] as String? ?? kBuiltinAddonId,
       metadata: json['metadata'] != null ? GameMetadata.fromJson(json['metadata']) : null,
       details: json['details'] != null ? GameDetails.fromJson(json['details']) : null,
     );
@@ -53,6 +62,7 @@ class Game {
       'url': url,
       'size': size,
       'consoleId': consoleId,
+      'sourceId': sourceId,
       'metadata': metadata?.toJson(),
       'details': details?.toJson(),
     };
@@ -61,17 +71,10 @@ class Game {
   String get filename {
     final segments = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
     final last = segments.isEmpty ? '' : segments.last;
-    // API-style URLs (e.g. .../download/<id>/base) carry no real filename —
-    // fall back to the title so ids stay unique and files get proper names.
     return sanitizeForFat(last.contains('.') ? last : title);
   }
 
-  // FAT/exFAT-illegal filename chars. Handheld ROM SD cards are almost always
-  // exFAT; creating a file whose name contains one of these fails with EPERM on
-  // the FUSE mount — a title like "...Prime 4: Beyond" (colon) silently fails to
-  // download/extract while a legal-named title in the same folder works. Every
-  // on-disk path derives from this getter, so sanitizing here keeps download,
-  // extraction and library-snapshot all agreeing on one safe name.
+  // FAT/exFAT-illegal filename chars: one of these silently fails the write.
   static final _exfatIllegal = RegExp(r'[<>:"/\\|?*\x00-\x1f]');
 
   static String sanitizeForFat(String name) {
@@ -79,7 +82,7 @@ class Game {
         .replaceAll(_exfatIllegal, ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
-        .replaceFirst(RegExp(r'[. ]+$'), ''); // trailing dot/space also illegal
+        .replaceFirst(RegExp(r'[. ]+$'), '');
     return cleaned.isEmpty ? 'output' : cleaned;
   }
 

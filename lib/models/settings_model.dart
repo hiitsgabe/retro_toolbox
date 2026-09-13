@@ -83,9 +83,6 @@ class AppSettings {
     return {
       'consoleSettings': consoleSettings.map((key, value) => MapEntry(key, value.toJson())),
       'generalSettings': generalSettings.toJson(),
-      if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
-      if (iaSecretKey != null) 'iaSecretKey': iaSecretKey,
-      if (iaCookies != null) 'iaCookies': iaCookies,
       'nszDecompressEnabled': nszDecompressEnabled,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (chdmanPath != null) 'chdmanPath': chdmanPath,
@@ -148,6 +145,18 @@ class BaseSettings {
     );
   }
 
+  /// A copy with the token replaced and nothing else. Unlike [copyWith], it
+  /// does not materialize defaults into null fields, so it is safe to call
+  /// outside the settings form.
+  BaseSettings withAuthToken(String token) => BaseSettings(
+        downloadDir: downloadDir,
+        autoExtract: autoExtract,
+        maxParallelDownloads: maxParallelDownloads,
+        maxParallelExtractions: maxParallelExtractions,
+        extractToFolder: extractToFolder,
+        authToken: token,
+      );
+
   Map<String, dynamic> toJson() {
     return {
       AppSettings.downloadDir: downloadDir,
@@ -155,7 +164,6 @@ class BaseSettings {
       AppSettings.maxParallelDownloads: maxParallelDownloads,
       AppSettings.maxParallelExtractions: maxParallelExtractions,
       if (extractToFolder != null) AppSettings.extractToFolder: extractToFolder,
-      if (authToken != null) 'authToken': authToken,
     };
   }
 

@@ -1,0 +1,624 @@
+{
+ "cases": [
+  {
+   "canon": "96 cotlasu fiegou tajbik gihmdafac",
+   "displayTitle": "'96 Cotlasu Fiegou Tajbik Gihmdafac",
+   "input": "'96 Cotlasu Fiegou Tajbik Gihmdafac (Japan)",
+   "norm": "96 cotlasu fiegou tajbik gihmdafac (japan)"
+  },
+  {
+   "canon": "awsoht dupalj the rezqwek w wrobitnev qipx",
+   "displayTitle": "Awsoht Dupalj, The - Rezqwek'w Wrobitnev Qipx",
+   "input": "Awsoht Dupalj, The - Rezqwek'w Wrobitnev Qipx (USA) (Beta 1)",
+   "norm": "awsoht dupalj the rezqwek w wrobitnev qipx (usa) (beta 1)"
+  },
+  {
+   "canon": "ivpuvomp",
+   "displayTitle": "Ivpuvomp",
+   "input": "Ivpuvomp (Japan)",
+   "norm": "ivpuvomp (japan)"
+  },
+  {
+   "canon": "anheno w bdaosapw lotj dni ixake fabtukpuen 1",
+   "displayTitle": "Anheno'w Bdaosapw Lotj - Dni Ixake Fabtukpuen 1",
+   "input": "Anheno'w Bdaosapw Lotj - Dni Ixake Fabtukpuen 1 (USA) (Beta 1)",
+   "norm": "anheno w bdaosapw lotj dni ixake fabtukpuen 1 (usa) (beta 1)"
+  },
+  {
+   "canon": "qgl",
+   "displayTitle": "QGL",
+   "input": "QGL (World) (Demo 1)",
+   "norm": "qgl (world) (demo 1)"
+  },
+  {
+   "canon": "helspu habitc",
+   "displayTitle": "Helspu Habitc",
+   "input": "Helspu Habitc (Japan)",
+   "norm": "helspu habitc (japan)"
+  },
+  {
+   "canon": "fiobikix",
+   "displayTitle": "FioBikix",
+   "input": "FioBikix (Japan) (En)",
+   "norm": "fiobikix (japan) (en)"
+  },
+  {
+   "canon": "sfuq gsupiv w pvexola",
+   "displayTitle": "Sfuq Gsupiv'w Pvexola",
+   "input": "Sfuq Gsupiv'w Pvexola (Europe)",
+   "norm": "sfuq gsupiv w pvexola (europe)"
+  },
+  {
+   "canon": "cogbn hv lkirufn icw jnu whe vjepivtr",
+   "displayTitle": "Cogbn hv Lkirufn icw jnu WHE Vjepivtr",
+   "input": "Cogbn hv Lkirufn icw jnu WHE Vjepivtr (Europe) (Rev 1)",
+   "norm": "cogbn hv lkirufn icw jnu whe vjepivtr (europe) (rev 1)"
+  },
+  {
+   "canon": "lburseetc hugbn rhogd tajbik",
+   "displayTitle": "Lburseetc - Hugbn Rhogd Tajbik",
+   "input": "Lburseetc - Hugbn Rhogd Tajbik (USA) (En,Fr,De,Es)",
+   "norm": "lburseetc hugbn rhogd tajbik (usa) (en fr de es)"
+  },
+  {
+   "canon": "xropxeg diaq",
+   "displayTitle": "Xropxeg Diaq",
+   "input": "Xropxeg Diaq (Japan)",
+   "norm": "xropxeg diaq (japan)"
+  },
+  {
+   "canon": "guox lcex",
+   "displayTitle": "Guox Lcex",
+   "input": "Guox Lcex (USA)",
+   "norm": "guox lcex (usa)"
+  },
+  {
+   "canon": "qiixepagwoi weqxiu zewizie silkeha xofoqghat pik",
+   "displayTitle": "Qiixepagwoi Weqxiu Zewizie - Silkeha Xofoqghat Pik",
+   "input": "Qiixepagwoi Weqxiu Zewizie - Silkeha Xofoqghat Pik (Japan)",
+   "norm": "qiixepagwoi weqxiu zewizie silkeha xofoqghat pik (japan)"
+  },
+  {
+   "canon": "buwrt bickug pexni ue u fe lerha",
+   "displayTitle": "Buwrt Bickug - Pexni Ue u fe Lerha",
+   "input": "Buwrt Bickug - Pexni Ue u fe Lerha (Japan)",
+   "norm": "buwrt bickug pexni ue u fe lerha (japan)"
+  },
+  {
+   "canon": "dune titan miuvhsz nimbiwodieh nuttbihme",
+   "displayTitle": "Dune Titan Miuvhsz - Nimbiwodieh Nuttbihme",
+   "input": "Dune Titan Miuvhsz - Nimbiwodieh Nuttbihme (USA) (Nimbiwodieh Vefs, Pidlitqo Sozeh ruaz-oskeh)",
+   "norm": "dune titan miuvhsz nimbiwodieh nuttbihme (usa) (nimbiwodieh vefs pidlitqo sozeh ruaz oskeh)"
+  },
+  {
+   "canon": "ctasah qits h vociz defia pak qonolee pik",
+   "displayTitle": "Ctasah Qits H - Vociz Defia Pak - Qonolee Pik",
+   "input": "Ctasah Qits H - Vociz Defia Pak - Qonolee Pik (Japan)",
+   "norm": "ctasah qits h vociz defia pak qonolee pik (japan)"
+  },
+  {
+   "canon": "kocxiem kinbet",
+   "displayTitle": "Kocxiem Kinbet",
+   "input": "Kocxiem Kinbet (Japan)",
+   "norm": "kocxiem kinbet (japan)"
+  },
+  {
+   "canon": "iwon femxolo taubhebd rwavfasno",
+   "displayTitle": "Iwon Femxolo Taubhebd Rwavfasno",
+   "input": "Iwon Femxolo Taubhebd Rwavfasno (France) (En,Fr,De,Es,It,Nl,Sv)",
+   "norm": "iwon femxolo taubhebd rwavfasno (france) (en fr de es it nl sv)"
+  },
+  {
+   "canon": "vijebux sikrii mvek cijk uo epgazu xi bocme zhiaru",
+   "displayTitle": "Vijebux Sikrii Mvek Cijk UO - Epgazu xi Bocme Zhiaru",
+   "input": "Vijebux Sikrii Mvek Cijk UO - Epgazu xi Bocme Zhiaru (Japan) (Rev 1) (LR)",
+   "norm": "vijebux sikrii mvek cijk uo epgazu xi bocme zhiaru (japan) (rev 1) (lr)"
+  },
+  {
+   "canon": "lawup vomrt 2",
+   "displayTitle": "Lawup Vomrt 2",
+   "input": "Lawup Vomrt 2 (Japan)",
+   "norm": "lawup vomrt 2 (japan)"
+  },
+  {
+   "canon": "pjewrldosuq the dni jbeagaco if boetni vidhepd",
+   "displayTitle": "Pjewrldosuq, The - Dni Jbeagaco if Boetni Vidhepd",
+   "input": "Pjewrldosuq, The - Dni Jbeagaco if Boetni Vidhepd (Europe)",
+   "norm": "pjewrldosuq the dni jbeagaco if boetni vidhepd (europe)"
+  },
+  {
+   "canon": "zd wuguze kaseekbo lu fuge cask",
+   "displayTitle": "ZD Wuguze - Kaseekbo lu Fuge Cask",
+   "input": "ZD Wuguze - Kaseekbo lu Fuge Cask (Japan)",
+   "norm": "zd wuguze kaseekbo lu fuge cask (japan)"
+  },
+  {
+   "canon": "gjcaeb",
+   "displayTitle": "Gjcaeb",
+   "input": "Gjcaeb (Japan) (Rev 1)",
+   "norm": "gjcaeb (japan) (rev 1)"
+  },
+  {
+   "canon": "xuaxexdoge iplizaso",
+   "displayTitle": "Xuaxexdoge Iplizaso",
+   "input": "Xuaxexdoge Iplizaso (Japan)",
+   "norm": "xuaxexdoge iplizaso (japan)"
+  },
+  {
+   "canon": "wagjac w safivlaep epnahwile",
+   "displayTitle": "Wagjac'w Safivlaep Epnahwile",
+   "input": "Wagjac'w Safivlaep Epnahwile (Europe)",
+   "norm": "wagjac w safivlaep epnahwile (europe)"
+  },
+  {
+   "canon": "kuwjzeo 777 tehnker eie paniwpee ue fe weljamdo",
+   "displayTitle": "Kuwjzeo 777 Tehnker EIE - Paniwpee Ue fe Weljamdo",
+   "input": "Kuwjzeo 777 Tehnker EIE - Paniwpee Ue fe Weljamdo (Japan)",
+   "norm": "kuwjzeo 777 tehnker eie paniwpee ue fe weljamdo (japan)"
+  },
+  {
+   "canon": "the qerexg",
+   "displayTitle": "The Qerexg",
+   "input": "Qerexg, The (World) (Uvuwbeca)",
+   "norm": "qerexg the (world) (uvuwbeca)"
+  },
+  {
+   "canon": "oxzoaxi locik bdaosapw exdaxruniq",
+   "displayTitle": "Oxzoaxi Locik' Bdaosapw Exdaxruniq",
+   "input": "Oxzoaxi Locik' Bdaosapw Exdaxruniq (Europe)",
+   "norm": "oxzoaxi locik bdaosapw exdaxruniq (europe)"
+  },
+  {
+   "canon": "r f f dovkieb w dni bikj if jnu civbn fedocu ame",
+   "displayTitle": "R.F.F. Dovkieb'w Dni Bikj if jnu Civbn - Fedocu Ame",
+   "input": "R.F.F. Dovkieb'w Dni Bikj if jnu Civbn - Fedocu Ame (Germany) (Sample)",
+   "norm": "r f f dovkieb w dni bikj if jnu civbn fedocu ame (germany) (sample)"
+  },
+  {
+   "canon": "nigfseu hugbn tajbik 2 nitwguwf utixiw",
+   "displayTitle": "Nigfseu Hugbn Tajbik 2 - Nitwguwf Utixiw",
+   "input": "Nigfseu Hugbn Tajbik 2 - Nitwguwf Utixiw (Japan) (Beta)",
+   "norm": "nigfseu hugbn tajbik 2 nitwguwf utixiw (japan) (beta)"
+  },
+  {
+   "canon": "the luhpna dooq",
+   "displayTitle": "The Luhpna Dooq",
+   "input": "Luhpna Dooq, The (Europe)",
+   "norm": "luhpna dooq the (europe)"
+  },
+  {
+   "canon": "rede fe kinse rcale 2",
+   "displayTitle": "Rede fe Kinse Rcale 2",
+   "input": "Rede fe Kinse Rcale 2 (Japan)",
+   "norm": "rede fe kinse rcale 2 (japan)"
+  },
+  {
+   "canon": "paxaca kojecibo fe xutfaacru mevoie 2",
+   "displayTitle": "Paxaca Kojecibo fe Xutfaacru Mevoie 2",
+   "input": "Paxaca Kojecibo fe Xutfaacru Mevoie 2 (Japan)",
+   "norm": "paxaca kojecibo fe xutfaacru mevoie 2 (japan)"
+  },
+  {
+   "canon": "daazdoe fe gepo",
+   "displayTitle": "Daazdoe fe Gepo",
+   "input": "Daazdoe fe Gepo (Japan)",
+   "norm": "daazdoe fe gepo (japan)"
+  },
+  {
+   "canon": "tunack",
+   "displayTitle": "Tunack",
+   "input": "Tunack (Europe)",
+   "norm": "tunack (europe)"
+  },
+  {
+   "canon": "the qeen batx",
+   "displayTitle": "The Qeen Batx",
+   "input": "Qeen Batx, The (USA) (Beta 4)",
+   "norm": "qeen batx the (usa) (beta 4)"
+  },
+  {
+   "canon": "sezhis qlv 95",
+   "displayTitle": "Sezhis QLV 95",
+   "input": "Sezhis QLV 95 (USA)",
+   "norm": "sezhis qlv 95 (usa)"
+  },
+  {
+   "canon": "nefiw zesqei",
+   "displayTitle": "Nefiw Zesqei",
+   "input": "Nefiw Zesqei (Japan) (Rev 1)",
+   "norm": "nefiw zesqei (japan) (rev 1)"
+  },
+  {
+   "canon": "pujjameqe wabopono pak seofjou fe wutomda a viwosuezu",
+   "displayTitle": "Pujjameqe Wabopono Pak - Seofjou fe Wutomda a Viwosuezu!",
+   "input": "Pujjameqe Wabopono Pak - Seofjou fe Wutomda a Viwosuezu! (Japan)",
+   "norm": "pujjameqe wabopono pak seofjou fe wutomda a viwosuezu (japan)"
+  },
+  {
+   "canon": "metal rider c",
+   "displayTitle": "Metal Rider C",
+   "input": "Metal Rider C (USA) (Metal Rider C Fabtukpuen)",
+   "norm": "metal rider c (usa) (metal rider c fabtukpuen)"
+  },
+  {
+   "canon": "dutfa qumzagec",
+   "displayTitle": "Dutfa Qumzagec",
+   "input": "Dutfa Qumzagec (Europe)",
+   "norm": "dutfa qumzagec (europe)"
+  },
+  {
+   "canon": "gohkig varpul gfehqed saawun cagdurni",
+   "displayTitle": "Gohkig Varpul - Gfehqed Saawun Cagdurni",
+   "input": "Gohkig Varpul - Gfehqed Saawun Cagdurni (Japan) (En)",
+   "norm": "gohkig varpul gfehqed saawun cagdurni (japan) (en)"
+  },
+  {
+   "canon": "sqkrad wooqd tunack",
+   "displayTitle": "Sqkrad Wooqd Tunack",
+   "input": "Sqkrad Wooqd Tunack (Germany)",
+   "norm": "sqkrad wooqd tunack (germany)"
+  },
+  {
+   "canon": "qlv foahcaxtopb mvek",
+   "displayTitle": "QLV Foahcaxtopb Mvek",
+   "input": "QLV Foahcaxtopb Mvek (USA) (Beta)",
+   "norm": "qlv foahcaxtopb mvek (usa) (beta)"
+  },
+  {
+   "canon": "nepmas luun ajzvcap teonameld xafem degtamq",
+   "displayTitle": "Nepmas Luun AjzvCap teonameld Xafem Degtamq",
+   "input": "Nepmas Luun AjzvCap teonameld Xafem Degtamq (USA)",
+   "norm": "nepmas luun ajzvcap teonameld xafem degtamq (usa)"
+  },
+  {
+   "canon": "xaffagowu",
+   "displayTitle": "Xaffagowu",
+   "input": "Xaffagowu (USA)",
+   "norm": "xaffagowu (usa)"
+  },
+  {
+   "canon": "t n o tawikac pvoutih if ejiwomuutv",
+   "displayTitle": "T.N.O. - Tawikac Pvoutih if Ejiwomuutv",
+   "input": "T.N.O. - Tawikac Pvoutih if Ejiwomuutv (USA)",
+   "norm": "t n o tawikac pvoutih if ejiwomuutv (usa)"
+  },
+  {
+   "canon": "magoj pi raw",
+   "displayTitle": "Magoj pi Raw",
+   "input": "Magoj pi Raw (World) (Ja) (Rev 1) (Qaswuos Hufbiji, Wfujzc Omsewe)",
+   "norm": "magoj pi raw (world) (ja) (rev 1) (qaswuos hufbiji wfujzc omsewe)"
+  },
+  {
+   "canon": "ganrafj lr vol 8",
+   "displayTitle": "Ganrafj LR Vol. 8",
+   "input": "Ganrafj LR Vol. 8 (Japan) (LR)",
+   "norm": "ganrafj lr vol 8 (japan) (lr)"
+  },
+  {
+   "canon": "tsew",
+   "displayTitle": "Tsew",
+   "input": "Tsew (USA)",
+   "norm": "tsew (usa)"
+  },
+  {
+   "canon": "sozeh zomsugc zoo helspu habitc",
+   "displayTitle": "Sozeh Zomsugc Zoo - Helspu Habitc",
+   "input": "Sozeh Zomsugc Zoo - Helspu Habitc (USA)",
+   "norm": "sozeh zomsugc zoo helspu habitc (usa)"
+  },
+  {
+   "canon": "jefmbe cegjta",
+   "displayTitle": "Jefmbe Cegjta",
+   "input": "Jefmbe Cegjta (Japan)",
+   "norm": "jefmbe cegjta (japan)"
+  },
+  {
+   "canon": "luorp",
+   "displayTitle": "Luorp",
+   "input": "Luorp (Europe)",
+   "norm": "luorp (europe)"
+  },
+  {
+   "canon": "mabij tebc bowmk reso",
+   "displayTitle": "Mabij Tebc Bowmk Reso",
+   "input": "Mabij Tebc Bowmk Reso (World) (Ja) (Wfujzc)",
+   "norm": "mabij tebc bowmk reso (world) (ja) (wfujzc)"
+  },
+  {
+   "canon": "xahulupukno dxaic xiicejwo jizfi mhulefsoa",
+   "displayTitle": "Xahulupukno Dxaic - Xiicejwo! Jizfi Mhulefsoa",
+   "input": "Xahulupukno Dxaic - Xiicejwo! Jizfi Mhulefsoa (Japan)",
+   "norm": "xahulupukno dxaic xiicejwo jizfi mhulefsoa (japan)"
+  },
+  {
+   "canon": "wg cbuokdeelmu meqazi vol 2 dopoh",
+   "displayTitle": "WG Cbuokdeelmu Meqazi Vol. 2 Dopoh",
+   "input": "WG Cbuokdeelmu Meqazi Vol. 2 Dopoh (Japan)",
+   "norm": "wg cbuokdeelmu meqazi vol 2 dopoh (japan)"
+  },
+  {
+   "canon": "quhfuv if rido",
+   "displayTitle": "Quhfuv if Rido",
+   "input": "Quhfuv if Rido (World) (Fr) (Rev 1) (Fabtukpuen if Rido)",
+   "norm": "quhfuv if rido (world) (fr) (rev 1) (fabtukpuen if rido)"
+  },
+  {
+   "canon": "bres qeciso zesqei uo",
+   "displayTitle": "Bres Qeciso Zesqei UO",
+   "input": "Bres Qeciso Zesqei UO (Japan)",
+   "norm": "bres qeciso zesqei uo (japan)"
+  },
+  {
+   "canon": "tuwsuqc",
+   "displayTitle": "TuwSuqc",
+   "input": "TuwSuqc (Europe)",
+   "norm": "tuwsuqc (europe)"
+  },
+  {
+   "canon": "sukmlicu uo",
+   "displayTitle": "Sukmlicu UO",
+   "input": "Sukmlicu UO (Japan)",
+   "norm": "sukmlicu uo (japan)"
+  },
+  {
+   "canon": "lqoek colos",
+   "displayTitle": "Lqoek Colos",
+   "input": "Lqoek Colos (USA)",
+   "norm": "lqoek colos (usa)"
+  },
+  {
+   "canon": "zxoc sox 2",
+   "displayTitle": "Zxoc Sox 2",
+   "input": "Zxoc Sox 2 (Japan) (Beta 4)",
+   "norm": "zxoc sox 2 (japan) (beta 4)"
+  },
+  {
+   "canon": "steel brawler uo",
+   "displayTitle": "Steel Brawler UO",
+   "input": "Steel Brawler UO (Japan) (Beta)",
+   "norm": "steel brawler uo (japan) (beta)"
+  },
+  {
+   "canon": "vociz epnahwile ohdimt uo",
+   "displayTitle": "Vociz Epnahwile Ohdimt UO",
+   "input": "Vociz Epnahwile Ohdimt UO (Europe)",
+   "norm": "vociz epnahwile ohdimt uo (europe)"
+  },
+  {
+   "canon": "vociz pinsahbes 2",
+   "displayTitle": "Vociz Pinsahbes 2",
+   "input": "Vociz Pinsahbes 2 (USA) (Beta)",
+   "norm": "vociz pinsahbes 2 (usa) (beta)"
+  },
+  {
+   "canon": "vociz cujk",
+   "displayTitle": "Vociz Cujk",
+   "input": "Vociz Cujk (France)",
+   "norm": "vociz cujk (france)"
+  },
+  {
+   "canon": "vociz qeze kze fzijwwelj 3",
+   "displayTitle": "Vociz Qeze Kze Fzijwwelj 3",
+   "input": "Vociz Qeze Kze Fzijwwelj 3 (Japan) (Auto Demo)",
+   "norm": "vociz qeze kze fzijwwelj 3 (japan) (auto demo)"
+  },
+  {
+   "canon": "vociz meqepunu 2",
+   "displayTitle": "Vociz Meqepunu 2",
+   "input": "Vociz Meqepunu 2 (Japan)",
+   "norm": "vociz meqepunu 2 (japan)"
+  },
+  {
+   "canon": "vociz townobh xoihoi",
+   "displayTitle": "Vociz Townobh Xoihoi",
+   "input": "Vociz Townobh Xoihoi (Japan) (Rev 2)",
+   "norm": "vociz townobh xoihoi (japan) (rev 2)"
+  },
+  {
+   "canon": "super pixel world 2 yuki s island",
+   "displayTitle": "Super Pixel World 2 - Yuki's Island",
+   "input": "Super Pixel World 2 - Yuki's Island (Europe) (En,Fr,De) (Rev 2)",
+   "norm": "super pixel world 2 yuki s island (europe) (en fr de) (rev 2)"
+  },
+  {
+   "canon": "vociz jewb",
+   "displayTitle": "Vociz Jewb",
+   "input": "Vociz Jewb (Japan)",
+   "norm": "vociz jewb (japan)"
+  },
+  {
+   "canon": "vociz nucjadacge uo",
+   "displayTitle": "Vociz Nucjadacge UO",
+   "input": "Vociz Nucjadacge UO (Japan)",
+   "norm": "vociz nucjadacge uo (japan)"
+  },
+  {
+   "canon": "vociz steel brawler uo",
+   "displayTitle": "Vociz Steel Brawler UO",
+   "input": "Vociz Steel Brawler UO (USA) (Beta 1)",
+   "norm": "vociz steel brawler uo (usa) (beta 1)"
+  },
+  {
+   "canon": "vociz tidbof uo",
+   "displayTitle": "Vociz Tidbof UO",
+   "input": "Vociz Tidbof UO (Japan)",
+   "norm": "vociz tidbof uo (japan)"
+  },
+  {
+   "canon": "wovjiriv tajbik",
+   "displayTitle": "Wovjiriv Tajbik",
+   "input": "Wovjiriv Tajbik (Japan)",
+   "norm": "wovjiriv tajbik (japan)"
+  },
+  {
+   "canon": "tidji vociz whe baploqqojh",
+   "displayTitle": "Tidji Vociz WHE Baploqqojh",
+   "input": "Tidji Vociz WHE Baploqqojh (USA) (JNJ-JE)",
+   "norm": "tidji vociz whe baploqqojh (usa) (jnj je)"
+  },
+  {
+   "canon": "tilefall 2",
+   "displayTitle": "Tilefall 2",
+   "input": "Tilefall 2 (USA) (Rev 1)",
+   "norm": "tilefall 2 (usa) (rev 1)"
+  },
+  {
+   "canon": "zegm vbwaxxafo w rcegx dni sakei ziba",
+   "displayTitle": "Zegm VbWaxxafo'w Rcegx - Dni Sakei Ziba",
+   "input": "Zegm VbWaxxafo'w Rcegx - Dni Sakei Ziba (USA) (Beta)",
+   "norm": "zegm vbwaxxafo w rcegx dni sakei ziba (usa) (beta)"
+  },
+  {
+   "canon": "hfiokw if rido",
+   "displayTitle": "Hfiokw if Rido",
+   "input": "Hfiokw if Rido (World) (De) (Fabtukpuen if Rido)",
+   "norm": "hfiokw if rido (world) (de) (fabtukpuen if rido)"
+  },
+  {
+   "canon": "igup wooqd luq defoh",
+   "displayTitle": "IGUP - Wooqd luq Defoh",
+   "input": "IGUP - Wooqd luq Defoh (World) (j1.3)",
+   "norm": "igup wooqd luq defoh (world) (j1 3)"
+  },
+  {
+   "canon": "obcet htqita",
+   "displayTitle": "Obcet Htqita",
+   "input": "Obcet Htqita (USA)",
+   "norm": "obcet htqita (usa)"
+  },
+  {
+   "canon": "safrij poderovo",
+   "displayTitle": "Safrij Poderovo",
+   "input": "Safrij Poderovo (Japan)",
+   "norm": "safrij poderovo (japan)"
+  },
+  {
+   "canon": "tigw xapzuqcot",
+   "displayTitle": "Tigw Xapzuqcot",
+   "input": "Tigw Xapzuqcot (Germany)",
+   "norm": "tigw xapzuqcot (germany)"
+  },
+  {
+   "canon": "hugbn gev ele 94",
+   "displayTitle": "Hugbn Gev ELE 94",
+   "input": "Hugbn Gev ELE 94 (USA) (En,Fr,De,Es,It,Nl,Pt,Sv)",
+   "norm": "hugbn gev ele 94 (usa) (en fr de es it nl pt sv)"
+  },
+  {
+   "canon": "jafpe w vicido",
+   "displayTitle": "Jafpe'w Vicido",
+   "input": "Jafpe'w Vicido (Europe)",
+   "norm": "jafpe w vicido (europe)"
+  },
+  {
+   "canon": "wom hem laq muvdao mvek qi oesuwili da",
+   "displayTitle": "Wom Hem Laq - Muvdao Mvek qi Oesuwili da",
+   "input": "Wom Hem Laq - Muvdao Mvek qi Oesuwili da (Japan)",
+   "norm": "wom hem laq muvdao mvek qi oesuwili da (japan)"
+  },
+  {
+   "canon": "crystal vanguard",
+   "displayTitle": "Crystal Vanguard",
+   "input": "Crystal Vanguard (USA).sfc",
+   "norm": "crystal vanguard (usa)"
+  },
+  {
+   "canon": "crystal vanguard",
+   "displayTitle": "Crystal Vanguard",
+   "input": "Crystal Vanguard (USA).zip",
+   "norm": "crystal vanguard (usa)"
+  },
+  {
+   "canon": "crystal vanguard",
+   "displayTitle": "Crystal_Vanguard_",
+   "input": "Crystal_Vanguard_(USA).zip",
+   "norm": "crystal vanguard (usa)"
+  },
+  {
+   "canon": "crystal vanguard",
+   "displayTitle": "crystal vanguard",
+   "input": "crystal vanguard (usa)",
+   "norm": "crystal vanguard (usa)"
+  },
+  {
+   "canon": "the legend of kaelis",
+   "displayTitle": "The Legend of Kaelis",
+   "input": "Legend of Kaelis, The (USA).smc",
+   "norm": "legend of kaelis the (usa)"
+  },
+  {
+   "canon": "the zxia gztqfevzem",
+   "displayTitle": "The Zxia Gztqfevzem",
+   "input": "Zxia Gztqfevzem, The (Japan)",
+   "norm": "zxia gztqfevzem the (japan)"
+  },
+  {
+   "canon": "awsoht dupalj",
+   "displayTitle": "Awsoht Dupalj",
+   "input": "Awsoht Dupalj, (USA)",
+   "norm": "awsoht dupalj (usa)"
+  },
+  {
+   "canon": "prismon moso",
+   "displayTitle": "Prismón Moso",
+   "input": "Prismón Moso (Spain).gb",
+   "norm": "prismon moso (spain)"
+  },
+  {
+   "canon": "aqtuveh and aterap",
+   "displayTitle": "Aqtúveh & Atérap",
+   "input": "Aqtúveh & Atérap (Europe)",
+   "norm": "aqtuveh and aterap (europe)"
+  },
+  {
+   "canon": "zuf and lgari lozbillesh",
+   "displayTitle": "Zuf & Lgari Lozbillesh",
+   "input": "Zuf & Lgari Lozbillesh (USA)",
+   "norm": "zuf and lgari lozbillesh (usa)"
+  },
+  {
+   "canon": "super pixel world 2 yuki s island",
+   "displayTitle": "Super Pixel World 2 - Yuki's Island",
+   "input": "Super Pixel World 2 - Yuki's Island (USA)",
+   "norm": "super pixel world 2 yuki s island (usa)"
+  },
+  {
+   "canon": "reso 4 kkesv hq h",
+   "displayTitle": "Reso 4 Kkesv HQ-H",
+   "input": "Reso 4 Kkesv HQ-H (Japan)",
+   "norm": "reso 4 kkesv hq h (japan)"
+  },
+  {
+   "canon": "nigfseu wugezcal kze zosbue miqed rew 98",
+   "displayTitle": "Nigfseu Wugezcal Kze Zosbue - Miqed Rew '98",
+   "input": "Nigfseu Wugezcal Kze Zosbue - Miqed Rew '98 (Japan)",
+   "norm": "nigfseu wugezcal kze zosbue miqed rew 98 (japan)"
+  },
+  {
+   "canon": "vol 3",
+   "displayTitle": "Vol. 3",
+   "input": "Vol. 3",
+   "norm": "vol 3"
+  },
+  {
+   "canon": "",
+   "displayTitle": "",
+   "input": "(USA)",
+   "norm": "(usa)"
+  },
+  {
+   "canon": "",
+   "displayTitle": "---",
+   "input": "---",
+   "norm": ""
+  },
+  {
+   "canon": "",
+   "displayTitle": "",
+   "input": "",
+   "norm": ""
+  }
+ ],
+ "stride": 50,
+ "system": "Nintendo - Super Nintendo Entertainment System"
+}

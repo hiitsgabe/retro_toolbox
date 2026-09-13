@@ -8,22 +8,25 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/utils/console_auth.dart';
 
 class TaskQueueService {
   /// Returns a human-readable reason downloads can't start, or null when OK.
   static Future<String?> _downloadBlockReason(WidgetRef ref, List<Game> games, String? consoleId) async {
-    final console = (await CatalogService().getConsoles())[consoleId];
+    final catalogService = CatalogService();
+    final console = (await catalogService.getConsoles())[consoleId];
     if (console == null) return null;
 
-    if (console.hasTokenAuth) {
-      final settings = ref.read(settingsProvider);
-      final token = settings.consoleSettings[console.id]?.authToken ?? console.auth?['token'] as String? ?? '';
-      if (token.isEmpty) {
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+
+    // Per source, not per console: an open addon's file must not be blocked by
+    // a private addon's account that the download does not use.
+    for (final addonId in addonsThatNeedToken(games, await catalogService.sourcesFor(console.id))) {
+      if ((await settingsNotifier.readAddonToken(addonId, console.id)).isEmpty) {
         return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
       }
     }
 
-    final settingsNotifier = ref.read(settingsProvider.notifier);
     if (settingsNotifier.getNszDecompressEnabled() &&
         (settingsNotifier.getNszKeysPath() ?? '').isEmpty &&
         games.any((g) => g.filename.toLowerCase().endsWith('.nsz'))) {
@@ -133,7 +136,7 @@ class TaskQueueService {
   static Future<void> _executeNszDecompressionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — nszDecompress manages its own queue-status updates.
+    // Fire and forget: nszDecompress manages its own queue-status updates.
     extractionNotifier.nszDecompress(
       taskId: task.params['taskId'] as String,
       nszFilePath: task.params['nszFilePath'] as String,
@@ -145,7 +148,7 @@ class TaskQueueService {
   static Future<void> _executeChdConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — chdConvert manages its own queue-status updates.
+    // Fire and forget: chdConvert manages its own queue-status updates.
     extractionNotifier.chdConvert(
       taskId: task.params['taskId'] as String,
       inputPath: task.params['inputPath'] as String,
@@ -157,7 +160,7 @@ class TaskQueueService {
   static Future<void> _executeCia3dsConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — cia3dsConvert manages its own queue-status updates.
+    // Fire and forget: cia3dsConvert manages its own queue-status updates.
     extractionNotifier.cia3dsConvert(
       taskId: task.params['taskId'] as String,
       inputPath: task.params['inputPath'] as String,

@@ -8,15 +8,29 @@ import 'package:url_launcher/url_launcher.dart';
 class ConsoleAuthSetting extends ConsumerStatefulWidget {
   final Console console;
 
-  const ConsoleAuthSetting({super.key, required this.console});
+  /// Which addon this account belongs to. The same console can be served by two
+  /// addons with different credentials, and this form is for one of them.
+  final String addonId;
+
+  /// Called after the token reaches the vault, with the new value (empty when
+  /// the user logged out). Optional, because callers that draw the connection
+  /// state outside this form have no other way to learn it saved.
+  final void Function(String token)? onSaved;
+
+  const ConsoleAuthSetting({super.key, required this.console, required this.addonId, this.onSaved});
 
   @override
   ConsumerState<ConsoleAuthSetting> createState() => _ConsoleAuthSettingState();
 }
 
 class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
-  late final TextEditingController _tokenController;
+  final TextEditingController _tokenController = TextEditingController();
   final Map<String, TextEditingController> _signinControllers = {};
+
+  /// What is stored in the vault now. Not from `settingsProvider`: its mirror
+  /// only covers the built-in addon.
+  String _saved = '';
+  bool _loading = true;
   bool _obscure = true;
   bool _dirty = false;
   bool _signingIn = false;
@@ -26,11 +40,23 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   @override
   void initState() {
     super.initState();
-    final saved = ref.read(settingsProvider.notifier).getConsoleAuthToken(widget.console.id);
-    _tokenController = TextEditingController(text: saved ?? '');
     for (final param in _signinParams) {
       _signinControllers[param] = TextEditingController();
     }
+    _loadToken();
+  }
+
+  /// The vault is async and `initState` is not, so the form starts loading. A
+  /// frame with a progress bar beats a frame with an empty field: an empty
+  /// field tells a connected user they have no account.
+  Future<void> _loadToken() async {
+    final token = await ref.read(settingsProvider.notifier).readAddonToken(widget.addonId, widget.console.id);
+    if (!mounted) return;
+    setState(() {
+      _saved = token;
+      _tokenController.text = token;
+      _loading = false;
+    });
   }
 
   @override
@@ -42,6 +68,16 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
     super.dispose();
   }
 
+  Future<void> _store(String token) async {
+    await ref.read(settingsProvider.notifier).setAddonToken(widget.addonId, widget.console.id, token);
+    if (!mounted) return;
+    setState(() {
+      _saved = token;
+      _dirty = false;
+    });
+    widget.onSaved?.call(token);
+  }
+
   Future<void> _signin() async {
     setState(() => _signingIn = true);
     try {
@@ -49,10 +85,9 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
         widget.console.authSignin!,
         {for (final e in _signinControllers.entries) e.key: e.value.text.trim()},
       );
-      await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, token);
       _tokenController.text = token;
+      await _store(token);
       if (mounted) {
-        setState(() => _dirty = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Signed in, token saved.'), duration: Duration(seconds: 2)),
         );
@@ -69,11 +104,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   }
 
   Future<void> _save() async {
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(
-          widget.console.id,
-          _tokenController.text.trim(),
-        );
-    setState(() => _dirty = false);
+    await _store(_tokenController.text.trim());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Auth token saved.'), duration: Duration(seconds: 2)),
@@ -83,14 +114,18 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
 
   Future<void> _clear() async {
     _tokenController.clear();
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, '');
-    setState(() => _dirty = false);
+    await _store('');
   }
 
   @override
   Widget build(BuildContext context) {
-    final saved = ref.watch(settingsProvider).consoleSettings[widget.console.id]?.authToken ?? '';
-    final hasToken = saved.isNotEmpty;
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    final hasToken = _saved.isNotEmpty;
 
     // Once a token is saved, show a compact "signed in" state (like the IA
     // login) instead of the sign-in form. Log out clears it to reveal inputs.

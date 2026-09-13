@@ -7,12 +7,18 @@ import 'package:roms_downloader/providers/app_state_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
+import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/screens/settings_screen.dart';
 import 'package:roms_downloader/screens/about_screen.dart';
 import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
+
+/// The funnel button label, which depends on the grid mode. In PACK MODE the
+/// sheet only sets the region preference, so the label says that instead of
+/// promising a filter that does not happen.
+String filterButtonLabel(GridMode mode) =>
+    mode == GridMode.pack ? 'Region preference' : 'Filters';
 
 class Header extends ConsumerStatefulWidget {
   final List<Console> consoles;
@@ -34,17 +40,19 @@ class _HeaderState extends ConsumerState<Header> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    final downloadNotifier = ref.read(downloadProvider.notifier);
+    // Not a dead read: `DownloadNotifier` wires background resume on construction;
+    // moving the kickoff out of the header is the fix, but it lives in `download_provider.dart`.
+    ref.read(downloadProvider.notifier);
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final taskQueueState = ref.watch(taskQueueProvider);
+    final gridMode = ref.watch(gridModeProvider);
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isNarrow = screenWidth < 600;
     final isMobile = screenWidth < 480;
 
     final canAccessSettings = !appState.loading && !taskQueueState.hasRunningTasks;
-    final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();
 
     return Container(
       height: !isMobile ? (kToolbarHeight - 5) + MediaQuery.of(context).padding.top : null,
@@ -110,7 +118,7 @@ class _HeaderState extends ConsumerState<Header> {
                           context: context,
                           appState: appState,
                           catalogState: catalogState,
-                          canDownload: canDownload,
+                          gridMode: gridMode,
                           canAccessSettings: canAccessSettings,
                         ),
                       ],
@@ -153,7 +161,7 @@ class _HeaderState extends ConsumerState<Header> {
                       context: context,
                       appState: appState,
                       catalogState: catalogState,
-                      canDownload: canDownload,
+                      gridMode: gridMode,
                       canAccessSettings: canAccessSettings,
                     ),
                   ],
@@ -167,7 +175,7 @@ class _HeaderState extends ConsumerState<Header> {
     required BuildContext context,
     required AppState appState,
     required CatalogState catalogState,
-    required bool canDownload,
+    required GridMode gridMode,
     required bool canAccessSettings,
   }) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
@@ -178,20 +186,7 @@ class _HeaderState extends ConsumerState<Header> {
         icon: catalogState.filter.isActive ? Icons.filter_alt : Icons.filter_alt_outlined,
         isActive: catalogState.filter.isActive,
         onPressed: () => FilterModal.show(context),
-        tooltip: 'Filters',
-      ),
-      SizedBox(width: 4),
-      _buildActionButton(
-        context: context,
-        icon: Icons.download_rounded,
-        isActive: canDownload,
-        onPressed: canDownload
-            ? () {
-                final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-                TaskQueueService.startDownloads(ref, context, selectedGames, widget.selectedConsole?.id);
-              }
-            : null,
-        tooltip: 'Download Selected',
+        tooltip: filterButtonLabel(gridMode),
       ),
       SizedBox(width: 4),
       _buildActionButton(

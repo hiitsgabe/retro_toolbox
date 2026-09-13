@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/tinfoil_server_service.dart';
@@ -66,13 +68,21 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
           console.id,
           iaAccessKey: settings.iaAccessKey,
           iaSecretKey: settings.iaSecretKey,
-          authToken: settings.consoleSettings[console.id]?.authToken,
+          tokens: _builtinTokens(settings, console.id),
         );
-      } catch (_) {
-        // Skip consoles whose catalog fails to load; the rest still serve.
-      }
+      } catch (_) {}
     }
     return result;
+  }
+
+  /// The builtin addon's token for this console, in the shape `loadCatalog`
+  /// expects.
+  ///
+  /// The LAN servers only serve the builtin addon's credential, so a console
+  /// served by a third-party addon with auth lists here but fails to download.
+  Map<String, String> _builtinTokens(AppSettings settings, String consoleId) {
+    final token = settings.consoleSettings[consoleId]?.authToken ?? '';
+    return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
 
   Map<String, String> _authHeaders(Console console) {
@@ -127,9 +137,7 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
 
 @pragma('vm:entry-point')
 void tinfoilKeepAliveCallback() {
-  // ponytail: no-op handler — the HTTP server lives in the main isolate; this
-  // service only keeps the process alive. Known ceiling: the extraction
-  // service shares the single foreground slot and may replace/stop it.
+  // The extraction service shares the single foreground slot and may stop this.
   FlutterForegroundTask.setTaskHandler(_TinfoilKeepAliveHandler());
 }
 

@@ -8,7 +8,9 @@ import 'package:roms_downloader/models/console_model.dart';
 import 'package:roms_downloader/models/favorites_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/models/library_snapshot_model.dart';
+import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/providers/library_snapshot_provider.dart';
+import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/filtering_service.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
@@ -55,11 +57,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     try {
       final settings = _ref.read(settingsProvider);
+      final vault = (await _ref.read(vaultProvider.future)).vault;
+      final tokens = <String, String>{};
+      for (final addonId in {for (final source in await catalogService.sourcesFor(console.id)) source.addonId}) {
+        final token = await vault.read(SecretRef.addonToken(addonId, console.id));
+        if (token != null && token.isNotEmpty) tokens[addonId] = token;
+      }
+
       final games = await catalogService.loadCatalog(
         console.id,
         iaAccessKey: settings.iaAccessKey,
         iaSecretKey: settings.iaSecretKey,
-        authToken: settings.consoleSettings[console.id]?.authToken,
+        tokens: tokens,
         onProgress: (done, total) {
           if (mounted && gen == _loadGeneration && total > 1) {
             state = state.copyWith(loadingStatus: 'Reading page $done of $total');
@@ -247,6 +256,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final selectedGames = Set<String>.from(state.selectedGames);
     selectedGames.remove(gameId);
     state = state.copyWith(selectedGames: selectedGames);
+  }
+
+  /// Clears the whole selection. The empty guard avoids a full grid rebuild,
+  /// since the grid listens to `catalogProvider`.
+  void clearSelection() {
+    if (state.selectedGames.isEmpty) return;
+    state = state.copyWith(selectedGames: {});
   }
 
   void updateFilter(CatalogFilter filter) {

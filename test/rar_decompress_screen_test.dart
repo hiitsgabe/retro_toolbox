@@ -9,7 +9,15 @@ void main() {
     expect(find.text('Extract'), findsOneWidget);
     expect(find.text('No file selected'), findsOneWidget);
 
-    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Extract'));
+    // `find.byType` matches the exact runtime type, which misses the private
+    // `_FilledButtonWithIcon` from `FilledButton.icon`; the predicate matches
+    // by `is`.
+    final button = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Extract'),
+        matching: find.byWidgetPredicate((widget) => widget is FilledButton),
+      ),
+    );
     expect(button.onPressed, isNull);
   });
 }
