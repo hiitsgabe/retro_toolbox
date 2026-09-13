@@ -1,26 +1,23 @@
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
-/// Como o match foi obtido. A ordem da declaração é a ordem de preferência: o
-/// matcher tenta de cima para baixo e para no primeiro que resolve.
+/// How a match was obtained. Declaration order is preference order: the
+/// matcher tries top to bottom and stops at the first that resolves.
 enum MatchTier {
-  /// O CRC32 bateu com um dump do pacote. É o único tier que não erra.
+  /// CRC32 matched a dump in the pack. The only tier that never errs.
   checksum,
 
-  /// `norm` do nome do arquivo é igual ao `norm` do nome de um dump.
+  /// The file's `norm` equals a dump's `norm`.
   exactName,
 
-  /// `canon` do nome do arquivo é igual ao `canon` de um jogo do pacote.
-  /// Casa variantes de região e revisão, que é o caso comum.
+  /// The file's `canon` equals a pack game's `canon`. Matches region and
+  /// revision variants, the common case.
   canonicalName,
 
-  /// Similaridade de edição acima do corte. Erra: a seção 5.9 do spec mediu
-  /// pelo menos 4 alvos errados em 26 casos, contra 0.63% de ganho de
-  /// cobertura. Existe porque o ganho é de graça, e nunca vira certeza.
+  /// Edit similarity above the cutoff. Can err, and never becomes certainty.
   fuzzyName,
 }
 
-/// O que a tela pode afirmar. Deriva do tier e existe para a fatia 3 não ter
-/// que redecidir isso em cada widget.
+/// What the screen may assert, derived from the tier.
 enum MatchConfidence { confirmed, likely, guess }
 
 extension MatchTierConfidence on MatchTier {
@@ -32,21 +29,20 @@ extension MatchTierConfidence on MatchTier {
       };
 }
 
-/// Um arquivo da fonte atribuído a um jogo do pacote.
+/// A source file assigned to a pack game.
 ///
-/// [dump] só vem preenchido quando o tier identifica **qual** versão, ou seja
-/// no `checksum` e no `exactName`. Os tiers canônico e fuzzy resolvem o jogo,
-/// não a versão, e deixam [dump] nulo de propósito.
+/// [dump] is filled only when the tier identifies which version (`checksum`
+/// and `exactName`); the canonical and fuzzy tiers leave it null.
 class GameMatch {
   final PackGame game;
   final MatchTier tier;
 
-  /// O nome do arquivo na fonte, cru, do jeito que a fonte deu.
+  /// The raw source filename, as the source gave it.
   final String sourceName;
 
   final PackDump? dump;
 
-  /// 0 a 100. Só o tier fuzzy usa; os outros ficam em 100.
+  /// 0 to 100. Only the fuzzy tier uses it; the others stay at 100.
   final double score;
 
   const GameMatch({

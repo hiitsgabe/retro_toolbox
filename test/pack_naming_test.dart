@@ -3,96 +3,95 @@ import 'package:roms_downloader/utils/pack_naming.dart';
 
 void main() {
   group('stripRomExtension', () {
-    test('tira a extensão de ROM', () {
-      expect(stripRomExtension('Chrono Trigger (USA).sfc'), 'Chrono Trigger (USA)');
-      expect(stripRomExtension('Chrono Trigger (USA).zip'), 'Chrono Trigger (USA)');
-      expect(stripRomExtension('Chrono Trigger (USA).ZIP'), 'Chrono Trigger (USA)');
+    test('strips a ROM extension', () {
+      expect(stripRomExtension('Crystal Vanguard (USA).sfc'), 'Crystal Vanguard (USA)');
+      expect(stripRomExtension('Crystal Vanguard (USA).zip'), 'Crystal Vanguard (USA)');
+      expect(stripRomExtension('Crystal Vanguard (USA).ZIP'), 'Crystal Vanguard (USA)');
     });
 
-    test('não tira o que não é extensão de ROM', () {
-      expect(stripRomExtension('Chrono Trigger (USA).txt'), 'Chrono Trigger (USA).txt');
+    test('does not strip what is not a ROM extension', () {
+      expect(stripRomExtension('Crystal Vanguard (USA).txt'), 'Crystal Vanguard (USA).txt');
       expect(stripRomExtension('Vol. 3'), 'Vol. 3');
     });
 
-    test('prefere a extensão mais longa', () {
-      // .gbc e .gb casam os dois; a mais longa é a certa.
-      expect(stripRomExtension('Zelda.gbc'), 'Zelda');
+    test('prefers the longest extension', () {
+      // .gbc and .gb both match; the longer one is right.
+      expect(stripRomExtension('Kaelis.gbc'), 'Kaelis');
     });
   });
 
   group('norm', () {
-    test('baixa a caixa e troca pontuação por espaço', () {
-      expect(norm('Chrono Trigger (USA)'), 'chrono trigger (usa)');
-      expect(norm('Zero 4 Champ RR-Z (Japan)'), 'zero 4 champ rr z (japan)');
+    test('lowercases and turns punctuation into space', () {
+      expect(norm('Crystal Vanguard (USA)'), 'crystal vanguard (usa)');
+      expect(norm('Reso 4 Kkesv HQ-H (Japan)'), 'reso 4 kkesv hq h (japan)');
     });
 
-    test('expande o e comercial', () {
-      expect(norm('Dig & Spike'), 'dig and spike');
+    test('expands the ampersand', () {
+      expect(norm('Zuf & Lgari'), 'zuf and lgari');
     });
 
-    test('tira acento', () {
-      expect(norm('Pokémon Rojo'), 'pokemon rojo');
-      expect(norm('Astérix & Obélix'), 'asterix and obelix');
+    test('strips accents', () {
+      expect(norm('Prismón Rojo'), 'prismon rojo');
+      expect(norm('Aqtúveh & Atérap'), 'aqtuveh and aterap');
     });
 
-    test('tira a extensão antes de normalizar', () {
-      expect(norm('Chrono Trigger (USA).sfc'), 'chrono trigger (usa)');
+    test('strips the extension before normalizing', () {
+      expect(norm('Crystal Vanguard (USA).sfc'), 'crystal vanguard (usa)');
     });
 
-    test('preserva as tags de região e revisão', () {
-      // O `!` é pontuação proibida e vira espaço, e um espaço só não é
-      // colapsado pelo `\s+`, então o colchete sai com o espaço dentro. É o que
-      // o `norm` do builder faz, conferido rodando o próprio Python. A paridade
-      // com o builder manda aqui, mesmo que `[ ]` seja mais feio que `[]`.
-      expect(norm('Chrono Trigger (USA) (Rev 1) [!]'), 'chrono trigger (usa) (rev 1) [ ]');
+    test('preserves region and revision tags', () {
+      // `!` is forbidden punctuation and becomes a space; a lone space is not
+      // collapsed by `\s+`, so the bracket keeps the space inside. This mirrors
+      // the builder's `norm`, so `[ ]` over `[]` is parity, not a typo.
+      expect(norm('Crystal Vanguard (USA) (Rev 1) [!]'), 'crystal vanguard (usa) (rev 1) [ ]');
     });
 
-    test('nome só de pontuação vira vazio', () {
+    test('a punctuation-only name becomes empty', () {
       expect(norm('---'), '');
       expect(norm(''), '');
     });
   });
 
   group('displayTitle', () {
-    test('preserva a caixa original', () {
-      expect(displayTitle('Chrono Trigger (USA)'), 'Chrono Trigger');
+    test('preserves the original case', () {
+      expect(displayTitle('Crystal Vanguard (USA)'), 'Crystal Vanguard');
     });
 
-    test('move o artigo do fim para a frente sem mexer no resto', () {
-      expect(displayTitle('Legend of Zelda, The (USA)'), 'The Legend of Zelda');
-      expect(displayTitle('Blue Crystalrod, The (Japan)'), 'The Blue Crystalrod');
+    test('moves the trailing article to the front without touching the rest', () {
+      expect(displayTitle('Legend of Kaelis, The (USA)'), 'The Legend of Kaelis');
+      expect(displayTitle('Zxia Gztqfevzem, The (Japan)'), 'The Zxia Gztqfevzem');
     });
 
-    test('preserva acento e pontuação', () {
-      expect(displayTitle('Pokémon Rojo (Spain).gb'), 'Pokémon Rojo');
-      expect(displayTitle('Super Mario World 2 - Yoshi\'s Island (USA)'),
-          'Super Mario World 2 - Yoshi\'s Island');
+    test('preserves accents and punctuation', () {
+      expect(displayTitle('Prismón Rojo (Spain).gb'), 'Prismón Rojo');
+      expect(displayTitle('Super Pixel World 2 - Yuki\'s Island (USA)'),
+          'Super Pixel World 2 - Yuki\'s Island');
     });
 
-    test('nome que é só tag vira vazio', () {
+    test('a tag-only name becomes empty', () {
       expect(displayTitle('(USA)'), '');
     });
 
-    test('tira vírgula sobrando na ponta', () {
-      expect(displayTitle('Addams Family, (USA)'), 'Addams Family');
+    test('strips a trailing comma', () {
+      expect(displayTitle('Awsoht Dupalj, (USA)'), 'Awsoht Dupalj');
     });
   });
 
   group('canon', () {
-    test('descarta tags de região e revisão', () {
-      expect(canon('Chrono Trigger (USA) (Rev 1)'), 'chrono trigger');
-      expect(canon('Chrono Trigger (Japan) [T+Eng]'), 'chrono trigger');
+    test('drops region and revision tags', () {
+      expect(canon('Crystal Vanguard (USA) (Rev 1)'), 'crystal vanguard');
+      expect(canon('Crystal Vanguard (Japan) [T+Eng]'), 'crystal vanguard');
     });
 
-    test('move o artigo antes de normalizar', () {
-      expect(canon('Legend of Zelda, The (USA)'), 'the legend of zelda');
+    test('moves the article before normalizing', () {
+      expect(canon('Legend of Kaelis, The (USA)'), 'the legend of kaelis');
     });
 
-    test('regiões diferentes do mesmo jogo dão a mesma chave', () {
-      expect(canon('Super Mario World (USA)'), canon('Super Mario World (Europe)'));
+    test('different regions of the same game give the same key', () {
+      expect(canon('Super Pixel World (USA)'), canon('Super Pixel World (Europe)'));
     });
 
-    test('nome que é só tag vira chave vazia', () {
+    test('a tag-only name becomes an empty key', () {
       expect(canon('(USA)'), '');
     });
   });

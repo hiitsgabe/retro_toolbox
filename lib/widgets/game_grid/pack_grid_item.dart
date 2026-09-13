@@ -1,36 +1,25 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-/// O tile de MODO PACK: representa um **jogo**, não um arquivo.
-///
-/// Widget puro de propósito. Ele não sabe o que é `PackGridEntry`, não lê
-/// provider nenhum e não decide nada: quem monta é `PackGrid` (Task 12).
-///
-/// O que ele **não** tem, e a ausência é a parte importante:
-/// - nenhum parâmetro de confiança de match. O tile mostra disponibilidade,
-///   e um jogo com uma fonte confirmada e uma no chute é um jogo só. Ver
-///   "Armadilha de leitura" no plano da fatia 3.
-/// - nenhum botão de baixar. O tile não sabe qual arquivo baixar, então não
-///   pode ter botão de baixar (spec de UI, seção 3.1).
-/// - nenhuma tag de região, revisão ou disco. Essas descrevem uma versão.
+/// The PACK MODE tile: it represents a **game**, not a file.
 class PackGridItem extends StatelessWidget {
   final String title;
 
-  /// URL da capa do pacote. Nulo cai no marcador de capa ausente.
+  /// Pack cover URL. Null falls back to the missing-cover placeholder.
   final String? coverUrl;
 
-  /// Se algum addon tem algum arquivo para este jogo. **É o único eixo que
-  /// muda o desenho do tile.**
+  /// Whether any addon has a file for this game. It is the only axis that
+  /// changes how the tile is drawn.
   final bool hasSource;
 
-  /// Se alguma versão deste jogo já está no disco (Task 13). Enquanto o scan
-  /// não terminou vem `false`, porque borda errada é pior que borda ausente.
+  /// Whether some version of this game is already on disk. Comes `false` until
+  /// the scan finishes, because a wrong border is worse than no border.
   final bool isOwned;
 
   final bool isSelected;
 
-  /// Se há seleção em curso. Com seleção vazia o checkbox some de **todos**
-  /// os tiles, para a capa ficar limpa (spec de UI, seção 4).
+  /// Whether a selection is active. With an empty selection the checkbox is
+  /// hidden on every tile so the cover stays clean.
   final bool selectionActive;
 
   final double aspectRatio;
@@ -76,14 +65,9 @@ class PackGridItem extends StatelessWidget {
         ),
         child: Tooltip(
           message: title,
-          // Sem `manual` o `Tooltip` monta um `LongPressGestureRecognizer`
-          // próprio, porque `TooltipTriggerMode.longPress` é o padrão em
-          // mobile e o `flutter_test` roda como Android. Esse reconhecedor é
-          // o mais interno, ganha a arena e engole o toque longo do
-          // `GestureDetector` de fora, então a seleção nunca dispara.
-          // `manual` tira só o gatilho de toque e mantém o hover de desktop,
-          // que é onde a dica de título truncado serve para alguma coisa. Em
-          // mobile o toque longo é da seleção, e isso é decisão travada.
+          // Do not change to `longPress`: the tooltip's own recognizer wins the
+          // gesture arena and swallows the outer long press that drives
+          // selection. `manual` keeps only the desktop hover.
           triggerMode: TooltipTriggerMode.manual,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
@@ -109,9 +93,9 @@ class PackGridItem extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Dois sinais redundantes para "sem fonte": a capa dessaturada
-                // e este ícone. Cinza sozinho confunde com "carregando", e
-                // muita capa de época já é quase monocromática.
+                // Two redundant "no source" signals: the desaturated cover and
+                // this icon. Grey alone reads as "loading", and many period
+                // covers are already nearly monochrome.
                 if (!hasSource)
                   Positioned(
                     top: 8,
@@ -161,7 +145,7 @@ class PackGridItem extends StatelessWidget {
 
   Widget _cover(BuildContext context) {
     final url = coverUrl;
-    final capa = url == null
+    final cover = url == null
         ? _placeholder(context)
         : CachedNetworkImage(
             imageUrl: url,
@@ -169,9 +153,8 @@ class PackGridItem extends StatelessWidget {
             errorWidget: (context, _, __) => _placeholder(context),
             errorListener: (_) {},
           );
-    if (hasSource) return capa;
-    // Matriz de saturação zero. É o mesmo truque do `ColorFilter.mode` com
-    // cinza, mas preserva o brilho da arte em vez de achatá-la.
+    if (hasSource) return cover;
+    // Zero-saturation matrix: greys the art while preserving its brightness.
     return ColorFiltered(
       colorFilter: const ColorFilter.matrix(<double>[
         0.2126, 0.7152, 0.0722, 0, 0,
@@ -179,7 +162,7 @@ class PackGridItem extends StatelessWidget {
         0.2126, 0.7152, 0.0722, 0, 0,
         0, 0, 0, 1, 0,
       ]),
-      child: capa,
+      child: cover,
     );
   }
 

@@ -17,49 +17,47 @@ import 'support/favorites_stub.dart';
 
 PackGame _pg(String id, String title) => PackGame(id: id, title: title, dumps: [PackDump(name: '$title (USA)')]);
 
-PackGridEntry _entrada(String id, String title, {bool comFonte = true}) => PackGridEntry(
+PackGridEntry _entry(String id, String title, {bool withSource = true}) => PackGridEntry(
       game: _pg(id, title),
-      sources: comFonte
-          ? [MatchedSource(filename: '$title (USA).zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1024)]
+      sources: withSource
+          ? [MatchedSource(filename: '$title (USA).zip', sourceId: 'listing', confidence: MatchConfidence.likely, size: 1024)]
           : const [],
     );
 
-/// Um índice de verdade, porque a faixa de estado vazio lê `matchedGameCount`
-/// e um índice falso não provaria nada.
-SourceIndex _indice({required bool casaAlgo}) {
+/// A real index, because the empty-state banner reads `matchedGameCount` and a
+/// fake index would prove nothing.
+SourceIndex _index({required bool matchesSomething}) {
   final matcher = PackMatcher(MetadataPack(
     pack: 'snes',
     system: 'Super Nintendo',
     built: '2026-01-01',
-    games: [_pg('snes/chrono-trigger', 'Chrono Trigger')],
+    games: [_pg('snes/crystal-vanguard', 'Crystal Vanguard')],
   ));
   return SourceIndex.build(matcher, [
-    if (casaAlgo)
-      (filename: 'Chrono Trigger (USA).zip', sourceId: 'listagem', size: 1024, url: null),
+    if (matchesSomething)
+      (filename: 'Crystal Vanguard (USA).zip', sourceId: 'listing', size: 1024, url: null),
   ]);
 }
 
 Widget _host(
-  List<PackGridEntry> entradas, {
-  SourceIndex? indice,
+  List<PackGridEntry> entries, {
+  SourceIndex? index,
   void Function(PackGridEntry)? onOpenGame,
-  Set<String>? baixados,
-  bool varrendo = false,
+  Set<String>? downloaded,
+  bool scanning = false,
 }) {
   return ProviderScope(
     overrides: [
-      // Continua aqui, e é a linha mais fácil de perder nesta troca: o
-      // `catalogProvider` deste teste é o de verdade, e o construtor dele
-      // escuta `favoritesProvider`, que vai ao disco. Sem o stub o caso do
-      // toque longo estoura com `MissingPluginException` **depois** de ter
-      // passado. Ver a "Sexta decisão travada".
-      semDiscoDeFavoritos,
-      packGridEntriesProvider.overrideWithValue(entradas),
-      sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
+      // The catalogProvider here is the real one, and its constructor listens
+      // to favoritesProvider, which hits disk; without the stub the long-press
+      // case throws MissingPluginException after already passing.
+      withoutFavoritesDisk,
+      packGridEntriesProvider.overrideWithValue(entries),
+      sourceIndexProvider.overrideWithValue(index ?? _index(matchesSomething: true)),
       ownedGameIdsProvider.overrideWith(
-        // Um `Completer` que ninguém completa é a varredura em curso. Um
-        // `Future.delayed` deixaria timer pendente e o teste falharia no fim.
-        (ref) => varrendo ? Completer<Set<String>>().future : Future.value(baixados ?? const <String>{}),
+        // A Completer nobody completes stands in for a scan in progress; a
+        // Future.delayed would leave a pending timer and fail the test at the end.
+        (ref) => scanning ? Completer<Set<String>>().future : Future.value(downloaded ?? const <String>{}),
       ),
     ],
     child: MaterialApp(
@@ -69,76 +67,76 @@ Widget _host(
 }
 
 void main() {
-  testWidgets('desenha um tile por entrada', (tester) async {
+  testWidgets('draws one tile per entry', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/super-metroid', 'Super Metroid'),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/super-vectron', 'Super Vectron'),
     ]));
 
     expect(find.byType(PackGridItem), findsNWidgets(2));
-    expect(find.text('Chrono Trigger'), findsOneWidget);
+    expect(find.text('Crystal Vanguard'), findsOneWidget);
   });
 
-  testWidgets('o jogo sem fonte continua na grade, marcado', (tester) async {
+  testWidgets('a sourceless game stays in the grid, badged', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/earthbound', 'EarthBound', comFonte: false),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/emberfall', 'Emberfall', withSource: false),
     ]));
 
     expect(find.byType(PackGridItem), findsNWidgets(2));
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
   });
 
-  testWidgets('com o índice vazio aparece a faixa de sem cobertura', (tester) async {
+  testWidgets('an empty index shows the no-coverage banner', (tester) async {
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger', comFonte: false)],
-      indice: _indice(casaAlgo: false),
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard', withSource: false)],
+      index: _index(matchesSomething: false),
     ));
 
-    expect(find.text('Nenhuma fonte cobre este console'), findsOneWidget);
-    // A faixa é estado da grade, não do tile: os tiles continuam lá.
+    expect(find.text('No source covers this console'), findsOneWidget);
+    // The banner is grid state, not tile state: the tiles are still there.
     expect(find.byType(PackGridItem), findsOneWidget);
   });
 
-  testWidgets('com o índice cobrindo alguma coisa não há faixa', (tester) async {
-    await tester.pumpWidget(_host([_entrada('snes/chrono-trigger', 'Chrono Trigger')]));
+  testWidgets('an index covering something shows no banner', (tester) async {
+    await tester.pumpWidget(_host([_entry('snes/crystal-vanguard', 'Crystal Vanguard')]));
 
-    expect(find.text('Nenhuma fonte cobre este console'), findsNothing);
+    expect(find.text('No source covers this console'), findsNothing);
   });
 
-  testWidgets('busca sem resultado mostra o vazio de busca, não o de cobertura', (tester) async {
+  testWidgets('a search with no results shows the search empty, not the coverage one', (tester) async {
     await tester.pumpWidget(_host(const []));
 
-    expect(find.text('Nenhum jogo com esse nome'), findsOneWidget);
-    expect(find.text('Nenhuma fonte cobre este console'), findsNothing);
+    expect(find.text('No game with that name'), findsOneWidget);
+    expect(find.text('No source covers this console'), findsNothing);
   });
 
-  testWidgets('o toque curto devolve a entrada tocada', (tester) async {
-    final abertas = <String>[];
+  testWidgets('a short tap returns the tapped entry', (tester) async {
+    final opened = <String>[];
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger'), _entrada('snes/super-metroid', 'Super Metroid')],
-      onOpenGame: (entry) => abertas.add(entry.game.id),
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard'), _entry('snes/super-vectron', 'Super Vectron')],
+      onOpenGame: (entry) => opened.add(entry.game.id),
     ));
 
-    await tester.tap(find.text('Super Metroid'));
+    await tester.tap(find.text('Super Vectron'));
     await tester.pump();
 
-    expect(abertas, ['snes/super-metroid']);
+    expect(opened, ['snes/super-vectron']);
   });
 
-  testWidgets('o toque longo seleciona, e aí o checkbox aparece em todo tile', (tester) async {
+  testWidgets('a long press selects, and then the checkbox appears on every tile', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/super-metroid', 'Super Metroid'),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/super-vectron', 'Super Vectron'),
     ]));
 
     expect(find.byType(Checkbox), findsNothing);
 
-    await tester.longPress(find.text('Chrono Trigger'));
+    await tester.longPress(find.text('Crystal Vanguard'));
     await tester.pump();
 
-    // Dois checkboxes, um marcado. É a regra da seção 4: a visibilidade do
-    // checkbox é global, o valor dele é por tile.
+    // Two checkboxes, one checked: checkbox visibility is global, its value is
+    // per tile.
     expect(find.byType(Checkbox), findsNWidgets(2));
     expect(
       tester.widgetList<Checkbox>(find.byType(Checkbox)).where((c) => c.value == true).length,
@@ -146,31 +144,31 @@ void main() {
     );
   });
 
-  testWidgets('o jogo que já está no disco vai marcado para o tile', (tester) async {
+  testWidgets('a game already on disk reaches the tile as owned', (tester) async {
     await tester.pumpWidget(_host(
       [
-        _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-        _entrada('snes/super-metroid', 'Super Metroid'),
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
       ],
-      baixados: {'snes/chrono-trigger'},
+      downloaded: {'snes/crystal-vanguard'},
     ));
     await tester.pump();
 
     final tiles = tester.widgetList<PackGridItem>(find.byType(PackGridItem)).toList();
-    expect(tiles.firstWhere((t) => t.title == 'Chrono Trigger').isOwned, isTrue);
-    expect(tiles.firstWhere((t) => t.title == 'Super Metroid').isOwned, isFalse);
+    expect(tiles.firstWhere((t) => t.title == 'Crystal Vanguard').isOwned, isTrue);
+    expect(tiles.firstWhere((t) => t.title == 'Super Vectron').isOwned, isFalse);
   });
 
-  testWidgets('enquanto a varredura não termina ninguém vai marcado', (tester) async {
+  testWidgets('while the scan is unfinished nothing is marked owned', (tester) async {
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger')],
-      baixados: {'snes/chrono-trigger'},
-      varrendo: true,
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard')],
+      downloaded: {'snes/crystal-vanguard'},
+      scanning: true,
     ));
     await tester.pump();
 
-    // Seção 3.1: nada de borda enquanto o scan roda. Borda errada é pior que
-    // borda ausente, e neste instante a resposta ainda não existe.
+    // No border while the scan runs: a wrong border is worse than none, and the
+    // answer does not exist yet.
     expect(tester.widget<PackGridItem>(find.byType(PackGridItem)).isOwned, isFalse);
   });
 }

@@ -3,9 +3,8 @@ import 'dart:typed_data';
 
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// Uma entrada de diretório central: 46 bytes fixos, o nome, e o extra e o
-/// comentário se pedidos. Só os campos que o parser lê são preenchidos, que é
-/// o que um zip real também faz com a maioria deles.
+/// A central directory entry: 46 fixed bytes, the name, then extra and comment
+/// if asked. Only the fields the parser reads are filled.
 Uint8List cdEntry(String name, int crc, {int extraLen = 0, int commentLen = 0}) {
   final nameBytes = utf8.encode(name);
   final head = ByteData(46);
@@ -22,13 +21,10 @@ Uint8List cdEntry(String name, int crc, {int extraLen = 0, int commentLen = 0}) 
   return out.toBytes();
 }
 
-/// Monta um zip inteiro: um bloco de zeros no lugar das entradas locais, o
-/// diretório central, o EOCD, e um comentário depois dele.
-///
-/// O comentário depois do EOCD não é invenção de teste: o TorrentZip, que é o
-/// formato que o archive.org serve, grava `TORRENTZIPPED-xxxxxxxx` ali. Se o
-/// parser assumisse que o EOCD são os últimos 22 bytes do arquivo, ele
-/// quebraria em cima de todo o acervo do archive.org.
+/// Builds a whole zip: a block of zeros for the local entries, the central
+/// directory, the EOCD, and a comment after it. The comment is real: TorrentZip
+/// (what archive.org serves) writes `TORRENTZIPPED-xxxxxxxx` there, so a parser
+/// that assumed the EOCD is the last 22 bytes would break on every item.
 Uint8List buildZip(
   List<Uint8List> entries, {
   int localBytes = 64,
@@ -60,8 +56,8 @@ Uint8List buildZip(
   return out.toBytes();
 }
 
-/// Servidor falso de Range. Guarda o que foi pedido, para o teste conferir que
-/// foram duas requisições curtas e não o arquivo inteiro.
+/// A fake Range server. Records what was asked so a test can check there were
+/// two short requests and not the whole file.
 class FakeRangeServer {
   final Uint8List body;
   final int status;

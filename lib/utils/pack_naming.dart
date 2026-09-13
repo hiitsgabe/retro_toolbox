@@ -1,27 +1,20 @@
-/// Porta Dart das funções de nome do builder (`tool/build_metadata_pack.py`).
+/// Dart port of the builder's name functions (`tool/build_metadata_pack.py`).
+/// The two must agree case by case, which `test/pack_naming_parity_test.dart`
+/// proves against a golden from the real DAT.
 ///
-/// O builder gera o pacote e o app consome, mas o app também precisa
-/// normalizar nomes em runtime, porque o nome do arquivo na fonte remota nunca
-/// passou pelo builder. As duas implementações têm que concordar caso a caso, e
-/// é isso que `test/pack_naming_parity_test.dart` prova contra um golden
-/// gerado do DAT real.
-///
-/// Este arquivo é Dart puro de propósito: `tool/verify_matcher.dart` o roda
-/// fora do Flutter. Não adicione import de `package:flutter`.
+/// Warning: pure Dart on purpose. Do not add a `package:flutter` import.
 library;
 
-/// Extensões que o No-Intro e o Redump usam, mais os empacotadores que as
-/// fontes servem. Mesma lista de `ROM_EXTS` no builder.
+/// The extensions No-Intro and Redump use, plus the packagers sources serve.
+/// Same list as `ROM_EXTS` in the builder.
 const romExtensions = <String>[
   '.zip', '.7z', '.sfc', '.smc', '.fig', '.swc', '.bin', '.rar', '.gz',
   '.nes', '.gb', '.gbc', '.gba', '.nds', '.3ds', '.n64', '.z64', '.v64',
   '.md', '.gen', '.gg', '.iso', '.cue', '.chd', '.col', '.int',
 ];
 
-/// As que são contêiner e não ROM. Isso importa para a seção 5.8 do spec: o
-/// CRC do diretório central só é comparável com o pacote quando a entrada é a
-/// ROM em si. Se a entrada for outro arquivo compactado, o CRC é do compactado
-/// e não casa com nada.
+/// The container extensions, not ROMs. A central-directory CRC only compares
+/// against the pack when the entry is the ROM itself.
 const archiveExtensions = <String>['.zip', '.7z', '.rar', '.gz'];
 
 final _byLength = [...romExtensions]..sort((a, b) => b.length.compareTo(a.length));
@@ -44,9 +37,8 @@ bool hasArchiveExtension(String name) {
   return archiveExtensions.any(low.endsWith);
 }
 
-/// Tabela de dobra de acento. Só as minúsculas, porque `norm` já baixou a
-/// caixa antes de dobrar. Cobre latim-1 e os pedaços de latim estendido que
-/// aparecem em título de jogo europeu.
+/// Diacritic-folding table. Lowercase only, because `norm` lowercases before
+/// folding.
 const _fold = <String, String>{
   'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a', 'ā': 'a', 'ă': 'a', 'ą': 'a',
   'ç': 'c', 'ć': 'c', 'č': 'c',
@@ -74,8 +66,8 @@ String _stripDiacritics(String value) {
 final _disallowed = RegExp(r'[^a-z0-9()\[\]]+');
 final _spaces = RegExp(r'\s+');
 
-/// Forma comparável do nome: sem extensão, sem acento, sem pontuação, mas
-/// **com** as tags de região e revisão. É o eixo do tier 1 do matcher.
+/// The comparable form of a name: no extension, no accents, no punctuation,
+/// but with region and revision tags kept. The matcher's exact-name axis.
 String norm(String value) {
   var v = stripRomExtension(value).toLowerCase();
   v = _stripDiacritics(v);
@@ -90,8 +82,8 @@ final _trailingArticle = RegExp(
   caseSensitive: false,
 );
 
-/// Equivalente do `.strip().strip(",").strip()` do Python: apara espaço,
-/// depois vírgula das duas pontas, depois espaço de novo.
+/// Mirror of the Python `.strip().strip(",").strip()`: trims space, then
+/// commas on both ends, then space again.
 String _trimSpaceThenComma(String value) {
   var v = value.trim();
   var start = 0;
@@ -105,8 +97,8 @@ String _trimSpaceThenComma(String value) {
   return v.substring(start, end).trim();
 }
 
-/// Título de exibição a partir do nome do DAT: sem extensão, sem tags, com o
-/// artigo de volta na frente, e com a caixa e os acentos originais intactos.
+/// Display title from a DAT name: no extension, no tags, trailing article
+/// moved back to the front, original case and accents intact.
 String displayTitle(String datName) {
   var v = stripRomExtension(datName).replaceAll(_tags, ' ');
   v = _trimSpaceThenComma(v.replaceAll(_spaces, ' '));
@@ -115,6 +107,5 @@ String displayTitle(String datName) {
   return v;
 }
 
-/// Título canônico: a chave de agrupamento de um jogo. É o título de exibição
-/// passado por [norm].
+/// Canonical title: a game's grouping key, the display title run through [norm].
 String canon(String value) => norm(displayTitle(value));

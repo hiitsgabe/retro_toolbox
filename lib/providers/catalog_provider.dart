@@ -57,13 +57,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     try {
       final settings = _ref.read(settingsProvider);
-      // Um token por addon que serve este console, não um token por console.
-      // A lista de addons não entra aqui: quem sabe quais addons servem este
-      // console é a fusão, e ler só esses evita ida ao cofre por addon que
-      // não tem nada a ver com o console aberto.
       final vault = (await _ref.read(vaultProvider.future)).vault;
       final tokens = <String, String>{};
-      for (final addonId in {for (final fonte in await catalogService.sourcesFor(console.id)) fonte.addonId}) {
+      for (final addonId in {for (final source in await catalogService.sourcesFor(console.id)) source.addonId}) {
         final token = await vault.read(SecretRef.addonToken(addonId, console.id));
         if (token != null && token.isNotEmpty) tokens[addonId] = token;
       }
@@ -262,10 +258,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     state = state.copyWith(selectedGames: selectedGames);
   }
 
-  /// Limpa a seleção inteira. É o `×` da barra do rodapé.
-  ///
-  /// A guarda de vazio não é micro-otimização: toda a grade escuta
-  /// `catalogProvider`, então emitir estado igual custa um rebuild da tela.
+  /// Clears the whole selection. The empty guard avoids a full grid rebuild,
+  /// since the grid listens to `catalogProvider`.
   void clearSelection() {
     if (state.selectedGames.isEmpty) return;
     state = state.copyWith(selectedGames: {});

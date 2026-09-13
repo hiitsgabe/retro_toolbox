@@ -4,7 +4,7 @@ import 'package:roms_downloader/models/source_pick_model.dart';
 
 Game _game(String name, int size) => Game(
       title: name,
-      url: 'https://exemplo/$name',
+      url: 'https://example/$name',
       size: size,
       consoleId: 'snes',
     );
@@ -14,27 +14,27 @@ SourcePick _pick(String name, int size, {bool uncertain = false}) => SourcePick(
       title: name,
       filename: name,
       size: size,
-      sourceId: 'listagem',
-      reason: 'escolhido pela sua região preferida',
+      sourceId: 'listing',
+      reason: 'chosen by your preferred region',
       uncertain: uncertain,
       game: _game(name, size),
     );
 
 void main() {
-  test('totalBytes soma o tamanho de todas as escolhas', () {
+  test('totalBytes sums the size of every pick', () {
     final plan = BatchPlan(picks: [_pick('a.zip', 1000), _pick('b.zip', 2400)]);
 
     expect(plan.totalBytes, 3400);
   });
 
-  test('totalBytes é zero num plano sem escolha', () {
+  test('totalBytes is zero for a plan with no pick', () {
     const plan = BatchPlan();
 
     expect(plan.totalBytes, 0);
     expect(plan.isEmpty, isTrue);
   });
 
-  test('uncertainCount conta só as escolhas marcadas como incertas', () {
+  test('uncertainCount counts only picks marked uncertain', () {
     final plan = BatchPlan(picks: [
       _pick('a.zip', 10),
       _pick('b.zip', 10, uncertain: true),
@@ -44,33 +44,31 @@ void main() {
     expect(plan.uncertainCount, 2);
   });
 
-  test('withoutPick tira uma escolha e preserva as falhas', () {
+  test('withoutPick removes one pick and keeps the failures', () {
     final plan = BatchPlan(
       picks: [_pick('a.zip', 10), _pick('b.zip', 20)],
-      failures: const [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: const [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     );
 
-    final menor = plan.withoutPick('snes/a.zip');
+    final smaller = plan.withoutPick('snes/a.zip');
 
-    expect(menor.picks.map((p) => p.gameId), ['snes/b.zip']);
-    expect(menor.failures.single.title, 'C');
-    // O plano original não muda: a folha guarda o anterior para desfazer.
+    expect(smaller.picks.map((p) => p.gameId), ['snes/b.zip']);
+    expect(smaller.failures.single.title, 'C');
+    // The original plan is unchanged: the sheet keeps it for undo.
     expect(plan.picks.length, 2);
   });
 
-  test('withoutPick de um id que não está no plano devolve o mesmo conteúdo', () {
+  test('withoutPick of an id not in the plan returns the same content', () {
     final plan = BatchPlan(picks: [_pick('a.zip', 10)]);
 
-    expect(plan.withoutPick('snes/nao-existe').picks.length, 1);
+    expect(plan.withoutPick('snes/does-not-exist').picks.length, 1);
   });
 
-  test('um plano só de falhas não está vazio', () {
+  test('a plan of failures only is not empty', () {
     const plan = BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     );
 
-    // Importa porque a folha precisa abrir para explicar por que nada vai
-    // ser baixado, em vez de sumir sem dizer nada.
     expect(plan.isEmpty, isFalse);
     expect(plan.picks, isEmpty);
   });

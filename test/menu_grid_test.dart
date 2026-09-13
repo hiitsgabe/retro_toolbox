@@ -12,7 +12,7 @@ void main() {
         home: Scaffold(
           body: MenuGrid(
             tiles: [
-              MenuTile(label: 'Baixar Jogos', icon: Icons.download, onTap: () => tapped.add('games')),
+              MenuTile(label: 'Download Games', icon: Icons.download, onTap: () => tapped.add('games')),
               MenuTile(label: 'Servers', icon: Icons.dns, onTap: () => tapped.add('servers')),
               MenuTile(label: 'Settings', icon: Icons.settings, onTap: () => tapped.add('settings')),
             ],
@@ -21,7 +21,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Baixar Jogos'), findsOneWidget);
+    expect(find.text('Download Games'), findsOneWidget);
     expect(find.text('Servers'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
 
@@ -31,14 +31,14 @@ void main() {
     expect(tapped, ['servers']);
   });
 
-  testWidgets('as tiles de Tools levam para os Addons', (tester) async {
-    final abertas = <Type>[];
-    final tiles = toolsTiles((tela) => abertas.add(tela.runtimeType));
+  testWidgets('the Tools tiles open the Addons screen', (tester) async {
+    final opened = <Type>[];
+    final tiles = toolsTiles((screen) => opened.add(screen.runtimeType));
 
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MenuGrid(tiles: tiles))));
     await tester.tap(find.text('Addons'));
     await tester.pump();
 
-    expect(abertas, [AddonsScreen]);
+    expect(opened, [AddonsScreen]);
   });
 }

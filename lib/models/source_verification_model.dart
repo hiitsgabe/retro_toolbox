@@ -1,29 +1,24 @@
-/// O eixo **a posteriori** da confiança numa fonte: o que a verificação por
-/// CRC disse depois de ler o cabeçalho do arquivo remoto.
+/// The a-posteriori confidence axis for a source: what the CRC check said
+/// after reading the remote file header.
 ///
-/// Não confunda com `MatchConfidence`, que é o eixo **a priori** e sai do tier
-/// de nome (fatia 2). São dois eixos e eles não se misturam: ver a "Segunda
-/// decisão travada" no plano da fatia 3. Se você se pegou querendo acrescentar
-/// um `crcOk` ao `MatchConfidence`, é este enum que você queria.
-///
-/// Dart puro, sem import nenhum, de propósito.
+/// Distinct from `MatchConfidence`, the a-priori name-tier axis; the two do
+/// not mix. If you want to add a `crcOk` to `MatchConfidence`, this is the
+/// enum you meant.
 enum SourceVerification {
-  /// Ninguém perguntou. É o estado de toda fonte fora da tela de detalhe: a
-  /// grade não verifica e o lote não verifica (seção 6 do spec de UI), e um
-  /// console sem pacote não tem com o que verificar.
+  /// Nobody asked. The state of every source outside the detail screen.
   notVerified,
 
-  /// As duas requisições estão no ar.
+  /// Both requests are in flight.
   verifying,
 
-  /// Um dump deste jogo está lá dentro. Certeza, não palpite.
+  /// A dump of this game is inside. Certainty, not a guess.
   crcOk,
 
-  /// Leu o CRC e ele não é deste jogo. A fonte sai do destaque e desce para a
-  /// lista, marcada (seção 8).
+  /// The CRC was read and is not this game's. The source drops out of the
+  /// highlight and down into the list, marked.
   crcDiscarded,
 
-  /// Não deu para saber: servidor sem `Range`, arquivo que não é ZIP, ZIP sem
-  /// ROM dentro. **Não** é sinônimo de fonte ruim, e por isso não descarta.
+  /// Undeterminable: no `Range`, not a ZIP, ZIP without a ROM inside. Not a
+  /// synonym for a bad source, so it does not discard.
   impossible,
 }

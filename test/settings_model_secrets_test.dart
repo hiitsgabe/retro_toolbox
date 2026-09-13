@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 
 void main() {
-  test('o JSON salvo não leva as três credenciais do Internet Archive', () {
+  test('saved JSON omits the three Internet Archive credentials', () {
     const settings = AppSettings(iaAccessKey: 'AK', iaSecretKey: 'SK', iaCookies: 'logged-in-sig=xyz');
 
     final json = settings.toJson();
@@ -12,7 +12,7 @@ void main() {
     expect(json.containsKey('iaCookies'), isFalse);
   });
 
-  test('o JSON salvo não leva o token de console', () {
+  test('saved JSON omits the console token', () {
     const console = BaseSettings(downloadDir: '/roms/snes', authToken: 'tok-snes');
 
     final json = console.toJson();
@@ -21,11 +21,9 @@ void main() {
     expect(json['downloadDir'], '/roms/snes');
   });
 
-  test('ler o formato legado continua funcionando', () {
-    // Assimetria deliberada: escreve sem, lê com. O arquivo de quem ainda não
-    // migrou tem os campos lá, e quem os tira é a migração da Task 5, que roda
-    // sobre o mapa cru. Tirar a leitura junto não fecharia buraco nenhum e
-    // faria qualquer caminho que pule a migração perder o token em silêncio.
+  test('reading the legacy format still works', () {
+    // Deliberate asymmetry: writes without, reads with. An unmigrated file
+    // still has these fields, and migration strips them from the raw map.
     final settings = AppSettings.fromJson({
       'iaAccessKey': 'AK',
       'consoleSettings': {
@@ -37,12 +35,12 @@ void main() {
     expect(settings.consoleSettings['snes']?.authToken, 'tok-snes');
   });
 
-  test('o que não é segredo continua sendo salvo', () {
-    const settings = AppSettings(nszDecompressEnabled: false, catalogSourceUrl: 'https://exemplo/consoles.json');
+  test('non-secret fields are still saved', () {
+    const settings = AppSettings(nszDecompressEnabled: false, catalogSourceUrl: 'https://example/consoles.json');
 
     final json = settings.toJson();
 
     expect(json['nszDecompressEnabled'], isFalse);
-    expect(json['catalogSourceUrl'], 'https://exemplo/consoles.json');
+    expect(json['catalogSourceUrl'], 'https://example/consoles.json');
   });
 }

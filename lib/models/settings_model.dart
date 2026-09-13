@@ -145,16 +145,9 @@ class BaseSettings {
     );
   }
 
-  /// Devolve uma cópia com o token trocado e **nada mais**.
-  ///
-  /// Existe porque [copyWith] materializa padrão em campo `null`
-  /// (`autoExtract ?? this.autoExtract ?? true`, e os dois limites logo
-  /// abaixo). No formulário isso é o desejado: o usuário está mexendo em
-  /// configuração e ver o valor efetivo é útil. Na hidratação do cofre não é:
-  /// ela roda a cada abertura do app, e depois da Task 8 roda também para
-  /// console que o usuário nunca abriu, então gravaria override que ninguém
-  /// pediu. `autoExtract` chega a mudar comportamento, porque `getSetting`
-  /// consulta o console antes do geral (`download_provider.dart:230`).
+  /// A copy with the token replaced and nothing else. Unlike [copyWith], it
+  /// does not materialize defaults into null fields, so it is safe to call
+  /// outside the settings form.
   BaseSettings withAuthToken(String token) => BaseSettings(
         downloadDir: downloadDir,
         autoExtract: autoExtract,

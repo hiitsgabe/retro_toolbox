@@ -10,7 +10,7 @@ import 'package:roms_downloader/providers/identity_provider.dart';
 import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
 PackGame _pg(String id, String dumpName) =>
     PackGame(id: id, title: dumpName, dumps: [PackDump(name: dumpName)]);
@@ -20,181 +20,175 @@ MetadataPack _pack() => MetadataPack(
       system: 'Super Nintendo',
       built: '2026-01-01',
       games: [
-        _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
-        _pg('snes/super-metroid', 'Super Metroid (USA)'),
+        _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
+        _pg('snes/super-vectron', 'Super Vectron (USA)'),
       ],
     );
 
 Game _game(String filename, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename,
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: 2048,
       consoleId: 'snes',
       sourceId: sourceId,
     );
 
 ProviderContainer _container({
-  PackTarget? alvo = _alvo,
-  Future<MetadataPack?>? pacote,
-  List<Game> jogos = const [],
-  String busca = '',
+  PackTarget? target = _target,
+  Future<MetadataPack?>? pack,
+  List<Game> games = const [],
+  String search = '',
 }) {
   final container = ProviderContainer(overrides: [
-    packTargetProvider.overrideWithValue(alvo),
-    if (alvo != null)
-      metadataPackProvider(alvo).overrideWith((ref) => pacote ?? Future.value(_pack())),
-    catalogGamesProvider.overrideWithValue(jogos),
-    gridSearchQueryProvider.overrideWithValue(busca),
+    packTargetProvider.overrideWithValue(target),
+    if (target != null)
+      metadataPackProvider(target).overrideWith((ref) => pack ?? Future.value(_pack())),
+    catalogGamesProvider.overrideWithValue(games),
+    gridSearchQueryProvider.overrideWithValue(search),
   ]);
   addTearDown(container.dispose);
   return container;
 }
 
-/// Espera o pacote e o matcher resolverem. Sem isto os providers síncronos
-/// ainda estão vendo `AsyncLoading`, que é um estado legítimo e testado à parte.
-Future<void> _pronto(ProviderContainer container) async {
-  await container.read(metadataPackProvider(_alvo).future);
-  await container.read(packMatcherProvider(_alvo).future);
+/// Waits for the pack and matcher to resolve; without it the synchronous
+/// providers still see `AsyncLoading`, a legitimate state tested separately.
+Future<void> _ready(ProviderContainer container) async {
+  await container.read(metadataPackProvider(_target).future);
+  await container.read(packMatcherProvider(_target).future);
 }
 
 void main() {
-  test('sem console selecionado o modo é FONTE e a grade fica vazia', () {
-    final container = _container(alvo: null);
+  test('no selected console means source mode and an empty grid', () {
+    final container = _container(target: null);
 
     expect(container.read(gridModeProvider), GridMode.source);
     expect(container.read(packGridEntriesProvider), isEmpty);
     expect(container.read(sourceIndexProvider), isNull);
   });
 
-  test('enquanto o pacote carrega o modo é FONTE', () {
-    // Sem `await`. É este o estado do primeiro quadro de toda sessão.
-    final container = _container(pacote: Future.delayed(const Duration(seconds: 1), _pack));
+  test('while the pack loads the mode is source', () {
+    // No await: this is the first-frame state of every session.
+    final container = _container(pack: Future.delayed(const Duration(seconds: 1), _pack));
 
     expect(container.read(gridModeProvider), GridMode.source);
   });
 
-  test('console sem pacote fica em MODO FONTE', () async {
-    final container = _container(pacote: Future.value(null));
-    await container.read(metadataPackProvider(_alvo).future);
+  test('a console without a pack stays in source mode', () async {
+    final container = _container(pack: Future.value(null));
+    await container.read(metadataPackProvider(_target).future);
 
     expect(container.read(gridModeProvider), GridMode.source);
     expect(container.read(packGridEntriesProvider), isEmpty);
   });
 
-  test('erro ao buscar o pacote cai em MODO FONTE, não em tela de erro', () async {
-    final container = _container(pacote: Future.error(Exception('sem rede')));
-    await expectLater(container.read(metadataPackProvider(_alvo).future), throwsException);
+  test('a pack fetch error falls to source mode, not an error screen', () async {
+    final container = _container(pack: Future.error(Exception('no network')));
+    await expectLater(container.read(metadataPackProvider(_target).future), throwsException);
 
     expect(container.read(gridModeProvider), GridMode.source);
   });
 
-  test('com pacote o modo é PACK e a grade traz todos os jogos do pacote', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('with a pack the mode is pack and the grid holds every pack game', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     expect(container.read(gridModeProvider), GridMode.pack);
-    final entradas = container.read(packGridEntriesProvider);
-    expect(entradas.map((e) => e.game.id), ['snes/chrono-trigger', 'snes/super-metroid']);
-    // O que não tem fonte continua na grade, marcado, e não some dela.
-    expect(entradas.map((e) => e.hasSource), [true, false]);
+    final entries = container.read(packGridEntriesProvider);
+    expect(entries.map((e) => e.game.id), ['snes/crystal-vanguard', 'snes/super-vectron']);
+    expect(entries.map((e) => e.hasSource), [true, false]);
   });
 
-  test('a fonte casada carrega o tamanho e o id de fonte embutido', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the matched source carries the size and the built-in source id', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
-    final fonte = container.read(packGridEntriesProvider).first.sources.single;
-    expect(fonte.filename, 'Chrono Trigger (USA).zip');
-    expect(fonte.size, 2048);
-    expect(fonte.sourceId, kBuiltinAddonId);
-    expect(fonte.url, 'https://exemplo.org/snes/Chrono Trigger (USA).zip');
+    final source = container.read(packGridEntriesProvider).first.sources.single;
+    expect(source.filename, 'Crystal Vanguard (USA).zip');
+    expect(source.size, 2048);
+    expect(source.sourceId, kBuiltinAddonId);
+    expect(source.url, 'https://example.org/snes/Crystal Vanguard (USA).zip');
   });
 
-  test('cada fonte carrega o id do addon do jogo que a originou', () async {
-    final container = _container(jogos: [
-      _game('Chrono Trigger (USA).zip', sourceId: 'myrient'),
-      _game('Super Metroid (USA).zip', sourceId: 'arquivo-do-fulano'),
+  test('each source carries the addon id of the game that produced it', () async {
+    final container = _container(games: [
+      _game('Crystal Vanguard (USA).zip', sourceId: 'myrient'),
+      _game('Super Vectron (USA).zip', sourceId: 'someones-archive'),
     ]);
-    await _pronto(container);
+    await _ready(container);
 
-    // Mapa e não lista: o que está sendo afirmado é que cada fonte ficou com
-    // o id do **seu** jogo, e isso não depende da ordem da grade.
+    // A map, not a list: what is asserted is that each source kept its own
+    // game's id, independent of grid order.
     expect(
       {for (final e in container.read(packGridEntriesProvider)) e.game.id: e.sources.single.sourceId},
-      {'snes/chrono-trigger': 'myrient', 'snes/super-metroid': 'arquivo-do-fulano'},
+      {'snes/crystal-vanguard': 'myrient', 'snes/super-vectron': 'someones-archive'},
     );
   });
 
-  test('a busca do header filtra a grade de pack', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')], busca: 'metroid');
-    await _pronto(container);
+  test('the header search filters the pack grid', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')], search: 'vectron');
+    await _ready(container);
 
-    expect(container.read(packGridEntriesProvider).single.game.id, 'snes/super-metroid');
+    expect(container.read(packGridEntriesProvider).single.game.id, 'snes/super-vectron');
   });
 
-  test('o resolvedor acha o jogo do catálogo pelo nome do arquivo', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the resolver finds the catalog game by filename', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     final resolver = container.read(gameResolverProvider);
-    final achado = resolver(const MatchedSource(
-      filename: 'Chrono Trigger (USA).zip',
-      sourceId: 'listagem',
+    final found = resolver(const MatchedSource(
+      filename: 'Crystal Vanguard (USA).zip',
+      sourceId: 'listing',
       confidence: MatchConfidence.likely,
       size: 2048,
     ));
 
-    expect(achado?.filename, 'Chrono Trigger (USA).zip');
+    expect(found?.filename, 'Crystal Vanguard (USA).zip');
   });
 
-  test('o resolvedor devolve nulo para uma fonte que não está no catálogo', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the resolver returns null for a source not in the catalog', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     final resolver = container.read(gameResolverProvider);
-    final achado = resolver(const MatchedSource(
-      filename: 'Um Jogo Que Saiu Da Listagem.zip',
-      sourceId: 'listagem',
+    final found = resolver(const MatchedSource(
+      filename: 'A Game That Left The Listing.zip',
+      sourceId: 'listing',
       confidence: MatchConfidence.likely,
       size: 10,
     ));
 
-    // É o caminho que vira `PickFailure` na Task 14, e ele tem que existir de
-    // verdade, senão o lote quebraria com um `null check` no primeiro catálogo
-    // recarregado durante uma seleção.
-    expect(achado, isNull);
+    expect(found, isNull);
   });
 
-  test('a busca do header não encolhe a lista que o lote lê', () async {
-    // O bug que este teste tranca: marcar três jogos, digitar no header e
-    // apertar Baixar enfileirando só os que sobraram na tela.
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')], busca: 'metroid');
-    await _pronto(container);
+  test('the header search does not shrink the list the batch reads', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')], search: 'vectron');
+    await _ready(container);
 
-    expect(container.read(packGridEntriesProvider).map((e) => e.game.id), ['snes/super-metroid']);
+    expect(container.read(packGridEntriesProvider).map((e) => e.game.id), ['snes/super-vectron']);
     expect(
       container.read(allPackEntriesProvider).map((e) => e.game.id),
-      ['snes/chrono-trigger', 'snes/super-metroid'],
+      ['snes/crystal-vanguard', 'snes/super-vectron'],
     );
   });
 
-  test('a lista do lote sai ordenada por título, não na ordem do pacote', () async {
+  test('the batch list is sorted by title, not by pack order', () async {
     final container = _container(
-      pacote: Future.value(MetadataPack(
+      pack: Future.value(MetadataPack(
         pack: 'snes',
         system: 'Super Nintendo',
         built: '2026-01-01',
         games: [
-          _pg('snes/super-metroid', 'Super Metroid (USA)'),
-          _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
+          _pg('snes/super-vectron', 'Super Vectron (USA)'),
+          _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
         ],
       )),
     );
-    await _pronto(container);
+    await _ready(container);
 
     expect(
       container.read(allPackEntriesProvider).map((e) => e.game.id),
-      ['snes/chrono-trigger', 'snes/super-metroid'],
+      ['snes/crystal-vanguard', 'snes/super-vectron'],
     );
   });
 }

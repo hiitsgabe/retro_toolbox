@@ -1,62 +1,62 @@
-# Fatia 1: Metadata Pack, plano de implementação
+# Slice 1: Metadata Pack, implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir e publicar um pacote de metadados por console (título canônico, dumps com CRC/SHA1/serial/região, capa, sinopse, gênero, ano) e fazer o app baixar, cachear e resolver esse pacote para os consoles do catálogo do usuário, sem login e sem servidor próprio.
+**Goal:** Build and publish a per-console metadata pack (canonical title, dumps with CRC/SHA1/serial/region, cover, synopsis, genre, year) and make the app download, cache and resolve that pack for the consoles in the user's catalog, with no login and no server of our own.
 
-**Architecture:** Um script Python em `tool/` roda no GitHub Actions, lê os DATs do libretro-database (No-Intro e Redump), colapsa os dumps em jogos canônicos, enriquece com os side files de `metadat/` e com o OpenVGDB, confere a existência da capa no libretro-thumbnails e publica um `<pack>.json.gz` por sistema mais um `index.json` numa release de tag fixa `packs`. No lado Flutter, `MetadataPackService` baixa sob demanda, descompacta com `gzip` do `dart:io`, grava em `getApplicationSupportDirectory()/packs/` e serve do disco nas próximas aberturas; `PackIndex.resolve` liga o id/nome arbitrário do console do usuário ao id do pacote.
+**Architecture:** A Python script in `tool/` runs on GitHub Actions, reads the libretro-database DATs (No-Intro and Redump), collapses the dumps into canonical games, enriches with the side files from `metadat/` and with OpenVGDB, checks the cover's existence on libretro-thumbnails and publishes one `<pack>.json.gz` per system plus one `index.json` in a release under the fixed tag `packs`. On the Flutter side, `MetadataPackService` downloads on demand, decompresses with `gzip` from `dart:io`, writes to `getApplicationSupportDirectory()/packs/` and serves from disk on the next launches; `PackIndex.resolve` links the arbitrary console id/name from the user to the pack id.
 
-**Tech Stack:** Python 3 stdlib (`urllib.request`, `sqlite3`, `gzip`, `json`, `re`, `unicodedata`, `difflib`, `unittest`), GitHub Actions, Dart/Flutter com Riverpod, `dart:io` `gzip`, `flutter_test`.
-
----
-
-## Contexto que o implementador precisa
-
-**O que já existe no repositório e não pode quebrar:**
-
-- `lib/services/catalog_service.dart` carrega `consoles.json` e deriva o id do console do nome com `_nameToId` (linha 59): minúsculas, tudo que não é `[a-z0-9]` vira `_`, `_` das pontas some. O id do console é arbitrário e vem do usuário, então o pacote nunca pode assumir que o id do console é igual ao id do pacote. Daí o `index.json` com aliases.
-- `tool/build_gametdb_boxarts.py` e `tool/build_xbox360_boxarts.py` são o precedente para scripts de build: Python 3, só stdlib, docstring de módulo explicando a fonte, `def main()`, sem framework de teste. Este plano mantém stdlib e adiciona `unittest`, que também é stdlib.
-- Os testes em `test/` usam `flutter_test` puro, sem mockito. Injeção de dependência é feita por parâmetro de construtor. Ver `test/catalog_add_console_test.dart`.
-- `assets/catalog/` é git-ignored. Nada deste plano escreve lá.
-
-**Decisões de formato travadas neste plano:**
-
-- Tag da release: `packs`, fixa, atualizada no lugar. A URL de download fica estável e o app não precisa chamar a API do GitHub. A data da build vive no campo `built` do JSON. Isto é um desvio consciente da seção 4.4 do spec de design, que sugeria `packs-YYYY-MM-DD`.
-- Nome do arquivo do pacote: `<pack>.json.gz`, onde `<pack>` é o nome do sistema libretro passado pelo mesmo normalizador do `_nameToId`. Exemplo: `Nintendo - Super Nintendo Entertainment System` vira `nintendo_super_nintendo_entertainment_system`.
-- `id` do jogo dentro do pacote: `<pack>/<slug do título canônico>`, com sufixo `-2`, `-3` e assim por diante em colisão, na ordem em que aparecem no DAT.
-- O pacote guarda a URL da capa, nunca o binário da imagem.
-
-**A tabela dos 24 sistemas** está no Task 6 e é a única fonte de verdade sobre quais DATs baixar, qual repositório de thumbnails usar e quais aliases cada pacote aceita. O Nintendo Switch não tem pacote de propósito: ele cai no MODO FONTE descrito no spec de UI.
+**Tech Stack:** Python 3 stdlib (`urllib.request`, `sqlite3`, `gzip`, `json`, `re`, `unicodedata`, `difflib`, `unittest`), GitHub Actions, Dart/Flutter with Riverpod, `dart:io` `gzip`, `flutter_test`.
 
 ---
 
-## Estrutura de arquivos
+## Context the implementer needs
 
-| Arquivo | Responsabilidade |
+**What already exists in the repository and cannot break:**
+
+- `lib/services/catalog_service.dart` loads `consoles.json` and derives the console id from the name with `_nameToId` (line 59): lowercase, everything that is not `[a-z0-9]` becomes `_`, leading and trailing `_` are dropped. The console id is arbitrary and comes from the user, so the pack can never assume the console id equals the pack id. Hence the `index.json` with aliases.
+- `tool/build_gametdb_boxarts.py` and `tool/build_xbox360_boxarts.py` are the precedent for build scripts: Python 3, stdlib only, a module docstring explaining the source, `def main()`, no test framework. This plan keeps stdlib and adds `unittest`, which is also stdlib.
+- The tests in `test/` use plain `flutter_test`, no mockito. Dependency injection is done through constructor parameters. See `test/catalog_add_console_test.dart`.
+- `assets/catalog/` is git-ignored. Nothing in this plan writes there.
+
+**Format decisions locked in this plan:**
+
+- Release tag: `packs`, fixed, updated in place. The download URL stays stable and the app does not need to call the GitHub API. The build date lives in the `built` field of the JSON. This is a deliberate departure from section 4.4 of the design spec, which suggested `packs-YYYY-MM-DD`.
+- Pack file name: `<pack>.json.gz`, where `<pack>` is the libretro system name run through the same normalizer as `_nameToId`. Example: `Nintendo - Super Nintendo Entertainment System` becomes `nintendo_super_nintendo_entertainment_system`.
+- Game `id` inside the pack: `<pack>/<slug of the canonical title>`, with suffix `-2`, `-3` and so on on collision, in the order they appear in the DAT.
+- The pack stores the cover URL, never the image binary.
+
+**The table of the 24 systems** is in Task 6 and is the single source of truth about which DATs to download, which thumbnails repository to use and which aliases each pack accepts. The Nintendo Switch has no pack on purpose: it falls into the SOURCE MODE described in the UI spec.
+
+---
+
+## File structure
+
+| File | Responsibility |
 | --- | --- |
-| `lib/models/metadata_pack_model.dart` | `PackDump`, `PackGame`, `MetadataPack`. Só dados e serialização. |
-| `lib/models/pack_index_model.dart` | `PackIndexEntry`, `PackIndex`, `PackTarget`. A regra de resolução console para pacote mora aqui, pura e testável. |
-| `lib/services/metadata_pack_service.dart` | Cache em disco, download, descompressão. Recebe `Directory` e a função de fetch por construtor. |
-| `lib/providers/metadata_pack_provider.dart` | Fiação Riverpod. Fino de propósito. |
-| `tool/build_metadata_pack.py` | O builder inteiro: parse, colapso, enriquecimento, saída. |
-| `tool/test_build_metadata_pack.py` | `unittest` do builder, sem rede. |
-| `.github/workflows/metadata-packs.yml` | Roda o builder e publica a release. |
-| `test/metadata_pack_model_test.dart` | Testes do Task 1. |
-| `test/pack_index_model_test.dart` | Testes do Task 2. |
-| `test/metadata_pack_service_test.dart` | Testes dos Tasks 3 e 4. |
-| `test/metadata_pack_provider_test.dart` | Teste do Task 5. |
+| `lib/models/metadata_pack_model.dart` | `PackDump`, `PackGame`, `MetadataPack`. Data and serialization only. |
+| `lib/models/pack_index_model.dart` | `PackIndexEntry`, `PackIndex`, `PackTarget`. The console to pack resolution rule lives here, pure and testable. |
+| `lib/services/metadata_pack_service.dart` | Disk cache, download, decompression. Takes a `Directory` and the fetch function through the constructor. |
+| `lib/providers/metadata_pack_provider.dart` | Riverpod wiring. Thin on purpose. |
+| `tool/build_metadata_pack.py` | The whole builder: parse, collapse, enrichment, output. |
+| `tool/test_build_metadata_pack.py` | `unittest` for the builder, no network. |
+| `.github/workflows/metadata-packs.yml` | Runs the builder and publishes the release. |
+| `test/metadata_pack_model_test.dart` | Tests for Task 1. |
+| `test/pack_index_model_test.dart` | Tests for Task 2. |
+| `test/metadata_pack_service_test.dart` | Tests for Tasks 3 and 4. |
+| `test/metadata_pack_provider_test.dart` | Test for Task 5. |
 
 ---
 
-### Task 1: Modelo do pacote
+### Task 1: The pack model
 
 **Files:**
 - Create: `lib/models/metadata_pack_model.dart`
 - Test: `test/metadata_pack_model_test.dart`
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/metadata_pack_model_test.dart`:
+Create `test/metadata_pack_model_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -71,29 +71,29 @@ void main() {
   "built": "2026-09-10",
   "games": [
     {
-      "id": "nintendo_super_nintendo_entertainment_system/chrono-trigger",
-      "title": "Chrono Trigger",
+      "id": "nintendo_super_nintendo_entertainment_system/crystal-vanguard",
+      "title": "Crystal Vanguard",
       "dumps": [
-        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
-        {"name": "Chrono Trigger (Japan)", "crc": "1f2e3d4c"}
+        {"name": "Crystal Vanguard (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
+        {"name": "Crystal Vanguard (Japan)", "crc": "1f2e3d4c"}
       ],
       "cover": "https://example.invalid/cover.png",
-      "synopsis": "Um RPG.",
+      "synopsis": "An RPG.",
       "genre": "Role-Playing",
       "developer": "Square",
       "publisher": "Square",
       "year": 1995
     },
     {
-      "id": "nintendo_super_nintendo_entertainment_system/sem-nada",
-      "title": "Sem Nada",
+      "id": "nintendo_super_nintendo_entertainment_system/sparse-entry",
+      "title": "Sparse Entry",
       "dumps": []
     }
   ]
 }
 ''';
 
-  test('decode lê o pacote inteiro', () {
+  test('decode reads the whole pack', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.pack, 'nintendo_super_nintendo_entertainment_system');
     expect(pack.system, 'Nintendo - Super Nintendo Entertainment System');
@@ -101,20 +101,20 @@ void main() {
     expect(pack.games.length, 2);
   });
 
-  test('CRC e SHA1 são normalizados para maiúsculas', () {
+  test('CRC and SHA1 are uppercased', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.games.first.dumps.first.crc, '2D206BF7');
     expect(pack.games.first.dumps.first.sha1, 'ABC');
     expect(pack.games.first.dumps[1].sha1, isNull);
   });
 
-  test('region é lida como veio e é opcional', () {
+  test('region is read as-is and is optional', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.games.first.dumps.first.region, 'USA');
     expect(pack.games.first.dumps[1].region, isNull);
   });
 
-  test('campos opcionais ausentes viram null e dumps vazio é permitido', () {
+  test('absent optional fields become null and empty dumps is allowed', () {
     final pack = MetadataPack.decode(sample);
     final game = pack.games[1];
     expect(game.cover, isNull);
@@ -123,7 +123,7 @@ void main() {
     expect(game.dumps, isEmpty);
   });
 
-  test('toJson omite os nulos e sobrevive ao round trip', () {
+  test('toJson omits nulls and survives a round trip', () {
     final pack = MetadataPack.decode(sample);
     final round = MetadataPack.decode(jsonEncode(pack.toJson()));
     expect(round.games[1].toJson().containsKey('cover'), isFalse);
@@ -132,40 +132,34 @@ void main() {
     expect(round.games.length, 2);
   });
 
-  test('byCrc indexa todos os dumps do pacote', () {
+  test('byCrc indexes every dump in the pack', () {
     final pack = MetadataPack.decode(sample);
-    expect(pack.byCrc['2D206BF7']?.title, 'Chrono Trigger');
-    expect(pack.byCrc['1F2E3D4C']?.title, 'Chrono Trigger');
+    expect(pack.byCrc['2D206BF7']?.title, 'Crystal Vanguard');
+    expect(pack.byCrc['1F2E3D4C']?.title, 'Crystal Vanguard');
     expect(pack.byCrc['DEADBEEF'], isNull);
   });
 }
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `flutter test test/metadata_pack_model_test.dart`
 Expected: FAIL, `Target of URI doesn't exist: 'package:roms_downloader/models/metadata_pack_model.dart'`.
 
-- [ ] **Step 3: Escrever o modelo**
+- [ ] **Step 3: Write the model**
 
-Crie `lib/models/metadata_pack_model.dart`:
+Create `lib/models/metadata_pack_model.dart`:
 
 ```dart
 import 'dart:convert';
 
-/// Um dump concreto de um jogo, como o DAT do No-Intro ou do Redump descreve.
-/// [name] é o nome do jogo no DAT, sem extensão, com as tags de região e
-/// revisão preservadas, porque é ele que o matcher compara com o nome do
-/// arquivo remoto.
+/// A concrete dump of a game, as a No-Intro or Redump DAT describes it.
+/// [name] is the DAT name, without extension, with region and revision tags
+/// preserved, because the matcher compares it against the remote filename.
 ///
-/// [crc] e [sha1] são normalizados para maiúsculas, porque são hexadecimais e a
-/// comparação precisa ser estável entre o DAT e o que o app calcula. O [serial]
-/// não é: ele é uma string de catálogo do fabricante, com maiúsculas e hifens
-/// que fazem parte do valor, e é gravado exatamente como o DAT emite.
-/// [region] é a região declarada no DAT, quando existe. Nem todo bloco traz
-/// uma: no SNES 293 dos 4268 blocos não têm, no GameCube 33 de 2268. Por isso é
-/// opcional. Ela existe para a regra de região preferida do download em lote e
-/// para o cartão de detalhe mostrar "(USA)" sem reparsear o nome em runtime.
+/// [crc] and [sha1] are uppercased for stable comparison; [serial] is not, as
+/// its case and hyphens are part of the value. [region] is the DAT region when
+/// present, and is optional because not every dump declares one.
 class PackDump {
   final String name;
   final String? crc;
@@ -198,7 +192,7 @@ class PackDump {
       };
 }
 
-/// Um jogo canônico: um título, várias versões.
+/// A canonical game: one title, several versions.
 class PackGame {
   final String id;
   final String title;
@@ -249,7 +243,7 @@ class PackGame {
       };
 }
 
-/// O pacote de um console inteiro.
+/// The pack for a whole console.
 class MetadataPack {
   final String pack;
   final String system;
@@ -265,8 +259,7 @@ class MetadataPack {
 
   Map<String, PackGame>? _byCrc;
 
-  /// CRC32 em maiúsculas para o jogo dono daquele dump. Construído sob demanda
-  /// e guardado, porque um pacote grande tem dezenas de milhares de dumps.
+  /// Uppercase CRC32 to the game owning that dump. Built lazily and cached.
   Map<String, PackGame> get byCrc {
     final cached = _byCrc;
     if (cached != null) return cached;
@@ -301,10 +294,10 @@ class MetadataPack {
 }
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `flutter test test/metadata_pack_model_test.dart`
-Expected: PASS, 6 testes.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -315,17 +308,17 @@ git commit -m "feat(packs): modelo do metadata pack"
 
 ---
 
-### Task 2: Índice de pacotes e a regra de resolução
+### Task 2: The pack index and the resolution rule
 
 **Files:**
 - Create: `lib/models/pack_index_model.dart`
 - Test: `test/pack_index_model_test.dart`
 
-O `index.json` é o que liga o console do usuário ao pacote. O usuário pode chamar o console dele de "Super Nintendo", "SNES" ou "snes_usa_set", e o pacote se chama `nintendo_super_nintendo_entertainment_system`. A resolução tenta, nesta ordem: id do console igual ao id do pacote, nome do console normalizado igual ao id do pacote, id ou nome batendo com algum alias. A ordem importa: um alias nunca ganha de um `pack` exato.
+The `index.json` is what links the user's console to the pack. The user can call their console "Super Nintendo", "SNES" or "snes_usa_set", and the pack is named `nintendo_super_nintendo_entertainment_system`. Resolution tries, in this order: console id equal to pack id, normalized console name equal to pack id, id or name matching some alias. The order matters: an alias never beats an exact `pack`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/pack_index_model_test.dart`:
+Create `test/pack_index_model_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -352,47 +345,47 @@ void main() {
 }
 ''';
 
-  test('decode lê as entradas', () {
+  test('decode reads the entries', () {
     final index = PackIndex.decode(sample);
     expect(index.built, '2026-09-10');
     expect(index.packs.length, 2);
     expect(index.packs.first.games, 2415);
   });
 
-  test('normalize segue a mesma regra do id de console do catálogo', () {
+  test('normalize follows the catalog console-id rule', () {
     expect(PackIndex.normalize('Nintendo - Super Nintendo Entertainment System'),
         'nintendo_super_nintendo_entertainment_system');
     expect(PackIndex.normalize('  PlayStation 1!! '), 'playstation_1');
   });
 
-  test('resolve pelo id do pacote', () {
+  test('resolves by pack id', () {
     final index = PackIndex.decode(sample);
     final entry = index.resolve(const PackTarget(
-        'nintendo_super_nintendo_entertainment_system', 'Qualquer Nome'));
+        'nintendo_super_nintendo_entertainment_system', 'Any Name'));
     expect(entry?.pack, 'nintendo_super_nintendo_entertainment_system');
   });
 
-  test('resolve pelo nome do console normalizado', () {
+  test('resolves by the normalized console name', () {
     final index = PackIndex.decode(sample);
     final entry = index.resolve(const PackTarget(
-        'catalogo_do_fulano', 'Nintendo - Super Nintendo Entertainment System'));
+        'acme_catalog', 'Nintendo - Super Nintendo Entertainment System'));
     expect(entry?.pack, 'nintendo_super_nintendo_entertainment_system');
   });
 
-  test('resolve por alias, do id e do nome', () {
+  test('resolves by alias, from id and from name', () {
     final index = PackIndex.decode(sample);
-    expect(index.resolve(const PackTarget('snes', 'Meu Set'))?.pack,
+    expect(index.resolve(const PackTarget('snes', 'My Set'))?.pack,
         'nintendo_super_nintendo_entertainment_system');
-    expect(index.resolve(const PackTarget('qualquer', 'PlayStation 1'))?.pack,
+    expect(index.resolve(const PackTarget('any', 'PlayStation 1'))?.pack,
         'sony_playstation');
   });
 
-  test('pack exato ganha de alias de outra entrada', () {
+  test('an exact pack beats another entry alias regardless of order', () {
     const colliding = '''
 {
   "built": "2026-09-10",
   "packs": [
-    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]},
+    {"pack": "other", "system": "Other", "games": 1, "aliases": ["snes"]},
     {"pack": "snes", "system": "Snes", "games": 2, "aliases": []}
   ]
 }
@@ -400,15 +393,14 @@ void main() {
     final index = PackIndex.decode(colliding);
     expect(index.resolve(const PackTarget('snes', 'Snes'))?.pack, 'snes');
 
-    // A mesma asserção com a ordem das entradas invertida. A garantia vem de
-    // resolve varrer todos os packs antes de olhar qualquer alias, não da
-    // ordem em que o índice foi escrito, e este par prova isso.
+    // Same assertion with the entries reversed: the guarantee comes from
+    // resolve scanning every pack before any alias, not from index order.
     const reversed = '''
 {
   "built": "2026-09-10",
   "packs": [
     {"pack": "snes", "system": "Snes", "games": 2, "aliases": []},
-    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]}
+    {"pack": "other", "system": "Other", "games": 1, "aliases": ["snes"]}
   ]
 }
 ''';
@@ -417,13 +409,13 @@ void main() {
         'snes');
   });
 
-  test('console sem pacote devolve null', () {
+  test('a console without a pack returns null', () {
     final index = PackIndex.decode(sample);
     expect(index.resolve(const PackTarget('nintendo_switch', 'Nintendo Switch')),
         isNull);
   });
 
-  test('PackTarget tem igualdade por valor, para servir de chave de family', () {
+  test('PackTarget has value equality, to serve as a family key', () {
     expect(const PackTarget('a', 'b'), const PackTarget('a', 'b'));
     expect(const PackTarget('a', 'b').hashCode, const PackTarget('a', 'b').hashCode);
     expect(const PackTarget('a', 'b') == const PackTarget('a', 'c'), isFalse);
@@ -431,22 +423,21 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `flutter test test/pack_index_model_test.dart`
 Expected: FAIL, `Target of URI doesn't exist: 'package:roms_downloader/models/pack_index_model.dart'`.
 
-- [ ] **Step 3: Escrever o modelo**
+- [ ] **Step 3: Write the model**
 
-Crie `lib/models/pack_index_model.dart`:
+Create `lib/models/pack_index_model.dart`:
 
 ```dart
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
-/// Um console do catálogo do usuário, do jeito que ele existe no app: um id
-/// arbitrário e um nome livre. É a chave do provider de pacote, então precisa
-/// de igualdade por valor.
+/// A console from the user's catalog: an arbitrary id and a free-form name.
+/// The pack provider keys on it, so it needs value equality.
 @immutable
 class PackTarget {
   final String consoleId;
@@ -499,14 +490,13 @@ class PackIndex {
 
   const PackIndex({required this.built, required this.packs});
 
-  /// Mesma regra do CatalogService._nameToId. Duplicada de propósito: este
-  /// modelo não deve depender de um service.
+  /// Same rule as `CatalogService._nameToId`.
   static String normalize(String value) => value
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
       .replaceAll(RegExp(r'^_+|_+$'), '');
 
-  /// Acha o pacote do console. Id e nome do pacote ganham de alias, sempre.
+  /// Finds the console's pack. Pack id and name always beat an alias.
   PackIndexEntry? resolve(PackTarget target) {
     final candidates = <String>{
       normalize(target.consoleId),
@@ -539,10 +529,10 @@ class PackIndex {
 }
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `flutter test test/pack_index_model_test.dart`
-Expected: PASS, 8 testes.
+Expected: PASS, 8 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -553,17 +543,17 @@ git commit -m "feat(packs): indice de pacotes e resolucao console para pacote"
 
 ---
 
-### Task 3: Serviço, metade do cache em disco
+### Task 3: The service, the disk cache half
 
 **Files:**
 - Create: `lib/services/metadata_pack_service.dart`
 - Test: `test/metadata_pack_service_test.dart`
 
-O serviço recebe o diretório de cache e a função de fetch pelo construtor. Nenhum teste toca a rede nem o `path_provider`. Neste task só o lado do disco existe; o download entra no Task 4.
+The service takes the cache directory and the fetch function through the constructor. No test touches the network or `path_provider`. In this task only the disk side exists; the download comes in Task 4.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/metadata_pack_service_test.dart`:
+Create `test/metadata_pack_service_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -575,8 +565,8 @@ import 'package:roms_downloader/services/metadata_pack_service.dart';
 
 const packJson = '''
 {"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System",
- "built":"2026-09-10","games":[{"id":"snes/chrono-trigger","title":"Chrono Trigger",
- "dumps":[{"name":"Chrono Trigger (USA)","crc":"2d206bf7"}]}]}
+ "built":"2026-09-10","games":[{"id":"snes/crystal-vanguard","title":"Crystal Vanguard",
+ "dumps":[{"name":"Crystal Vanguard (USA)","crc":"2d206bf7"}]}]}
 ''';
 
 void main() {
@@ -592,41 +582,41 @@ void main() {
 
   MetadataPackService service() => MetadataPackService(
         cacheDir: tmp,
-        fetch: (uri) async => throw StateError('rede proibida neste teste'),
+        fetch: (uri) async => throw StateError('network not allowed in this test'),
       );
 
-  test('readCached devolve null quando não tem nada em disco', () async {
+  test('readCached returns null when nothing is on disk', () async {
     expect(await service().readCached('snes'), isNull);
   });
 
-  test('writeCache grava e readCached lê de volta', () async {
+  test('writeCache writes and readCached reads it back', () async {
     final svc = service();
     await svc.writeCache('snes', packJson);
     final pack = await svc.readCached('snes');
     expect(pack, isNotNull);
-    expect(pack!.games.single.title, 'Chrono Trigger');
+    expect(pack!.games.single.title, 'Crystal Vanguard');
     expect(await File(p.join(tmp.path, 'snes.json')).exists(), isTrue);
   });
 
-  test('writeCache cria o diretório se ele não existir', () async {
+  test('writeCache creates the directory when it does not exist', () async {
     final nested = Directory(p.join(tmp.path, 'a', 'b'));
     final svc = MetadataPackService(
-        cacheDir: nested, fetch: (uri) async => throw StateError('nao'));
+        cacheDir: nested, fetch: (uri) async => throw StateError('no'));
     await svc.writeCache('snes', packJson);
     expect(await File(p.join(nested.path, 'snes.json')).exists(), isTrue);
   });
 
-  test('readCached devolve null e apaga o arquivo quando o JSON está corrompido',
+  test('readCached returns null and deletes the file when the JSON is corrupt',
       () async {
     final svc = service();
     final file = File(p.join(tmp.path, 'snes.json'));
     await file.create(recursive: true);
-    await file.writeAsString('{ isso nao e json');
+    await file.writeAsString('{ this is not json');
     expect(await svc.readCached('snes'), isNull);
     expect(await file.exists(), isFalse);
   });
 
-  test('cachedPacks lista os ids que estão em disco', () async {
+  test('cachedPacks lists the ids on disk', () async {
     final svc = service();
     await svc.writeCache('snes', packJson);
     await svc.writeCache('nes', packJson);
@@ -634,7 +624,7 @@ void main() {
     expect(ids..sort(), ['nes', 'snes']);
   });
 
-  test('evict apaga o pacote do disco', () async {
+  test('evict deletes the pack from disk', () async {
     final svc = service();
     await svc.writeCache('snes', packJson);
     await svc.evict('snes');
@@ -642,7 +632,7 @@ void main() {
     expect(await svc.cachedPacks(), isEmpty);
   });
 
-  test('readCachedIndex e writeCacheIndex usam index.json', () async {
+  test('readCachedIndex and writeCacheIndex use index.json', () async {
     final svc = service();
     const indexJson =
         '{"built":"2026-09-10","packs":[{"pack":"snes","system":"S","games":1,"aliases":[]}]}';
@@ -655,14 +645,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `flutter test test/metadata_pack_service_test.dart`
 Expected: FAIL, `Target of URI doesn't exist: 'package:roms_downloader/services/metadata_pack_service.dart'`.
 
-- [ ] **Step 3: Escrever o serviço, só o lado do disco**
+- [ ] **Step 3: Write the service, only the disk side**
 
-Crie `lib/services/metadata_pack_service.dart`:
+Create `lib/services/metadata_pack_service.dart`:
 
 ```dart
 import 'dart:io';
@@ -674,9 +664,7 @@ import 'package:roms_downloader/models/pack_index_model.dart';
 
 typedef PackFetch = Future<List<int>> Function(Uri uri);
 
-/// Baixa, descompacta e cacheia os metadata packs. Recebe o diretório e a
-/// função de rede por construtor para os testes rodarem sem disco de usuário
-/// e sem rede.
+/// Downloads, decompresses, and caches the metadata packs.
 class MetadataPackService {
   final Directory cacheDir;
   final PackFetch fetch;
@@ -705,7 +693,7 @@ class MetadataPackService {
     try {
       return MetadataPack.decode(await file.readAsString());
     } catch (e) {
-      debugPrint('Pacote $packId corrompido em disco, descartando: $e');
+      debugPrint('Pack $packId corrupt on disk, discarding: $e');
       await file.delete();
       return null;
     }
@@ -716,13 +704,13 @@ class MetadataPackService {
     try {
       return PackIndex.decode(await indexFile.readAsString());
     } catch (e) {
-      debugPrint('Indice de pacotes corrompido em disco, descartando: $e');
+      debugPrint('Pack index corrupt on disk, discarding: $e');
       await indexFile.delete();
       return null;
     }
   }
 
-  /// Ids dos pacotes em disco. O index.json não conta.
+  /// Ids of the packs on disk. index.json does not count.
   Future<List<String>> cachedPacks() async {
     if (!await cacheDir.exists()) return [];
     final ids = <String>[];
@@ -742,10 +730,10 @@ class MetadataPackService {
 }
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `flutter test test/metadata_pack_service_test.dart`
-Expected: PASS, 7 testes.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -756,22 +744,22 @@ git commit -m "feat(packs): cache em disco dos metadata packs"
 
 ---
 
-### Task 4: Serviço, metade do download
+### Task 4: The service, the download half
 
 **Files:**
 - Modify: `lib/services/metadata_pack_service.dart`
 - Test: `test/metadata_pack_service_test.dart`
 
-A descompressão usa o `gzip` do `dart:io`, que é stdlib e não depende da API do pacote `archive`. A política de carga é cache primeiro; se não tem cache, baixa; se o download falha, tenta o cache de novo antes de desistir, para o app continuar funcionando offline.
+Decompression uses the `gzip` from `dart:io`, which is stdlib and does not depend on the `archive` package API. The load policy is cache first; if there is no cache, download; if the download fails, try the cache again before giving up, so the app keeps working offline.
 
-- [ ] **Step 1: Escrever os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Adicione ao final de `test/metadata_pack_service_test.dart`, dentro do `main()`, depois do último `test(...)` existente:
+Add at the end of `test/metadata_pack_service_test.dart`, inside `main()`, after the last existing `test(...)`:
 
 ```dart
   List<int> gz(String s) => gzip.encode(utf8.encode(s));
 
-  test('packUri e indexUri apontam para a release de tag fixa', () {
+  test('packUri and indexUri point at the fixed-tag release', () {
     final svc = service();
     expect(svc.packUri('snes').toString(),
         'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs/snes.json.gz');
@@ -779,94 +767,94 @@ Adicione ao final de `test/metadata_pack_service_test.dart`, dentro do `main()`,
         'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs/index.json');
   });
 
-  test('download descompacta, grava no cache e devolve o pacote', () async {
-    final pedidos = <Uri>[];
+  test('download unzips, writes the cache and returns the pack', () async {
+    final requests = <Uri>[];
     final svc = MetadataPackService(
       cacheDir: tmp,
       fetch: (uri) async {
-        pedidos.add(uri);
+        requests.add(uri);
         return gz(packJson);
       },
     );
     final pack = await svc.download('snes');
-    expect(pack.games.single.title, 'Chrono Trigger');
-    expect(pedidos.single.path, endsWith('/packs/snes.json.gz'));
+    expect(pack.games.single.title, 'Crystal Vanguard');
+    expect(requests.single.path, endsWith('/packs/snes.json.gz'));
     expect(await File(p.join(tmp.path, 'snes.json')).exists(), isTrue);
   });
 
-  test('load usa o cache e não chama a rede', () async {
-    var chamadas = 0;
+  test('load uses the cache and does not hit the network', () async {
+    var calls = 0;
     final svc = MetadataPackService(
       cacheDir: tmp,
       fetch: (uri) async {
-        chamadas++;
+        calls++;
         return gz(packJson);
       },
     );
     await svc.writeCache('snes', packJson);
     final pack = await svc.load('snes');
-    expect(pack!.games.single.title, 'Chrono Trigger');
-    expect(chamadas, 0);
+    expect(pack!.games.single.title, 'Crystal Vanguard');
+    expect(calls, 0);
   });
 
-  test('load com forceRefresh vai na rede mesmo tendo cache', () async {
-    var chamadas = 0;
+  test('load with forceRefresh hits the network even with a cache', () async {
+    var calls = 0;
     final svc = MetadataPackService(
       cacheDir: tmp,
       fetch: (uri) async {
-        chamadas++;
+        calls++;
         return gz(packJson);
       },
     );
     await svc.writeCache('snes', packJson);
     await svc.load('snes', forceRefresh: true);
-    expect(chamadas, 1);
+    expect(calls, 1);
   });
 
-  test('load cai de volta no cache quando a rede falha', () async {
+  test('load falls back to the cache when the network fails', () async {
     final svc = MetadataPackService(
       cacheDir: tmp,
-      fetch: (uri) async => throw const SocketException('sem rede'),
+      fetch: (uri) async => throw const SocketException('no network'),
     );
     await svc.writeCache('snes', packJson);
     final pack = await svc.load('snes', forceRefresh: true);
-    expect(pack!.games.single.title, 'Chrono Trigger');
+    expect(pack!.games.single.title, 'Crystal Vanguard');
   });
 
-  test('load devolve null quando não tem rede nem cache', () async {
+  test('load returns null with neither network nor cache', () async {
     final svc = MetadataPackService(
       cacheDir: tmp,
-      fetch: (uri) async => throw const SocketException('sem rede'),
+      fetch: (uri) async => throw const SocketException('no network'),
     );
     expect(await svc.load('snes'), isNull);
   });
 
-  test('loadIndex baixa o index.json sem gzip e cacheia', () async {
+  test('loadIndex downloads index.json ungzipped and caches it', () async {
     const indexJson =
         '{"built":"2026-09-10","packs":[{"pack":"snes","system":"S","games":1,"aliases":["snes"]}]}';
-    final pedidos = <Uri>[];
+    final requests = <Uri>[];
     final svc = MetadataPackService(
       cacheDir: tmp,
       fetch: (uri) async {
-        pedidos.add(uri);
+        requests.add(uri);
         return utf8.encode(indexJson);
       },
     );
     final index = await svc.loadIndex(forceRefresh: true);
     expect(index!.packs.single.pack, 'snes');
-    expect(pedidos.single.path, endsWith('/packs/index.json'));
+    expect(requests.single.path, endsWith('/packs/index.json'));
     expect((await svc.readCachedIndex())!.built, '2026-09-10');
   });
 ```
 
-- [ ] **Step 2: Rodar os testes e ver falhar**
+- [ ] **Step 2: Run the tests and watch them fail**
 
 Run: `flutter test test/metadata_pack_service_test.dart`
 Expected: FAIL, `The method 'download' isn't defined for the class 'MetadataPackService'`.
 
-- [ ] **Step 3: Adicionar o download ao serviço**
+- [ ] **Step 3: Add the download to the service**
 
-Em `lib/services/metadata_pack_service.dart`, troque os imports do topo por:
+In `lib/services/metadata_pack_service.dart`, replace the imports at the top with:
 
 ```dart
 import 'dart:convert';
@@ -878,16 +866,16 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 ```
 
-Logo depois de `MetadataPackService({required this.cacheDir, required this.fetch});`, adicione:
+Right after `MetadataPackService({required this.cacheDir, required this.fetch});`, add:
 
 ```dart
-  /// Release de tag fixa, atualizada no lugar pelo workflow metadata-packs.
-  /// Tag fixa significa URL estável e zero chamadas à API do GitHub no app.
+  /// Fixed-tag release, updated in place by the metadata-packs workflow.
+  /// A fixed tag means a stable URL and zero GitHub API calls in the app.
   static const releaseBase =
       'https://github.com/hiitsgabe/retro_toolbox/releases/download/packs';
 
-  /// Fetch padrão de produção. Segue redirect, que a release do GitHub sempre
-  /// devolve.
+  /// Default production fetch. Follows the redirect that the GitHub release
+  /// always returns.
   static Future<List<int>> httpFetch(Uri uri) async {
     final client = HttpClient();
     try {
@@ -922,8 +910,8 @@ Logo depois de `MetadataPackService({required this.cacheDir, required this.fetch
     return PackIndex.decode(jsonStr);
   }
 
-  /// Cache primeiro, rede depois, cache de novo se a rede falhar. Null só
-  /// quando não existe nem uma coisa nem a outra.
+  /// Cache first, then network, then cache again if the network fails. Null
+  /// only when neither exists.
   Future<MetadataPack?> load(String packId, {bool forceRefresh = false}) async {
     if (!forceRefresh) {
       final cached = await readCached(packId);
@@ -932,7 +920,7 @@ Logo depois de `MetadataPackService({required this.cacheDir, required this.fetch
     try {
       return await download(packId);
     } catch (e) {
-      debugPrint('Falha ao baixar o pacote $packId: $e');
+      debugPrint('Failed to download pack $packId: $e');
       return readCached(packId);
     }
   }
@@ -945,16 +933,16 @@ Logo depois de `MetadataPackService({required this.cacheDir, required this.fetch
     try {
       return await downloadIndex();
     } catch (e) {
-      debugPrint('Falha ao baixar o indice de pacotes: $e');
+      debugPrint('Failed to download the pack index: $e');
       return readCachedIndex();
     }
   }
 ```
 
-- [ ] **Step 4: Rodar os testes e ver passar**
+- [ ] **Step 4: Run the tests and watch them pass**
 
 Run: `flutter test test/metadata_pack_service_test.dart`
-Expected: PASS, 14 testes.
+Expected: PASS, 14 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -965,17 +953,17 @@ git commit -m "feat(packs): download e descompressao dos metadata packs"
 
 ---
 
-### Task 5: Providers Riverpod
+### Task 5: Riverpod providers
 
 **Files:**
 - Create: `lib/providers/metadata_pack_provider.dart`
 - Test: `test/metadata_pack_provider_test.dart`
 
-Os providers são finos de propósito: toda a decisão está no `PackIndex.resolve` do Task 2 e no `MetadataPackService` dos Tasks 3 e 4. O teste usa `ProviderContainer` com override do service, que é onde a rede e o `path_provider` entrariam.
+The providers are thin on purpose: all the decision is in `PackIndex.resolve` from Task 2 and in `MetadataPackService` from Tasks 3 and 4. The test uses `ProviderContainer` with an override of the service, which is where the network and `path_provider` would come in.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/metadata_pack_provider_test.dart`:
+Create `test/metadata_pack_provider_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -990,7 +978,7 @@ import 'package:roms_downloader/services/metadata_pack_service.dart';
 const indexJson =
     '{"built":"2026-09-10","packs":[{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","games":1,"aliases":["super_nintendo"]}]}';
 const packJson =
-    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/chrono-trigger","title":"Chrono Trigger","dumps":[]}]}';
+    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/crystal-vanguard","title":"Crystal Vanguard","dumps":[]}]}';
 
 void main() {
   late Directory tmp;
@@ -1010,14 +998,14 @@ void main() {
     ]);
   }
 
-  test('packIndexProvider entrega o índice baixado', () async {
+  test('packIndexProvider delivers the downloaded index', () async {
     final container = containerWith((uri) async => utf8.encode(indexJson));
     addTearDown(container.dispose);
     final index = await container.read(packIndexProvider.future);
     expect(index!.packs.single.pack, 'snes');
   });
 
-  test('metadataPackProvider resolve por alias e baixa o pacote', () async {
+  test('metadataPackProvider resolves by alias and downloads the pack', () async {
     final container = containerWith((uri) async {
       if (uri.path.endsWith('index.json')) return utf8.encode(indexJson);
       return gzip.encode(utf8.encode(packJson));
@@ -1026,13 +1014,13 @@ void main() {
     final pack = await container.read(
         metadataPackProvider(const PackTarget('super_nintendo', 'Super Nintendo'))
             .future);
-    expect(pack!.games.single.title, 'Chrono Trigger');
+    expect(pack!.games.single.title, 'Crystal Vanguard');
   });
 
-  test('console sem pacote no índice devolve null sem tentar baixar', () async {
-    final pedidos = <Uri>[];
+  test('a console absent from the index returns null without fetching a pack', () async {
+    final requests = <Uri>[];
     final container = containerWith((uri) async {
-      pedidos.add(uri);
+      requests.add(uri);
       return utf8.encode(indexJson);
     });
     addTearDown(container.dispose);
@@ -1040,19 +1028,19 @@ void main() {
         metadataPackProvider(const PackTarget('nintendo_switch', 'Nintendo Switch'))
             .future);
     expect(pack, isNull);
-    expect(pedidos.every((u) => u.path.endsWith('index.json')), isTrue);
+    expect(requests.every((u) => u.path.endsWith('index.json')), isTrue);
   });
 }
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `flutter test test/metadata_pack_provider_test.dart`
 Expected: FAIL, `Target of URI doesn't exist: 'package:roms_downloader/providers/metadata_pack_provider.dart'`.
 
-- [ ] **Step 3: Escrever os providers**
+- [ ] **Step 3: Write the providers**
 
-Crie `lib/providers/metadata_pack_provider.dart`:
+Create `lib/providers/metadata_pack_provider.dart`:
 
 ```dart
 import 'dart:io';
@@ -1064,8 +1052,7 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/services/metadata_pack_service.dart';
 
-/// O serviço real, apontando para `<support>/packs`. Os testes sobrescrevem
-/// este provider com um serviço de diretório temporário e fetch falso.
+/// The real service, pointing at `<support>/packs`.
 final metadataPackServiceProvider =
     FutureProvider<MetadataPackService>((ref) async {
   final supportDir = await getApplicationSupportDirectory();
@@ -1075,15 +1062,14 @@ final metadataPackServiceProvider =
   );
 });
 
-/// O index.json da release. Null quando não deu para baixar e não tem cache.
+/// The release index.json. Null when it could not be fetched and has no cache.
 final packIndexProvider = FutureProvider<PackIndex?>((ref) async {
   final service = await ref.watch(metadataPackServiceProvider.future);
   return service.loadIndex();
 });
 
-/// O pacote de um console do catálogo. Null quando o console não tem pacote,
-/// que é o caso do Nintendo Switch e de qualquer console adicionado à mão que
-/// não bata com nenhum alias.
+/// A catalog console's pack. Null when the console has no pack, as with the
+/// Nintendo Switch and any hand-added console that matches no alias.
 final metadataPackProvider =
     FutureProvider.family<MetadataPack?, PackTarget>((ref, target) async {
   final index = await ref.watch(packIndexProvider.future);
@@ -1095,15 +1081,15 @@ final metadataPackProvider =
 });
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `flutter test test/metadata_pack_provider_test.dart`
-Expected: PASS, 3 testes.
+Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Rodar a suíte inteira**
+- [ ] **Step 5: Run the whole suite**
 
 Run: `flutter test`
-Expected: PASS, com todos os testes que já existiam intactos. Esta fatia adiciona 31 testes Dart: 6 no Task 1, 8 no Task 2, 7 no Task 3, 7 no Task 4 e 3 aqui.
+Expected: PASS, with every previously existing test intact. This slice adds 31 Dart tests: 6 in Task 1, 8 in Task 2, 7 in Task 3, 7 in Task 4 and 3 here.
 
 - [ ] **Step 6: Commit**
 
@@ -1114,27 +1100,27 @@ git commit -m "feat(packs): providers do metadata pack"
 
 ---
 
-### Task 6: Builder, parser de DAT
+### Task 6: The builder, DAT parser
 
 **Files:**
 - Create: `tool/build_metadata_pack.py`
 - Test: `tool/test_build_metadata_pack.py`
 
-O libretro-database publica dois formatos. O DAT principal (`metadat/no-intro/*.dat` e `metadat/redump/*.dat`) traz `name`, `region` e uma ou mais linhas `rom` com `crc`, `md5` e `sha1`. Os side files (`metadat/genre/*.dat`, `metadat/developer/*.dat` e companhia) trazem `comment`, o campo em questão e um `rom ( crc ... )` que é a chave de ligação.
+The libretro-database publishes two formats. The main DAT (`metadat/no-intro/*.dat` and `metadat/redump/*.dat`) carries `name`, `region` and one or more `rom` lines with `crc`, `md5` and `sha1`. The side files (`metadat/genre/*.dat`, `metadat/developer/*.dat` and company) carry `comment`, the field in question and a `rom ( crc ... )` that is the linking key.
 
-Dois fatos verificados que mudam o desenho:
+Two verified facts that shape the design:
 
-- Os side files só existem para sistemas No-Intro. `metadat/genre/Sony - PlayStation.dat` responde 404. Para os sistemas Redump o enriquecimento vem só do OpenVGDB, e o builder precisa tratar 404 como caso normal.
-- No Redump o `serial` vem no próprio bloco `game`, então não depende de side file. No No-Intro ele vem do `metadat/serial/*.dat`.
-- Jogos de disco Redump têm várias linhas `rom`, uma por faixa. O builder guarda a primeira, que é a faixa de dados. O CRC de faixa não casa com um `.chd` baixado, e isso é uma limitação conhecida: a verificação por CRC é útil de verdade nos sistemas de cartucho.
+- The side files only exist for No-Intro systems. `metadat/genre/Sony - PlayStation.dat` responds 404. For Redump systems the enrichment comes only from OpenVGDB, and the builder needs to treat 404 as a normal case.
+- On Redump the `serial` comes in the `game` block itself, so it does not depend on a side file. On No-Intro it comes from `metadat/serial/*.dat`.
+- Redump disc games have several `rom` lines, one per track. The builder keeps the first, which is the data track. The track CRC does not match a downloaded `.chd`, and this is a known limitation: CRC verification is genuinely useful on cartridge systems.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `tool/test_build_metadata_pack.py`:
+Create `tool/test_build_metadata_pack.py`:
 
 ```python
 #!/usr/bin/env python3
-"""Testes do builder de metadata packs. Nada aqui toca a rede."""
+"""Tests for the metadata pack builder. Nothing here touches the network."""
 import unittest
 
 import build_metadata_pack as b
@@ -1145,17 +1131,17 @@ NO_INTRO_DAT = '''clrmamepro (
 )
 
 game (
-\tname "'96 Zenkoku Koukou Soccer Senshuken (Japan)"
+\tname "'96 Zenith Cup Soccer (Japan)"
 \tregion "Japan"
-\trom ( name "'96 Zenkoku Koukou Soccer Senshuken (Japan).sfc" size 1572864 crc 05FBB855 md5 3369347F7663B133CE445C15200A5AFA sha1 005CCD8362DC41491F89F31FC9326A6688300E0C )
+\trom ( name "'96 Zenith Cup Soccer (Japan).sfc" size 1572864 crc 05FBB855 md5 3369347F7663B133CE445C15200A5AFA sha1 005CCD8362DC41491F89F31FC9326A6688300E0C )
 )
 game (
-\tname "Chrono Trigger (USA)"
+\tname "Crystal Vanguard (USA)"
 \tregion "USA"
-\trom ( name "Chrono Trigger (USA).sfc" size 4194304 crc 2D206BF7 md5 A2BC447961E52FD2227BAED164F729DC sha1 DE5DFB1E9F82A5C1220E7C6D0D4E5F5C2D3E4F50 )
+\trom ( name "Crystal Vanguard (USA).sfc" size 4194304 crc 2D206BF7 md5 A2BC447961E52FD2227BAED164F729DC sha1 DE5DFB1E9F82A5C1220E7C6D0D4E5F5C2D3E4F50 )
 )
 game (
-\tname "Sem Hash (Japan)"
+\tname "No Hash (Japan)"
 \tregion "Japan"
 )
 '''
@@ -1165,17 +1151,17 @@ REDUMP_DAT = '''clrmamepro (
 )
 
 game (
-\tname "'98 Koushien (Japan)"
+\tname "'98 Ballpark (Japan)"
 \tregion "Japan"
 \tserial "SLPS-01204"
-\trom ( name "'98 Koushien (Japan).bin" size 583415952 crc 8ACD8FB1 md5 39A936EA7521157838D4E67B24F62F15 sha1 782C50827BF4CF8FE5530B64B188A2D43C75B0E0 serial "SLPS-01204" )
+\trom ( name "'98 Ballpark (Japan).bin" size 583415952 crc 8ACD8FB1 md5 39A936EA7521157838D4E67B24F62F15 sha1 782C50827BF4CF8FE5530B64B188A2D43C75B0E0 serial "SLPS-01204" )
 )
 game (
-\tname "'99 Koushien (Japan)"
+\tname "'99 Ballpark (Japan)"
 \tregion "Japan"
 \tserial "SLPS-02110"
-\trom ( name "'99 Koushien (Japan) (Track 01).bin" size 314812848 crc 1D91CBAB md5 7BDC7092AEF04C6BEC7E78CDFE3D9A81 sha1 C1B7929C137E885569D30803664B26E496F32BB6 serial "SLPS-02110" )
-\trom ( name "'99 Koushien (Japan) (Track 02).bin" size 12345 crc AAAAAAAA md5 BB sha1 CC serial "SLPS-02110" )
+\trom ( name "'99 Ballpark (Japan) (Track 01).bin" size 314812848 crc 1D91CBAB md5 7BDC7092AEF04C6BEC7E78CDFE3D9A81 sha1 C1B7929C137E885569D30803664B26E496F32BB6 serial "SLPS-02110" )
+\trom ( name "'99 Ballpark (Japan) (Track 02).bin" size 12345 crc AAAAAAAA md5 BB sha1 CC serial "SLPS-02110" )
 )
 '''
 
@@ -1184,19 +1170,19 @@ GENRE_DAT = '''clrmamepro (
 )
 
 game (
-\tcomment "'96 Zenkoku Koukou Soccer Senshuken (Japan)"
+\tcomment "'96 Zenith Cup Soccer (Japan)"
 \tgenre "Sports"
 \trom ( crc 05FBB855 )
 )
 game (
-\tcomment "Chrono Trigger (USA)"
+\tcomment "Crystal Vanguard (USA)"
 \tgenre "Role-Playing"
 \trom ( crc 2d206bf7 )
 )
 '''
 
 SERIAL_DAT = '''game (
-\tcomment "'96 Zenkoku Koukou Soccer Senshuken (Japan)"
+\tcomment "'96 Zenith Cup Soccer (Japan)"
 \tserial "SHVC-AY2J-JPN"
 \trom (
 \t\tcrc 05FBB855
@@ -1209,7 +1195,7 @@ class ParseDatTest(unittest.TestCase):
     def test_reads_every_game(self):
         entries = b.parse_dat(NO_INTRO_DAT)
         self.assertEqual(len(entries), 3)
-        self.assertEqual(entries[1]["name"], "Chrono Trigger (USA)")
+        self.assertEqual(entries[1]["name"], "Crystal Vanguard (USA)")
 
     def test_reads_the_first_rom_hashes_uppercased(self):
         entries = b.parse_dat(NO_INTRO_DAT)
@@ -1218,7 +1204,7 @@ class ParseDatTest(unittest.TestCase):
 
     def test_game_without_rom_line_keeps_null_hashes(self):
         entries = b.parse_dat(NO_INTRO_DAT)
-        self.assertEqual(entries[2]["name"], "Sem Hash (Japan)")
+        self.assertEqual(entries[2]["name"], "No Hash (Japan)")
         self.assertIsNone(entries[2]["crc"])
         self.assertIsNone(entries[2]["sha1"])
 
@@ -1239,10 +1225,8 @@ class ParseDatTest(unittest.TestCase):
         entries = b.parse_dat(NO_INTRO_DAT)
         self.assertEqual(entries[1]["region"], "USA")
         self.assertEqual(entries[0]["region"], "Japan")
-        # Nem todo bloco declara região. No DAT real do SNES são 293 de 4268,
-        # no do GameCube 33 de 2268, então a ausência é normal e vira None.
-        sem = b.parse_dat('game (\n\tname "Sem Regiao"\n)\n')
-        self.assertIsNone(sem[0]["region"])
+        untagged = b.parse_dat('game (\n\tname "No Region"\n)\n')
+        self.assertIsNone(untagged[0]["region"])
 
 
 class ParseSideDatTest(unittest.TestCase):
@@ -1275,7 +1259,7 @@ class SystemsTableTest(unittest.TestCase):
         seen = {}
         for s in b.SYSTEMS:
             for alias in s["aliases"]:
-                self.assertNotIn(alias, seen, f"{alias} repetido em {s['system']}")
+                self.assertNotIn(alias, seen, f"{alias} repeated in {s['system']}")
                 seen[alias] = s["system"]
 
     def test_every_system_declares_dat_group_and_thumbs(self):
@@ -1288,18 +1272,18 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py' -v`
 Expected: FAIL, `ModuleNotFoundError: No module named 'build_metadata_pack'`.
 
-- [ ] **Step 3: Escrever o parser e a tabela de sistemas**
+- [ ] **Step 3: Write the parser and the systems table**
 
-Crie `tool/build_metadata_pack.py`:
+Create `tool/build_metadata_pack.py`:
 
 ```python
 #!/usr/bin/env python3
-"""Builds one metadata pack per console for the app's "Stremio de jogos" grid.
+"""Builds one metadata pack per console for the app's game grid.
 
 Sources, all public and without accounts:
   - libretro-database (CC BY-SA 4.0): the No-Intro and Redump DATs under
@@ -1330,8 +1314,6 @@ THUMBS_API = "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/
 THUMBS_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/{repo}/master/Named_Boxarts/{name}"
 OPENVGDB_URL = "https://github.com/OpenVGDB/OpenVGDB/releases/download/v29.0/openvgdb.zip"
 
-# Os side files por campo só existem para sistemas No-Intro. Para Redump o
-# builder recebe 404 e segue em frente com o OpenVGDB.
 SIDE_FIELDS = {
     "genre": "genre",
     "developer": "developer",
@@ -1342,11 +1324,6 @@ SIDE_FIELDS = {
     "serial": "serial",
 }
 
-# system: nome do sistema no libretro-database, e também o que vira o pack id.
-# group: qual pasta de metadat tem o DAT principal.
-# thumbs: repositório do libretro-thumbnails, que nem sempre casa com o nome
-#         do sistema (Wii U Digital usa o repo do Wii U).
-# aliases: como o console pode se chamar no catálogo do usuário.
 SYSTEMS = [
     {"system": "Coleco - ColecoVision", "group": "no-intro",
      "thumbs": "Coleco_-_ColecoVision", "aliases": ["colecovision", "coleco"]},
@@ -1407,9 +1384,8 @@ GAME_RE = re.compile(r"game \(\s*(.*?)\n\)", re.S)
 NAME_RE = re.compile(r'^\s*name "([^"]+)"', re.M)
 SERIAL_RE = re.compile(r'^\s*serial "([^"]+)"', re.M)
 REGION_RE = re.compile(r'^\s*region "([^"]+)"', re.M)
-# O md5 é capturado só para o grupo do sha1 cair na posição certa. Ele não vai
-# para o pacote: nenhum dos três eixos de identidade da fatia 2 usa md5, e
-# guardar um hash a mais por dump inflaria o pacote sem comprador.
+# md5 is captured only so the sha1 group lands in the right position; it is
+# discarded.
 ROM_RE = re.compile(
     r'rom \( name "([^"]+)"(?:\s+size \d+)?\s+crc (\w+)'
     r"(?:\s+md5 (\w+))?(?:\s+sha1 (\w+))?"
@@ -1418,20 +1394,14 @@ CRC_RE = re.compile(r"crc (\w+)")
 
 
 def normalize(value):
-    """Mesma regra do CatalogService._nameToId no app."""
+    """Same rule as CatalogService._nameToId in the app."""
     return re.sub(r"^_+|_+$", "", re.sub(r"[^a-z0-9]+", "_", value.lower()))
 
 
 def parse_dat(text):
-    """DAT principal do No-Intro ou do Redump para uma lista de dumps.
+    """Parses a No-Intro or Redump main DAT into a list of dumps.
 
-    Só a primeira linha rom de cada bloco entra: em jogos de disco as demais
-    são faixas de áudio, cujo CRC não serve para identificar o arquivo que o
-    usuário baixa.
-
-    O crc e o sha1 sobem para maiúsculas porque são hexadecimais e a comparação
-    precisa ser estável. O serial não: ele é uma string de catálogo do
-    fabricante e vai para o pacote exatamente como o DAT emite.
+    Only the first rom line of each block is kept; crc and sha1 are uppercased.
     """
     entries = []
     for block in GAME_RE.findall(text):
@@ -1452,7 +1422,7 @@ def parse_dat(text):
 
 
 def parse_side_dat(text, field):
-    """Side file por campo para um mapa CRC32 em maiúsculas para valor."""
+    """Parses a per-field side file into an uppercase-CRC32 to value map."""
     field_re = re.compile(field + r' "([^"]+)"')
     out = {}
     for block in GAME_RE.findall(text):
@@ -1464,17 +1434,17 @@ def parse_side_dat(text, field):
 
 
 def main():
-    raise SystemExit("CLI ainda nao implementada, ver Task 10")
+    raise SystemExit("CLI not implemented yet, see Task 10")
 
 
 if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py' -v`
-Expected: PASS, 15 testes.
+Expected: PASS, 15 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1485,59 +1455,59 @@ git commit -m "feat(packs): parser de DAT e tabela dos 24 sistemas"
 
 ---
 
-### Task 7: Builder, colapso em jogos canônicos
+### Task 7: The builder, collapse into canonical games
 
 **Files:**
 - Modify: `tool/build_metadata_pack.py`
 - Test: `tool/test_build_metadata_pack.py`
 
-Aqui mora a razão de o pacote existir: o DAT do SNES tem 4268 dumps e o usuário quer ver 2415 jogos. `canon` joga fora região, revisão, idioma e tags e devolve o título do jogo; dumps que compartilham o mesmo `canon` viram um `PackGame`. `norm` e `canon` são o porte do que a PoC mediu, com uma correção: na PoC a troca do artigo final rodava depois de `norm`, que já tinha comido a vírgula de "Legend of Zelda, The", então nunca acontecia. Aqui ela roda no nome cru, dentro de `display_title`.
+Here lives the reason the pack exists: the SNES DAT has 4268 dumps and the user wants to see 2415 games. `canon` throws away region, revision, language and tags and returns the game title; dumps that share the same `canon` become one `PackGame`. `norm` and `canon` are the port of what the PoC measured, with one fix: in the PoC the trailing-article swap ran after `norm`, which had already eaten the comma in "Legend of Kaelis, The", so it never happened. Here it runs on the raw name, inside `display_title`.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Adicione a `tool/test_build_metadata_pack.py`, antes do bloco `if __name__`:
+Add to `tool/test_build_metadata_pack.py`, before the `if __name__` block:
 
 ```python
 class NormTest(unittest.TestCase):
     def test_lowercases_and_strips_punctuation(self):
-        self.assertEqual(b.norm("Chrono Trigger (USA)"), "chrono trigger (usa)")
+        self.assertEqual(b.norm("Crystal Vanguard (USA)"), "crystal vanguard (usa)")
 
     def test_expands_ampersand(self):
-        self.assertEqual(b.norm("Dig & Spike"), "dig and spike")
+        self.assertEqual(b.norm("Grip & Slam"), "grip and slam")
 
     def test_drops_accents(self):
-        self.assertEqual(b.norm("Pokémon Rojo"), "pokemon rojo")
+        self.assertEqual(b.norm("Prismón Rojo"), "prismon rojo")
 
     def test_strips_rom_extensions(self):
-        self.assertEqual(b.norm("Chrono Trigger (USA).sfc"), "chrono trigger (usa)")
-        self.assertEqual(b.norm("Chrono Trigger (USA).zip"), "chrono trigger (usa)")
+        self.assertEqual(b.norm("Crystal Vanguard (USA).sfc"), "crystal vanguard (usa)")
+        self.assertEqual(b.norm("Crystal Vanguard (USA).zip"), "crystal vanguard (usa)")
 
 
 class CanonTest(unittest.TestCase):
     def test_drops_region_and_revision_tags(self):
-        self.assertEqual(b.canon("Chrono Trigger (USA) (Rev 1)"), "chrono trigger")
-        self.assertEqual(b.canon("Chrono Trigger (Japan) [T+Eng]"), "chrono trigger")
+        self.assertEqual(b.canon("Crystal Vanguard (USA) (Rev 1)"), "crystal vanguard")
+        self.assertEqual(b.canon("Crystal Vanguard (Japan) [T+Eng]"), "crystal vanguard")
 
     def test_moves_the_trailing_article_to_the_front(self):
-        self.assertEqual(b.canon("Legend of Zelda, The (USA)"), "the legend of zelda")
+        self.assertEqual(b.canon("Legend of Kaelis, The (USA)"), "the legend of kaelis")
 
     def test_different_regions_share_one_canon(self):
         self.assertEqual(
-            b.canon("Super Mario World (USA)"), b.canon("Super Mario World (Europe)")
+            b.canon("Super Pixel World (USA)"), b.canon("Super Pixel World (Europe)")
         )
 
 
 class DisplayTitleTest(unittest.TestCase):
     def test_keeps_the_original_casing(self):
-        self.assertEqual(b.display_title("Chrono Trigger (USA)"), "Chrono Trigger")
+        self.assertEqual(b.display_title("Crystal Vanguard (USA)"), "Crystal Vanguard")
 
     def test_moves_the_article_without_lowercasing_the_rest(self):
         self.assertEqual(
-            b.display_title("Legend of Zelda, The (USA)"), "The Legend of Zelda"
+            b.display_title("Legend of Kaelis, The (USA)"), "The Legend of Kaelis"
         )
 
     def test_keeps_accents_and_punctuation(self):
-        self.assertEqual(b.display_title("Pokémon Rojo (Spain).gb"), "Pokémon Rojo")
+        self.assertEqual(b.display_title("Prismón Rojo (Spain).gb"), "Prismón Rojo")
 
     def test_name_that_is_only_tags_becomes_empty(self):
         self.assertEqual(b.display_title("(USA)"), "")
@@ -1545,20 +1515,20 @@ class DisplayTitleTest(unittest.TestCase):
 
 class SlugTest(unittest.TestCase):
     def test_makes_a_url_safe_slug(self):
-        self.assertEqual(b.slug("the legend of zelda"), "the-legend-of-zelda")
+        self.assertEqual(b.slug("the legend of kaelis"), "the-legend-of-kaelis")
 
     def test_collapses_runs_of_separators(self):
-        self.assertEqual(b.slug("f-zero  ii!!"), "f-zero-ii")
+        self.assertEqual(b.slug("f-blaze  ii!!"), "f-blaze-ii")
 
 
 class CollapseTest(unittest.TestCase):
     def setUp(self):
         self.entries = [
-            {"name": "Chrono Trigger (USA)", "crc": "2D206BF7", "sha1": "A",
+            {"name": "Crystal Vanguard (USA)", "crc": "2D206BF7", "sha1": "A",
              "serial": None, "region": "USA"},
-            {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C", "sha1": "B",
+            {"name": "Crystal Vanguard (Japan)", "crc": "1F2E3D4C", "sha1": "B",
              "serial": None, "region": "Japan"},
-            {"name": "Legend of Zelda, The (USA)", "crc": "AAAAAAAA", "sha1": None,
+            {"name": "Legend of Kaelis, The (USA)", "crc": "AAAAAAAA", "sha1": None,
              "serial": None, "region": None},
         ]
 
@@ -1569,41 +1539,39 @@ class CollapseTest(unittest.TestCase):
 
     def test_title_comes_from_the_first_dump_without_its_tags(self):
         games = b.collapse(self.entries, "snes")
-        self.assertEqual(games[0]["title"], "Chrono Trigger")
-        self.assertEqual(games[1]["title"], "The Legend of Zelda")
+        self.assertEqual(games[0]["title"], "Crystal Vanguard")
+        self.assertEqual(games[1]["title"], "The Legend of Kaelis")
 
     def test_id_is_pack_slash_slug(self):
         games = b.collapse(self.entries, "snes")
-        self.assertEqual(games[0]["id"], "snes/chrono-trigger")
-        self.assertEqual(games[1]["id"], "snes/the-legend-of-zelda")
+        self.assertEqual(games[0]["id"], "snes/crystal-vanguard")
+        self.assertEqual(games[1]["id"], "snes/the-legend-of-kaelis")
 
     def test_dump_order_is_the_dat_order(self):
         games = b.collapse(self.entries, "snes")
         self.assertEqual(
             [d["name"] for d in games[0]["dumps"]],
-            ["Chrono Trigger (USA)", "Chrono Trigger (Japan)"],
+            ["Crystal Vanguard (USA)", "Crystal Vanguard (Japan)"],
         )
 
     def test_hyphen_and_space_spellings_are_the_same_game(self):
         entries = [
-            {"name": "Pac-Man (USA)", "crc": "1", "sha1": None, "serial": None},
-            {"name": "Pac Man (Japan)", "crc": "2", "sha1": None, "serial": None},
+            {"name": "Pix-Man (USA)", "crc": "1", "sha1": None, "serial": None},
+            {"name": "Pix Man (Japan)", "crc": "2", "sha1": None, "serial": None},
         ]
         games = b.collapse(entries, "nes")
         self.assertEqual(len(games), 1)
-        self.assertEqual(games[0]["id"], "nes/pac-man")
+        self.assertEqual(games[0]["id"], "nes/pix-man")
 
     def test_two_titles_with_the_same_slug_get_a_numeric_suffix(self):
-        # Tags desbalanceadas sobrevivem ao canon, entao dois jogos de canon
-        # diferente podem cair no mesmo slug. O sufixo garante id único.
         entries = [
-            {"name": "Sonic (Beta", "crc": "1", "sha1": None, "serial": None},
-            {"name": "Sonic Beta", "crc": "2", "sha1": None, "serial": None},
+            {"name": "Sprint (Beta", "crc": "1", "sha1": None, "serial": None},
+            {"name": "Sprint Beta", "crc": "2", "sha1": None, "serial": None},
         ]
         games = b.collapse(entries, "md")
         self.assertEqual(len(games), 2)
-        self.assertEqual(games[0]["id"], "md/sonic-beta")
-        self.assertEqual(games[1]["id"], "md/sonic-beta-2")
+        self.assertEqual(games[0]["id"], "md/sprint-beta")
+        self.assertEqual(games[1]["id"], "md/sprint-beta-2")
 
     def test_region_travels_to_the_dump_and_is_omitted_when_absent(self):
         games = b.collapse(self.entries, "snes")
@@ -1616,14 +1584,14 @@ class CollapseTest(unittest.TestCase):
         self.assertEqual(b.collapse(entries, "nes"), [])
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
 Expected: FAIL, `AttributeError: module 'build_metadata_pack' has no attribute 'norm'`.
 
-- [ ] **Step 3: Implementar norm, canon, slug e collapse**
+- [ ] **Step 3: Implement norm, canon, slug and collapse**
 
-Em `tool/build_metadata_pack.py`, logo depois de `def parse_side_dat(...)`, adicione:
+In `tool/build_metadata_pack.py`, right after `def parse_side_dat(...)`, add:
 
 ```python
 ROM_EXTS = (".zip", ".7z", ".sfc", ".smc", ".fig", ".swc", ".bin", ".rar", ".gz",
@@ -1643,8 +1611,8 @@ def strip_ext(name):
 
 
 def norm(value):
-    """Forma comparável do nome do arquivo: sem extensão, sem acento, sem
-    pontuação, mas com as tags de região e revisão preservadas."""
+    """Comparable form of a filename: no extension, accents, or punctuation,
+    but region and revision tags preserved."""
     value = strip_ext(value)
     value = unicodedata.normalize("NFKD", value)
     value = "".join(c for c in value if not unicodedata.combining(c))
@@ -1654,12 +1622,8 @@ def norm(value):
 
 
 def display_title(dat_name):
-    """Título de exibição a partir do nome do DAT: sem extensão, sem tags de
-    região e revisão, com o artigo de volta na frente.
-
-    A troca do artigo acontece aqui, no nome cru, e não depois de norm, porque
-    norm come a vírgula que separa "Legend of Zelda" de "The".
-    """
+    """Display title from a DAT name: no extension, no region or revision tags,
+    with the trailing article moved to the front."""
     value = TAG_RE.sub(" ", strip_ext(dat_name))
     value = re.sub(r"\s+", " ", value).strip().strip(",").strip()
     match = ARTICLE_RE.match(value)
@@ -1669,8 +1633,8 @@ def display_title(dat_name):
 
 
 def canon(value):
-    """Título canônico do jogo, a chave de agrupamento: o título de exibição
-    passado por norm."""
+    """Canonical game title, the grouping key: the display title run through
+    norm."""
     return norm(display_title(value))
 
 
@@ -1679,7 +1643,7 @@ def slug(value):
 
 
 def collapse(entries, pack_id):
-    """Dumps do DAT para jogos canônicos, na ordem em que aparecem."""
+    """Collapses DAT dumps into canonical games, in order of appearance."""
     games = []
     by_canon = {}
     used_slugs = {}
@@ -1695,8 +1659,6 @@ def collapse(entries, pack_id):
             game_slug = base if count == 1 else f"{base}-{count}"
             game = {
                 "id": f"{pack_id}/{game_slug}",
-                # O título vem do primeiro dump, que preserva a grafia e os
-                # acentos do DAT. O canon serve só para agrupar e para o slug.
                 "title": display_title(entry["name"]),
                 "dumps": [],
             }
@@ -1710,10 +1672,10 @@ def collapse(entries, pack_id):
     return games
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 36 testes.
+Expected: PASS, 36 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1724,27 +1686,27 @@ git commit -m "feat(packs): colapso de dumps em jogos canonicos"
 
 ---
 
-### Task 8: Builder, enriquecimento pelos side files
+### Task 8: The builder, enrichment from the side files
 
 **Files:**
 - Modify: `tool/build_metadata_pack.py`
 - Test: `tool/test_build_metadata_pack.py`
 
-Os side files chaveiam por CRC32 de um dump. Um jogo canônico tem vários dumps, então a regra é: o primeiro dump que tiver valor para o campo ganha. Isso favorece a região que aparece primeiro no DAT, que é a ordem alfabética, e é determinístico.
+The side files key on a dump's CRC32. A canonical game has several dumps, so the rule is: the first dump that has a value for the field wins. That favors the region that appears first in the DAT, which is alphabetical order, and it is deterministic.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Adicione a `tool/test_build_metadata_pack.py`, antes do bloco `if __name__`:
+Add to `tool/test_build_metadata_pack.py`, before the `if __name__` block:
 
 ```python
 class EnrichTest(unittest.TestCase):
     def games(self):
         return [{
-            "id": "snes/chrono-trigger",
-            "title": "Chrono Trigger",
+            "id": "snes/crystal-vanguard",
+            "title": "Crystal Vanguard",
             "dumps": [
-                {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C"},
-                {"name": "Chrono Trigger (USA)", "crc": "2D206BF7"},
+                {"name": "Crystal Vanguard (Japan)", "crc": "1F2E3D4C"},
+                {"name": "Crystal Vanguard (USA)", "crc": "2D206BF7"},
             ],
         }]
 
@@ -1776,9 +1738,9 @@ class EnrichTest(unittest.TestCase):
 
     def test_serial_already_on_the_dump_is_not_overwritten(self):
         games = self.games()
-        games[0]["dumps"][1]["serial"] = "JA-ESTAVA-LA"
+        games[0]["dumps"][1]["serial"] = "ALREADY-THERE"
         b.enrich_from_side(games, {"serial": {"2D206BF7": "SNS-AC-USA"}})
-        self.assertEqual(games[0]["dumps"][1]["serial"], "JA-ESTAVA-LA")
+        self.assertEqual(games[0]["dumps"][1]["serial"], "ALREADY-THERE")
 
     def test_missing_side_maps_leave_the_game_untouched(self):
         games = self.games()
@@ -1793,25 +1755,23 @@ class EnrichTest(unittest.TestCase):
     def test_franchise_and_esrb_are_carried_over(self):
         games = self.games()
         b.enrich_from_side(games, {
-            "franchise": {"2D206BF7": "Chrono"},
+            "franchise": {"2D206BF7": "Crystal"},
             "esrb": {"2D206BF7": "E"},
         })
-        self.assertEqual(games[0]["franchise"], "Chrono")
+        self.assertEqual(games[0]["franchise"], "Crystal")
         self.assertEqual(games[0]["esrb"], "E")
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
 Expected: FAIL, `AttributeError: module 'build_metadata_pack' has no attribute 'enrich_from_side'`.
 
-- [ ] **Step 3: Implementar o enriquecimento**
+- [ ] **Step 3: Implement the enrichment**
 
-Em `tool/build_metadata_pack.py`, logo depois de `def collapse(...)`, adicione:
+In `tool/build_metadata_pack.py`, right after `def collapse(...)`, add:
 
 ```python
-# Campo do side file para chave no JSON do jogo. O serial é o único que não
-# descreve o jogo e sim o dump, então tem tratamento próprio.
 GAME_FIELDS = {
     "genre": "genre",
     "developer": "developer",
@@ -1822,11 +1782,8 @@ GAME_FIELDS = {
 
 
 def enrich_from_side(games, side_maps):
-    """Preenche os campos do jogo a partir dos mapas CRC para valor.
-
-    Um jogo tem vários dumps; o primeiro dump que tiver valor para o campo
-    ganha, o que torna o resultado determinístico.
-    """
+    """Fills game fields from the CRC-to-value maps; the first dump with a
+    value for a field wins."""
     for game in games:
         for source, target in GAME_FIELDS.items():
             table = side_maps.get(source)
@@ -1854,10 +1811,10 @@ def enrich_from_side(games, side_maps):
                     dump["serial"] = value
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 43 testes.
+Expected: PASS, 43 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1868,24 +1825,24 @@ git commit -m "feat(packs): enriquecimento pelos side files do libretro-database
 
 ---
 
-### Task 9: Builder, capas e sinopse
+### Task 9: The builder, covers and synopsis
 
 **Files:**
 - Modify: `tool/build_metadata_pack.py`
 - Test: `tool/test_build_metadata_pack.py`
 
-Duas fontes, com ordem de preferência. A capa preferida é a do libretro-thumbnails, porque a PoC mediu 86,8% de cobertura contra 75,6% do OpenVGDB e a união dá 89,6%. O OpenVGDB entra como reserva de capa e como única fonte de sinopse.
+Two sources, with a preference order. The preferred cover is the libretro-thumbnails one, because the PoC measured 86.8% coverage against 75.6% for OpenVGDB and the union gives 89.6%. OpenVGDB comes in as a cover fallback and as the only synopsis source.
 
-Dois detalhes verificados que o código precisa respeitar:
+Two verified details the code must respect:
 
-- O nome do arquivo no libretro-thumbnails é o nome do DAT com `&*/:` e outros caracteres proibidos trocados por `_`, mais `.png`. Exemplo real do repositório do SNES: `Advanced Dungeons _ Dragons - Eye of the Beholder (USA).png`.
-- A árvore de `Named_Boxarts` cabe numa chamada só da API do GitHub, mesmo no PlayStation, que tem 9301 arquivos e não vem truncado.
+- The file name on libretro-thumbnails is the DAT name with `&*/:` and other forbidden characters replaced by `_`, plus `.png`. An example of the rule: `Guild _ Dungeon - Eye of the Watcher (USA).png`.
+- The `Named_Boxarts` tree fits in a single GitHub API call, even for the PlayStation, which has 9301 files and does not come back truncated.
 
-A escolha da capa entre os dumps de um jogo segue prioridade de região: USA, World, Europe, Japan e depois qualquer um, para o usuário ver a capa que ele reconhece.
+The cover choice among a game's dumps follows region priority: USA, World, Europe, Japan and then any, so the user sees the cover they recognize.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Adicione a `tool/test_build_metadata_pack.py`, antes do bloco `if __name__`:
+Add to `tool/test_build_metadata_pack.py`, before the `if __name__` block:
 
 ```python
 import sqlite3
@@ -1893,58 +1850,58 @@ import sqlite3
 
 class ThumbNameTest(unittest.TestCase):
     def test_keeps_the_dat_name_and_adds_png(self):
-        self.assertEqual(b.thumb_name("Chrono Trigger (USA)"), "Chrono Trigger (USA).png")
+        self.assertEqual(b.thumb_name("Crystal Vanguard (USA)"), "Crystal Vanguard (USA).png")
 
     def test_replaces_the_characters_libretro_forbids(self):
         self.assertEqual(
-            b.thumb_name("Advanced Dungeons & Dragons - Eye of the Beholder (USA)"),
-            "Advanced Dungeons _ Dragons - Eye of the Beholder (USA).png",
+            b.thumb_name("Guild & Dungeon - Eye of the Watcher (USA)"),
+            "Guild _ Dungeon - Eye of the Watcher (USA).png",
         )
-        self.assertEqual(b.thumb_name("Ratchet: Deadlocked"), "Ratchet_ Deadlocked.png")
+        self.assertEqual(b.thumb_name("Sprocket: Deadlocked"), "Sprocket_ Deadlocked.png")
 
 
 class RegionPriorityTest(unittest.TestCase):
     def test_usa_beats_japan(self):
         self.assertLess(
-            b.region_rank("Chrono Trigger (USA)"), b.region_rank("Chrono Trigger (Japan)")
+            b.region_rank("Crystal Vanguard (USA)"), b.region_rank("Crystal Vanguard (Japan)")
         )
 
     def test_world_beats_europe(self):
         self.assertLess(
-            b.region_rank("Sonic (World)"), b.region_rank("Sonic (Europe)")
+            b.region_rank("Sprint (World)"), b.region_rank("Sprint (Europe)")
         )
 
     def test_unknown_region_goes_last(self):
         self.assertGreater(
-            b.region_rank("Sonic (Korea)"), b.region_rank("Sonic (Japan)")
+            b.region_rank("Sprint (Korea)"), b.region_rank("Sprint (Japan)")
         )
 
 
 class AttachCoversTest(unittest.TestCase):
     def games(self):
         return [{
-            "id": "snes/chrono-trigger",
-            "title": "Chrono Trigger",
+            "id": "snes/crystal-vanguard",
+            "title": "Crystal Vanguard",
             "dumps": [
-                {"name": "Chrono Trigger (Japan)", "crc": "1F2E3D4C"},
-                {"name": "Chrono Trigger (USA)", "crc": "2D206BF7"},
+                {"name": "Crystal Vanguard (Japan)", "crc": "1F2E3D4C"},
+                {"name": "Crystal Vanguard (USA)", "crc": "2D206BF7"},
             ],
         }]
 
     def test_picks_the_preferred_region_cover(self):
         games = self.games()
-        available = {"Chrono Trigger (Japan).png", "Chrono Trigger (USA).png"}
+        available = {"Crystal Vanguard (Japan).png", "Crystal Vanguard (USA).png"}
         b.attach_thumbnail_covers(games, available, "Nintendo_-_Super_Nintendo_Entertainment_System")
         self.assertEqual(
             games[0]["cover"],
             "https://raw.githubusercontent.com/libretro-thumbnails/"
             "Nintendo_-_Super_Nintendo_Entertainment_System/master/Named_Boxarts/"
-            "Chrono%20Trigger%20%28USA%29.png",
+            "Crystal%20Vanguard%20%28USA%29.png",
         )
 
     def test_falls_back_to_the_only_available_region(self):
         games = self.games()
-        b.attach_thumbnail_covers(games, {"Chrono Trigger (Japan).png"}, "R")
+        b.attach_thumbnail_covers(games, {"Crystal Vanguard (Japan).png"}, "R")
         self.assertIn("Japan", games[0]["cover"])
 
     def test_no_thumbnail_leaves_the_game_without_cover(self):
@@ -1962,7 +1919,7 @@ class OpenVgdbTest(unittest.TestCase):
                 releaseCoverFront TEXT, releaseDeveloper TEXT,
                 releasePublisher TEXT, releaseGenre TEXT, releaseDate TEXT);
             INSERT INTO ROMs VALUES (1, '2D206BF7');
-            INSERT INTO RELEASES VALUES (1, 'Um RPG.', 'https://img/ct.jpg',
+            INSERT INTO RELEASES VALUES (1, 'An RPG.', 'https://img/ct.jpg',
                 'Square', 'Square', 'Role-Playing', 'Mar 11, 1995');
             INSERT INTO ROMs VALUES (2, 'AAAAAAAA');
             INSERT INTO RELEASES VALUES (2, NULL, NULL, NULL, NULL, NULL, NULL);
@@ -1971,7 +1928,7 @@ class OpenVgdbTest(unittest.TestCase):
     def test_index_is_keyed_by_uppercase_crc(self):
         index = b.openvgdb_index(self.conn)
         self.assertIn("2D206BF7", index)
-        self.assertEqual(index["2D206BF7"]["synopsis"], "Um RPG.")
+        self.assertEqual(index["2D206BF7"]["synopsis"], "An RPG.")
 
     def test_year_is_extracted_from_the_release_date(self):
         index = b.openvgdb_index(self.conn)
@@ -1982,20 +1939,20 @@ class OpenVgdbTest(unittest.TestCase):
 
     def test_enrich_fills_only_what_is_missing(self):
         games = [{
-            "id": "snes/chrono-trigger", "title": "Chrono Trigger",
+            "id": "snes/crystal-vanguard", "title": "Crystal Vanguard",
             "genre": "RPG",
-            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+            "dumps": [{"name": "Crystal Vanguard (USA)", "crc": "2D206BF7"}],
         }]
         b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
         self.assertEqual(games[0]["genre"], "RPG")
-        self.assertEqual(games[0]["synopsis"], "Um RPG.")
+        self.assertEqual(games[0]["synopsis"], "An RPG.")
         self.assertEqual(games[0]["developer"], "Square")
         self.assertEqual(games[0]["year"], 1995)
 
     def test_openvgdb_cover_is_only_a_fallback(self):
         games = [{
             "id": "a", "title": "A", "cover": "https://libretro/x.png",
-            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+            "dumps": [{"name": "Crystal Vanguard (USA)", "crc": "2D206BF7"}],
         }]
         b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
         self.assertEqual(games[0]["cover"], "https://libretro/x.png")
@@ -2003,23 +1960,23 @@ class OpenVgdbTest(unittest.TestCase):
     def test_openvgdb_cover_is_used_when_there_is_none(self):
         games = [{
             "id": "a", "title": "A",
-            "dumps": [{"name": "Chrono Trigger (USA)", "crc": "2D206BF7"}],
+            "dumps": [{"name": "Crystal Vanguard (USA)", "crc": "2D206BF7"}],
         }]
         b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
         self.assertEqual(games[0]["cover"], "https://img/ct.jpg")
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
 Expected: FAIL, `AttributeError: module 'build_metadata_pack' has no attribute 'thumb_name'`.
 
-- [ ] **Step 3: Implementar capas e sinopse**
+- [ ] **Step 3: Implement covers and synopsis**
 
-Em `tool/build_metadata_pack.py`, logo depois de `def enrich_from_side(...)`, adicione:
+In `tool/build_metadata_pack.py`, right after `def enrich_from_side(...)`, add:
 
 ```python
-# O libretro-thumbnails troca estes caracteres por "_" no nome do arquivo.
+# libretro-thumbnails replaces these characters with "_" in the filename.
 THUMB_FORBIDDEN_RE = re.compile(r"[&*/:`<>?\\|]")
 REGION_ORDER = ["(usa", "(world", "(europe", "(japan"]
 YEAR_RE = re.compile(r"(19|20)\d{2}")
@@ -2038,8 +1995,8 @@ def region_rank(dat_name):
 
 
 def attach_thumbnail_covers(games, available, repo):
-    """Escolhe a capa do libretro-thumbnails do dump de melhor região que
-    realmente existe no repositório."""
+    """Picks the libretro-thumbnails cover of the best-region dump that
+    actually exists in the repository."""
     for game in games:
         best = None
         for dump in sorted(game["dumps"], key=lambda d: region_rank(d["name"])):
@@ -2055,7 +2012,7 @@ def attach_thumbnail_covers(games, available, repo):
 
 
 def openvgdb_index(conn):
-    """CRC32 em maiúsculas para os campos úteis do OpenVGDB."""
+    """Maps uppercase CRC32 to the useful OpenVGDB fields."""
     rows = conn.execute(
         "SELECT r.romHashCRC, rel.releaseDescription, rel.releaseCoverFront, "
         "rel.releaseDeveloper, rel.releasePublisher, rel.releaseGenre, rel.releaseDate "
@@ -2079,8 +2036,7 @@ def openvgdb_index(conn):
 
 
 def enrich_from_openvgdb(games, index):
-    """Só preenche buraco. O libretro-database sempre ganha do OpenVGDB, que
-    não tem licença declarada e é a fonte menos confiável das duas."""
+    """Fills gaps only; libretro-database always wins over OpenVGDB."""
     for game in games:
         for dump in game["dumps"]:
             record = index.get(dump.get("crc"))
@@ -2092,10 +2048,10 @@ def enrich_from_openvgdb(games, index):
             break
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 57 testes.
+Expected: PASS, 57 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2106,19 +2062,19 @@ git commit -m "feat(packs): capas do libretro-thumbnails e sinopse do OpenVGDB"
 
 ---
 
-### Task 10: Builder, rede, saída e CLI
+### Task 10: The builder, network, output and CLI
 
 **Files:**
 - Modify: `tool/build_metadata_pack.py`
 - Test: `tool/test_build_metadata_pack.py`
 
-Agora a rede entra, mas isolada em três funções finas (`fetch_text`, `fetch_json`, `download_openvgdb`) para as partes testáveis continuarem puras. O que os testes cobrem aqui é a montagem do pacote e do índice, com uma função `fetch` injetada.
+Now the network comes in, but isolated in three thin functions (`fetch_text`, `fetch_json`, `download_openvgdb`) so the testable parts stay pure. What the tests cover here is the assembly of the pack and the index, with an injected `fetch` function.
 
-O gzip sai com `mtime=0` para que uma rebuild sem mudança de dados produza bytes idênticos, o que deixa óbvio no diff da release quando nada mudou.
+The gzip goes out with `mtime=0` so a rebuild with no data change produces identical bytes, which makes it obvious in the release diff when nothing changed.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Adicione a `tool/test_build_metadata_pack.py`, antes do bloco `if __name__`:
+Add to `tool/test_build_metadata_pack.py`, before the `if __name__` block:
 
 ```python
 import gzip
@@ -2154,8 +2110,8 @@ class BuildPackTest(unittest.TestCase):
             built="2026-09-10",
         )
         by_id = {g["id"]: g for g in pack["games"]}
-        chrono = by_id["nintendo_super_nintendo_entertainment_system/chrono-trigger"]
-        self.assertEqual(chrono["genre"], "Role-Playing")
+        vanguard = by_id["nintendo_super_nintendo_entertainment_system/crystal-vanguard"]
+        self.assertEqual(vanguard["genre"], "Role-Playing")
 
     def test_missing_side_files_are_tolerated(self):
         pack = b.build_pack(
@@ -2199,18 +2155,18 @@ class BuildIndexTest(unittest.TestCase):
                          {"built": "2026-09-10", "packs": []})
 ```
 
-- [ ] **Step 2: Rodar o teste e ver falhar**
+- [ ] **Step 2: Run the test and watch it fail**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
 Expected: FAIL, `AttributeError: module 'build_metadata_pack' has no attribute 'build_pack'`.
 
-- [ ] **Step 3: Implementar montagem, saída e CLI**
+- [ ] **Step 3: Implement assembly, output and CLI**
 
-Em `tool/build_metadata_pack.py`, logo depois de `def enrich_from_openvgdb(...)`, adicione:
+In `tool/build_metadata_pack.py`, right after `def enrich_from_openvgdb(...)`, add:
 
 ```python
 def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
-    """Junta tudo num documento de pacote pronto para serializar."""
+    """Assembles everything into a pack document ready to serialize."""
     pack_id = normalize(system["system"])
     games = collapse(parse_dat(dat_text), pack_id)
     side_maps = {
@@ -2224,8 +2180,8 @@ def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
 
 
 def pack_bytes(pack):
-    """JSON compacto em gzip determinístico: mtime zerado para que uma
-    rebuild sem mudança produza bytes idênticos."""
+    """Compact JSON in deterministic gzip: mtime zeroed so an unchanged
+    rebuild produces identical bytes."""
     raw = json.dumps(pack, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     buffer = io.BytesIO()
     with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as out:
@@ -2245,15 +2201,14 @@ def build_index(packs, aliases, built):
     }
 ```
 
-Acrescente `import argparse`, `import tempfile` e `import zipfile` ao bloco de imports
-do topo do arquivo, mantendo a ordem alfabética que já está lá.
+Add `import argparse`, `import tempfile` and `import zipfile` to the import block
+at the top of the file, keeping the alphabetical order that is already there.
 
-Agora troque o `def main()` provisório do Task 6 por:
+Now replace the provisional `def main()` from Task 6 with:
 
 ```python
 def fetch_text(url, optional=False):
-    """Baixa texto. Com optional=True um 404 vira None, que é o caso normal
-    dos side files: eles só existem para os sistemas No-Intro."""
+    """Downloads text. With optional=True a 404 returns None."""
     try:
         with urllib.request.urlopen(url, timeout=180) as response:
             return response.read().decode("utf-8", "replace")
@@ -2272,22 +2227,20 @@ def fetch_json(url, token=None):
 
 
 def thumbnail_names(repo, token=None):
-    """Nomes de arquivo em Named_Boxarts. A árvore de um diretório único cabe
-    numa chamada; se vier truncada o builder devolve conjunto vazio em vez de
-    inventar URL que não existe."""
+    """Filenames in Named_Boxarts; a truncated tree returns an empty set."""
     try:
         tree = fetch_json(THUMBS_API.format(repo=repo), token)
     except urllib.error.HTTPError as error:
-        print(f"  thumbnails de {repo} indisponiveis: HTTP {error.code}", file=sys.stderr)
+        print(f"  thumbnails for {repo} unavailable: HTTP {error.code}", file=sys.stderr)
         return set()
     if tree.get("truncated"):
-        print(f"  arvore de {repo} truncada, ignorando capas", file=sys.stderr)
+        print(f"  tree for {repo} truncated, skipping covers", file=sys.stderr)
         return set()
     return {entry["path"] for entry in tree.get("tree", [])}
 
 
 def download_openvgdb(dest_dir):
-    """Baixa e descompacta o openvgdb.sqlite, devolvendo a conexão."""
+    """Downloads and unzips openvgdb.sqlite, returning the connection."""
     zip_path = os.path.join(dest_dir, "openvgdb.zip")
     urllib.request.urlretrieve(OPENVGDB_URL, zip_path)
     with zipfile.ZipFile(zip_path) as archive:
@@ -2297,10 +2250,10 @@ def download_openvgdb(dest_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="dist/packs", help="diretorio de saida")
-    parser.add_argument("--built", required=True, help="data da build, YYYY-MM-DD")
+    parser.add_argument("--out", default="dist/packs", help="output directory")
+    parser.add_argument("--built", required=True, help="build date, YYYY-MM-DD")
     parser.add_argument("--only", action="append", default=[],
-                        help="constroi so estes pack ids, repetivel")
+                        help="build only these pack ids, repeatable")
     args = parser.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -2308,7 +2261,7 @@ def main():
     selected = [s for s in SYSTEMS
                 if not args.only or normalize(s["system"]) in args.only]
     if not selected:
-        raise SystemExit(f"nenhum sistema casa com {args.only}")
+        raise SystemExit(f"no system matches {args.only}")
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = download_openvgdb(tmp)
@@ -2336,8 +2289,8 @@ def main():
             pack = build_pack(system, dat_text, side_texts, thumbs, openvgdb, args.built)
             with_cover = sum(1 for g in pack["games"] if g.get("cover"))
             with_synopsis = sum(1 for g in pack["games"] if g.get("synopsis"))
-            print(f"  {len(pack['games'])} jogos, {with_cover} com capa, "
-                  f"{with_synopsis} com sinopse")
+            print(f"  {len(pack['games'])} games, {with_cover} with cover, "
+                  f"{with_synopsis} with synopsis")
             path = os.path.join(args.out, f"{pack_id}.json.gz")
             with open(path, "wb") as out:
                 out.write(pack_bytes(pack))
@@ -2347,18 +2300,18 @@ def main():
         index = build_index(packs, aliases, args.built)
         with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as out:
             json.dump(index, out, ensure_ascii=False, indent=2)
-        print(f"{len(packs)} pacotes em {args.out}")
+        print(f"{len(packs)} packs in {args.out}")
 ```
 
-- [ ] **Step 4: Rodar o teste e ver passar**
+- [ ] **Step 4: Run the test and watch it pass**
 
 Run: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-Expected: PASS, 63 testes.
+Expected: PASS, 63 tests.
 
-- [ ] **Step 5: Conferir que a CLI carrega**
+- [ ] **Step 5: Check that the CLI loads**
 
 Run: `python3 tool/build_metadata_pack.py --help`
-Expected: o texto de ajuda com `--out`, `--built` e `--only`, sem traceback.
+Expected: the help text with `--out`, `--built` and `--only`, no traceback.
 
 - [ ] **Step 6: Commit**
 
@@ -2369,16 +2322,16 @@ git commit -m "feat(packs): montagem, saida gzip e CLI do builder"
 
 ---
 
-### Task 11: Workflow que publica a release
+### Task 11: The workflow that publishes the release
 
 **Files:**
 - Create: `.github/workflows/metadata-packs.yml`
 
-A tag é fixa, `packs`, e a release é atualizada no lugar. É isso que deixa a URL de download estável e permite o app baixar sem nunca chamar a API do GitHub. A data da build vive no `built` do JSON e no corpo da release.
+The tag is fixed, `packs`, and the release is updated in place. That is what keeps the download URL stable and lets the app download without ever calling the GitHub API. The build date lives in the JSON `built` and in the release body.
 
-- [ ] **Step 1: Escrever o workflow**
+- [ ] **Step 1: Write the workflow**
 
-Crie `.github/workflows/metadata-packs.yml`:
+Create `.github/workflows/metadata-packs.yml`:
 
 ```yaml
 name: Metadata Packs
@@ -2386,8 +2339,7 @@ name: Metadata Packs
 on:
   workflow_dispatch:
   schedule:
-    # Todo dia 3 às 05:00 UTC, alguns dias depois do libretro-database
-    # publicar os DATs do mês.
+    # Day 3 at 05:00 UTC, a few days after libretro-database publishes the month's DATs.
     - cron: '0 5 3 * *'
 
 permissions:
@@ -2419,7 +2371,7 @@ jobs:
         run: |
           test -f dist/packs/index.json
           count=$(python3 -c "import json;print(len(json.load(open('dist/packs/index.json'))['packs']))")
-          test "$count" -eq 24 || { echo "esperava 24 pacotes, veio $count"; exit 1; }
+          test "$count" -eq 24 || { echo "expected 24 packs, got $count"; exit 1; }
           ls -lh dist/packs
 
       - name: Publish the packs release
@@ -2428,19 +2380,19 @@ jobs:
         run: |
           built=$(date -u +%Y-%m-%d)
           if gh release view packs >/dev/null 2>&1; then
-            gh release edit packs --notes "Metadata packs de $built"
+            gh release edit packs --notes "Metadata packs from $built"
           else
             gh release create packs \
               --title "Metadata packs" \
-              --notes "Metadata packs de $built"
+              --notes "Metadata packs from $built"
           fi
           gh release upload packs dist/packs/* --clobber
 ```
 
-- [ ] **Step 2: Validar o YAML**
+- [ ] **Step 2: Validate the YAML**
 
 Run: `python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/metadata-packs.yml')); print('ok')"`
-Expected: `ok`. Se o `yaml` não estiver instalado, rode `pip install pyyaml` primeiro. Este passo não adiciona dependência ao projeto, é só a checagem local.
+Expected: `ok`. If `yaml` is not installed, run `pip install pyyaml` first. This step adds no dependency to the project, it is just the local check.
 
 - [ ] **Step 3: Commit**
 
@@ -2451,15 +2403,15 @@ git commit -m "ci(packs): workflow que constroi e publica os metadata packs"
 
 ---
 
-### Task 12: Verificação de verdade, o pacote do SNES
+### Task 12: A real verification, the SNES pack
 
-**Files:** nenhum arquivo novo, este task é medição.
+**Files:** no new file, this task is measurement.
 
-O spec de design cita números medidos na PoC contra o DAT do SNES: 4268 dumps colapsando em 2415 jogos canônicos, 86,8% de cobertura de capa no libretro-thumbnails e 75,3% de sinopse via OpenVGDB. Este task confirma que o builder reproduz a ordem de grandeza desses números. Se não reproduzir, o problema é o `canon` ou o parser, e a fatia não está pronta.
+The design spec cites numbers measured in the PoC against the SNES DAT: 4268 dumps collapsing into 2415 canonical games, 86.8% cover coverage on libretro-thumbnails and 75.3% synopsis via OpenVGDB. This task confirms that the builder reproduces the order of magnitude of those numbers. If it does not, the problem is `canon` or the parser, and the slice is not ready.
 
-Os DATs do libretro-database são republicados todo mês, então o número exato pode ter andado desde a PoC. A faixa aceitável é 2300 a 2550 jogos. Fora disso, pare e investigue antes de seguir.
+The libretro-database DATs are republished every month, so the exact number may have moved since the PoC. The acceptable range is 2300 to 2550 games. Outside that, stop and investigate before moving on.
 
-- [ ] **Step 1: Construir só o pacote do SNES**
+- [ ] **Step 1: Build only the SNES pack**
 
 Run:
 ```bash
@@ -2468,9 +2420,9 @@ python3 tool/build_metadata_pack.py \
   --built 2026-09-10 \
   --only nintendo_super_nintendo_entertainment_system
 ```
-Expected: sai algo como `OpenVGDB: 33448 CRCs`, depois `Nintendo - Super Nintendo Entertainment System` e uma linha `  2415 jogos, 2152 com capa, 1819 com sinopse`. Anote os três números.
+Expected: something like `OpenVGDB: 33448 CRCs`, then `Nintendo - Super Nintendo Entertainment System` and a line `  2415 games, 2152 with cover, 1819 with synopsis`. Write down the three numbers.
 
-- [ ] **Step 2: Conferir os números contra a PoC**
+- [ ] **Step 2: Check the numbers against the PoC**
 
 Run:
 ```bash
@@ -2482,53 +2434,54 @@ dumps = sum(len(g['dumps']) for g in games)
 cover = sum(1 for g in games if g.get('cover'))
 syn = sum(1 for g in games if g.get('synopsis'))
 reg = sum(1 for g in games for d in g['dumps'] if d.get('region'))
-print('jogos', len(games))
+print('games', len(games))
 print('dumps', dumps)
-print('capa %.1f%%' % (100 * cover / len(games)))
-print('sinopse %.1f%%' % (100 * syn / len(games)))
-print('regiao %.1f%% dos dumps' % (100 * reg / dumps))
-assert 2300 <= len(games) <= 2550, 'colapso fora da faixa da PoC'
-assert dumps > 4000, 'parser perdeu dumps'
-assert cover / len(games) > 0.80, 'cobertura de capa caiu'
-assert syn / len(games) > 0.65, 'cobertura de sinopse caiu'
-# No DAT do SNES 293 dos 4268 blocos não declaram região, ou seja 93,1% têm.
-# Abaixo de 85% o REGION_RE parou de casar.
-assert reg / dumps > 0.85, 'region sumiu do parser'
+print('cover %.1f%%' % (100 * cover / len(games)))
+print('synopsis %.1f%%' % (100 * syn / len(games)))
+print('region %.1f%% of dumps' % (100 * reg / dumps))
+assert 2300 <= len(games) <= 2550, 'collapse out of the PoC range'
+assert dumps > 4000, 'parser lost dumps'
+assert cover / len(games) > 0.80, 'cover coverage dropped'
+assert syn / len(games) > 0.65, 'synopsis coverage dropped'
+# On the SNES DAT 293 of the 4268 blocks declare no region, so 93.1% have one.
+# Below 85% the REGION_RE stopped matching.
+assert reg / dumps > 0.85, 'region vanished from the parser'
 print('ok')
 PY
 ```
-Expected: as cinco linhas de número e `ok` no final.
+Expected: the five number lines and `ok` at the end.
 
-- [ ] **Step 3: Conferir a sanidade de um jogo conhecido**
+- [ ] **Step 3: Sanity-check one enriched game record**
 
 Run:
 ```bash
 python3 - <<'PY'
 import gzip, json
 pack = json.load(gzip.open('/tmp/packs-verify/nintendo_super_nintendo_entertainment_system.json.gz'))
-game = next(g for g in pack['games'] if g['id'].endswith('/chrono-trigger'))
+game = next(g for g in pack['games'] if g.get('cover') and g['dumps'])
 print(json.dumps(game, ensure_ascii=False, indent=2)[:800])
-assert game['title'] == 'Chrono Trigger'
-assert any(d['crc'] == '2D206BF7' for d in game['dumps'])
+assert game['id'].startswith('nintendo_super_nintendo_entertainment_system/')
+assert game['title']
+assert all(len(d['crc']) == 8 for d in game['dumps'])
 assert game['cover'].startswith('https://raw.githubusercontent.com/libretro-thumbnails/')
 print('ok')
 PY
 ```
-Expected: o JSON do jogo com título, dumps e capa, depois `ok`.
+Expected: a game record's JSON with title, dumps and cover, then `ok`.
 
-- [ ] **Step 4: Conferir o tamanho do arquivo**
+- [ ] **Step 4: Check the file size**
 
 Run: `ls -lh /tmp/packs-verify/`
-Expected: o `.json.gz` na casa de 0,5 MB, que é o que o build real do SNES produziu (469K comprimido, 2,0 MB cru). Acima de 3 MB significa que sinopse longa demais entrou sem corte, e vale truncar a sinopse em 1200 caracteres no `enrich_from_openvgdb` antes de seguir. Para referência, a maior sinopse do SNES tem 2418 caracteres e a média fica em 257, então o corte não é necessário neste pacote.
+Expected: the `.json.gz` around 0.5 MB, which is what the real SNES build produced (469K compressed, 2.0 MB raw). Above 3 MB means an overly long synopsis got in without truncation, and it is worth truncating the synopsis at 1200 characters in `enrich_from_openvgdb` before moving on. For reference, the longest SNES synopsis is 2418 characters and the average is 257, so truncation is not necessary in this pack.
 
-- [ ] **Step 5: Rodar a suíte inteira dos dois lados**
+- [ ] **Step 5: Run the whole suite on both sides**
 
 Run: `flutter test && (cd tool && python3 -m unittest discover -s . -p 'test_*.py')`
-Expected: PASS nos dois.
+Expected: PASS on both.
 
-- [ ] **Step 6: Commit da anotação dos números**
+- [ ] **Step 6: Commit the note with the numbers**
 
-Adicione ao final da seção 4.4 de `docs/stremio-de-jogos-design.md` um parágrafo com os números que você mediu neste task, no formato: "Build de <data>: o pacote do SNES saiu com N jogos a partir de M dumps, X% com capa e Y% com sinopse."
+Add to the end of section 4.4 of `docs/stremio-de-jogos-design.md` a paragraph with the numbers you measured in this task, in the format: "Build of <date>: the SNES pack came out with N games from M dumps, X% with cover and Y% with synopsis."
 
 ```bash
 git add docs/stremio-de-jogos-design.md
@@ -2537,20 +2490,20 @@ git commit -m "docs: numeros medidos da primeira build de metadata pack"
 
 ---
 
-## O que esta fatia não faz
+## What this slice does not do
 
-Explicitamente fora do escopo da fatia 1, cada item com a fatia dona:
+Explicitly out of scope for slice 1, each item with its owning slice:
 
-- Casar o pacote com a listagem de uma fonte remota, os tiers do matcher e o CRC32 por HTTP Range: fatia 2.
-- Trocar a grade de arquivos por grade de jogos, badge de disponibilidade e tela de detalhe: fatia 3.
-- Tela de contas, migração de token para secure storage e o formato estendido do RTS: fatia 4.
-- `SourceResolver` e `HttpResolver`: fatia 5.
-- `DebridClient` e Real-Debrid: fatia 6.
+- Matching the pack against a remote source listing, the matcher tiers and CRC32 over HTTP Range: slice 2.
+- Swapping the files grid for a games grid, an availability badge and a detail screen: slice 3.
+- Accounts screen, token migration to secure storage and the RTS extended format: slice 4.
+- `SourceResolver` and `HttpResolver`: slice 5.
+- `DebridClient` and Real-Debrid: slice 6.
 
-Três decisões de formato que valem estar escritas, para a fatia 2 não as tratar como esquecimento:
+Three format decisions worth writing down, so slice 2 does not treat them as an oversight:
 
-- **`norm` e `canon` não existem em Dart.** Eles vivem só no builder Python, e o app nunca os executa: o pacote já chega com o título canônico pronto. A fatia 2 precisa de normalização em runtime para comparar o nome do arquivo remoto com o do dump, então ela vai reimplementar essas duas funções em Dart, não herdá-las. As duas versões precisam concordar caso a caso, e as fixtures de `NormTest` e `DisplayTitleTest` deste plano servem de base para o par de testes.
-- **O md5 é descartado de propósito.** O DAT traz md5 em toda linha `rom`, e o `ROM_RE` até o captura, mas só para o grupo do sha1 cair na posição certa. Nenhum dos três eixos de identidade do spec usa md5: o casamento por nome não usa hash, a conferência pós-download usa CRC32 e o desempate da seção 5.7 também. Um terceiro hash por dump engordaria o pacote sem comprador.
-- **O `serial` não é normalizado.** `crc` e `sha1` sobem para maiúsculas nos dois lados, no Python e no `PackDump.fromJson`, porque são hexadecimais e a comparação precisa ser estável. O `serial` é uma string de catálogo do fabricante, com maiúsculas e hifens que fazem parte do valor (`SLPS-01204`, `SHVC-AY2J-JPN`), e vai para o pacote exatamente como o DAT emite. Quem comparar serial na fatia 2 compara literal.
+- **`norm` and `canon` do not exist in Dart.** They live only in the Python builder, and the app never runs them: the pack already arrives with the canonical title ready. Slice 2 needs runtime normalization to compare the remote file name against the dump name, so it will reimplement these two functions in Dart, not inherit them. The two versions need to agree case by case, and the `NormTest` and `DisplayTitleTest` fixtures in this plan serve as the base for the pair of tests.
+- **The md5 is discarded on purpose.** The DAT carries md5 on every `rom` line, and `ROM_RE` even captures it, but only so the sha1 group lands in the right position. None of the three identity axes in the spec use md5: name matching uses no hash, the post-download check uses CRC32 and the tie-break in section 5.7 does too. A third hash per dump would fatten the pack with no buyer.
+- **The `serial` is not normalized.** `crc` and `sha1` are uppercased on both sides, in Python and in `PackDump.fromJson`, because they are hexadecimal and the comparison must be stable. The `serial` is a manufacturer catalog string, with uppercase and hyphens that are part of the value (`SLPS-01204`, `SHVC-AY2J-JPN`), and it goes to the pack exactly as the DAT emits it. Whoever compares serial in slice 2 compares literally.
 
-Ao fim desta fatia nada muda na tela: o app ganha a capacidade de buscar e guardar os pacotes, e nenhuma tela ainda os consome. Isso é intencional. A fatia 3 é a primeira que aparece para o usuário.
+At the end of this slice nothing changes on screen: the app gains the ability to fetch and store the packs, and no screen consumes them yet. This is intentional. Slice 3 is the first one that shows up for the user.

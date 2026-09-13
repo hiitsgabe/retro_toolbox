@@ -5,39 +5,39 @@ import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 
 void main() {
-  const jogo = Game(title: 'Chrono Trigger (USA).zip', url: 'https://a/ct.zip', size: 1024, consoleId: 'snes');
+  const game = Game(title: 'Crystal Vanguard (USA).zip', url: 'https://a/ct.zip', size: 1024, consoleId: 'snes');
 
-  test('sem fonte declarada, o jogo é do addon embutido', () {
-    expect(jogo.sourceId, kBuiltinAddonId);
+  test('no source declared means the game belongs to the built-in addon', () {
+    expect(game.sourceId, kBuiltinAddonId);
   });
 
-  test('o sourceId sobrevive à ida e volta pelo json do cache', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    final volta = Game.fromJson(jsonDecode(jsonEncode(marcado.toJson())) as Map<String, dynamic>);
-    expect(volta.sourceId, 'ultranx');
-    expect(volta.title, jogo.title);
-    expect(volta.url, jogo.url);
-    expect(volta.consoleId, jogo.consoleId);
+  test('sourceId survives a round-trip through the cache json', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    final restored = Game.fromJson(jsonDecode(jsonEncode(tagged.toJson())) as Map<String, dynamic>);
+    expect(restored.sourceId, 'ultranx');
+    expect(restored.title, game.title);
+    expect(restored.url, game.url);
+    expect(restored.consoleId, game.consoleId);
   });
 
-  test('toJson emite o campo', () {
-    expect(jogo.copyWith(sourceId: 'ultranx').toJson()['sourceId'], 'ultranx');
+  test('toJson emits the field', () {
+    expect(game.copyWith(sourceId: 'ultranx').toJson()['sourceId'], 'ultranx');
   });
 
-  test('cache antigo, escrito sem o campo, degrada para o embutido', () {
-    final antigo = {'title': 'a.zip', 'url': 'https://a/a.zip', 'size': 1, 'consoleId': 'snes'};
-    expect(Game.fromJson(antigo).sourceId, kBuiltinAddonId);
+  test('old cache written without the field degrades to the built-in addon', () {
+    final old = {'title': 'a.zip', 'url': 'https://a/a.zip', 'size': 1, 'consoleId': 'snes'};
+    expect(Game.fromJson(old).sourceId, kBuiltinAddonId);
   });
 
-  test('copyWith troca a fonte sem mexer no resto', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    expect(marcado.sourceId, 'ultranx');
-    expect(marcado.title, jogo.title);
-    expect(marcado.size, jogo.size);
+  test('copyWith replaces the source without touching other fields', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    expect(tagged.sourceId, 'ultranx');
+    expect(tagged.title, game.title);
+    expect(tagged.size, game.size);
   });
 
-  test('copyWith sem sourceId preserva a fonte que já estava', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    expect(marcado.copyWith(size: 2048).sourceId, 'ultranx');
+  test('copyWith without sourceId preserves the existing source', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    expect(tagged.copyWith(size: 2048).sourceId, 'ultranx');
   });
 }

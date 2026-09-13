@@ -5,44 +5,41 @@ import 'package:roms_downloader/services/console_merge.dart';
 Console _console(String id, List<String> urls, {Map<String, dynamic>? auth}) =>
     Console(id: id, name: id.toUpperCase(), urls: urls, auth: auth);
 
-AddonCatalog _catalogo(String addonId, Map<String, Console> consoles) => (addonId: addonId, consoles: consoles);
+AddonCatalog _catalog(String addonId, Map<String, Console> consoles) => (addonId: addonId, consoles: consoles);
 
 void main() {
   group('authNeedsToken', () {
-    test('console sem bloco de auth não pede token', () {
+    test('console with no auth block needs no token', () {
       expect(authNeedsToken(null), isFalse);
     });
 
-    test('a marca que a colheita deixou basta', () {
-      // `requires_token` é o que a Task 8 grava no lugar do token que tira do
-      // arquivo compartilhável. Sem este caso, um catálogo privado instalado
-      // perderia justamente a tela onde o usuário digitaria o token dele.
+    test('the harvest mark alone is enough', () {
+      // `requires_token` is what the harvest writes in place of the token it
+      // strips from the shareable file.
       expect(authNeedsToken(const {'requires_token': true}), isTrue);
     });
 
-    test('o campo cru do catálogo ainda conta', () {
-      // O embutido nunca passou pela colheita, e um arquivo que o usuário
-      // abriu na mão também não.
+    test('the raw catalog field still counts', () {
+      // The built-in never went through the harvest, nor did a hand-opened file.
       expect(authNeedsToken(const {'token': 'tok'}), isTrue);
     });
 
-    test('só a mensagem de login já conta', () {
-      expect(authNeedsToken(const {'auth_message': 'Peça convite no fórum.'}), isTrue);
+    test('the login message alone counts', () {
+      expect(authNeedsToken(const {'auth_message': 'Ask for an invite on the forum.'}), isTrue);
     });
 
-    test('ia_s3 não pede token, nem com a marca', () {
-      // O Internet Archive assina de outro jeito e tem tela própria em
-      // Accounts. Um campo de token aqui seria campo que não autentica nada.
+    test('ia_s3 needs no token, even with the mark', () {
+      // Internet Archive signs differently and has its own screen in Accounts.
       expect(authNeedsToken(const {'type': 'ia_s3', 'requires_token': true}), isFalse);
     });
 
-    test('auth que não fala de token não pede token', () {
+    test('auth that says nothing about a token needs none', () {
       expect(authNeedsToken(const {'cookies': true, 'cookie_name': 'sess'}), isFalse);
     });
 
-    test('hasTokenAuth é a função, e não uma segunda regra', () {
-      // O caso que impede a volta da duplicação: se alguém mexer num dos dois
-      // lugares, este expect para de valer.
+    test('hasTokenAuth is the function, not a second rule', () {
+      // Guards against the duplication returning: if someone edits one of the
+      // two places, this expect stops holding.
       const auth = {'requires_token': true};
       expect(_console('snes', const ['https://a/'], auth: auth).hasTokenAuth, authNeedsToken(auth));
       expect(_console('snes', const ['https://a/']).hasTokenAuth, authNeedsToken(null));
@@ -50,112 +47,107 @@ void main() {
   });
 
   group('authForAddon', () {
-    final fundido = mergeCatalogs([
-      _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-      _catalogo('ultranx', {
+    final merged = mergeCatalogs([
+      _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+      _catalog('ultranx', {
         'snes': _console('snes', const ['https://ultranx/snes/'], auth: const {'token': 'tok', 'cookies': true}),
       }),
     ]);
 
-    test('devolve a auth da fonte do addon pedido', () {
-      expect(authForAddon(fundido.sources['snes']!, 'ultranx'), {'token': 'tok', 'cookies': true});
+    test('returns the auth of the requested addon\'s source', () {
+      expect(authForAddon(merged.sources['snes']!, 'ultranx'), {'token': 'tok', 'cookies': true});
     });
 
-    test('addon que não serve este console devolve null', () {
-      expect(authForAddon(fundido.sources['snes']!, 'arquivo-do-fulano'), isNull);
+    test('addon that does not serve this console returns null', () {
+      expect(authForAddon(merged.sources['snes']!, 'someones-archive'), isNull);
     });
 
-    test('addon que serve sem declarar auth também devolve null', () {
-      // As duas ausências viram o mesmo `null` de propósito: quem lê faz a
-      // mesma coisa nos dois casos, que é não mandar header nenhum.
-      expect(authForAddon(fundido.sources['snes']!, 'myrient'), isNull);
+    test('addon that serves without declaring auth also returns null', () {
+      // Both absences become the same `null` on purpose: the reader treats them
+      // alike, sending no header.
+      expect(authForAddon(merged.sources['snes']!, 'myrient'), isNull);
     });
 
-    test('entre duas fontes do mesmo addon, a primeira manda', () {
-      // Não sai da fusão, que dá a mesma auth a todas as urls de um console
-      // num mesmo catálogo. A regra fica fixada porque `coverage` depende dela
-      // para concordar com esta função.
-      const lista = [
-        ConsoleSource(addonId: 'a', url: 'https://um/', auth: {'token': 'primeiro'}),
-        ConsoleSource(addonId: 'a', url: 'https://dois/', auth: {'token': 'segundo'}),
+    test('between two sources of the same addon, the first wins', () {
+      const list = [
+        ConsoleSource(addonId: 'a', url: 'https://one/', auth: {'token': 'first'}),
+        ConsoleSource(addonId: 'a', url: 'https://two/', auth: {'token': 'second'}),
       ];
 
-      expect(authForAddon(lista, 'a'), {'token': 'primeiro'});
+      expect(authForAddon(list, 'a'), {'token': 'first'});
     });
   });
 
   group('coverage', () {
-    test('lista os consoles de cada addon', () {
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {
+    test('lists each addon\'s consoles', () {
+      final merged = mergeCatalogs([
+        _catalog('myrient', {
           'snes': _console('snes', const ['https://myrient/snes/']),
           'md': _console('md', const ['https://myrient/md/']),
         }),
-        _catalogo('ultranx', {'switch': _console('switch', const ['https://ultranx/'])}),
+        _catalog('ultranx', {'switch': _console('switch', const ['https://ultranx/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes', 'md']);
-      expect(fundido.coverage()['ultranx']!.consoles, ['switch']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes', 'md']);
+      expect(merged.coverage()['ultranx']!.consoles, ['switch']);
     });
 
-    test('console servido por dois addons conta para os dois', () {
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-        _catalogo('fulano', {'snes': _console('snes', const ['https://fulano/snes/'])}),
+    test('a console served by two addons counts for both', () {
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+        _catalog('acme', {'snes': _console('snes', const ['https://acme/snes/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes']);
-      expect(fundido.coverage()['fulano']!.consoles, ['snes']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes']);
+      expect(merged.coverage()['acme']!.consoles, ['snes']);
     });
 
-    test('duas urls do mesmo addon no mesmo console contam um console só', () {
-      // A linha da seção 9 diz "25 consoles", não "25 urls". Um espelho a mais
-      // não deixa a fonte maior.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {
-          'snes': _console('snes', const ['https://myrient/snes/', 'https://espelho/snes/']),
+    test('two urls of the same addon on the same console count one console', () {
+      // The count is "25 consoles", not "25 urls". One more mirror does not make
+      // the source bigger.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {
+          'snes': _console('snes', const ['https://myrient/snes/', 'https://mirror/snes/']),
         }),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes']);
     });
 
-    test('authConsoles traz só os consoles que pedem conta', () {
-      final fundido = mergeCatalogs([
-        _catalogo('ultranx', {
+    test('authConsoles carries only the consoles that need an account', () {
+      final merged = mergeCatalogs([
+        _catalog('ultranx', {
           'switch': _console('switch', const ['https://ultranx/switch/'], auth: const {'requires_token': true}),
           'wiiu': _console('wiiu', const ['https://ultranx/wiiu/']),
         }),
       ]);
 
-      final cobertura = fundido.coverage()['ultranx']!;
+      final coverage = merged.coverage()['ultranx']!;
 
-      expect(cobertura.consoles, ['switch', 'wiiu']);
-      expect(cobertura.authConsoles, ['switch']);
+      expect(coverage.consoles, ['switch', 'wiiu']);
+      expect(coverage.authConsoles, ['switch']);
     });
 
-    test('addon sem conta em console nenhum tem authConsoles vazio', () {
-      // É este vazio que apaga o chip de conta da linha, e ele precisa ser
-      // lista vazia e não `null`: a tela pergunta `isNotEmpty`.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+    test('addon with no account on any console has empty authConsoles', () {
+      // This empty is what hides the account chip, and it must be an empty list,
+      // not `null`: the screen asks `isNotEmpty`.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.authConsoles, isEmpty);
+      expect(merged.coverage()['myrient']!.authConsoles, isEmpty);
     });
 
-    test('addon que não serve nenhum console não aparece no mapa', () {
-      // O caso do addon recém instalado cujo catálogo ainda não foi lido, e o
-      // do addon cuja url morreu. Quem desenha a linha trata ausente como
-      // zero, e é por isso que a tela da Task 23 usa
-      // `?? (consoles: const <String>[], authConsoles: const <String>[])` em
-      // vez de `!`.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-        _catalogo('vazio', const {}),
+    test('addon serving no console does not appear in the map', () {
+      // A freshly installed addon whose catalog is not read yet, or one whose
+      // url died. The row treats absent as zero, so the screen uses a fallback
+      // record instead of `!`.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+        _catalog('empty', const {}),
       ]);
 
-      expect(fundido.coverage().containsKey('vazio'), isFalse);
+      expect(merged.coverage().containsKey('empty'), isFalse);
     });
   });
 }

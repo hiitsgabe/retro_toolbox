@@ -2,24 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
-/// Um arquivo de uma fonte que o matcher casou com um `PackGame`.
-///
-/// É o `GameMatch` da fatia 2 virado do avesso: lá a chave é o nome do
-/// arquivo e o valor é o jogo; aqui a chave é o jogo e isto é um dos valores.
-/// O tamanho vem da listagem, não do matcher.
+/// A source file the matcher paired with a `PackGame`. Size comes from the
+/// listing, not the matcher.
 @immutable
 class MatchedSource {
   final String filename;
 
-  /// De qual fonte veio. Nesta fatia é sempre a listagem do console; na
-  /// fatia 4 passa a ser o id do addon, e é por isso que o campo já existe.
+  /// Which source it came from, by addon id.
   final String sourceId;
   final MatchConfidence confidence;
 
-  /// Bytes, ou zero quando a listagem não declara tamanho.
+  /// Bytes, or zero when the listing declares no size.
   final int size;
 
-  /// A URL de download. Fica nula quando a fonte não a fornece de imediato.
+  /// The download URL. Null when the source does not provide it up front.
   final String? url;
 
   const MatchedSource({
@@ -31,17 +27,12 @@ class MatchedSource {
   });
 }
 
-/// O prefixo da chave de seleção de MODO PACK.
-///
-/// Ver "Quarta decisão travada" no plano da fatia 3: o `:` não pode sair de
-/// `CatalogService._nameToId`, então uma chave com este prefixo nunca colide
-/// com um `Game.gameId`.
+/// The PACK-mode selection key prefix. `:` cannot appear in a `_nameToId` id,
+/// so a key with this prefix never collides with a `Game.gameId`.
 const kPackSelectionPrefix = 'pack:';
 
-/// Uma entrada da grade em MODO PACK: um jogo canônico e as fontes dele.
-///
-/// A grade desenha isto, e não `Game`. Ver "Terceira decisão travada" no
-/// plano da fatia 3.
+/// A PACK-mode grid entry: a canonical game and its sources. The grid draws
+/// this, not `Game`.
 @immutable
 class PackGridEntry {
   final PackGame game;
@@ -49,14 +40,12 @@ class PackGridEntry {
 
   const PackGridEntry({required this.game, this.sources = const []});
 
-  /// O único eixo que o tile pinta. Ver "Armadilha de leitura": o tile mostra
-  /// **disponibilidade**, nunca confiança.
+  /// The only axis the tile paints: availability, never confidence.
   bool get hasSource => sources.isNotEmpty;
 
   int get sourceCount => sources.length;
 
-  /// A chave de seleção em MODO PACK. O prefixo `pack:` é obrigatório porque
-  /// `Game.gameId` e `PackGame.id` não são provadamente disjuntos, e `:` não
-  /// pode aparecer num id gerado por `_nameToId` (`catalog_service.dart:61-63`).
+  /// The PACK-mode selection key; the `pack:` prefix keeps it disjoint from
+  /// `Game.gameId`.
   String get selectionKey => '$kPackSelectionPrefix${game.id}';
 }

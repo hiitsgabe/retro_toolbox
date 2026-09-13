@@ -2,10 +2,8 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 
-/// CRC32 de um arquivo local, lido em pedaços.
-///
-/// O `getCrc32` recebe o CRC anterior como segundo argumento e continua de
-/// onde parou, então nunca precisamos do arquivo inteiro na memória.
+/// CRC32 of a local file, read in chunks so the whole file never needs to be
+/// held in memory.
 Future<String> crc32OfFile(File file) async {
   var crc = 0;
   await for (final chunk in file.openRead()) {
@@ -14,7 +12,7 @@ Future<String> crc32OfFile(File file) async {
   return formatCrc(crc);
 }
 
-/// Oito dígitos hexadecimais em maiúsculas, que é como o DAT escreve e como o
-/// `PackDump.crc` guarda. Sem isso a comparação vira uma loteria de caixa.
+/// Eight uppercase hex digits, matching how the DAT and `PackDump.crc` store
+/// it. Warning: without this the comparison becomes case-dependent.
 String formatCrc(int crc) =>
     (crc & 0xFFFFFFFF).toRadixString(16).toUpperCase().padLeft(8, '0');

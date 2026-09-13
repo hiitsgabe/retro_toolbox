@@ -9,9 +9,9 @@ import 'package:roms_downloader/services/secret_migration.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
 class SettingsService {
-  /// A chave única onde o app guarda as settings. Pública porque a migração de
-  /// addons (`addon_store.dart`) precisa ler o `catalogSourceUrl` de antes da
-  /// fatia 4, e uma string literal repetida nos dois arquivos seria pior.
+  /// The single key where the app stores its settings. Public because the
+  /// addon migration (`addon_store.dart`) reads the pre-slice-4
+  /// `catalogSourceUrl` from it.
   static const String settingsKey = 'app_settings';
 
   final DirectoryService _directoryService = DirectoryService();
@@ -22,20 +22,17 @@ class SettingsService {
       final settingsJson = prefs.getString(settingsKey);
 
       if (settingsJson != null) {
-        final cru = jsonDecode(settingsJson) as Map<String, dynamic>;
-        final limpo = await SecretMigration(vault: vault, builtinAddonId: kBuiltinAddonId).drain(cru);
+        final raw = jsonDecode(settingsJson) as Map<String, dynamic>;
+        final cleaned = await SecretMigration(vault: vault, builtinAddonId: kBuiltinAddonId).drain(raw);
 
-        // Só reescreve se a migração de fato tirou alguma coisa. A carga roda
-        // em toda abertura do app; reescrever sempre é escrita em disco por
-        // nada. A comparação é segura porque `drain` não mexe no mapa que
-        // recebeu.
-        final limpoJson = jsonEncode(limpo);
-        if (limpoJson != jsonEncode(cru)) {
-          await prefs.setString(settingsKey, limpoJson);
+        // Only rewrite when the migration actually removed something: load
+        // runs on every app open.
+        final cleanedJson = jsonEncode(cleaned);
+        if (cleanedJson != jsonEncode(raw)) {
+          await prefs.setString(settingsKey, cleanedJson);
         }
 
-        final hidratado = await _hydrate(AppSettings.fromJson(limpo), vault);
-        return hidratado;
+        return _hydrate(AppSettings.fromJson(cleaned), vault);
       }
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -47,15 +44,12 @@ class SettingsService {
     );
   }
 
-  /// Devolve as settings com os segredos postos de volta, vindos do cofre.
-  ///
-  /// Sem isto, a migração seria perda de dados: o app inteiro lê
-  /// `settings.consoleSettings[id].authToken`, e ele acabou de sair do arquivo.
+  /// Returns the settings with secrets put back, read from the vault.
   Future<AppSettings> _hydrate(AppSettings settings, SecretVault vault) async {
     final consoles = <String, BaseSettings>{};
-    for (final entrada in settings.consoleSettings.entries) {
-      final token = await vault.read(SecretRef.addonToken(kBuiltinAddonId, entrada.key));
-      consoles[entrada.key] = token == null ? entrada.value : entrada.value.withAuthToken(token);
+    for (final entry in settings.consoleSettings.entries) {
+      final token = await vault.read(SecretRef.addonToken(kBuiltinAddonId, entry.key));
+      consoles[entry.key] = token == null ? entry.value : entry.value.withAuthToken(token);
     }
 
     return settings.copyWith(
@@ -76,26 +70,21 @@ class SettingsService {
     }
   }
 
-  /// Grava o que existe e **não apaga o que está `null`**.
-  ///
-  /// Apagar aqui seria tentador e é errado: `SettingsNotifier` salva a partir
-  /// de ação do usuário enquanto a carga ainda está no ar, e nesse instante o
-  /// estado é `const AppSettings()`, tudo `null`. Salvar apagando transformaria
-  /// um clique apressado no boot em perda de todas as credenciais, sem erro na
-  /// tela. Quem apaga são [clearIaSecrets] e [writeAddonToken] com valor
-  /// vazio, chamados de propósito.
+  /// Writes what exists and does not delete what is `null`: a save triggered
+  /// while the load is still in flight would otherwise wipe every credential.
+  /// Deletion is [clearIaSecrets] and [writeAddonToken] with an empty value.
   Future<void> _writeSecrets(AppSettings settings, SecretVault vault) async {
     await _writeIfPresent(vault, SecretRef.iaAccessKey, settings.iaAccessKey);
     await _writeIfPresent(vault, SecretRef.iaSecretKey, settings.iaSecretKey);
     await _writeIfPresent(vault, SecretRef.iaCookies, settings.iaCookies);
-    for (final entrada in settings.consoleSettings.entries) {
-      await _writeIfPresent(vault, SecretRef.addonToken(kBuiltinAddonId, entrada.key), entrada.value.authToken);
+    for (final entry in settings.consoleSettings.entries) {
+      await _writeIfPresent(vault, SecretRef.addonToken(kBuiltinAddonId, entry.key), entry.value.authToken);
     }
   }
 
-  Future<void> _writeIfPresent(SecretVault vault, String chave, String? valor) async {
-    if (valor == null || valor.isEmpty) return;
-    await vault.write(chave, valor);
+  Future<void> _writeIfPresent(SecretVault vault, String key, String? value) async {
+    if (value == null || value.isEmpty) return;
+    await vault.write(key, value);
   }
 
   Future<void> clearIaSecrets(SecretVault vault) async {
@@ -104,24 +93,16 @@ class SettingsService {
     await vault.delete(SecretRef.iaCookies);
   }
 
-  /// O token de um par (addon, console) no cofre. Valor vazio **apaga**.
-  ///
-  /// Era `clearConsoleToken(consoleId, vault)`, que sabia apagar e não sabia
-  /// gravar, e que assumia o embutido. O addon vira parâmetro porque dois
-  /// addons servindo o mesmo console têm tokens diferentes, e misturá-los é
-  /// mandar a credencial de um servidor para o outro.
-  ///
-  /// Continua morando nesta classe, e não no notifier, porque ela é a única
-  /// dona do formato da chave: [_hydrate] e [_writeSecrets] leem e escrevem a
-  /// mesma `SecretRef.addonToken`.
+  /// The token for an (addon, console) pair in the vault. An empty value
+  /// deletes.
   Future<void> writeAddonToken(String addonId, String consoleId, String token, SecretVault vault) async {
-    final chave = SecretRef.addonToken(addonId, consoleId);
-    if (token.isEmpty) return vault.delete(chave);
-    return vault.write(chave, token);
+    final key = SecretRef.addonToken(addonId, consoleId);
+    if (token.isEmpty) return vault.delete(key);
+    return vault.write(key, token);
   }
 
-  /// O token do par, ou string vazia. A tradução de `null` para `''` acontece
-  /// aqui, uma vez só, porque todo chamador pergunta `isEmpty`.
+  /// The pair's token, or an empty string. `null` becomes `''` here, once,
+  /// because every caller asks `isEmpty`.
   Future<String> readAddonToken(String addonId, String consoleId, SecretVault vault) async =>
       await vault.read(SecretRef.addonToken(addonId, consoleId)) ?? '';
 

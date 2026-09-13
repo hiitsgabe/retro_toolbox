@@ -1,32 +1,26 @@
-/// Onde moram os segredos do app: tokens de addon, credenciais do Internet
-/// Archive e, na fatia 6, chaves de debrid.
+/// Where the app's secrets live: addon tokens, Internet Archive credentials.
 ///
-/// É interface e não classe concreta porque a implementação depende da
-/// plataforma, e numa delas ela **falha**: no Linux, o chaveiro do sistema
-/// exige um Secret Service vivo no D-Bus, e num Linux de servidor não existe.
-/// A escolha do usuário foi cair para texto puro avisando, em vez de
-/// desabilitar o campo, então o app precisa conseguir trocar de cofre em
-/// tempo de execução.
+/// An interface because the implementation is platform-dependent, and on one
+/// platform it fails: Linux without a live Secret Service on D-Bus. So the app
+/// must be able to swap vaults at runtime.
 ///
-/// **A ausência de um segredo tem uma representação só, `null`.** Escrever
-/// string vazia apaga a chave. Sem essa regra, cada chamador precisaria tratar
-/// `''` e `null` como a mesma coisa, e uma hora um esqueceria.
+/// A missing secret has one representation, `null`. Writing an empty string
+/// deletes the key.
 abstract class SecretVault {
-  /// O segredo, ou `null` se nunca foi escrito ou já foi apagado.
+  /// The secret, or `null` if never written or already deleted.
   Future<String?> read(String key);
 
-  /// Grava. Valor vazio **apaga**, e não grava vazio.
+  /// Writes. An empty value deletes, and does not write empty.
   Future<void> write(String key, String value);
 
   Future<void> delete(String key);
 
-  /// Apaga tudo que começa com [prefix]. Usado quando o usuário remove um
-  /// addon: as credenciais dele vão junto, e o app não sabe de antemão quais
-  /// consoles daquele addon chegaram a ter login.
+  /// Deletes everything starting with [prefix]. Used when the user removes an
+  /// addon, whose credentials go with it.
   Future<void> deleteWithPrefix(String prefix);
 }
 
-/// Cofre de mentira, para teste. Não persiste nada e não sai desta instância.
+/// A fake vault, for tests. Persists nothing.
 class MemoryVault implements SecretVault {
   final Map<String, String> _values = {};
 

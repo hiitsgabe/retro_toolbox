@@ -8,7 +8,7 @@ import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier(ref.watch(vaultProvider.future).then((escolha) => escolha.vault));
+  return SettingsNotifier(ref.watch(vaultProvider.future).then((choice) => choice.vault));
 });
 
 final settingProvider = Provider.family<dynamic, ({String key, String? consoleId})>((ref, params) {
@@ -36,12 +36,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
   final Future<SecretVault> _vault;
 
-  /// Resolve quando a carga inicial chegou do prefs e do cofre.
-  ///
-  /// Existe pelo teste, e não é enfeite: sem ela, um teste que leia o estado
-  /// logo depois de construir o container lê `const AppSettings()` e passa por
-  /// acidente, inclusive depois de a carga quebrar. Mesma saída do
-  /// `AddonNotifier.ready` da Task 14.
+  /// Resolves once the initial load has arrived from prefs and the vault.
   late final Future<void> ready;
 
   SettingsNotifier(this._vault) : super(const AppSettings()) {
@@ -53,11 +48,10 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = settings;
   }
 
-  /// Troca o estado e salva. Existe porque onze métodos faziam as duas linhas
-  /// na mão, e agora cada um deles precisaria também esperar o cofre.
-  Future<void> _persist(AppSettings novo) async {
-    state = novo;
-    await _settingsService.saveSettings(novo, await _vault);
+  /// Swaps the state and saves.
+  Future<void> _persist(AppSettings next) async {
+    state = next;
+    await _settingsService.saveSettings(next, await _vault);
   }
 
   Future<void> setGeneralSetting<T>(String key, T value) async {
@@ -137,20 +131,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return await _settingsService.selectDownloadDirectory();
   }
 
-  /// Guarda, ou apaga, o token de um par (addon, console).
+  /// Stores, or clears, the token for an (addon, console) pair.
   ///
-  /// **O espelho em `AppSettings.consoleSettings` só é mexido para o addon
-  /// embutido, e isso não é economia.** `consoleHasToken` (as duas telas da
-  /// Task 7) e os dois `_authHeaders` de LAN leem esse espelho de forma
-  /// síncrona e sem saber de addon. Espelhar ali o token de um terceiro faria
-  /// o servidor de LAN mandar a credencial de um servidor para outro, que é o
-  /// vazamento que a Task 13 acabou de fechar.
-  ///
-  /// O token de terceiro mora só no cofre. Ele não pode ser hidratado em
-  /// `AppSettings` porque `SecretVault` não enumera: não existe `readAll`, de
-  /// propósito (Task 2), então o app não descobre para quais pares existe
-  /// segredo sem já saber a lista. Quem precisa lê sob demanda, por
-  /// [readAddonToken].
+  /// The `AppSettings.consoleSettings` mirror is written only for the builtin
+  /// addon: mirroring a third-party token there would make a LAN server send
+  /// one server's credential to another. Third-party tokens live only in the
+  /// vault; read them on demand via [readAddonToken].
   Future<void> setAddonToken(String addonId, String consoleId, String token) async {
     await _settingsService.writeAddonToken(addonId, consoleId, token, await _vault);
     if (addonId != kBuiltinAddonId) return;
@@ -165,15 +151,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<String> readAddonToken(String addonId, String consoleId) async =>
       _settingsService.readAddonToken(addonId, consoleId, await _vault);
 
-  /// O caso particular do addon embutido: escreve no par (embutido, console).
-  /// Depois da Task 20 nenhum sítio de `lib/` chama, e o que o segura é o caso
-  /// `'setConsoleAuthToken é o caso particular do embutido'`, que trava a
-  /// equivalência com `setAddonToken(kBuiltinAddonId, ...)`.
+  /// The builtin-addon special case: writes the (builtin, console) pair.
   Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
 
-  /// O espelho síncrono do embutido, e só dele. Sem leitor desde a Task 20:
-  /// para addon de terceiro devolve `null` mesmo havendo token no cofre, então
-  /// quem for usar isto provavelmente quer `readAddonToken`.
+  /// The synchronous mirror of the builtin addon only. Returns `null` for a
+  /// third-party addon even with a token in the vault; use `readAddonToken`.
   String? getConsoleAuthToken(String consoleId) {
     return state.consoleSettings[consoleId]?.authToken;
   }

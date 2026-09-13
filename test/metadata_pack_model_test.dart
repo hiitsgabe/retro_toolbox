@@ -10,29 +10,29 @@ void main() {
   "built": "2026-09-10",
   "games": [
     {
-      "id": "nintendo_super_nintendo_entertainment_system/chrono-trigger",
-      "title": "Chrono Trigger",
+      "id": "nintendo_super_nintendo_entertainment_system/crystal-vanguard",
+      "title": "Crystal Vanguard",
       "dumps": [
-        {"name": "Chrono Trigger (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
-        {"name": "Chrono Trigger (Japan)", "crc": "1f2e3d4c"}
+        {"name": "Crystal Vanguard (USA)", "crc": "2d206bf7", "sha1": "abc", "serial": null, "region": "USA"},
+        {"name": "Crystal Vanguard (Japan)", "crc": "1f2e3d4c"}
       ],
       "cover": "https://example.invalid/cover.png",
-      "synopsis": "Um RPG.",
+      "synopsis": "An RPG.",
       "genre": "Role-Playing",
       "developer": "Square",
       "publisher": "Square",
       "year": 1995
     },
     {
-      "id": "nintendo_super_nintendo_entertainment_system/sem-nada",
-      "title": "Sem Nada",
+      "id": "nintendo_super_nintendo_entertainment_system/sparse-entry",
+      "title": "Sparse Entry",
       "dumps": []
     }
   ]
 }
 ''';
 
-  test('decode lê o pacote inteiro', () {
+  test('decode reads the whole pack', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.pack, 'nintendo_super_nintendo_entertainment_system');
     expect(pack.system, 'Nintendo - Super Nintendo Entertainment System');
@@ -40,20 +40,20 @@ void main() {
     expect(pack.games.length, 2);
   });
 
-  test('CRC e SHA1 são normalizados para maiúsculas', () {
+  test('CRC and SHA1 are uppercased', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.games.first.dumps.first.crc, '2D206BF7');
     expect(pack.games.first.dumps.first.sha1, 'ABC');
     expect(pack.games.first.dumps[1].sha1, isNull);
   });
 
-  test('region é lida como veio e é opcional', () {
+  test('region is read as-is and is optional', () {
     final pack = MetadataPack.decode(sample);
     expect(pack.games.first.dumps.first.region, 'USA');
     expect(pack.games.first.dumps[1].region, isNull);
   });
 
-  test('campos opcionais ausentes viram null e dumps vazio é permitido', () {
+  test('absent optional fields become null and empty dumps is allowed', () {
     final pack = MetadataPack.decode(sample);
     final game = pack.games[1];
     expect(game.cover, isNull);
@@ -62,7 +62,7 @@ void main() {
     expect(game.dumps, isEmpty);
   });
 
-  test('toJson omite os nulos e sobrevive ao round trip', () {
+  test('toJson omits nulls and survives a round trip', () {
     final pack = MetadataPack.decode(sample);
     final round = MetadataPack.decode(jsonEncode(pack.toJson()));
     expect(round.games[1].toJson().containsKey('cover'), isFalse);
@@ -71,10 +71,10 @@ void main() {
     expect(round.games.length, 2);
   });
 
-  test('byCrc indexa todos os dumps do pacote', () {
+  test('byCrc indexes every dump in the pack', () {
     final pack = MetadataPack.decode(sample);
-    expect(pack.byCrc['2D206BF7']?.title, 'Chrono Trigger');
-    expect(pack.byCrc['1F2E3D4C']?.title, 'Chrono Trigger');
+    expect(pack.byCrc['2D206BF7']?.title, 'Crystal Vanguard');
+    expect(pack.byCrc['1F2E3D4C']?.title, 'Crystal Vanguard');
     expect(pack.byCrc['DEADBEEF'], isNull);
   });
 }

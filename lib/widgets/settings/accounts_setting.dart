@@ -9,17 +9,16 @@ import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 /// Connected accounts, one accordion per provider. Collapsed once connected so
 /// it stays out of the way; opens when the user still needs to log in.
 ///
-/// A visão consolidada da seção 9 do spec de UI: as contas que não são de
-/// addon (hoje, o Internet Archive) e uma por par (addon, console) que pede
-/// credencial. A mesma credencial é editável aqui e no detalhe do addon, e
-/// isso é custo aceito e não descuido.
+/// The consolidated view: non-addon accounts (today, the Internet Archive) and
+/// one per (addon, console) pair that needs a credential. The same credential
+/// is editable here and in the addon detail, and that is an accepted cost.
 class AccountsSetting extends ConsumerWidget {
   const AccountsSetting({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loggedIn = ref.watch(settingsProvider).hasIaCredentials;
-    final contas = ref.watch(addonAccountsProvider);
+    final accounts = ref.watch(addonAccountsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -39,11 +38,11 @@ class AccountsSetting extends ConsumerWidget {
           childrenPadding: const EdgeInsets.only(bottom: 8),
           children: const [IaCredentialsSetting()],
         ),
-        // Carga e erro não desenham nada: esta é uma seção dentro da tela de
-        // settings, e uma barra de progresso piscando aqui a cada abertura
-        // custa mais do que a espera de um quadro.
-        ...contas.maybeWhen(
-          data: (lista) => [for (final conta in lista) _ContaDeAddon(conta: conta)],
+        // Loading and error draw nothing: this is a section inside the settings
+        // screen, and a progress bar flashing here on every open costs more
+        // than the one-frame wait.
+        ...accounts.maybeWhen(
+          data: (list) => [for (final account in list) _AddonAccount(account: account)],
           orElse: () => const <Widget>[],
         ),
       ],
@@ -51,32 +50,29 @@ class AccountsSetting extends ConsumerWidget {
   }
 }
 
-/// Uma conta de addon, com o estado de conexão no subtítulo.
-///
-/// Tem estado porque o token vem do cofre, que é assíncrono, e porque o
-/// formulário de dentro pode gravar enquanto esta linha está montada.
-class _ContaDeAddon extends ConsumerStatefulWidget {
-  final AddonAccount conta;
+/// An addon account, with the connection state in the subtitle.
+class _AddonAccount extends ConsumerStatefulWidget {
+  final AddonAccount account;
 
-  const _ContaDeAddon({required this.conta});
+  const _AddonAccount({required this.account});
 
   @override
-  ConsumerState<_ContaDeAddon> createState() => _ContaDeAddonState();
+  ConsumerState<_AddonAccount> createState() => _AddonAccountState();
 }
 
-class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
+class _AddonAccountState extends ConsumerState<_AddonAccount> {
   String? _token;
 
   @override
   void initState() {
     super.initState();
-    _ler();
+    _read();
   }
 
-  Future<void> _ler() async {
+  Future<void> _read() async {
     final token = await ref.read(settingsProvider.notifier).readAddonToken(
-          widget.conta.addon.id,
-          widget.conta.console.id,
+          widget.account.addon.id,
+          widget.account.console.id,
         );
     if (!mounted) return;
     setState(() => _token = token);
@@ -84,11 +80,11 @@ class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
 
   @override
   Widget build(BuildContext context) {
-    final console = widget.conta.console;
-    // Enquanto o cofre não respondeu, o subtítulo é só o nome do console. Não
-    // é "Not connected": dizer que não tem conta para quem tem, durante um
-    // quadro, é a única das três respostas que é mentira.
-    final estado = _token == null ? console.name : '${console.name}: ${_token!.isEmpty ? 'Not connected' : 'Connected'}';
+    final console = widget.account.console;
+    // Until the vault responds the subtitle is just the console name, never
+    // "Not connected": telling a connected user they are not, for one frame, is
+    // the only one of the three answers that is a lie.
+    final state = _token == null ? console.name : '${console.name}: ${_token!.isEmpty ? 'Not connected' : 'Connected'}';
 
     return ExpansionTile(
       initiallyExpanded: false,
@@ -96,13 +92,13 @@ class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
       collapsedShape: const Border(),
       tilePadding: EdgeInsets.zero,
       leading: const Icon(Icons.extension_outlined),
-      title: Text(widget.conta.addon.name),
-      subtitle: Text(estado),
+      title: Text(widget.account.addon.name),
+      subtitle: Text(state),
       childrenPadding: const EdgeInsets.only(bottom: 8),
       children: [
         ConsoleAuthSetting(
           console: console,
-          addonId: widget.conta.addon.id,
+          addonId: widget.account.addon.id,
           onSaved: (token) {
             if (mounted) setState(() => _token = token);
           },

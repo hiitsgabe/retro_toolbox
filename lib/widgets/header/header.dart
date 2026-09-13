@@ -14,19 +14,11 @@ import 'package:roms_downloader/widgets/header/console_dropdown.dart';
 import 'package:roms_downloader/widgets/header/search_field.dart';
 import 'package:roms_downloader/widgets/header/filter_modal.dart';
 
-/// O rótulo do botão de funil, que depende do modo de grade.
-///
-/// "Quinta decisão travada" do plano da fatia 3: em MODO PACK os chips de
-/// região, revisão e qualidade de dump não filtram a grade, porque a grade de
-/// pack não tem versão para filtrar. O que sobrevive daquela folha é a
-/// região, que passa a alimentar a escolha de versão em `planFromEntries`
-/// (Task 14). O rótulo diz isso em vez de prometer um filtro que não
-/// acontece.
-///
-/// O botão **não some** em MODO PACK. Sumir com ele tiraria o único caminho
-/// para a preferência de região, que é justamente o que ainda tem efeito.
+/// The funnel button label, which depends on the grid mode. In PACK MODE the
+/// sheet only sets the region preference, so the label says that instead of
+/// promising a filter that does not happen.
 String filterButtonLabel(GridMode mode) =>
-    mode == GridMode.pack ? 'Preferência de região' : 'Filters';
+    mode == GridMode.pack ? 'Region preference' : 'Filters';
 
 class Header extends ConsumerStatefulWidget {
   final List<Console> consoles;
@@ -48,15 +40,8 @@ class _HeaderState extends ConsumerState<Header> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    // Não é leitura morta: é a única construção adiantada de `downloadProvider`
-    // no app. O construtor de `DownloadNotifier` assina o stream de updates do
-    // `background_downloader`, chama `resumeFromBackground()`,
-    // `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()`
-    // (`download_provider.dart:37-58`). Os outros seis leitores são `read`
-    // dentro de método ou de uma tela secundária, e nenhum roda na abertura.
-    // O jeito certo de arrumar isto é mover a partida para fora do header, mas
-    // isso é `download_provider.dart`, que a fatia 3 não toca (ver a tabela de
-    // intocados que a Task 22 confere). Fica aqui, agora com o motivo escrito.
+    // Not a dead read: `DownloadNotifier` wires background resume on construction;
+    // moving the kickoff out of the header is the fix, but it lives in `download_provider.dart`.
     ref.read(downloadProvider.notifier);
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);

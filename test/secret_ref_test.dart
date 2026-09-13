@@ -2,53 +2,44 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 
 void main() {
-  test('a chave de token carrega o addon e o console, nessa ordem', () {
+  test('token key carries addon then console', () {
     expect(SecretRef.addonToken('ultranx', 'nintendo_64'), 'addon:ultranx/nintendo_64');
   });
 
-  test('dois addons servindo o mesmo console não dividem a chave', () {
-    // Este é o caso que justifica a chave inteira. O id do console vem do
-    // NOME dele (`catalog_service.dart:_nameToId`), então dois addons que
-    // sirvam "Nintendo 64" produzem `nintendo_64` os dois. Se a chave fosse
-    // só do console, o login do segundo apagaria o do primeiro em silêncio.
+  test('two addons on the same console get distinct keys', () {
     expect(
       SecretRef.addonToken('ultranx', 'nintendo_64'),
       isNot(SecretRef.addonToken('meu_rts', 'nintendo_64')),
     );
   });
 
-  test('as chaves do Internet Archive são as três da seção 6.2', () {
+  test('Internet Archive keys', () {
     expect(SecretRef.iaAccessKey, 'ia/accessKey');
     expect(SecretRef.iaSecretKey, 'ia/secretKey');
     expect(SecretRef.iaCookies, 'ia/cookies');
   });
 
-  test('debrid é chaveado por provedor, porque vai ter mais de um', () {
+  test('debrid key is per provider', () {
     expect(SecretRef.debrid('realdebrid'), 'debrid/realdebrid');
   });
 
-  test('o prefixo de um addon casa com as chaves dele e com mais nenhuma', () {
-    final prefixo = SecretRef.addonPrefix('ultranx');
+  test('addon prefix matches only that addon keys', () {
+    final prefix = SecretRef.addonPrefix('ultranx');
 
-    expect(SecretRef.addonToken('ultranx', 'nintendo_64').startsWith(prefixo), isTrue);
-    expect(SecretRef.addonToken('ultranx', 'snes').startsWith(prefixo), isTrue);
-    expect(SecretRef.addonToken('ultranx_2', 'snes').startsWith(prefixo), isFalse);
-    expect(SecretRef.iaAccessKey.startsWith(prefixo), isFalse);
+    expect(SecretRef.addonToken('ultranx', 'nintendo_64').startsWith(prefix), isTrue);
+    expect(SecretRef.addonToken('ultranx', 'snes').startsWith(prefix), isTrue);
+    expect(SecretRef.addonToken('ultranx_2', 'snes').startsWith(prefix), isFalse);
+    expect(SecretRef.iaAccessKey.startsWith(prefix), isFalse);
   });
 
-  test('um id com barra ou dois-pontos não consegue forjar a chave de outro', () {
-    // Sem sanear, o addon de id `a/b` mais o console `c` daria
-    // `addon:a/b/c`, que é a mesma coisa que o addon `a` mais o console
-    // `b/c`. Os ids de hoje são slugs e isso não acontece, mas a chave é
-    // permanente e o gerador de id não é: o saneamento mora aqui, no lado
-    // que não pode mudar depois.
+  test('a slash or colon in an id cannot forge another key', () {
     expect(
       SecretRef.addonToken('a/b', 'c'),
       isNot(SecretRef.addonToken('a', 'b/c')),
     );
   });
 
-  test('sanear não colapsa ids que só diferem em pontuação', () {
+  test('sanitizing keeps ids that differ only in punctuation apart', () {
     expect(SecretRef.addonToken('meu-rts', 'snes'), isNot(SecretRef.addonToken('meu_rts', 'snes')));
   });
 }

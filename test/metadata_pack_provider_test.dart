@@ -10,7 +10,7 @@ import 'package:roms_downloader/services/metadata_pack_service.dart';
 const indexJson =
     '{"built":"2026-09-10","packs":[{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","games":1,"aliases":["super_nintendo"]}]}';
 const packJson =
-    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/chrono-trigger","title":"Chrono Trigger","dumps":[]}]}';
+    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/crystal-vanguard","title":"Crystal Vanguard","dumps":[]}]}';
 
 void main() {
   late Directory tmp;
@@ -30,14 +30,14 @@ void main() {
     ]);
   }
 
-  test('packIndexProvider entrega o índice baixado', () async {
+  test('packIndexProvider delivers the downloaded index', () async {
     final container = containerWith((uri) async => utf8.encode(indexJson));
     addTearDown(container.dispose);
     final index = await container.read(packIndexProvider.future);
     expect(index!.packs.single.pack, 'snes');
   });
 
-  test('metadataPackProvider resolve por alias e baixa o pacote', () async {
+  test('metadataPackProvider resolves by alias and downloads the pack', () async {
     final container = containerWith((uri) async {
       if (uri.path.endsWith('index.json')) return utf8.encode(indexJson);
       return gzip.encode(utf8.encode(packJson));
@@ -46,13 +46,13 @@ void main() {
     final pack = await container.read(
         metadataPackProvider(const PackTarget('super_nintendo', 'Super Nintendo'))
             .future);
-    expect(pack!.games.single.title, 'Chrono Trigger');
+    expect(pack!.games.single.title, 'Crystal Vanguard');
   });
 
-  test('console sem pacote no índice devolve null sem tentar baixar', () async {
-    final pedidos = <Uri>[];
+  test('a console absent from the index returns null without fetching a pack', () async {
+    final requests = <Uri>[];
     final container = containerWith((uri) async {
-      pedidos.add(uri);
+      requests.add(uri);
       return utf8.encode(indexJson);
     });
     addTearDown(container.dispose);
@@ -60,6 +60,6 @@ void main() {
         metadataPackProvider(const PackTarget('nintendo_switch', 'Nintendo Switch'))
             .future);
     expect(pack, isNull);
-    expect(pedidos.every((u) => u.path.endsWith('index.json')), isTrue);
+    expect(requests.every((u) => u.path.endsWith('index.json')), isTrue);
   });
 }

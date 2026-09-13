@@ -1,338 +1,343 @@
-# Stremio de Jogos: UI
+# Stremio for Games: UI
 
-Data: 2026-09-10
-Status: proposta, aguardando revisão
-Complementa: `docs/stremio-de-jogos-design.md`
+Date: 2026-09-10
+Status: proposal, awaiting review
+Complements: `docs/stremio-de-jogos-design.md`
 
-## 1. Escopo
+## 1. Scope
 
-Este documento define a interface. A arquitetura está no spec irmão e não é repetida aqui.
+This document defines the interface. The architecture is in the sibling spec and is not repeated here.
 
-Quase tudo abaixo vale para o **MODO PACK** (seção 7 do spec de arquitetura). No **MODO
-FONTE**, que hoje é só o Switch, a grade continua exatamente como está: listagem crua, botão
-de download por tile, nenhuma mudança. Console sem pack não é afetado por este documento.
+Almost everything below applies to **PACK MODE** (section 7 of the architecture spec). In **SOURCE
+MODE**, which today is only the Switch, the grid stays exactly as it is: raw listing, per-tile
+download button, no change. A console without a pack is not affected by this document.
 
-Duas coisas valem para os dois modos, porque não dependem de pack: a barra de seleção no
-rodapé (seção 5) e a folha de confirmação de lote (seção 6). A seleção múltipla já existe
-hoje, com o botão "Download Selected" no header, e essas duas seções melhoram o que já está lá.
-Da seção 4, o toque curto é MODO PACK, porque só ali existe tela de detalhe para abrir. O resto
-da seção 4 vale para os dois.
+Two things apply to both modes, because they do not depend on a pack: the selection bar in the
+footer (section 5) and the batch confirmation sheet (section 6). Multi-selection already exists
+today, with the "Download Selected" button in the header, and these two sections improve what is
+already there. In section 4, the short tap is PACK MODE, because only there is there a detail
+screen to open. The rest of section 4 applies to both.
 
-## 2. Decisões travadas
+## 2. Locked decisions
 
-| Decisão | Motivo |
+| Decision | Reason |
 | --- | --- |
-| **Toque curto sempre abre a tela de detalhe** | O significado do toque nunca muda. Isso elimina "modo de seleção" e, junto com ele, a barra contextual que substituiria o header. |
-| **Seleção é estado que sobrevive à navegação** | O usuário seleciona, abre um jogo, lê a sinopse, volta e continua selecionando. Já é assim no estado (`catalogProvider.selectedGames`), passa a ser assim na UI. |
-| **Contador de seleção mora numa barra fixa no rodapé** | Mesma posição na grade e no detalhe, impossível não ver. O `×` à esquerda limpa a seleção. |
-| **A barra de seleção empilha em cima do rodapé de tarefas** | As duas coisas ficam ativas ao mesmo tempo e nenhuma esconde a outra. |
-| **Lote é regra mais confirmação** | O app escolhe a versão por regra determinística e mostra o resultado antes de enfileirar, com override por item. |
-| **O detalhe destaca a melhor escolha e colapsa o resto** | Um toque no caso comum, expansão para quem quer escolher. |
-| **O tile marca só a exceção** | 96,98% dos jogos têm fonte. Marcar quem tem fonte é ruído em 97% das capas. |
-| **Confiança de match não aparece no tile** | Confiança é propriedade da fonte, e fonte só aparece no detalhe. O jogo existe, o que é incerto é uma das fontes dele. |
-| **Match incerto é resolvido por CRC ao abrir o detalhe** | 2 requisições `Range`, 326 bytes. Melhor do que pedir para o usuário adivinhar por nome de arquivo. |
-| **Addon tem tela de detalhe própria** | Cobertura, conta, prioridade e remoção num lugar só. Accounts continua sendo o cofre único e vira a visão consolidada. |
-| **Prioridade entre fontes é manual, por arrasto** | O app não tem como calcular "melhor fonte": não sabe qual servidor é mais rápido nem qual dump é mais confiável. |
-| **Debrid resolve dentro da tarefa, não bloqueando a tela** | É a única opção que funciona em lote, e a fila já é onde coisa demorada mora no app. |
+| **A short tap always opens the detail screen** | The meaning of the tap never changes. This eliminates a "selection mode" and, along with it, the contextual bar that would replace the header. |
+| **Selection is state that survives navigation** | The user selects, opens a game, reads the synopsis, goes back and keeps selecting. It is already this way in the state (`catalogProvider.selectedGames`), and it becomes this way in the UI. |
+| **The selection counter lives in a fixed bar in the footer** | Same position on the grid and on the detail, impossible to miss. The `×` on the left clears the selection. |
+| **The selection bar stacks on top of the tasks footer** | Both things stay active at the same time and neither hides the other. |
+| **A batch is rule plus confirmation** | The app picks the version by a deterministic rule and shows the result before enqueuing, with a per-item override. |
+| **The detail highlights the best choice and collapses the rest** | One tap in the common case, expansion for whoever wants to choose. |
+| **The tile marks only the exception** | 96.98% of games have a source. Marking the ones that have a source is noise on 97% of the covers. |
+| **Match confidence does not appear on the tile** | Confidence is a property of the source, and a source only appears in the detail. The game exists; what is uncertain is one of its sources. |
+| **An uncertain match is resolved by CRC when the detail is opened** | 2 `Range` requests, 326 bytes. Better than asking the user to guess by filename. |
+| **An addon has its own detail screen** | Coverage, account, priority and removal in one place. Accounts stays the single vault and becomes the consolidated view. |
+| **Priority between sources is manual, by drag** | The app has no way to compute "best source": it does not know which server is faster nor which dump is more reliable. |
+| **Debrid resolves inside the task, not blocking the screen** | It is the only option that works in a batch, and the queue is already where slow things live in the app. |
 
-## 3. A grade
+## 3. The grid
 
-### 3.1 O tile
+### 3.1 The tile
 
-O tile passa a representar um **jogo**, não um arquivo. Três consequências em
+The tile now represents a **game**, not a file. Three consequences in
 `game_grid_item.dart`:
 
-1. As tags de disco, revisão e região (`:123-186`) saem do tile. Elas descrevem uma versão, e
-   a versão agora é escolhida na tela de detalhe.
-2. O `GameActionButtons` no canto superior direito (`:210-230`) sai. O tile não sabe mais qual
-   arquivo baixar, então não pode ter botão de baixar.
-3. O tile ganha `onTap`, que abre o detalhe, e `onLongPress`, que seleciona.
+1. The disc, revision and region tags (`:123-186`) leave the tile. They describe a version, and
+   the version is now chosen on the detail screen.
+2. The `GameActionButtons` in the top right corner (`:210-230`) leaves. The tile no longer knows
+   which file to download, so it cannot have a download button.
+3. The tile gains `onTap`, which opens the detail, and `onLongPress`, which selects.
 
-O que o tile mostra: capa, título sobreposto, a marca de "sem fonte" quando for o caso, o
-checkbox de seleção quando houver seleção ativa, a borda de estado que já existe (`:34-46`) e
-a barra de progresso que já existe (`:187-205`).
+What the tile shows: cover, overlaid title, the "no source" mark when applicable, the selection
+checkbox when there is an active selection, the existing state border (`:34-46`) and the existing
+progress bar (`:187-205`).
 
-**Marca de "sem fonte"**: capa dessaturada mais um ícone (`Icons.cloud_off_rounded`) no canto
-superior direito. Dois sinais redundantes de propósito, porque cinza sozinho é ambíguo com
-"carregando" e várias capas de época já são quase monocromáticas. Quem tem fonte não ganha
-marca nenhuma.
+**"No source" mark**: a desaturated cover plus an icon (`Icons.cloud_off_rounded`) in the top
+right corner. Two deliberately redundant signals, because gray alone is ambiguous with
+"loading" and several period covers are already almost monochrome. The ones that have a source
+get no mark at all.
 
-Contagem de fontes **não** aparece no tile. Ela aparece no detalhe, como "outras N fontes".
+The source count does **not** appear on the tile. It appears on the detail, as "N other sources".
 
-**A borda de "já baixado" muda de significado.** Hoje ela reflete um arquivo:
-`library_snapshot_provider.dart` indexa o diretório por nome exato e base name, e o nome na
-grade é o nome no disco. Em MODO PACK o tile é um jogo, então a borda passa a significar
-"você tem alguma versão deste jogo". Isso exige mapear arquivo local de volta para jogo
-canônico, com a regra de nome primeiro e CRC só na dúvida da seção 5.7 do spec de arquitetura.
-Enquanto o scan roda, o tile não mostra borda nenhuma, nunca uma borda errada.
+**The "already downloaded" border changes meaning.** Today it reflects a file:
+`library_snapshot_provider.dart` indexes the directory by exact name and base name, and the name
+on the grid is the name on disk. In PACK MODE the tile is a game, so the border now means
+"you have some version of this game". This requires mapping a local file back to a canonical
+game, with the name first and CRC only when in doubt rule from section 5.7 of the architecture
+spec. While the scan runs, the tile shows no border at all, never a wrong border.
 
-### 3.2 Estados vazios
+### 3.2 Empty states
 
-O argumento de "marcar só a exceção" depende de a maioria ter fonte, e isso depende do addon
-instalado. Com nenhum addon instalado, 100% dos jogos seriam exceção, o que é absurdo.
+The "mark only the exception" argument depends on most games having a source, and that depends on
+the installed addon. With no addon installed, 100% of the games would be an exception, which is
+absurd.
 
-Regra: se **nenhum addon está instalado**, a grade não marca tile nenhum. Ela mostra uma faixa
-no topo, "nenhuma fonte instalada", com atalho para a tela de addons. Isso é estado vazio da
-grade, não estado do tile.
+Rule: if **no addon is installed**, the grid marks no tile at all. It shows a banner at the top,
+"no source installed", with a shortcut to the addons screen. This is an empty state of the grid,
+not a state of the tile.
 
-Se há addon instalado mas ele não cobre o console atual, a faixa é a mesma com texto diferente:
-"nenhum addon instalado cobre este console".
+If there is an addon installed but it does not cover the current console, the banner is the same
+with different text: "no installed addon covers this console".
 
-## 4. Seleção
+## 4. Selection
 
-Não existe modo de seleção. A seleção é um estado, ela sobrevive à navegação e o toque curto
-nunca muda de significado.
+There is no selection mode. Selection is a state, it survives navigation and the short tap never
+changes meaning.
 
-| Gesto | Efeito |
+| Gesture | Effect |
 | --- | --- |
-| Toque curto no tile | Abre a tela de detalhe. Só em MODO PACK: em MODO FONTE o tile não tem toque curto hoje e continua sem |
-| Toque longo no tile | Alterna a seleção daquele jogo |
-| Clique no checkbox | Alterna a seleção daquele jogo |
-| `×` na barra do rodapé | Limpa a seleção inteira |
+| Short tap on the tile | Opens the detail screen. PACK MODE only: in SOURCE MODE the tile has no short tap today and stays without one |
+| Long press on the tile | Toggles the selection of that game |
+| Click on the checkbox | Toggles the selection of that game |
+| `×` in the footer bar | Clears the entire selection |
 
-**Visibilidade do checkbox.** Hoje o checkbox aparece sempre que o jogo é interagível
-(`game_grid_item.dart:69`). Passa a aparecer só quando a seleção não está vazia, em **todos**
-os tiles, até a seleção zerar. Capa limpa enquanto ninguém selecionou nada, descoberta óbvia
-depois do primeiro toque longo. No desktop ele também aparece no hover do tile, com seleção
-vazia ou não.
+**Checkbox visibility.** Today the checkbox appears whenever the game is interactive
+(`game_grid_item.dart:69`). It now appears only when the selection is not empty, on **all** the
+tiles, until the selection is emptied. A clean cover while no one has selected anything, an
+obvious discovery after the first long press. On desktop it also appears on tile hover, with the
+selection empty or not.
 
-**Entrar na seleção a partir do detalhe.** A tela de detalhe tem um checkbox ao lado do
-coração de favorito, no mesmo canto. Sem ele, o usuário que abriu um jogo teria que voltar
-para a grade só para selecionar.
+**Entering the selection from the detail.** The detail screen has a checkbox next to the favorite
+heart, in the same corner. Without it, the user who opened a game would have to go back to the
+grid just to select.
 
-## 5. A barra de seleção e o rodapé
+## 5. The selection bar and the footer
 
-O rodapé de tarefas já existe e já é ocupado (`footer.dart`): à esquerda "Downloading N,
-Extracting M" e a contagem de jogos, à direita a barra de progresso e o diretório, no meio a
-seta que abre o `TaskPanelModal`.
+The tasks footer already exists and is already occupied (`footer.dart`): on the left "Downloading
+N, Extracting M" and the game count, on the right the progress bar and the directory, in the
+middle the arrow that opens the `TaskPanelModal`.
 
-A barra de seleção senta **em cima** dele, como uma segunda faixa, em roxo sólido. Ela aparece
-quando há seleção e some quando zera. As duas podem estar ativas ao mesmo tempo, porque
-selecionar 3 jogos enquanto outros 2 baixam é o caso normal.
+The selection bar sits **on top** of it, as a second strip, in solid purple. It appears when
+there is a selection and disappears when it is emptied. Both can be active at the same time,
+because selecting 3 games while another 2 are downloading is the normal case.
 
 ```
 +-----------------------------------------------+
-|  ×  3 selecionados              [ Baixar ]    |  <- roxo, some quando zera
+|  ×  3 selected                  [ Download ]  |  <- purple, disappears when emptied
 +-----------------------------------------------+
-|  Downloading 2, Extracting 1   ====  /roms    |  <- footer.dart, intacto
+|  Downloading 2, Extracting 1   ====  /roms    |  <- footer.dart, untouched
 +-----------------------------------------------+
 ```
 
-Custo aceito: com seleção ativa, some com uma fileira de capas no celular.
+Accepted cost: with an active selection, one row of covers disappears on a phone.
 
-A barra existe nas duas telas, grade e detalhe, na mesma posição.
+The bar exists on both screens, grid and detail, in the same position.
 
-**Consequência no header**: o botão "Download Selected" (`header.dart:186-194`) sai. A barra do
-rodapé faz a mesma coisa, em lugar mais visível e com o contador junto. Dois botões para a
-mesma ação é pior do que um.
+**Consequence in the header**: the "Download Selected" button (`header.dart:186-194`) leaves. The
+footer bar does the same thing, in a more visible place and with the counter alongside. Two
+buttons for the same action is worse than one.
 
-## 6. Lote: regra mais confirmação
+## 6. Batch: rule plus confirmation
 
-Ao tocar em Baixar com N jogos selecionados, o app escolhe uma versão por jogo com esta regra,
-nesta ordem:
+When tapping Download with N games selected, the app picks one version per game with this rule,
+in this order:
 
-1. **Região preferida**, lida do filtro que já existe (`catalog_filter_model.dart`, `regions`,
-   padrão `{'USA'}`).
-2. **Maior revisão**.
-3. **Maior confiança de match**.
-4. **Prioridade do addon**, a ordem manual da seção 9.
+1. **Preferred region**, read from the existing filter (`catalog_filter_model.dart`, `regions`,
+   default `{'USA'}`).
+2. **Highest revision**.
+3. **Highest match confidence**.
+4. **Addon priority**, the manual order from section 9.
 
-Antes de enfileirar, uma folha de confirmação: "40 jogos, 1.2 GB", a lista do que foi escolhido
-e override por item. Jogos sem fonte e jogos onde a regra não achou candidato aparecem
-separados, com o motivo, e não entram na fila.
+Before enqueuing, a confirmation sheet: "40 games, 1.2 GB", the list of what was chosen and a
+per-item override. Games without a source and games where the rule found no candidate appear
+separately, with the reason, and do not enter the queue.
 
-A regra é a mesma que escolhe o destaque da tela de detalhe. Uma regra só, dois lugares.
+The rule is the same one that picks the highlight on the detail screen. One rule, two places.
 
-**O lote não verifica CRC antes de enfileirar.** A verificação da seção 8 custa 2 requisições
-por arquivo incerto, e em 40 jogos isso vira uma rajada de 80 requisições antes de o download
-começar. Em vez disso, a folha de confirmação marca os itens incertos com o mesmo selo do
-detalhe, e a rede de segurança é a verificação de CRC32 que o pipeline já faz **depois** do
-download. Quem quiser certeza antes abre o jogo, que é exatamente o gatilho da seção 8.
+**The batch does not verify CRC before enqueuing.** The verification in section 8 costs 2 requests
+per uncertain file, and across 40 games that becomes a burst of 80 requests before the download
+begins. Instead, the confirmation sheet marks the uncertain items with the same badge as the
+detail, and the safety net is the CRC32 verification the pipeline already does **after** the
+download. Whoever wants certainty beforehand opens the game, which is exactly the trigger for
+section 8.
 
-## 7. A tela de detalhe
+## 7. The detail screen
 
-Nova tela, `lib/screens/game_detail_screen.dart`. Não é bottom sheet e não é expansão inline.
+New screen, `lib/screens/game_detail_screen.dart`. It is not a bottom sheet and not an inline
+expansion.
 
-**Topo**, igual em todos os estados: capa, título, metadados (console, ano, publisher, gênero),
-sinopse, coração de favorito e o checkbox de seleção.
+**Top**, the same in all states: cover, title, metadata (console, year, publisher, genre),
+synopsis, favorite heart and the selection checkbox.
 
-**Corpo**, no caso comum: um card de destaque com a versão que o app escolheria, o motivo
-escrito por extenso, e o botão Baixar. O resto colapsa atrás de "outras N fontes".
+**Body**, in the common case: a highlight card with the version the app would pick, the reason
+written out in full, and the Download button. The rest collapses behind "N other sources".
 
 ```
 +---------------------------------------------+
-| <-  Chrono Trigger              (heart) [ ] |
+| <-  Crystal Vanguard            (heart) [ ] |
 +---------------------------------------------+
-| [capa]  Chrono Trigger                      |
+| [cover] Crystal Vanguard                    |
 |         SNES, 1995, Square, RPG             |
-|         sinopse...                          |
+|         synopsis...                         |
 +---------------------------------------------+
-| Chrono Trigger (USA)                  HTTP  |
+| Crystal Vanguard (USA)                HTTP  |
 | 4.0 MB, Myrient                             |
-| escolhido pela sua região preferida         |
-| [            Baixar             ]           |
+| chosen by your preferred region             |
+| [           Download            ]           |
 +---------------------------------------------+
-| v outras 5 fontes                           |
+| v 5 other sources                           |
 +---------------------------------------------+
 ```
 
-O motivo é obrigatório, não decorativo. Ele é a única coisa que separa "o app escolheu por
-você" de "o app escolheu ao acaso".
+The reason is mandatory, not decorative. It is the only thing that separates "the app chose for
+you" from "the app chose at random".
 
-Expandido, cada linha mostra: nome do arquivo, tamanho, addon de origem, tipo de fonte (HTTP,
-SEED, RD) e o estado de confiança.
+Expanded, each line shows: filename, size, originating addon, source type (HTTP, SEED, RD) and
+the confidence state.
 
-**Estado "sem fonte"**, os 3% da seção 3.1: a tela é completa e funcional. Capa, sinopse,
-metadados e favorito funcionam. No lugar do card de destaque, uma faixa "nenhum addon
-instalado tem este jogo" com atalho para a tela de addons. O jogo continua existindo e continua
-favoritável, ele só não tem de onde vir hoje.
+**"No source" state**, the 3% from section 3.1: the screen is complete and functional. Cover,
+synopsis, metadata and favorite all work. In place of the highlight card, a banner "no installed
+addon has this game" with a shortcut to the addons screen. The game keeps existing and stays
+favoritable, it just has nowhere to come from today.
 
-## 8. Confiança do match
+## 8. Match confidence
 
-Em torno de 10% dos matches por nome estão errados em fontes não canônicas. Destacar um
-palpite com a mesma cara de uma certeza é mentira, e o app tem como não mentir.
+Around 10% of name matches are wrong on non-canonical sources. Highlighting a guess with the same
+look as a certainty is a lie, and the app has a way not to lie.
 
-**Ao abrir o detalhe**, para cada fonte cujo match não é confiável, o app dispara a leitura do
-CRC32 pelo cabeçalho ZIP via HTTP `Range`: 2 requisições, 326 bytes por arquivo. Enquanto roda,
-a fonte mostra o rótulo "verificando" e o botão diz "Baixar mesmo assim".
+**When the detail is opened**, for each source whose match is not trustworthy, the app fires off
+the CRC32 read from the ZIP header via HTTP `Range`: 2 requests, 326 bytes per file. While it
+runs, the source shows the "verifying" label and the button says "Download anyway".
 
-Ao terminar, cada fonte cai em um de três estados:
+When it finishes, each source falls into one of three states:
 
-| Estado | O que aparece |
+| State | What appears |
 | --- | --- |
-| CRC bate com o pack | Selo "CRC ok" e o motivo vira "confirmado pelo CRC, é exatamente este dump" |
-| CRC não bate com nada | A fonte é descartada do destaque e desce para a lista, marcada. O contador vira "outras N fontes, 1 descartada" |
-| Verificação impossível | Cai no comportamento descrito dois parágrafos abaixo |
+| CRC matches the pack | A "CRC ok" badge and the reason becomes "confirmed by CRC, this is exactly this dump" |
+| CRC matches nothing | The source is dropped from the highlight and moves down into the list, marked. The counter becomes "N other sources, 1 discarded" |
+| Verification impossible | Falls into the behavior described two paragraphs below |
 
-O destaque **pode trocar de arquivo** depois da verificação. Isso é o ponto: o app corrige a
-própria escolha antes de o usuário gastar banda.
+The highlight **may switch files** after verification. That is the point: the app corrects its own
+choice before the user spends bandwidth.
 
-**Quando a verificação é impossível** (servidor sem suporte a `Range`, arquivo que não é ZIP,
-fonte de debrid ainda não resolvida), o app não destaca nada. O card vira "não tenho certeza de
-nenhuma" e a lista abre expandida, com botão Baixar por linha e o selo de incerteza em cada
-uma. Nunca finge certeza.
+**When verification is impossible** (server without `Range` support, a file that is not a ZIP, a
+debrid source not yet resolved), the app highlights nothing. The card becomes "I am not sure of
+any of them" and the list opens expanded, with a Download button per line and the uncertainty
+badge on each one. It never fakes certainty.
 
-O resultado da verificação é cacheado por (fonte, arquivo), então a segunda abertura do mesmo
-jogo é instantânea.
+The verification result is cached per (source, file), so the second opening of the same game is
+instant.
 
-Isso é a "confiança na UI" da fatia 2 do spec de arquitetura.
+This is the "confidence in the UI" from slice 2 of the architecture spec.
 
-## 9. Addons e contas
+## 9. Addons and accounts
 
-O app não vem com fonte nenhuma, então **instalar addon é a primeira coisa que o usuário faz**.
-O encanamento de instalar por URL já existe (`setCatalogFromUrl`,
-`add_catalog_source_screen.dart`), e o `consoles.json` de hoje entra como addon nº 1, no topo
-da ordem. Quem já usa o app não vê diferença no dia seguinte.
+The app ships with no source at all, so **installing an addon is the first thing the user does**.
+The plumbing to install by URL already exists (`setCatalogFromUrl`,
+`add_catalog_source_screen.dart`), and today's `consoles.json` enters as addon no. 1, at the top
+of the order. Whoever already uses the app sees no difference the next day.
 
-**Tela de addons**, lista enxuta. Cada linha: ícone, nome, cobertura resumida ("25 consoles"),
-chip de "conta" quando exige credencial, alça de arrasto e seta. No fim, "+ Instalar de URL".
+**Addons screen**, a lean list. Each row: icon, name, coverage summary ("25 consoles"), an
+"account" chip when it requires a credential, a drag handle and an arrow. At the end, "+ Install
+from URL".
 
-**A tool "New Catalog Source" continua em Tools, onde está.** Os dois caminhos coexistem
-porque servem públicos diferentes: a tool monta um console à mão, pedindo nome, pasta de ROMs,
-formatos e comportamento de unzip; o "+ Instalar de URL" instala um catálogo que já vem
-pronto. Custo aceito: dois caminhos que terminam no mesmo lugar. O que o console montado à mão
-ganha é aparecer na lista de addons como qualquer outro, com prioridade arrastável e conta se
-precisar.
+**The "New Catalog Source" tool stays in Tools, where it is.** The two paths coexist because they
+serve different audiences: the tool assembles a console by hand, asking for name, ROMs folder,
+formats and unzip behavior; "+ Install from URL" installs a catalog that comes ready-made.
+Accepted cost: two paths that end up in the same place. What the hand-assembled console gains is
+appearing in the addons list like any other, with draggable priority and an account if needed.
 
-O **Retro Tools Server** aparece na lista de addons de quem instalar a URL dele, e não muda
-nada na tela do servidor em si. Ele é o produtor do mesmo formato, e o vínculo está na seção
-6.4 do spec de arquitetura.
+The **Retro Tools Server** appears in the addons list of whoever installs its URL, and nothing
+changes on the server screen itself. It is the producer of the same format, and the link is in
+section 6.4 of the architecture spec.
 
-**Tela de detalhe do addon**, uma por addon:
+**Addon detail screen**, one per addon:
 
-- Identificação: nome e URL de origem
-- **Conta**: o formulário de credencial, no formato que o addon declarar (usuário e senha,
-  chave de API, chaves S3)
-- **Cobertura**: quais consoles ele atende e quantos itens em cada
-- **Prioridade**: a posição atual, com a instrução de arrastar na lista
-- **Remover**
+- Identification: name and origin URL
+- **Account**: the credential form, in the format the addon declares (username and password,
+  API key, S3 keys)
+- **Coverage**: which consoles it serves and how many items in each
+- **Priority**: the current position, with the instruction to drag in the list
+- **Remove**
 
-**Accounts** (`accounts_setting.dart`) continua sendo o cofre único e vira a visão consolidada:
-todas as contas em um lugar, de addon ou não, com o estado de conexão. A mesma credencial é
-editável pelos dois caminhos, e isso é o custo aceito da decisão.
+**Accounts** (`accounts_setting.dart`) stays the single vault and becomes the consolidated view:
+all accounts in one place, from an addon or not, with the connection state. The same credential is
+editable through both paths, and that is the accepted cost of the decision.
 
-**Real-Debrid não é addon, é conta.** Ele aparece em Accounts e nunca na lista de addons. Quem
-produz o magnet é o addon de torrent, quem resolve o magnet em link direto é a conta. Isso
-importa porque a mesma conta serve vários addons de torrent ao mesmo tempo.
+**Real-Debrid is not an addon, it is an account.** It appears in Accounts and never in the addons
+list. Whoever produces the magnet is the torrent addon, whoever resolves the magnet into a direct
+link is the account. This matters because the same account serves several torrent addons at the
+same time.
 
-**Prioridade é manual, por arrasto.** A ordem da lista é o desempate da seção 6 e do destaque
-da seção 7.
+**Priority is manual, by drag.** The order of the list is the tiebreaker for section 6 and for the
+highlight in section 7.
 
-Credenciais vão para `flutter_secure_storage`, nunca para o JSON compartilhável do addon nem
-para `shared_preferences`. Isso é a fatia 4 do spec de arquitetura e está detalhado lá.
+Credentials go to `flutter_secure_storage`, never to the addon's shareable JSON nor to
+`shared_preferences`. This is slice 4 of the architecture spec and is detailed there.
 
-## 10. Debrid: a espera mora na fila
+## 10. Debrid: the wait lives in the queue
 
-Baixar de fonte HTTP é imediato: tem URL, enfileira, pronto. Via Real-Debrid não. O app manda o
-magnet, seleciona os arquivos e espera o RD baixar o torrent dos peers antes de pedir o link
-direto. Em cache são segundos, fora do cache podem ser minutos ou nunca. E não dá para saber
-antes: o `instantAvailability` responde `error_code 37` desde que o Real-Debrid o desligou.
+Downloading from an HTTP source is immediate: there is a URL, enqueue, done. Via Real-Debrid it is
+not. The app sends the magnet, selects the files and waits for RD to download the torrent from the
+peers before asking for the direct link. Cached it is seconds, out of cache it can be minutes or
+never. And there is no way to know beforehand: `instantAvailability` responds `error_code 37`
+since Real-Debrid turned it off.
 
-**O toque em Baixar é sempre instantâneo.** A tarefa nasce na fila
-(`task_queue_service.dart`) com um estado novo, "resolvendo", e vira "baixando" sozinha quando
-o link sai. A tela não bloqueia e nada de modal.
+**Tapping Download is always instant.** The task is born in the queue
+(`task_queue_service.dart`) with a new state, "resolving", and turns into "downloading" on its own
+when the link comes out. The screen does not block and there is no modal.
 
-Isso é obrigatório por causa do lote: selecionar 40 jogos onde alguns são RD não pode virar 40
-esperas nem 40 folhas de progresso.
+This is mandatory because of the batch: selecting 40 games where some are RD cannot become 40 waits
+nor 40 progress sheets.
 
-No rodapé, o contador ganha o estado: "Resolvendo 1, Downloading 2". A barra de progresso fica
-indeterminada enquanto só há tarefa resolvendo, porque nessa fase não existe porcentagem
-verdadeira do lado do app.
+In the footer, the counter gains the state: "Resolving 1, Downloading 2". The progress bar stays
+indeterminate while there is only a resolving task, because at that stage there is no true
+percentage on the app side.
 
-No `TaskPanelModal`, a linha da tarefa mostra o jogo, o addon, o tamanho e o estado.
+In the `TaskPanelModal`, the task line shows the game, the addon, the size and the state.
 
-**Falha aqui é caso comum, não exceção**: torrent sem seeds, conta sem tráfego, magnet
-inválido. A tarefa falhada fica no painel com o motivo em uma linha e um botão "tentar outra
-fonte", que reabre o detalhe do jogo já com a fonte que falhou riscada. Nada de sumir sozinha.
+**A failure here is the common case, not the exception**: torrent with no seeds, an account with no
+traffic, an invalid magnet. The failed task stays in the panel with the reason on one line and a
+"try another source" button, which reopens the game detail with the source that failed already
+struck out. No disappearing on its own.
 
-## 11. O que muda no código existente
+## 11. What changes in existing code
 
-| Arquivo | Mudança |
+| File | Change |
 | --- | --- |
-| `widgets/game_grid/game_grid_item.dart` | Duas variantes por modo. Em MODO PACK: sai o bloco de tags (`:123-186`), sai o `GameActionButtons` (`:210-230`), entra `onTap` e `onLongPress`, entra a marca de "sem fonte", o checkbox (`:69-84`) passa a ser condicional à seleção não vazia. Em MODO FONTE: intacto |
-| `widgets/game_grid/game_grid.dart` | Faixa de estado vazio no topo quando não há addon ou o addon não cobre o console |
-| `widgets/footer/footer.dart` | Barra de seleção empilhada acima, contador e `×`, estado "Resolvendo N" |
-| `widgets/footer/task_list_view.dart` | Estado "resolvendo" e linha de falha com motivo e "tentar outra fonte" |
-| `widgets/header/header.dart` | Sai o botão "Download Selected" (`:186-194`) |
-| `widgets/settings/accounts_setting.dart` | Vira a visão consolidada de contas, incluindo debrid |
-| `services/task_queue_service.dart` | Estado "resolvendo" antes de "baixando" |
-| `models/catalog_filter_model.dart` | `regions` passa a alimentar a regra do lote, além do filtro |
-| `providers/library_snapshot_provider.dart` | Em MODO PACK, mapeia arquivo local para jogo canônico: nome primeiro, CRC na dúvida, cache por caminho, tamanho e mtime |
-| `screens/add_catalog_source_screen.dart` | Nenhuma mudança de fluxo. O console que ela cria passa a aparecer na lista de addons |
-| `screens/rts_server_screen.dart` | Nenhuma mudança de tela. Só precisa emitir as extensões do formato quando elas existirem, seção 6.4 do spec de arquitetura |
-| **novo** `screens/game_detail_screen.dart` | Seções 7 e 8 |
-| **novo** `screens/addons_screen.dart` | Lista de addons, seção 9 |
-| **novo** `screens/addon_detail_screen.dart` | Detalhe do addon, seção 9 |
-| **novo** widget de folha de confirmação de lote | Seção 6 |
+| `widgets/game_grid/game_grid_item.dart` | Two variants by mode. In PACK MODE: the tags block leaves (`:123-186`), `GameActionButtons` leaves (`:210-230`), `onTap` and `onLongPress` enter, the "no source" mark enters, the checkbox (`:69-84`) becomes conditional on a non-empty selection. In SOURCE MODE: untouched |
+| `widgets/game_grid/game_grid.dart` | Empty-state banner at the top when there is no addon or the addon does not cover the console |
+| `widgets/footer/footer.dart` | Selection bar stacked above, counter and `×`, "Resolving N" state |
+| `widgets/footer/task_list_view.dart` | "resolving" state and a failure line with reason and "try another source" |
+| `widgets/header/header.dart` | The "Download Selected" button leaves (`:186-194`) |
+| `widgets/settings/accounts_setting.dart` | Becomes the consolidated view of accounts, including debrid |
+| `services/task_queue_service.dart` | "resolving" state before "downloading" |
+| `models/catalog_filter_model.dart` | `regions` now feeds the batch rule, in addition to the filter |
+| `providers/library_snapshot_provider.dart` | In PACK MODE, maps a local file to a canonical game: name first, CRC when in doubt, cache by path, size and mtime |
+| `screens/add_catalog_source_screen.dart` | No flow change. The console it creates now appears in the addons list |
+| `screens/rts_server_screen.dart` | No screen change. It just needs to emit the format extensions when they exist, section 6.4 of the architecture spec |
+| **new** `screens/game_detail_screen.dart` | Sections 7 and 8 |
+| **new** `screens/addons_screen.dart` | Addons list, section 9 |
+| **new** `screens/addon_detail_screen.dart` | Addon detail, section 9 |
+| **new** batch confirmation sheet widget | Section 6 |
 
-## 12. Fora de escopo
+## 12. Out of scope
 
-- **Onde comprar.** Já estava fora no spec de arquitetura, continua fora.
-- **Barra contextual de seleção.** Morreu junto com o modo de seleção.
-- **Badge de "cacheado no debrid".** Impossível de dar honestamente enquanto o
-  `instantAvailability` estiver morto.
-- **Coverflow e lista.** `ViewMode.coverflow` e `ViewMode.list` continuam existindo e
-  continuam como estão. Este documento só trata da grade. Adaptá-los ao MODO PACK é trabalho
-  separado.
-- **Redesenho do tema.** Material 3, seed `#7C4DEF` e ChakraPetch ficam como estão.
-- **Tinfoil, JDKV, FBI, SMB e FTP.** Servem arquivo para outro aparelho, não catálogo para o
-  app. Intocados.
-- **As tools de arquivo local.** NSZ, RAR, CHD, CIA, M3U, Collection Clean, Steam Shortcuts e
-  Sports continuam como estão. Vale registrar que em MODO PACK elas ganham algo que nunca
-  tiveram, um nome canônico e um CRC por jogo, mas aproveitar isso é trabalho separado.
+- **Where to buy.** It was already out in the architecture spec, it stays out.
+- **Contextual selection bar.** It died along with the selection mode.
+- **"Cached on debrid" badge.** Impossible to give honestly while `instantAvailability` is dead.
+- **Coverflow and list.** `ViewMode.coverflow` and `ViewMode.list` keep existing and stay as they
+  are. This document only covers the grid. Adapting them to PACK MODE is separate work.
+- **Theme redesign.** Material 3, seed `#7C4DEF` and ChakraPetch stay as they are.
+- **Tinfoil, JDKV, FBI, SMB and FTP.** They serve files to another device, not a catalog to the
+  app. Untouched.
+- **The local-file tools.** NSZ, RAR, CHD, CIA, M3U, Collection Clean, Steam Shortcuts and Sports
+  stay as they are. It is worth noting that in PACK MODE they gain something they never had, a
+  canonical name and a CRC per game, but taking advantage of that is separate work.
 
-## 13. Ordem de implementação
+## 13. Implementation order
 
-Este documento não vira um plano só. Ele se distribui pelas fatias do spec de arquitetura:
+This document does not become a single plan. It spreads across the slices of the architecture
+spec:
 
-| Seção deste documento | Fatia |
+| Section of this document | Slice |
 | --- | --- |
-| 8, confiança do match | Fatia 2, Identidade |
-| 3.1, borda de "já baixado" | Fatia 2, Identidade |
-| 3, 4, 5, 6, 7, grade, seleção, lote e detalhe | Fatia 3, Grade e modos |
-| 9, addons e contas | Fatia 4, Addon e Accounts |
-| 10, debrid na fila | Fatia 6, Debrid |
+| 8, match confidence | Slice 2, Identity |
+| 3.1, "already downloaded" border | Slice 2, Identity |
+| 3, 4, 5, 6, 7, grid, selection, batch and detail | Slice 3, Grid and modes |
+| 9, addons and accounts | Slice 4, Addon and Accounts |
+| 10, debrid in the queue | Slice 6, Debrid |
 
-As seções 5 e 6, mais a parte da seção 4 que não é o toque curto, são a exceção útil: não
-dependem de pack, de matcher nem de addon. Dão para ser feitas antes de tudo, isoladas, e já
-melhoram o app de hoje.
+Sections 5 and 6, plus the part of section 4 that is not the short tap, are the useful exception:
+they do not depend on a pack, on the matcher nor on an addon. They can be done before everything
+else, in isolation, and they already improve today's app.

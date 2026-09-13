@@ -19,55 +19,51 @@ import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
-const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://outro/ps2/']);
+const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://other/ps2/']);
 
-const _catalogoBaixado = '''
-[{"name": "PS2", "urls": ["https://novo.org/ps2/"]}]
+const _catalogFetched = '''
+[{"name": "PS2", "urls": ["https://incoming.org/ps2/"]}]
 ''';
 
-/// `myrient` cobre dois consoles e um deles pede conta; `outro` cobre um e
-/// nenhum pede.
-MergedCatalog _catalogo() => const MergedCatalog(
+/// `myrient` covers two consoles and one needs an account; `other` covers one
+/// and none do.
+MergedCatalog _catalog() => const MergedCatalog(
       consoles: {'switch': _switch, 'snes': _snes, 'ps2': _ps2},
       sources: {
         'switch': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/switch/', auth: {'requires_token': true})],
         'snes': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/snes/')],
-        'ps2': [ConsoleSource(addonId: 'outro', url: 'https://outro/ps2/')],
+        'ps2': [ConsoleSource(addonId: 'other', url: 'https://other/ps2/')],
       },
     );
 
-/// O fetcher que os casos que não falam de rede usam.
-///
-/// Função de topo e não literal no `??`: `fetch ?? (_) async => ...` não
-/// parseia como se lê, porque o `=>` come o resto da expressão.
-Future<String> _fetchPadrao(String url) async => _catalogoBaixado;
+/// The fetcher used by cases that do not talk about the network. A top-level
+/// function, not a literal in the `??`, because `fetch ?? (_) async => ...` does
+/// not parse as it reads.
+Future<String> _fetchDefault(String url) async => _catalogFetched;
 
-/// O notifier é o de verdade, sobre um store de memória: o arrasto e a
-/// instalação têm que atravessar `reorder` e `install`, que chamam `save` e
-/// `writeCatalog`. Falso é só o disco, que trava dentro de `testWidgets`.
-///
-/// Sem `addTearDown(notifier.dispose)` pelo mesmo motivo da Task 22: quem
-/// descarta é o `StateNotifierProvider` quando a árvore cai, e um segundo
-/// `dispose` mata todos os casos.
+/// A real notifier over an in-memory store: drag and install must pass through
+/// `reorder` and `install`. Only disk is fake, since it hangs inside
+/// `testWidgets`. No `addTearDown(notifier.dispose)`: the provider disposes it
+/// when the tree falls, and a second dispose kills every case.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidateCache: () async {});
   await notifier.ready;
   return notifier;
 }
 
-Future<void> _abrir(
+Future<void> _open(
   WidgetTester tester, {
   required AddonNotifier notifier,
-  MergedCatalog? catalogo,
+  MergedCatalog? catalog,
   CatalogFetcher? fetch,
 }) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
       addonProvider.overrideWith((ref) => notifier),
-      mergedCatalogProvider.overrideWith((ref) async => catalogo ?? _catalogo()),
-      catalogFetcherProvider.overrideWithValue(fetch ?? _fetchPadrao),
+      mergedCatalogProvider.overrideWith((ref) async => catalog ?? _catalog()),
+      catalogFetcherProvider.overrideWithValue(fetch ?? _fetchDefault),
       vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: true)),
     ],
     child: const MaterialApp(home: AddonsScreen()),
@@ -75,132 +71,119 @@ Future<void> _abrir(
   await tester.pumpAndSettle();
 }
 
-/// Preenche o campo do diálogo de instalação e confirma.
-Future<void> _instalar(WidgetTester tester, String url) async {
-  await tester.tap(find.text('Instalar de URL'));
+/// Fills the install dialog field and confirms.
+Future<void> _install(WidgetTester tester, String url) async {
+  await tester.tap(find.text('Install from URL'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField), url);
-  await tester.tap(find.text('Instalar'));
+  await tester.tap(find.text('Install'));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('lista os addons na ordem da prioridade', (tester) async {
+  testWidgets('lists addons in priority order', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    final nomes = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList();
-    expect(nomes.indexOf('myrient.erista.me'), lessThan(nomes.indexOf('outro.org')));
+    final names = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList();
+    expect(names.indexOf('myrient.erista.me'), lessThan(names.indexOf('other.org')));
   });
 
-  testWidgets('cada linha resume a cobertura', (tester) async {
+  testWidgets('each row summarizes coverage', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
     expect(find.text('2 consoles'), findsOneWidget);
     expect(find.text('1 console'), findsOneWidget);
   });
 
-  testWidgets('o chip de conta só aparece em quem exige credencial', (tester) async {
+  testWidgets('the account chip only shows on addons needing a credential', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('conta'), findsOneWidget);
+    expect(find.text('account'), findsOneWidget);
   });
 
-  testWidgets('addon sem cobertura não some da lista', (tester) async {
-    // `coverage()` omite o addon sem console, e omitir na tela seria pior que
-    // mostrar zero: o usuário acabou de instalar uma fonte e ela não aparece,
-    // então ele instala de novo.
-    final notifier = await _notifier(const [Addon(id: 'novo', name: 'novo.org', url: 'https://novo.org/c.json')]);
+  testWidgets('addon with no coverage stays in the list', (tester) async {
+    // `coverage()` omits an addon with no console; omitting it on screen would
+    // be worse than showing zero: the user just installed a source and, not
+    // seeing it, installs again.
+    final notifier = await _notifier(const [Addon(id: 'incoming', name: 'incoming.org', url: 'https://incoming.org/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('novo.org'), findsOneWidget);
-    expect(find.text('Nenhum console'), findsOneWidget);
+    expect(find.text('incoming.org'), findsOneWidget);
+    expect(find.text('No console'), findsOneWidget);
   });
 
-  testWidgets('lista vazia convida a instalar', (tester) async {
+  testWidgets('empty list invites installing', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('Nenhum addon instalado.'), findsOneWidget);
-    expect(find.text('Instalar de URL'), findsOneWidget);
+    expect(find.text('No addons installed.'), findsOneWidget);
+    expect(find.text('Install from URL'), findsOneWidget);
   });
 
-  testWidgets('tocar na linha abre o detalhe', (tester) async {
+  testWidgets('tapping a row opens the detail', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
     await tester.tap(find.text('myrient.erista.me'));
     await tester.pumpAndSettle();
 
     expect(find.byType(AddonDetailScreen), findsOneWidget);
   });
 
-  testWidgets('arrastar reordena e a nova ordem persiste', (tester) async {
+  testWidgets('dragging reorders and the new order persists', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    // Na alça e não na linha: a linha inteira é um `ListTile` com `onTap` que
-    // abre o detalhe, e arrastar por ela abriria a tela em vez de reordenar.
-    //
-    // Gesto na mão e não `tester.drag`: o `ReorderableDragStartListener` usa
-    // `ImmediateMultiDragGestureRecognizer`, que precisa do `moveBy` em um
-    // quadro próprio para o reorder começar. Com `drag` o teste passa ou falha
-    // conforme o tamanho da linha, que é a pior espécie de teste.
-    //
-    // A distância é folgada de propósito. Medido nesta tela: 100, 120 e 137 px
-    // não trocam nada e 150 px troca, porque o `ReorderableListView` só
-    // remaneja quando o item arrastado ultrapassa o vizinho inteiro, e as duas
-    // linhas têm 74 e 72 px. Um gesto curto falha sem erro nenhum: a lista fica
-    // intacta e a asserção acusa a ordem original, sem dizer que o gesto é que
-    // foi curto. Com duas linhas, passar do fim dá no mesmo que trocar, então a
-    // folga não custa precisão.
-    final alca = find.byIcon(Icons.drag_handle).first;
-    final gesto = await tester.startGesture(tester.getCenter(alca));
+    // Drag the handle (not the row): use a hand-driven gesture with generous
+    // distance — tester.drag skips the start listener and a short drag silently fails.
+    final handle = find.byIcon(Icons.drag_handle).first;
+    final gesture = await tester.startGesture(tester.getCenter(handle));
     await tester.pump(kLongPressTimeout);
-    await gesto.moveBy(const Offset(0, 300));
+    await gesture.moveBy(const Offset(0, 300));
     await tester.pump();
-    await gesto.up();
+    await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(notifier.state.map((a) => a.id), ['outro', 'myrient']);
+    expect(notifier.state.map((a) => a.id), ['other', 'myrient']);
   });
 
-  testWidgets('instalar de URL acrescenta o addon', (tester) async {
+  testWidgets('installing from URL appends the addon', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier);
-    await _instalar(tester, 'https://novo.org/catalogo.json');
+    await _open(tester, notifier: notifier);
+    await _install(tester, 'https://incoming.org/catalog.json');
 
-    expect(notifier.state.map((a) => a.id), [Addon.idFromUrl('https://novo.org/catalogo.json')]);
+    expect(notifier.state.map((a) => a.id), [Addon.idFromUrl('https://incoming.org/catalog.json')]);
   });
 
-  testWidgets('url que não devolve catálogo mostra o erro e não instala', (tester) async {
+  testWidgets('a url returning no catalog shows the error and does not install', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier, fetch: (_) async => '<html>login</html>');
-    await _instalar(tester, 'https://novo.org/catalogo.json');
+    await _open(tester, notifier: notifier, fetch: (_) async => '<html>login</html>');
+    await _install(tester, 'https://incoming.org/catalog.json');
 
     expect(notifier.state, isEmpty);
-    expect(find.textContaining('Não deu para instalar'), findsOneWidget);
+    expect(find.textContaining('Could not install'), findsOneWidget);
   });
 }

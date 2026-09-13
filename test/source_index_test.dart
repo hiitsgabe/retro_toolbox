@@ -15,81 +15,79 @@ PackMatcher _matcher() => PackMatcher(MetadataPack(
       system: 'Super Nintendo',
       built: '2026-01-01',
       games: [
-        _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
-        _pg('snes/super-metroid', 'Super Metroid (USA)'),
-        _pg('snes/earthbound', 'EarthBound (USA)'),
+        _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
+        _pg('snes/super-vectron', 'Super Vectron (USA)'),
+        _pg('snes/emberfall', 'Emberfall (USA)'),
       ],
     ));
 
 SourceFile _f(String filename, {int size = 1024}) =>
-    (filename: filename, sourceId: 'listagem', size: size, url: null);
+    (filename: filename, sourceId: 'listing', size: size, url: null);
 
 void main() {
-  test('cada arquivo casado entra na lista do jogo dele', () {
+  test('each matched file joins its game list', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),
-      _f('Super Metroid (USA).zip'),
+      _f('Crystal Vanguard (USA).zip'),
+      _f('Super Vectron (USA).zip'),
     ]);
 
-    expect(index.sourcesFor('snes/chrono-trigger').single.filename, 'Chrono Trigger (USA).zip');
-    expect(index.sourcesFor('snes/super-metroid').single.filename, 'Super Metroid (USA).zip');
-    expect(index.hasSource('snes/earthbound'), isFalse);
+    expect(index.sourcesFor('snes/crystal-vanguard').single.filename, 'Crystal Vanguard (USA).zip');
+    expect(index.sourcesFor('snes/super-vectron').single.filename, 'Super Vectron (USA).zip');
+    expect(index.hasSource('snes/emberfall'), isFalse);
   });
 
-  test('duas versões do mesmo jogo ficam juntas, na ordem da listagem', () {
+  test('two versions of one game stay together, in listing order', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),
-      _f('Chrono Trigger (Europe).zip'),
+      _f('Crystal Vanguard (USA).zip'),
+      _f('Crystal Vanguard (Europe).zip'),
     ]);
 
     expect(
-      index.sourcesFor('snes/chrono-trigger').map((s) => s.filename),
-      ['Chrono Trigger (USA).zip', 'Chrono Trigger (Europe).zip'],
+      index.sourcesFor('snes/crystal-vanguard').map((s) => s.filename),
+      ['Crystal Vanguard (USA).zip', 'Crystal Vanguard (Europe).zip'],
     );
   });
 
-  test('a confiança de cada fonte vem do tier daquele arquivo', () {
+  test('each source confidence comes from that file tier', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),   // nome exato
-      _f('Chrono Triggr (USA).zip'),    // erro de digitação, cai no fuzzy
+      _f('Crystal Vanguard (USA).zip'),   // exact name
+      _f('Crystal Vanguar (USA).zip'),    // typo, falls into fuzzy
     ]);
 
-    final fontes = index.sourcesFor('snes/chrono-trigger');
-    expect(fontes.map((s) => s.confidence),
+    final sources = index.sourcesFor('snes/crystal-vanguard');
+    expect(sources.map((s) => s.confidence),
         [MatchConfidence.likely, MatchConfidence.guess]);
   });
 
-  test('o tamanho e a fonte de origem sobrevivem à travessia', () {
-    final index = SourceIndex.build(_matcher(), [_f('Chrono Trigger (USA).zip', size: 4096)]);
+  test('size and source id survive the crossing', () {
+    final index = SourceIndex.build(_matcher(), [_f('Crystal Vanguard (USA).zip', size: 4096)]);
 
-    final fonte = index.sourcesFor('snes/chrono-trigger').single;
-    expect(fonte.size, 4096);
-    expect(fonte.sourceId, 'listagem');
+    final source = index.sourcesFor('snes/crystal-vanguard').single;
+    expect(source.size, 4096);
+    expect(source.sourceId, 'listing');
   });
 
-  test('arquivo que não casa com jogo nenhum vira um não reconhecido', () {
-    final index = SourceIndex.build(_matcher(), [_f('Jogo Que Nao Existe (USA).zip')]);
+  test('a file that matches no game becomes unmatched', () {
+    final index = SourceIndex.build(_matcher(), [_f('Unknown Game (USA).zip')]);
 
-    expect(index.unmatched, ['Jogo Que Nao Existe (USA).zip']);
+    expect(index.unmatched, ['Unknown Game (USA).zip']);
     expect(index.matchedGameCount, 0);
   });
 
-  test('o que não é ROM é ignorado, e não conta como não reconhecido', () {
-    // A listagem do archive.org vem cheia de .txt, .png e .xml de índice.
-    // Chamar isso de "não reconhecido" mentiria na faixa da Task 12.
+  test('non-ROM files are ignored, not counted as unmatched', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('leiame.txt'),
-      _f('Chrono Trigger (USA).zip'),
+      _f('readme.txt'),
+      _f('Crystal Vanguard (USA).zip'),
     ]);
 
     expect(index.unmatched, isEmpty);
     expect(index.matchedGameCount, 1);
   });
 
-  test('jogo sem fonte devolve lista vazia, nunca nulo', () {
+  test('a game with no source returns an empty list, never null', () {
     final index = SourceIndex.build(_matcher(), const []);
 
-    expect(index.sourcesFor('snes/earthbound'), isEmpty);
-    expect(index.sourcesFor('id/que/nao/existe'), isEmpty);
+    expect(index.sourcesFor('snes/emberfall'), isEmpty);
+    expect(index.sourcesFor('id/that/does/not/exist'), isEmpty);
   });
 }

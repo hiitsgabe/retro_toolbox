@@ -58,9 +58,8 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     await _cleanupInterruptedNsz();
   }
 
-  /// On startup, clean up after a decompression a crash/kill interrupted: drop
-  /// the incomplete `.nsp` but keep the `.nsz`. Never auto-starts a retry — the
-  /// user decides when to decompress again (from the game or the NSZ tool).
+  /// On startup, drops an incomplete `.nsp` from an interrupted decompression
+  /// but keeps the `.nsz`. Never auto-starts a retry.
   Future<void> _cleanupInterruptedNsz() async {
     try {
       final settings = _ref.read(settingsProvider.notifier);
@@ -76,9 +75,6 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         await for (final entity in directory.list()) {
           if (entity is! File || !entity.path.toLowerCase().endsWith('.nsz')) continue;
 
-          // A finished decompression deletes its own .nsz, so a .nsz sitting
-          // next to a .nsp means that .nsp is a partial from an interrupted
-          // run. Remove the partial; leave the .nsz for a manual retry.
           final nspPath = p.join(dir, '${p.basenameWithoutExtension(entity.path)}.nsp');
           final nsp = File(nspPath);
           if (await nsp.exists()) {
@@ -194,7 +190,6 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
 
-    // NSZ files require Python decompression — not ZIP extraction.
     if (game.filename.toLowerCase().endsWith('.nsz')) {
       if (settingsNotifier.getNszDecompressEnabled()) {
         final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
@@ -208,10 +203,9 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
           'keysPath': keysPath,
         }));
       }
-      return; // Never ZIP-extract a .nsz file
+      return;
     }
 
-    // .3ds/.cci auto-convert to .cia when the console opts in (needs boot9).
     final lower = game.filename.toLowerCase();
     if (lower.endsWith('.3ds') || lower.endsWith('.cci')) {
       final console = CatalogService.consoleByIdSync(game.consoleId);
@@ -340,8 +334,6 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     return catalogState.selectedGames.any((taskId) => isTaskDownloadable(taskId));
   }
 
-  // WARNING: This is tends to be problematic if keeps giving headaches:
-  // just use downloadService.cancelTaskById in the allTasks loop instead of this whole control and call it a day
   Future<void> _syncWithBackgroundTasks() async {
     debugPrint('_syncWithBackgroundTasks: Starting sync with background tasks');
     try {
@@ -366,7 +358,6 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         }
       }
 
-      // Cancel any paused tasks that are still in the database
       try {
         final pausedRecords = await FileDownloader().database.allRecordsWithStatus(TaskStatus.paused);
         debugPrint('_syncWithBackgroundTasks: Found ${pausedRecords.length} paused tasks from FileDownloader');
@@ -412,10 +403,9 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     if (!isTaskDownloadable(taskId)) return;
 
-    // Create the target dir first — free-space checks on a missing dir read 0.
+    // Create the target dir first: free-space checks on a missing dir read 0.
     await Directory(downloadDir).create(recursive: true);
 
-    // Check for sufficient disk space before downloading
     final freeSpace = await DirectoryService.getFreeSpace(downloadDir);
     if (freeSpace < game.size) {
       debugPrint('Insufficient disk space for download: available $freeSpace bytes, need ${game.size} bytes');
@@ -427,28 +417,23 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     debugPrint('Executing download task for: $taskId -> $downloadDir/$fileName');
 
-    // Same auth as catalog fetches, agora pela fonte que serviu este arquivo.
     final settings = _ref.read(settingsProvider);
     final catalogService = CatalogService();
     final isIaUrl = game.url.contains('archive.org/download/');
-    // A auth é da fonte e não do console: `console.auth` é a do primeiro addon
-    // que declarou o console, então usá-la aqui mandaria o cookie de um
-    // servidor junto com o token de outro. `null` quando o addon que serviu o
-    // arquivo não serve mais este console, e aí não vai header nenhum.
+    // Auth is per source, not per console: `console.auth` is the first addon's,
+    // so using it here would send one server's cookie with another's token.
     final auth = authForAddon(await catalogService.sourcesFor(game.consoleId), game.sourceId);
     final token = await _ref.read(settingsProvider.notifier).readAddonToken(game.sourceId, game.consoleId);
     final headers = <String, String>{
       ...buildConsoleAuthHeaders(auth, tokenOverride: token.isEmpty ? null : token),
-      // Restricted ("loggedin") IA items only accept session cookies; S3 keys
-      // are kept as a fallback for older flows.
       if (isIaUrl && (settings.iaCookies?.isNotEmpty ?? false))
         'Cookie': settings.iaCookies!
       else if (isIaUrl && (settings.iaAccessKey?.isNotEmpty ?? false) && (settings.iaSecretKey?.isNotEmpty ?? false))
         'Authorization': 'LOW ${settings.iaAccessKey}:${settings.iaSecretKey}',
     };
 
-    // Authenticated downloads: enqueue against the final URL — the downloader
-    // drops auth headers on cross-host redirects (archive.org data nodes).
+    // Enqueue against the resolved URL: the downloader drops auth headers on
+    // cross-host redirects.
     var url = game.url;
     if (headers.isNotEmpty) {
       try {
@@ -479,9 +464,8 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
   bool _iaLoginDialogOpen = false;
 
-  /// Shown when an archive.org download fails with 401/403 — the item is
-  /// restricted and needs the user to sign in to Internet Archive in Settings.
-  /// Guarded so a batch of failing tasks raises a single dialog.
+  /// Shown when an archive.org download fails with 401/403. Guarded so a batch
+  /// of failing tasks raises a single dialog.
   Future<void> _promptIaLogin() async {
     if (_iaLoginDialogOpen) return;
     final context = navigatorKey.currentContext;

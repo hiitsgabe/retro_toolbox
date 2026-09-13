@@ -8,13 +8,8 @@ class Game {
   final int size;
   final String consoleId;
 
-  /// O id do addon que serviu este arquivo.
-  ///
-  /// Não-nulável de propósito. O `Game` vai e volta de disco pelo cache de
-  /// catálogo (`catalog_service.dart:327` escreve, `:271` lê), e todo cache
-  /// escrito antes da fatia 4 não tem o campo. Com padrão, a degradação
-  /// acontece uma vez, no `fromJson`; com `null`, ela viraria um `??` em cada
-  /// consumidor e o primeiro esquecido põe um jogo sem fonte na grade.
+  /// The id of the addon that served this file. Non-nullable: caches written
+  /// before this field existed degrade to the default once in `fromJson`.
   final String sourceId;
   final GameMetadata? metadata;
   final GameDetails? details;
@@ -76,17 +71,10 @@ class Game {
   String get filename {
     final segments = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
     final last = segments.isEmpty ? '' : segments.last;
-    // API-style URLs (e.g. .../download/<id>/base) carry no real filename —
-    // fall back to the title so ids stay unique and files get proper names.
     return sanitizeForFat(last.contains('.') ? last : title);
   }
 
-  // FAT/exFAT-illegal filename chars. Handheld ROM SD cards are almost always
-  // exFAT; creating a file whose name contains one of these fails with EPERM on
-  // the FUSE mount — a title like "...Prime 4: Beyond" (colon) silently fails to
-  // download/extract while a legal-named title in the same folder works. Every
-  // on-disk path derives from this getter, so sanitizing here keeps download,
-  // extraction and library-snapshot all agreeing on one safe name.
+  // FAT/exFAT-illegal filename chars: one of these silently fails the write.
   static final _exfatIllegal = RegExp(r'[<>:"/\\|?*\x00-\x1f]');
 
   static String sanitizeForFat(String name) {
@@ -94,7 +82,7 @@ class Game {
         .replaceAll(_exfatIllegal, ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim()
-        .replaceFirst(RegExp(r'[. ]+$'), ''); // trailing dot/space also illegal
+        .replaceFirst(RegExp(r'[. ]+$'), '');
     return cleaned.isEmpty ? 'output' : cleaned;
   }
 

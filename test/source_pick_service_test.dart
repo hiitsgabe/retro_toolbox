@@ -10,46 +10,46 @@ import 'package:roms_downloader/services/source_pick_service.dart';
 
 Game _game(String filename, int size, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename.replaceAll('.zip', ''),
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: size,
       consoleId: 'snes',
       sourceId: sourceId,
     );
 
-MatchedSource _fonte(
+MatchedSource _source(
   String filename, {
-  MatchConfidence confianca = MatchConfidence.likely,
-  String sourceId = 'listagem',
+  MatchConfidence confidence = MatchConfidence.likely,
+  String sourceId = 'listing',
   int size = 1000,
 }) =>
-    MatchedSource(filename: filename, sourceId: sourceId, confidence: confianca, size: size);
+    MatchedSource(filename: filename, sourceId: sourceId, confidence: confidence, size: size);
 
-PackGridEntry _entrada(String title, List<MatchedSource> fontes) => PackGridEntry(
+PackGridEntry _entry(String title, List<MatchedSource> sources) => PackGridEntry(
       game: PackGame(id: 'snes/${title.toLowerCase()}', title: title, dumps: [PackDump(name: title)]),
-      sources: fontes,
+      sources: sources,
     );
 
-/// O resolvedor do teste: todo nome de arquivo resolve, e o `Game` que sai é
-/// reconhecível pelo nome. A Task 20 troca isto por um mapa sobre o catálogo.
+/// The test resolver: every filename resolves, and the `Game` it returns is
+/// recognizable by name.
 Game? _resolve(MatchedSource source) => _game(source.filename, source.size);
 
-BatchPlan _plano(
-  List<PackGridEntry> entradas, {
-  Set<String> regioes = const {'USA'},
-  List<String> prioridade = const [],
+BatchPlan _plan(
+  List<PackGridEntry> entries, {
+  Set<String> regions = const {'USA'},
+  List<String> priority = const [],
   GameResolver? resolver,
 }) =>
     planFromEntries(
-      entradas,
-      preferredRegions: regioes,
+      entries,
+      preferredRegions: regions,
       resolveGame: resolver ?? _resolve,
-      sourcePriority: prioridade,
+      sourcePriority: priority,
     );
 
 VerifiedSource _v(String filename, SourceVerification state) => (
       source: MatchedSource(
         filename: filename,
-        sourceId: 'listagem',
+        sourceId: 'listing',
         confidence: MatchConfidence.likely,
         size: 100,
       ),
@@ -57,44 +57,38 @@ VerifiedSource _v(String filename, SourceVerification state) => (
     );
 
 void main() {
-  test('cada jogo selecionado vira uma escolha, na mesma ordem', () {
+  test('each selected game becomes a pick, in the same order', () {
     final plan = planFromGames([
-      _game('Chrono Trigger (USA).zip', 4 * 1024 * 1024),
-      _game('Super Metroid (USA).zip', 3 * 1024 * 1024),
+      _game('Crystal Vanguard (USA).zip', 4 * 1024 * 1024),
+      _game('Super Vectron (USA).zip', 3 * 1024 * 1024),
     ]);
 
     expect(plan.picks.map((p) => p.filename),
-        ['Chrono Trigger (USA).zip', 'Super Metroid (USA).zip']);
+        ['Crystal Vanguard (USA).zip', 'Super Vectron (USA).zip']);
     expect(plan.totalBytes, 7 * 1024 * 1024);
   });
 
-  test('planFromGames carrega o id do addon de cada jogo', () {
+  test('planFromGames carries each game addon id', () {
     final plan = planFromGames([
-      _game('Chrono Trigger (USA).zip', 4 * 1024 * 1024, sourceId: 'myrient'),
-      _game('Super Metroid (USA).zip', 2 * 1024 * 1024, sourceId: 'arquivo-do-fulano'),
+      _game('Crystal Vanguard (USA).zip', 4 * 1024 * 1024, sourceId: 'myrient'),
+      _game('Super Vectron (USA).zip', 2 * 1024 * 1024, sourceId: 'someones-archive'),
     ]);
 
-    expect(plan.picks.map((p) => p.sourceId), ['myrient', 'arquivo-do-fulano']);
+    expect(plan.picks.map((p) => p.sourceId), ['myrient', 'someones-archive']);
   });
 
-  test('jogo de cache antigo, sem addon declarado, vira o embutido', () {
-    // `Game.sourceId` tem padrão (Task 12), então um `Game` vindo de um
-    // `catalog_<id>.json` gravado antes desta fatia entra aqui sem carimbo.
-    // Ele não pode virar string vazia: fonte sem id some da prioridade e
-    // apareceria na tela como ", " entre o tamanho e o selo.
-    //
-    // O `Game` é montado à mão, sem o `_game`, de propósito: o helper tem
-    // padrão próprio, então ele passaria `sourceId` explícito e este caso
-    // exercitaria o padrão do helper, não o de `Game`.
+  test('a cached game with no declared addon becomes the builtin', () {
+    // Built by hand, without `_game`, so the case exercises `Game`'s default
+    // rather than the helper's own default.
     final plan = planFromGames([
-      Game(title: 'Chrono Trigger (USA)', url: 'https://exemplo.org/snes/Chrono Trigger (USA).zip', size: 1024, consoleId: 'snes'),
+      Game(title: 'Crystal Vanguard (USA)', url: 'https://example.org/snes/Crystal Vanguard (USA).zip', size: 1024, consoleId: 'snes'),
     ]);
 
     expect(plan.picks.single.sourceId, kBuiltinAddonId);
   });
 
-  test('a chave e o Game inteiro viajam junto, porque é o que vai para a fila', () {
-    final game = _game('Chrono Trigger (USA).zip', 1024);
+  test('the id and the whole Game travel together into the queue', () {
+    final game = _game('Crystal Vanguard (USA).zip', 1024);
     final pick = planFromGames([game]).picks.single;
 
     expect(pick.gameId, game.gameId);
@@ -102,10 +96,7 @@ void main() {
     expect(pick.size, 1024);
   });
 
-  test('em MODO FONTE nada é incerto e nada fica de fora', () {
-    // A folha existe para mostrar incerteza e falha. Em MODO FONTE ela não
-    // tem nenhuma das duas para mostrar, e isso é correto, não é bug: o
-    // arquivo que o usuário marcou é o arquivo que ele vai receber.
+  test('in source mode nothing is uncertain and nothing is left out', () {
     final plan = planFromGames([_game('a.zip', 1), _game('b.zip', 2)]);
 
     expect(plan.uncertainCount, 0);
@@ -113,181 +104,168 @@ void main() {
     expect(plan.picks.every((p) => p.reason.isNotEmpty), isTrue);
   });
 
-  test('sem jogo nenhum o plano fica vazio de verdade', () {
+  test('no games makes a truly empty plan', () {
     expect(planFromGames(const []).isEmpty, isTrue);
   });
 
-  test('com uma fonte só, o motivo diz que não houve escolha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (Japan).zip')]),
+  test('with a single source the reason says there was no choice', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (Japan).zip')]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (Japan).zip');
-    expect(plan.picks.single.reason, 'é a única fonte que tem este jogo');
-    // A região não é preferida e mesmo assim a fonte foi escolhida: a regra
-    // ordena candidatos, ela não descarta nenhum.
+    expect(plan.picks.single.filename, 'Crystal Vanguard (Japan).zip');
+    expect(plan.picks.single.reason, 'the only source that has this game');
     expect(plan.failures, isEmpty);
   });
 
-  test('a região preferida ganha, e o motivo nomeia a região', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (Japan).zip'),
-        _fonte('Chrono Trigger (USA).zip'),
+  test('the preferred region wins and the reason names it', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (Japan).zip'),
+        _source('Crystal Vanguard (USA).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (USA).zip');
-    expect(plan.picks.single.reason, 'escolhido pela sua região preferida (USA)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip');
+    expect(plan.picks.single.reason, 'chosen by your preferred region (USA)');
   });
 
-  test('com o filtro de região vazio o eixo é neutro e a revisão decide', () {
-    final plan = _plano(
+  test('with an empty region filter the axis is neutral and revision decides', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip'),
-          _fonte('Chrono Trigger (Japan) (Rev A).zip'),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip'),
+          _source('Crystal Vanguard (Japan) (Rev A).zip'),
         ]),
       ],
-      regioes: const {},
+      regions: const {},
     );
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (Japan) (Rev A).zip');
-    expect(plan.picks.single.reason, 'é a revisão mais nova (Rev A)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (Japan) (Rev A).zip');
+    expect(plan.picks.single.reason, 'the newest revision (Rev A)');
   });
 
-  test('o arquivo sem tag de região não perde do preferido', () {
-    // Espelha `filtering_service.dart:61-65`, onde metadados sem região
-    // passam pelo filtro em vez de serem descartados.
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger.zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+  test('a file with no region tag does not lose to the preferred one', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard.zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger.zip');
+    expect(plan.picks.single.filename, 'Crystal Vanguard.zip');
   });
 
-  test('na mesma região, a revisão maior ganha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (USA) (Rev A).zip'),
+  test('within the same region the higher revision wins', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (USA) (Rev A).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (USA) (Rev A).zip');
-    expect(plan.picks.single.reason, 'é a revisão mais nova (Rev A)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA) (Rev A).zip');
+    expect(plan.picks.single.reason, 'the newest revision (Rev A)');
   });
 
-  test('empatadas região e revisão, a confiança maior ganha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.guess),
-        _fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.confirmed),
+  test('region and revision tied, the higher confidence wins', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.guess),
+        _source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.confirmed),
       ]),
     ]);
 
-    expect(plan.picks.single.reason, 'é o casamento mais confiável entre as 2 fontes');
+    expect(plan.picks.single.reason, 'the most confident match among the 2 sources');
     expect(plan.picks.single.uncertain, isFalse);
   });
 
-  test('empatado o resto, a prioridade do addon decide', () {
-    final plan = _plano(
+  test('everything else tied, addon priority decides', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento'),
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido'),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip', sourceId: 'slow'),
+          _source('Crystal Vanguard (USA).zip', sourceId: 'fast'),
         ]),
       ],
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     );
 
-    expect(plan.picks.single.reason, 'vem do addon de maior prioridade');
+    expect(plan.picks.single.reason, 'comes from the higher-priority addon');
   });
 
-  test('a prioridade do addon escolhe a fonte, não só escreve o motivo', () {
-    // O caso acima afirma só o `reason`, e o `reason` sai de `_reason`, que
-    // recalcula `_priorityRank` por conta própria. Com isso, neutralizar o
-    // eixo de addon dentro de `_compare` não deixa nenhum teste vermelho, e o
-    // estrago é pior que um ramo morto: o desempate cairia na ordem de
-    // chegada, o lote baixaria da fonte lenta, e o motivo continuaria dizendo
-    // que ela veio do addon de maior prioridade. Texto certo, arquivo errado.
-    //
-    // As duas fontes diferem no `size`, que não entra em `_compare`, então
-    // quem ganhou o `sort` fica observável. A lenta vem primeiro de propósito:
-    // é ela que venceria pela ordem de chegada.
-    final plan = _plano(
+  test('addon priority picks the source, not only writes the reason', () {
+    // The reason recomputes its own rank, so a mutant that neutralizes the addon
+    // axis in `_compare` keeps the reason right while picking the wrong file;
+    // `size` is not in `_compare`, so the sort winner stays observable.
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento', size: 10),
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido', size: 20),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip', sourceId: 'slow', size: 10),
+          _source('Crystal Vanguard (USA).zip', sourceId: 'fast', size: 20),
         ]),
       ],
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     );
 
     expect(plan.picks.single.size, 20);
   });
 
-  test('empate em tudo fica com a primeira, e o motivo admite o empate', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip', size: 10),
-        _fonte('Chrono Trigger (USA).zip', size: 20),
+  test('all tied keeps the first, and the reason admits the tie', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip', size: 10),
+        _source('Crystal Vanguard (USA).zip', size: 20),
       ]),
     ]);
 
     expect(plan.picks.single.size, 10);
-    expect(plan.picks.single.reason, 'empate entre 2 fontes, ficou a primeira');
+    expect(plan.picks.single.reason, 'tie among 2 sources, kept the first');
   });
 
-  test('a escolha por palpite vai marcada como incerta', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.guess)]),
+  test('a guessed pick is marked uncertain', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.guess)]),
     ]);
 
-    // O lote não verifica CRC antes de enfileirar (seção 6). Ele marca.
     expect(plan.picks.single.uncertain, isTrue);
   });
 
-  test('o jogo sem fonte vira falha, não escolha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip')]),
-      _entrada('EarthBound', const []),
+  test('a game with no source becomes a failure, not a pick', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip')]),
+      _entry('Emberfall', const []),
     ]);
 
-    expect(plan.picks.map((p) => p.title), ['Chrono Trigger']);
-    expect(plan.failures.single.title, 'EarthBound');
-    expect(plan.failures.single.gameId, 'pack:snes/earthbound');
-    expect(plan.failures.single.reason, 'nenhuma fonte instalada tem este jogo');
+    expect(plan.picks.map((p) => p.title), ['Crystal Vanguard']);
+    expect(plan.failures.single.title, 'Emberfall');
+    expect(plan.failures.single.gameId, 'pack:snes/emberfall');
+    expect(plan.failures.single.reason, 'no installed source has this game');
   });
 
-  test('o jogo cujas fontes não resolvem vira falha com outro motivo', () {
-    final plan = _plano(
+  test('a game whose sources do not resolve fails with another reason', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip')]),
+        _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip')]),
       ],
       resolver: (_) => null,
     );
 
     expect(plan.picks, isEmpty);
-    expect(plan.failures.single.reason, 'a fonte saiu da listagem antes de a fila começar');
+    expect(plan.failures.single.reason, 'the source left the listing before the queue started');
   });
 
-  test('sem fonte nenhuma não há nada elegível e não há incerteza', () {
+  test('no sources means nothing eligible and no uncertainty', () {
     final split = splitByVerification(const []);
 
     expect(split.eligible, isEmpty);
     expect(split.discarded, isEmpty);
     expect(split.confirmed, isFalse);
     expect(split.verifying, isFalse);
-    // Zero fonte é a faixa de "sem fonte" da Task 16, não o estado novo.
     expect(split.noCertainty, isFalse);
   });
 
-  test('sem verificação, todas disputam', () {
+  test('without verification all sources compete', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.notVerified),
       _v('b.zip', SourceVerification.notVerified),
@@ -298,18 +276,17 @@ void main() {
     expect(split.noCertainty, isFalse);
   });
 
-  test('uma confirmada por CRC tira as não confirmadas da disputa', () {
+  test('one CRC-confirmed source removes the unconfirmed from the race', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.notVerified),
       _v('b.zip', SourceVerification.crcOk),
     ]);
 
-    // É aqui que o destaque troca de arquivo (seção 8).
     expect(split.eligible.map((v) => v.source.filename), ['b.zip']);
     expect(split.confirmed, isTrue);
   });
 
-  test('a descartada nunca disputa e sai contada à parte', () {
+  test('a discarded source never competes and is counted apart', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.crcDiscarded),
       _v('b.zip', SourceVerification.notVerified),
@@ -319,7 +296,7 @@ void main() {
     expect(split.discarded.map((v) => v.source.filename), ['a.zip']);
   });
 
-  test('enquanto alguma verifica, ninguém é excluído', () {
+  test('while one is verifying, none is excluded', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.verifying),
       _v('b.zip', SourceVerification.notVerified),
@@ -330,7 +307,7 @@ void main() {
     expect(split.noCertainty, isFalse);
   });
 
-  test('todas impossíveis viram o estado de não tenho certeza de nenhuma', () {
+  test('all impossible becomes the not-sure-about-any state', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.impossible),
       _v('b.zip', SourceVerification.impossible),
@@ -339,19 +316,18 @@ void main() {
     expect(split.noCertainty, isTrue);
   });
 
-  test('uma impossível e uma sem verificar não é incerteza total', () {
+  test('one impossible and one unverified is not total uncertainty', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.impossible),
       _v('b.zip', SourceVerification.notVerified),
     ]);
 
-    // A segunda nunca foi perguntada, então ainda não se sabe. Abrir a lista
-    // e desistir do destaque aqui seria desistir cedo demais.
+    // The second was never asked, so it is still unknown.
     expect(split.noCertainty, isFalse);
     expect(split.eligible.length, 2);
   });
 
-  test('tudo descartado deixa a disputa vazia sem virar incerteza', () {
+  test('all discarded leaves the race empty without becoming uncertainty', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.crcDiscarded),
       _v('b.zip', SourceVerification.crcDiscarded),
@@ -359,7 +335,7 @@ void main() {
 
     expect(split.eligible, isEmpty);
     expect(split.discarded.length, 2);
-    // Não é incerteza: é certeza de que nenhuma serve. A tela mostra a faixa.
+    // Not uncertainty: it is certainty that none fits.
     expect(split.noCertainty, isFalse);
   });
 }

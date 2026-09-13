@@ -10,133 +10,95 @@ final addonProvider = StateNotifierProvider<AddonNotifier, List<Addon>>((ref) {
   return AddonNotifier(AddonStore.open());
 });
 
-/// A ordem de prioridade das fontes, derivada da ordem da lista.
-///
-/// É o que alimenta o `sourcePriority` de `planFromEntries`
-/// (`source_pick_service.dart:54`), o último critério de desempate da seção 6
-/// do spec de UI. Derivado e não guardado: prioridade que fosse um campo
-/// próprio poderia discordar da ordem que o usuário vê na tela.
+/// Source priority order, derived from the list order.
 final sourcePriorityProvider = Provider<List<String>>((ref) => [for (final addon in ref.watch(addonProvider)) addon.id]);
 
-/// Do id do addon para o nome que o usuário escreveu ou que o catálogo trouxe.
+/// Addon id to the display name the user wrote or the catalog carried.
 ///
-/// A seção 7 do spec de UI pede "4.0 MB, Myrient", e `SourcePick.sourceId`
-/// guarda `myrient_org_files`, que é chave de cofre e nome de arquivo. Mapa e
-/// não busca linear porque a lista de outras fontes resolve um nome por linha.
-///
-/// Quem lê tem que tratar id ausente: o cache de jogo de um addon removido
-/// sobrevive à remoção, e o `sourceId` dele não está mais na lista.
+/// Callers must handle a missing id: a removed addon's cached games outlive
+/// the removal, and their `sourceId` is no longer in the list.
 final addonNamesProvider = Provider<Map<String, String>>(
   (ref) => {for (final addon in ref.watch(addonProvider)) addon.id: addon.name},
 );
 
-/// O catálogo fundido de todos os addons instalados, na ordem deles.
-///
-/// **Sem teste, e de propósito.** `mergedCatalog()` chega em disco por
-/// `path_provider`, que num teste sem plataforma não falha: devolve vazio em
-/// silêncio. Um teste aqui afirmaria catálogo vazio e passaria para sempre,
-/// inclusive depois de a regra quebrar. O que tem teste é `mergeCatalogs` e
-/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22,
-/// 23 e 25 sobrescrevem este provider.
+/// The merged catalog of every installed addon, in their order.
 final mergedCatalogProvider = FutureProvider<MergedCatalog>((ref) async {
   ref.watch(addonProvider);
   return CatalogService().mergedCatalog();
 });
 
-/// Como a tela de addons baixa um catálogo.
-///
-/// Existe porque `installAddonFromUrl` só é injetável por parâmetro e um
-/// `onPressed` não recebe parâmetro. Em produção é sempre
-/// `fetchCatalogByHttp`; em teste, uma função que devolve uma string.
+/// How the addons screen fetches a catalog. Injectable for tests.
 final catalogFetcherProvider = Provider<CatalogFetcher>((ref) => fetchCatalogByHttp);
 
-/// De cada addon para o que ele cobre.
-///
-/// Deriva do fundido em vez de montá-lo de novo: a tela de detalhe precisa dos
-/// dois, e duas leituras de disco para a mesma resposta é o tipo de custo que
-/// ninguém vê até a lista de addons ficar grande.
+/// Per-addon coverage, derived from the merged catalog.
 final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
   return (await ref.watch(mergedCatalogProvider.future)).coverage();
 });
 
-/// Um par (addon, console) que pede credencial.
-///
-/// O par é a unidade e não o console: dois addons servindo o mesmo console têm
-/// dois segredos, em duas chaves de cofre, e quem desenha uma linha só faz o
-/// usuário logar num e achar que logou nos dois.
+/// An (addon, console) pair that needs a credential. The pair is the unit,
+/// not the console: two addons serving one console have two secrets.
 typedef AddonAccount = ({Addon addon, Console console});
 
-/// Todas as contas de addon, na ordem de prioridade dos addons.
-///
-/// Derivado, e não guardado: instalar addon, remover addon ou arrastar a lista
-/// muda esta resposta, e o `ref.watch` é o que faz a tela de Accounts
-/// acompanhar sem ninguém avisar.
+/// Every addon account, in addon priority order.
 final addonAccountsProvider = FutureProvider<List<AddonAccount>>((ref) async {
   final addons = ref.watch(addonProvider);
-  final fundido = await ref.watch(mergedCatalogProvider.future);
-  final cobertura = fundido.coverage();
+  final merged = await ref.watch(mergedCatalogProvider.future);
+  final coverage = merged.coverage();
   return [
     for (final addon in addons)
-      for (final consoleId in cobertura[addon.id]?.authConsoles ?? const <String>[])
-        if (fundido.consoles[consoleId] != null) (addon: addon, console: fundido.consoles[consoleId]!),
+      for (final consoleId in coverage[addon.id]?.authConsoles ?? const <String>[])
+        if (merged.consoles[consoleId] != null) (addon: addon, console: merged.consoles[consoleId]!),
   ];
 });
 
 class AddonNotifier extends StateNotifier<List<Addon>> {
   final Future<AddonStore> _store;
 
-  /// O que esquecer quando a lista muda. Entra por parâmetro porque o padrão
-  /// passa por `path_provider`, que num teste sem plataforma lança; o teste
-  /// passa uma função que só conta quantas vezes foi chamada.
-  final Future<void> Function() _invalidarCache;
+  final Future<void> Function() _invalidateCache;
 
-  /// Resolve quando a lista inicial chegou do disco.
+  /// Resolves once the initial list has loaded from disk.
   late final Future<void> ready;
 
-  AddonNotifier(this._store, {Future<void> Function()? invalidarCache})
-      : _invalidarCache = invalidarCache ?? CatalogService().invalidateForAddonChange,
+  AddonNotifier(this._store, {Future<void> Function()? invalidateCache})
+      : _invalidateCache = invalidateCache ?? CatalogService().invalidateForAddonChange,
         super(const []) {
-    ready = _carregar();
+    ready = _load();
   }
 
-  Future<void> _carregar() async {
+  Future<void> _load() async {
     final store = await _store;
     if (!mounted) return;
     state = store.load();
   }
 
-  /// Instala, ou reinstala, um addon com o catálogo já baixado.
-  ///
-  /// Reinstalar mantém a posição (`upsertAddon`), e é por isso que corrigir a
-  /// url de uma fonte não rebaixa a prioridade dela.
-  Future<void> install(Addon addon, String catalogoJson) async {
+  /// Installs, or reinstalls, an addon with the already-fetched catalog.
+  /// Reinstalling keeps the position (`upsertAddon`).
+  Future<void> install(Addon addon, String catalogJson) async {
     final store = await _store;
-    await store.writeCatalog(addon.id, catalogoJson);
-    final nova = upsertAddon(state, addon);
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    await store.writeCatalog(addon.id, catalogJson);
+    final next = upsertAddon(state, addon);
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 
-  /// Tira o addon da lista e apaga o catálogo dele do disco.
-  ///
-  /// **Não** apaga o segredo do cofre. Reinstalar a mesma fonte tem que
-  /// reencontrar o token, e é para isso que `Addon.idFromUrl` é estável. Quem
-  /// apaga credencial é a tela de conta, por pedido explícito (Grupo 5).
+  /// Removes the addon from the list and deletes its catalog from disk.
+  /// Does not delete the vault secret: reinstalling the same source must find
+  /// the token again, which is why `Addon.idFromUrl` is stable.
   Future<void> remove(String id) async {
     final store = await _store;
     await store.deleteCatalog(id);
-    final nova = removeAddon(state, id);
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    final next = removeAddon(state, id);
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 
   Future<void> reorder(int from, int to) async {
-    final nova = reorderAddons(state, from, to);
+    final next = reorderAddons(state, from, to);
     final store = await _store;
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 }

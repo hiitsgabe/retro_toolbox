@@ -5,8 +5,7 @@ import 'dart:typed_data';
 import 'package:roms_downloader/utils/file_crc32.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// A resposta de uma requisição com header `Range`, reduzida ao que o parser
-/// precisa. Existe para o teste poder responder sem rede.
+/// A `Range` response, reduced to what the parser needs.
 class RangeResponse {
   final int statusCode;
   final String? contentRange;
@@ -19,50 +18,41 @@ class RangeResponse {
   });
 }
 
-/// Busca um intervalo de bytes. [range] já vem pronto, no formato do header:
-/// `bytes=-256` ou `bytes=100-199`.
+/// Fetches a byte range. [range] arrives in header form: `bytes=-256` or
+/// `bytes=100-199`.
 typedef RangeFetch = Future<RangeResponse> Function(Uri uri, String range);
 
-/// Uma entrada do diretório central. [crc] em maiúsculas, oito dígitos, no
-/// mesmo formato de `PackDump.crc`.
+/// A central directory entry. [crc] uppercase, eight digits, same format as
+/// `PackDump.crc`.
 class ZipEntry {
   final String name;
   final String crc;
 
   const ZipEntry({required this.name, required this.crc});
 
-  /// Verdadeiro quando este CRC pode ser comparado com o de um dump do pacote.
-  ///
-  /// Um zip dentro de um zip tem CRC próprio, que é o do comprimido e não o da
-  /// ROM. Comparar esse CRC com o pacote é pior que não comparar: no melhor
-  /// caso não casa, no pior casa por acidente. Ver a seção 5.8 do spec,
-  /// limite 1.
+  /// True when this CRC can be compared against a pack dump's. A zip inside a
+  /// zip has its own CRC (the compressed file's, not the ROM's), which could
+  /// match by accident.
   bool get crcMatchesRom => hasRomExtension(name) && !hasArchiveExtension(name);
 
   @override
   String toString() => 'ZipEntry($name, $crc)';
 }
 
-/// Lê o diretório central de um ZIP remoto em duas requisições curtas.
+/// Reads the central directory of a remote ZIP in two short requests.
 ///
-/// Dart puro de propósito: `tool/probe_zip_cd.dart` roda isto fora do Flutter.
-/// Não adicione import de `package:flutter`.
+/// Pure Dart on purpose: `tool/probe_zip_cd.dart` runs this outside Flutter.
+/// Do not add a `package:flutter` import.
 class ZipCentralDirectory {
-  /// Quantos bytes do fim buscar para achar o EOCD. 256 cobre os 22 bytes do
-  /// EOCD mais um comentário curto, incluindo o `TORRENTZIPPED-xxxxxxxx` de
-  /// 22 caracteres que o archive.org grava. Zip com comentário maior sai fora,
-  /// e isso é aceitável: virar duas requisições em três não paga o ganho.
+  /// How many trailing bytes to fetch to find the EOCD. 256 covers the 22-byte
+  /// EOCD plus a short comment.
   static const tailBytes = 256;
 
-  /// Teto do que aceitamos bufferizar. Um diretório central acima disso é um
-  /// zip com dezenas de milhares de entradas, que não é o caso de uso, e
-  /// aceitar significa deixar um servidor hostil encher a memória do app.
+  /// Cap on what we buffer, so a hostile server cannot fill the app's memory.
   static const maxDirectoryBytes = 8 * 1024 * 1024;
 
-  /// Os bytes crus do diretório central, ou null quando não deu.
-  ///
-  /// Null nunca é erro fatal: quem chama simplesmente fica com o palpite de
-  /// nome. Este método não levanta.
+  /// The raw central directory bytes, or null when it did not work. Never
+  /// throws: null just leaves the caller with the name guess.
   static Future<Uint8List?> readRaw(Uri uri, RangeFetch fetch) async {
     final RangeResponse tail;
     try {
@@ -80,9 +70,8 @@ class ZipCentralDirectory {
     final size = view.getUint32(eocd + 12, Endian.little);
     final offset = view.getUint32(eocd + 16, Endian.little);
 
-    // 0xFFFFFFFF nos dois campos é o marcador de zip64: o valor real está num
-    // registro separado, antes do EOCD. Nenhuma fonte de ROM serve zip64, e
-    // implementar isso por completude seria código morto.
+    // 0xFFFFFFFF in both fields is the zip64 marker. No ROM source serves
+    // zip64, so this is dead code if implemented.
     if (size == 0xFFFFFFFF || offset == 0xFFFFFFFF) return null;
     if (size == 0 || size > maxDirectoryBytes) return null;
     if (offset + size > total) return null;
@@ -98,16 +87,15 @@ class ZipCentralDirectory {
     return body.bytes;
   }
 
-  /// As entradas de um ZIP remoto, ou null quando não deu para ler.
+  /// The entries of a remote ZIP, or null when it could not be read.
   static Future<List<ZipEntry>?> read(Uri uri, RangeFetch fetch) async {
     final raw = await readRaw(uri, fetch);
     if (raw == null) return null;
     return parse(raw);
   }
 
-  /// Quebra os bytes do diretório central em entradas. Para no primeiro
-  /// registro que não começa com `PK\x01\x02` e devolve o que já leu, porque
-  /// meia leitura ainda é útil e um erro aqui não deve custar o palpite todo.
+  /// Breaks the central directory bytes into entries. Stops at the first record
+  /// not starting with `PK\x01\x02` and returns what it read.
   static List<ZipEntry>? parse(Uint8List directory) {
     final view = ByteData.sublistView(directory);
     final entries = <ZipEntry>[];
@@ -121,10 +109,9 @@ class ZipCentralDirectory {
       final nameEnd = pos + 46 + nameLen;
       if (nameEnd > directory.length) break;
       entries.add(ZipEntry(
-        // O nome pode ser CP437 ou UTF-8, e o zip só distingue por um bit de
-        // flag que quase ninguém grava direito. `allowMalformed` faz o
-        // acentuado errado virar U+FFFD em vez de levantar, e o `norm` do
-        // matcher come o U+FFFD como pontuação.
+        // The name may be CP437 or UTF-8, distinguished only by a flag bit
+        // few writers set right. `allowMalformed` turns bad bytes into U+FFFD
+        // instead of throwing.
         name: utf8.decode(directory.sublist(pos + 46, nameEnd),
             allowMalformed: true),
         crc: formatCrc(crc),
@@ -134,12 +121,8 @@ class ZipCentralDirectory {
     return entries.isEmpty ? null : entries;
   }
 
-  /// O tamanho total do arquivo, extraído do `Content-Range`, ou null se a
-  /// resposta não for uma resposta parcial de verdade.
-  ///
-  /// As duas condições juntas são a guarda da seção 5.8, limite 2. Um `200`
-  /// significa que o servidor ignorou o `Range` e está mandando o arquivo
-  /// inteiro, ou uma página de erro com cara de sucesso.
+  /// The total file size from `Content-Range`, or null if the response is not a
+  /// real partial response. A `200` means the server ignored the `Range`.
   static int? _totalFrom(RangeResponse response) {
     if (response.statusCode != HttpStatus.partialContent) return null;
     final header = response.contentRange;
@@ -149,9 +132,8 @@ class ZipCentralDirectory {
     return int.parse(m.group(3)!);
   }
 
-  /// Varre de trás para frente atrás de `PK\x05\x06`. De trás para frente
-  /// porque o EOCD é o último registro, mas não necessariamente os últimos
-  /// bytes: o comentário vem depois dele.
+  /// Scans backward for `PK\x05\x06`: the EOCD is the last record, but the
+  /// comment can come after it.
   static int? _findEocd(Uint8List bytes) {
     if (bytes.length < 22) return null;
     for (var i = bytes.length - 22; i >= 0; i--) {
@@ -165,15 +147,10 @@ class ZipCentralDirectory {
     return null;
   }
 
-  /// O fetch de produção.
+  /// The production fetch.
   ///
-  /// A ordem das linhas importa: **confira o status antes de consumir o
-  /// corpo**. Ler primeiro e checar depois significa baixar o arquivo inteiro,
-  /// que é exatamente o que a leitura por Range existe para evitar.
-  ///
-  /// O `HttpClient` segue redirect sozinho e preserva o header `Range` ao
-  /// fazê-lo, o que foi conferido contra o archive.org, que responde 302 antes
-  /// do 206.
+  /// Check the status before consuming the body: reading first would download
+  /// the whole file, which is what the Range read exists to avoid.
   static Future<RangeResponse> httpRangeFetch(Uri uri, String range) async {
     final client = HttpClient();
     try {
@@ -192,7 +169,7 @@ class ZipCentralDirectory {
         builder.add(chunk);
         if (builder.length > maxDirectoryBytes) {
           throw HttpException(
-              'resposta parcial acima de $maxDirectoryBytes bytes',
+              'partial response over $maxDirectoryBytes bytes',
               uri: uri);
         }
       }

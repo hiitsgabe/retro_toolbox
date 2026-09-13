@@ -12,7 +12,7 @@ import 'package:roms_downloader/services/metadata_pack_service.dart';
 const indexJson =
     '{"built":"2026-09-10","packs":[{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","games":1,"aliases":["super_nintendo"]}]}';
 const packJson =
-    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/chrono-trigger","title":"Chrono Trigger","dumps":[{"name":"Chrono Trigger (USA)","crc":"2D206BF7"}]}]}';
+    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/crystal-vanguard","title":"Crystal Vanguard","dumps":[{"name":"Crystal Vanguard (USA)","crc":"2D206BF7"}]}]}';
 
 const snes = PackTarget('super_nintendo', 'Super Nintendo');
 const switchTarget = PackTarget('nintendo_switch', 'Nintendo Switch');
@@ -43,21 +43,21 @@ void main() {
     return c;
   }
 
-  test('constrói o matcher a partir do pacote do console', () async {
+  test('builds the matcher from the console pack', () async {
     final matcher = await container().read(packMatcherProvider(snes).future);
     expect(matcher, isNotNull);
-    expect(matcher!.match('Chrono Trigger (USA).zip')?.tier,
+    expect(matcher!.match('Crystal Vanguard (USA).zip')?.tier,
         MatchTier.exactName);
   });
 
-  test('console sem pacote devolve null em vez de erro', () async {
+  test('a console without a pack returns null instead of throwing', () async {
     final c = container();
     expect(await c.read(packMatcherProvider(switchTarget).future), isNull);
     expect(
         await c.read(localIdentityServiceProvider(switchTarget).future), isNull);
   });
 
-  test('o serviço local reusa o mesmo matcher memoizado', () async {
+  test('the local service reuses the same memoized matcher', () async {
     final c = container();
     final matcher = await c.read(packMatcherProvider(snes).future);
     final service = await c.read(localIdentityServiceProvider(snes).future);

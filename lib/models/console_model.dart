@@ -1,21 +1,9 @@
-/// Se este bloco de `auth` diz que o console pede um token do usuário.
+/// Whether this `auth` block means the console needs a user token.
 ///
-/// Existe como função de topo, e não só como getter, porque desde a Grupo 3 a
-/// auth que importa é a da **fonte** (`ConsoleSource.auth`) e não a do
-/// `Console`: com dois addons servindo o mesmo console, `Console.auth` é a do
-/// primeiro que o declarou. Quem tem uma fonte em mãos não tem um `Console`
-/// para chamar o getter.
-///
-/// `requires_token` é a marca que a colheita da instalação deixa no lugar do
-/// token que tirou (`CatalogService.harvestAuthTokens`). Os outros dois termos
-/// continuam valendo para o catálogo embutido, que nunca passou pela colheita,
-/// e para arquivo aberto na mão.
+/// A top-level function, not just a getter, so a caller holding a source
+/// (`ConsoleSource.auth`) can ask without a `Console`.
 bool authNeedsToken(Map<String, dynamic>? auth) {
   if (auth == null) return false;
-  // O Internet Archive assina de outro jeito, e a conta dele é gerida pelo
-  // fluxo de login próprio, em Accounts. Sai antes dos outros três termos de
-  // propósito: um item do IA colhido com token continua não pedindo campo de
-  // token na tela.
   if (auth['type'] == 'ia_s3') return false;
   return auth['requires_token'] == true || auth.containsKey('token') || auth.containsKey('auth_message');
 }
@@ -72,17 +60,11 @@ class Console {
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
 
-  /// Uma cópia com outra lista de urls, e mais nada diferente.
-  ///
-  /// Existe só para `mergeCatalogs` (`console_merge.dart`), que acrescenta as
-  /// urls de outro addon ao console sem tocar em mais nenhum campo. É um
-  /// `copyWith` de um campo só de propósito: um `copyWith` completo de vinte e
-  /// um campos seria vinte parâmetros que ninguém passa e um lugar a mais para
-  /// esquecer de atualizar quando o `Console` crescer.
-  Console withUrls(List<String> novas) => Console(
+  /// A copy with a different url list and nothing else changed.
+  Console withUrls(List<String> next) => Console(
         id: id,
         name: name,
-        urls: novas,
+        urls: next,
         regex: regex,
         boxarts: boxarts,
         fileFormat: fileFormat,
@@ -182,8 +164,7 @@ class Console {
     };
   }
 
-  // Default regex matches Myrient-style HTML directory listings.
-  // Format: <tr><td class="link"><a href="URL" title="TITLE">TEXT</a></td><td class="size">SIZE</td>...
+  // Matches Myrient-style HTML directory listings.
   String get defaultRegex =>
       '<tr><td class="link"><a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a></td><td class="size">(?<size>[^<]+)</td><td class="date">[^<]*</td></tr>';
 

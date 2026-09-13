@@ -6,15 +6,12 @@ import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/utils/title_metadata_parser.dart';
 
-/// O plano de lote do MODO FONTE.
+/// The batch plan for SOURCE MODE.
 ///
-/// Não há escolha a fazer aqui: cada `Game` selecionado já é um arquivo, e
-/// todo arquivo da listagem existe. Por isso nenhum pick é incerto e a lista
-/// de falhas é sempre vazia.
-///
-/// A regra de verdade da seção 6 do spec de UI, com região, revisão,
-/// confiança e prioridade de addon, mora em `planFromEntries` e só tem
-/// sujeito em MODO PACK, onde existe mais de uma versão do mesmo jogo.
+/// There is no choice to make here: each selected `Game` is already a file, so
+/// no pick is uncertain and the failure list is always empty. The real rule,
+/// with region, revision, confidence, and addon priority, lives in
+/// `planFromEntries`.
 BatchPlan planFromGames(List<Game> games) {
   return BatchPlan(
     picks: [
@@ -25,28 +22,23 @@ BatchPlan planFromGames(List<Game> games) {
           filename: game.filename,
           size: game.size,
           sourceId: game.sourceId,
-          reason: 'você escolheu este arquivo',
+          reason: 'you picked this file',
           game: game,
         ),
     ],
   );
 }
 
-/// Como quem chama transforma uma fonte no `Game` que vai para a fila.
-///
-/// Nesta fatia é uma busca no catálogo por nome de arquivo (Task 20). Na
-/// fatia 4 é o addon que responde. Devolve `null` quando a fonte não existe
-/// mais, e aí o jogo vira `PickFailure` em vez de escolha.
+/// How the caller turns a source into the `Game` that goes to the queue.
+/// Returns `null` when the source no longer exists, and the game becomes a
+/// `PickFailure`.
 typedef GameResolver = Game? Function(MatchedSource source);
 
 typedef _Candidate = ({MatchedSource source, GameMetadata meta, Game game, int order});
 
-/// A regra de escolha da seção 6 do spec de UI, na ordem dela: região
-/// preferida, maior revisão, maior confiança, prioridade do addon.
-///
-/// É a mesma regra que escolhe o destaque da tela de detalhe. Uma regra só,
-/// dois lugares: se você precisar de uma variação, mude esta função, não
-/// escreva outra.
+/// The pick rule, in order: preferred region, highest revision, highest
+/// confidence, addon priority. The same rule that picks the detail screen's
+/// highlight.
 BatchPlan planFromEntries(
   List<PackGridEntry> entries, {
   required Set<String> preferredRegions,
@@ -61,7 +53,7 @@ BatchPlan planFromEntries(
       failures.add(PickFailure(
         gameId: entry.selectionKey,
         title: entry.game.title,
-        reason: 'nenhuma fonte instalada tem este jogo',
+        reason: 'no installed source has this game',
       ));
       continue;
     }
@@ -83,7 +75,7 @@ BatchPlan planFromEntries(
       failures.add(PickFailure(
         gameId: entry.selectionKey,
         title: entry.game.title,
-        reason: 'a fonte saiu da listagem antes de a fila começar',
+        reason: 'the source left the listing before the queue started',
       ));
       continue;
     }
@@ -98,8 +90,8 @@ BatchPlan planFromEntries(
       size: winner.source.size,
       sourceId: winner.source.sourceId,
       reason: _reason(winner, candidates, preferredRegions, sourcePriority),
-      // O lote não verifica CRC antes de enfileirar (seção 6): ele marca o
-      // palpite e deixa a rede de segurança para a verificação pós-download.
+      // The batch does not verify CRC before enqueuing: it marks the guess and
+      // leaves the safety net to post-download verification.
       uncertain: winner.source.confidence == MatchConfidence.guess,
       game: winner.game,
     ));
@@ -112,40 +104,35 @@ int _compare(_Candidate a, _Candidate b, Set<String> preferred, List<String> pri
   final region = _regionRank(a, preferred).compareTo(_regionRank(b, preferred));
   if (region != 0) return region;
 
-  // Invertido de propósito: revisão maior vem primeiro.
+  // Inverted on purpose: the higher revision comes first.
   final revision = _compareRevision(b.meta.revision, a.meta.revision);
   if (revision != 0) return revision;
 
-  // `MatchConfidence` está declarado do mais confiável para o menos, então
-  // o índice menor é o melhor.
+  // `MatchConfidence` is declared most confident first, so the lower index
+  // wins.
   final confidence = a.source.confidence.index.compareTo(b.source.confidence.index);
   if (confidence != 0) return confidence;
 
   final addon = _priorityRank(a, priority).compareTo(_priorityRank(b, priority));
   if (addon != 0) return addon;
 
-  // O desempate final é a ordem de chegada. Está aqui porque `List.sort` não
-  // promete estabilidade, e um lote que muda de resultado entre duas rodadas
-  // com a mesma entrada seria impossível de reportar como bug.
+  // Final tiebreak is arrival order, because `List.sort` is not stable.
   return a.order.compareTo(b.order);
 }
 
-/// 0 é preferida, 1 não é.
-///
-/// Sem região no nome o candidato **não** perde, o que espelha
-/// `filtering_service.dart:61-65`, onde metadados sem região passam pelo
-/// filtro em vez de serem descartados.
+/// 0 is preferred, 1 is not. A candidate with no region in its name does not
+/// lose.
 int _regionRank(_Candidate candidate, Set<String> preferred) {
   if (preferred.isEmpty) return 0;
   if (candidate.meta.regions.isEmpty) return 0;
   return candidate.meta.regions.any(preferred.contains) ? 0 : 1;
 }
 
-/// Positivo quando [a] é mais nova que [b].
+/// Positive when [a] is newer than [b].
 ///
-/// Comparação lexical, igual à de `filtering_service.dart:151-157`, com a
-/// mesma limitação conhecida: `Rev A` ganha de `Rev 1`, e `1.10` perde de
-/// `1.2`. Divergir daqui faria a grade e o lote discordarem.
+/// Lexical comparison, with a known limitation: `Rev A` beats `Rev 1`, and
+/// `1.10` loses to `1.2`. Diverging here would make the grid and the batch
+/// disagree.
 int _compareRevision(String a, String b) {
   if (a == b) return 0;
   if (a.isEmpty) return -1;
@@ -158,71 +145,64 @@ int _priorityRank(_Candidate candidate, List<String> priority) {
   return index < 0 ? priority.length : index;
 }
 
-/// O motivo por extenso, que é o eixo em que o vencedor bateu o segundo
-/// colocado. Obrigatório, não decorativo: é a única coisa que separa "o app
-/// escolheu por você" de "o app escolheu ao acaso" (seção 7).
+/// The spelled-out reason: the axis on which the winner beat the runner-up.
 String _reason(
   _Candidate winner,
   List<_Candidate> ordered,
   Set<String> preferred,
   List<String> priority,
 ) {
-  if (ordered.length == 1) return 'é a única fonte que tem este jogo';
+  if (ordered.length == 1) return 'the only source that has this game';
   final runnerUp = ordered[1];
 
   if (_regionRank(winner, preferred) != _regionRank(runnerUp, preferred)) {
     final region = winner.meta.regions.where(preferred.contains).firstOrNull;
     return region == null
-        ? 'escolhido pela sua região preferida'
-        : 'escolhido pela sua região preferida ($region)';
+        ? 'chosen by your preferred region'
+        : 'chosen by your preferred region ($region)';
   }
 
-  // Se as revisões diferem, a do vencedor é a maior, senão ele não seria o
-  // vencedor. Por isso dá para nomeá-la sem checar de novo.
+  // If the revisions differ, the winner's is the higher one, so it can be
+  // named without checking again.
   if (_compareRevision(winner.meta.revision, runnerUp.meta.revision) != 0) {
-    return 'é a revisão mais nova (Rev ${winner.meta.revision})';
+    return 'the newest revision (Rev ${winner.meta.revision})';
   }
 
   if (winner.source.confidence != runnerUp.source.confidence) {
-    return 'é o casamento mais confiável entre as ${ordered.length} fontes';
+    return 'the most confident match among the ${ordered.length} sources';
   }
 
   if (_priorityRank(winner, priority) != _priorityRank(runnerUp, priority)) {
-    return 'vem do addon de maior prioridade';
+    return 'comes from the higher-priority addon';
   }
 
-  return 'empate entre ${ordered.length} fontes, ficou a primeira';
+  return 'tie among ${ordered.length} sources, kept the first';
 }
 
-/// Uma fonte com o veredito de CRC dela já resolvido.
-///
-/// A tela resolve os vereditos uma vez, no `build` do `ConsumerWidget`, e
-/// passa isto para baixo. Assim esta função não conhece Riverpod e os testes
-/// dela não sobem widget.
+/// A source with its CRC verdict already resolved.
 typedef VerifiedSource = ({MatchedSource source, SourceVerification state});
 
-/// Como a verificação por CRC reorganiza as fontes de um jogo (seção 8).
+/// How CRC verification reorganizes a game's sources.
 typedef VerificationSplit = ({
-  /// Quem pode disputar o destaque: só as confirmadas quando existe alguma
-  /// confirmada, senão tudo que não foi descartado.
+  /// Who can contest the highlight: only the confirmed ones when any is
+  /// confirmed, otherwise everything not discarded.
   List<VerifiedSource> eligible,
 
-  /// Quem saiu da disputa porque o CRC desmentiu o nome.
+  /// Who left the contest because the CRC contradicted the name.
   List<VerifiedSource> discarded,
 
-  /// Alguma leitura ainda no ar.
+  /// Some read still in flight.
   bool verifying,
 
-  /// Alguma fonte confirmada por CRC.
+  /// Some source confirmed by CRC.
   bool confirmed,
 
-  /// Sobrou fonte, nenhuma confirmada, e **todas** as que sobraram são
-  /// impossíveis de verificar. É o "não tenho certeza de nenhuma" da seção 8.
+  /// Sources remain, none confirmed, and all that remain are impossible to
+  /// verify.
   bool noCertainty,
 });
 
-/// A regra da seção 8, na ordem dela. Pura, e é de propósito: a tela de
-/// detalhe fica só com o desenho.
+/// The verification rule, in order. Pure, so the detail screen only draws.
 VerificationSplit splitByVerification(List<VerifiedSource> sources) {
   final ok = <VerifiedSource>[];
   final discarded = <VerifiedSource>[];
@@ -252,8 +232,8 @@ VerificationSplit splitByVerification(List<VerifiedSource> sources) {
     discarded: discarded,
     verifying: verifying,
     confirmed: ok.isNotEmpty,
-    // `impossible == rest.length` e não `!verifying`: uma fonte que ninguém
-    // perguntou ainda não desistiu, e desistir por ela seria desistir cedo.
+    // `impossible == rest.length`, not `!verifying`: a source nobody asked
+    // about has not given up yet.
     noCertainty: ok.isEmpty && rest.isNotEmpty && impossible == rest.length,
   );
 }

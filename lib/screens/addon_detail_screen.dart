@@ -5,14 +5,11 @@ import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 
-/// Os cinco blocos que a seção 9 do spec de UI pede para um addon:
-/// identificação, conta, cobertura, prioridade e remover.
+/// The addon detail: identity, account, coverage, priority and remove.
 ///
-/// A cobertura mostra quais consoles o addon atende, e **não** quantos itens
-/// em cada. A contagem por console é uma requisição de listagem por console
-/// (`CatalogService._fetchCatalog`), e o app carrega listagem sob demanda
-/// justamente porque ela é cara: um addon com 25 consoles pagaria 25
-/// requisições ao abrir uma tela de leitura.
+/// Coverage shows which consoles the addon serves, not how many items in each:
+/// a per-console count would cost one listing request per console, and the app
+/// loads listings on demand precisely because they are expensive.
 class AddonDetailScreen extends ConsumerWidget {
   final String addonId;
 
@@ -21,57 +18,57 @@ class AddonDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final addons = ref.watch(addonProvider);
-    final indice = addons.indexWhere((a) => a.id == addonId);
+    final index = addons.indexWhere((a) => a.id == addonId);
 
-    // A remoção muda a lista antes de o `pop` completar, então este quadro
-    // existe de verdade. Sem a guarda, o `addons[indice]` abaixo estoura com
-    // índice -1 no caminho feliz do botão Remover.
-    if (indice < 0) return const Scaffold(body: SizedBox.shrink());
+    // Removal changes the list before the `pop` completes, so this frame really
+    // exists. Without the guard, `addons[index]` below blows up with index -1
+    // on the happy path of the Remove button.
+    if (index < 0) return const Scaffold(body: SizedBox.shrink());
 
-    final addon = addons[indice];
-    final catalogo = ref.watch(mergedCatalogProvider);
+    final addon = addons[index];
+    final catalog = ref.watch(mergedCatalogProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(addon.name)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _Secao(
-            titulo: 'Origem',
-            child: Text(addon.url ?? (addon.isBuiltin ? 'Instalado com o app' : 'Instalado de arquivo')),
+          _Section(
+            title: 'Source',
+            child: Text(addon.url ?? (addon.isBuiltin ? 'Installed with the app' : 'Installed from file')),
           ),
-          catalogo.when(
+          catalog.when(
             loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
-            error: (e, _) => _Secao(titulo: 'Cobertura', child: Text('Catálogo ilegível: $e')),
-            data: (fundido) {
-              final cobertura = fundido.coverage()[addonId] ?? (consoles: const <String>[], authConsoles: const <String>[]);
-              // Declaração e não `final nome = (String id) => ...`: o
-              // `prefer_function_declarations_over_variables` vem ligado no
-              // `flutter_lints` e a variável empurraria o analyze para 23.
-              String nome(String id) => fundido.consoles[id]?.name ?? id;
+            error: (e, _) => _Section(title: 'Coverage', child: Text('Unreadable catalog: $e')),
+            data: (merged) {
+              final coverage = merged.coverage()[addonId] ?? (consoles: const <String>[], authConsoles: const <String>[]);
+              // A declaration, not `final name = (String id) => ...`:
+              // `prefer_function_declarations_over_variables` is on and the
+              // variable form would trip the lint.
+              String name(String id) => merged.consoles[id]?.name ?? id;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (cobertura.authConsoles.isNotEmpty) const VaultWarning(),
-                  for (final consoleId in cobertura.authConsoles)
-                    if (fundido.consoles[consoleId] != null)
-                      _Secao(
-                        titulo: 'Conta: ${nome(consoleId)}',
-                        child: ConsoleAuthSetting(console: fundido.consoles[consoleId]!, addonId: addonId),
+                  if (coverage.authConsoles.isNotEmpty) const VaultWarning(),
+                  for (final consoleId in coverage.authConsoles)
+                    if (merged.consoles[consoleId] != null)
+                      _Section(
+                        title: 'Account: ${name(consoleId)}',
+                        child: ConsoleAuthSetting(console: merged.consoles[consoleId]!, addonId: addonId),
                       ),
-                  _Secao(
-                    titulo: 'Cobertura',
+                  _Section(
+                    title: 'Coverage',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(cobertura.consoles.isEmpty
-                            ? 'Nenhum console'
-                            : '${cobertura.consoles.length} console${cobertura.consoles.length == 1 ? '' : 's'}'),
+                        Text(coverage.consoles.isEmpty
+                            ? 'No console'
+                            : '${coverage.consoles.length} console${coverage.consoles.length == 1 ? '' : 's'}'),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: [for (final id in cobertura.consoles) Chip(label: Text(nome(id)))],
+                          children: [for (final id in coverage.consoles) Chip(label: Text(name(id)))],
                         ),
                       ],
                     ),
@@ -80,15 +77,15 @@ class AddonDetailScreen extends ConsumerWidget {
               );
             },
           ),
-          _Secao(
-            titulo: 'Prioridade',
+          _Section(
+            title: 'Priority',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${indice + 1}ª de ${addons.length}'),
+                Text('${index + 1} of ${addons.length}'),
                 const SizedBox(height: 4),
                 Text(
-                  'Arraste na lista de addons para mudar a ordem. A primeira fonte que tem o arquivo é a que baixa.',
+                  'Drag in the addons list to change the order. The first source that has the file is the one that downloads.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -96,42 +93,42 @@ class AddonDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () => _confirmarRemocao(context, ref, addon),
+            onPressed: () => _confirmRemoval(context, ref, addon),
             icon: const Icon(Icons.delete_outline),
-            label: const Text('Remover'),
+            label: const Text('Remove'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _confirmarRemocao(BuildContext context, WidgetRef ref, Addon addon) async {
+  Future<void> _confirmRemoval(BuildContext context, WidgetRef ref, Addon addon) async {
     final navigator = Navigator.of(context);
-    final confirmou = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Remover ${addon.name}?'),
-        // O token fica no cofre de propósito (`AddonNotifier.remove`), e dizer
-        // isso aqui é o que impede o usuário de achar que vai ter que
-        // redescobrir a credencial para reinstalar.
-        content: const Text('O catálogo sai do app. A credencial fica guardada, e reinstalar a mesma fonte volta a encontrá-la.'),
+        title: Text('Remove ${addon.name}?'),
+        // The token stays in the vault on purpose (`AddonNotifier.remove`);
+        // saying so here stops the user from thinking they must rediscover the
+        // credential to reinstall.
+        content: const Text('The catalog leaves the app. The credential stays saved, and reinstalling the same source finds it again.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remover addon')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove addon')),
         ],
       ),
     );
-    if (confirmou != true) return;
+    if (confirmed != true) return;
     await ref.read(addonProvider.notifier).remove(addon.id);
     navigator.pop();
   }
 }
 
-class _Secao extends StatelessWidget {
-  final String titulo;
+class _Section extends StatelessWidget {
+  final String title;
   final Widget child;
 
-  const _Secao({required this.titulo, required this.child});
+  const _Section({required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +137,7 @@ class _Secao extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(titulo, style: Theme.of(context).textTheme.titleSmall),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           child,
         ],

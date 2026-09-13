@@ -1,19 +1,15 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// O cofre de reserva, em `shared_preferences`, **em texto puro**.
+/// The fallback vault, in `shared_preferences`, in plaintext.
 ///
-/// Usado quando o chaveiro do sistema não está disponível, que na prática é o
-/// Linux sem `gnome-keyring` nem KWallet no D-Bus. A escolha do usuário foi
-/// esta em vez de desabilitar o campo de login, e quem usa este cofre aparece
-/// com aviso na tela (Grupo 5).
-///
-/// Não cifra, e não finge cifrar. O que ele entrega em relação ao que existia
-/// antes é separação: o segredo deixa de morar dentro do JSON do
-/// `app_settings`, que é serializado inteiro e impresso no caminho de erro.
+/// Used when the system keyring is unavailable (in practice, Linux without
+/// gnome-keyring or KWallet on D-Bus). It does not encrypt and does not
+/// pretend to: what it buys is keeping the secret out of the `app_settings`
+/// JSON, which is serialized whole and printed on the error path.
 class PrefsVault implements SecretVault {
-  /// Prefixo de todas as chaves deste cofre. Serve para não colidir com
-  /// `app_settings` e para conseguir varrer só segredo.
+  /// Prefix of every key in this vault, so it never collides with
+  /// `app_settings` and can be swept on its own.
   static const String keyPrefix = 'secret:';
 
   final SharedPreferences _prefs;
@@ -41,17 +37,11 @@ class PrefsVault implements SecretVault {
 
   @override
   Future<void> deleteWithPrefix(String prefix) async {
-    final alvo = '$keyPrefix$prefix';
-    // `toList()` é defesa barata, não necessidade: nesta versão do plugin,
-    // `getKeys()` já devolve cópia (`Set<String>.from(_preferenceCache.keys)`,
-    // `shared_preferences_legacy.dart:111`), então remover enquanto itera
-    // **não** lança `ConcurrentModificationError`. Medido, tirando o `toList()`
-    // e rodando. Fica porque a versão do plugin pode mudar, e porque `where`
-    // é preguiçoso: sem materializar, a iteração e as remoções se intercalam,
-    // e é essa intercalação que dependeria da cópia continuar existindo.
-    final chaves = _prefs.getKeys().where((chave) => chave.startsWith(alvo)).toList();
-    for (final chave in chaves) {
-      await _prefs.remove(chave);
+    final target = '$keyPrefix$prefix';
+    // `toList()` before removing: `where` is lazy, so it would interleave.
+    final keys = _prefs.getKeys().where((key) => key.startsWith(target)).toList();
+    for (final key in keys) {
+      await _prefs.remove(key);
     }
   }
 }

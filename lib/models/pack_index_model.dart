@@ -1,9 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
-/// Um console do catálogo do usuário, do jeito que ele existe no app: um id
-/// arbitrário e um nome livre. É a chave do provider de pacote, então precisa
-/// de igualdade por valor.
+/// A console from the user's catalog: an arbitrary id and a free-form name.
+/// The pack provider keys on it, so it needs value equality.
 @immutable
 class PackTarget {
   final String consoleId;
@@ -56,14 +55,13 @@ class PackIndex {
 
   const PackIndex({required this.built, required this.packs});
 
-  /// Mesma regra do CatalogService._nameToId. Duplicada de propósito: este
-  /// modelo não deve depender de um service.
+  /// Same rule as `CatalogService._nameToId`.
   static String normalize(String value) => value
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
       .replaceAll(RegExp(r'^_+|_+$'), '');
 
-  /// Acha o pacote do console. Id e nome do pacote ganham de alias, sempre.
+  /// Finds the console's pack. Pack id and name always beat an alias.
   PackIndexEntry? resolve(PackTarget target) {
     final candidates = <String>{
       normalize(target.consoleId),

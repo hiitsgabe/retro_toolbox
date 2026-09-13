@@ -2,15 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/favorites_model.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
 
-/// Favoritos em memória, sem disco e sem `async` que sobreviva ao teste.
-///
-/// O `FavoritesNotifier` de verdade chama `_loadFavorites()` no construtor,
-/// que vai ao `path_provider`. Em teste isso dá `MissingPluginException`, e
-/// se você calar o canal, dá `Bad state: Tried to use FavoritesNotifier
-/// after dispose` porque o `await` completa depois do teardown.
-///
-/// Guarda favorito de verdade, e não é no-op: as Tasks 15 e 18 apertam o
-/// coração e esperam o ícone virar.
+/// In-memory favorites: no disk, no `async` that outlives the test. The real
+/// `FavoritesNotifier` loads from `path_provider` in its constructor, whose
+/// await completes after teardown and throws use-after-dispose.
 class InMemoryFavoritesNotifier extends StateNotifier<Favorites>
     implements FavoritesNotifier {
   InMemoryFavoritesNotifier()
@@ -51,7 +45,7 @@ class InMemoryFavoritesNotifier extends StateNotifier<Favorites>
   bool isFavorite(String gameId) => state.isFavorite(gameId);
 }
 
-/// Ponha isto na lista de `overrides` de todo teste que construa
-/// `catalogProvider` de verdade, em container ou em `ProviderScope`.
-final semDiscoDeFavoritos =
+/// Add this to the `overrides` of every test that builds the real
+/// `catalogProvider`, in a container or a `ProviderScope`.
+final withoutFavoritesDisk =
     favoritesProvider.overrideWith((_) => InMemoryFavoritesNotifier());

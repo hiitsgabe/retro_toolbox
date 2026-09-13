@@ -3,72 +3,68 @@ import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/secure_storage_vault.dart';
 
-class _BackendBom implements SecureStorageBackend {
-  final Map<String, String> valores = {};
+class _GoodBackend implements SecureStorageBackend {
+  final Map<String, String> values = {};
 
   @override
-  Future<String?> read(String key) async => valores[key];
+  Future<String?> read(String key) async => values[key];
 
   @override
   Future<void> write(String key, String value) async {
-    valores[key] = value;
+    values[key] = value;
   }
 
   @override
   Future<void> delete(String key) async {
-    valores.remove(key);
+    values.remove(key);
   }
 
   @override
-  Future<Map<String, String>> readAll() async => Map.of(valores);
+  Future<Map<String, String>> readAll() async => Map.of(values);
 }
 
-class _BackendMorto implements SecureStorageBackend {
+class _DeadBackend implements SecureStorageBackend {
   @override
-  Future<String?> read(String key) async => throw StateError('sem chaveiro');
+  Future<String?> read(String key) async => throw StateError('no keyring');
 
   @override
-  Future<void> write(String key, String value) async => throw StateError('sem chaveiro');
+  Future<void> write(String key, String value) async => throw StateError('no keyring');
 
   @override
-  Future<void> delete(String key) async => throw StateError('sem chaveiro');
+  Future<void> delete(String key) async => throw StateError('no keyring');
 
   @override
-  Future<Map<String, String>> readAll() async => throw StateError('sem chaveiro');
+  Future<Map<String, String>> readAll() async => throw StateError('no keyring');
 }
 
 void main() {
-  test('com chaveiro vivo, usa o de sistema e diz que está cifrado', () async {
-    final escolha = await chooseVault(backend: _BackendBom(), buildFallback: () async => MemoryVault());
+  test('live keyring: uses system vault and reports encrypted', () async {
+    final choice = await chooseVault(backend: _GoodBackend(), buildFallback: () async => MemoryVault());
 
-    expect(escolha.vault, isA<SecureStorageVault>());
-    expect(escolha.encryptedAtRest, isTrue);
+    expect(choice.vault, isA<SecureStorageVault>());
+    expect(choice.encryptedAtRest, isTrue);
   });
 
-  test('sem chaveiro, cai para a reserva e diz que NÃO está cifrado', () async {
-    // As duas afirmações são a decisão travada inteira. Cair para a reserva
-    // sem carregar o `false` junto é o que transforma a fatia em maquiagem: a
-    // tela anunciaria "guardado com segurança" sobre texto puro.
-    final escolha = await chooseVault(backend: _BackendMorto(), buildFallback: () async => MemoryVault());
+  test('no keyring: falls back and reports NOT encrypted', () async {
+    // Falling back without carrying `false` would let the screen announce
+    // "stored securely" over plain text.
+    final choice = await chooseVault(backend: _DeadBackend(), buildFallback: () async => MemoryVault());
 
-    expect(escolha.vault, isA<MemoryVault>());
-    expect(escolha.encryptedAtRest, isFalse);
+    expect(choice.vault, isA<MemoryVault>());
+    expect(choice.encryptedAtRest, isFalse);
   });
 
-  test('com chaveiro vivo, a reserva nem chega a ser construída', () async {
-    // `PrefsVault.open()` abre o `shared_preferences`. Construir a reserva
-    // sempre, para descartá-la em seguida, é trabalho de boot desperdiçado em
-    // todo aparelho que tem chaveiro, que é a maioria.
-    var construcoes = 0;
+  test('live keyring: the fallback is never built', () async {
+    var builds = 0;
 
     await chooseVault(
-      backend: _BackendBom(),
+      backend: _GoodBackend(),
       buildFallback: () async {
-        construcoes++;
+        builds++;
         return MemoryVault();
       },
     );
 
-    expect(construcoes, 0);
+    expect(builds, 0);
   });
 }

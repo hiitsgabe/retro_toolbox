@@ -7,8 +7,7 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/models/pack_index_model.dart';
 import 'package:roms_downloader/services/metadata_pack_service.dart';
 
-/// O serviço real, apontando para `<support>/packs`. Os testes sobrescrevem
-/// este provider com um serviço de diretório temporário e fetch falso.
+/// The real service, pointing at `<support>/packs`.
 final metadataPackServiceProvider =
     FutureProvider<MetadataPackService>((ref) async {
   final supportDir = await getApplicationSupportDirectory();
@@ -18,15 +17,14 @@ final metadataPackServiceProvider =
   );
 });
 
-/// O index.json da release. Null quando não deu para baixar e não tem cache.
+/// The release index.json. Null when it could not be fetched and has no cache.
 final packIndexProvider = FutureProvider<PackIndex?>((ref) async {
   final service = await ref.watch(metadataPackServiceProvider.future);
   return service.loadIndex();
 });
 
-/// O pacote de um console do catálogo. Null quando o console não tem pacote,
-/// que é o caso do Nintendo Switch e de qualquer console adicionado à mão que
-/// não bata com nenhum alias.
+/// A catalog console's pack. Null when the console has no pack, as with the
+/// Nintendo Switch and any hand-added console that matches no alias.
 final metadataPackProvider =
     FutureProvider.family<MetadataPack?, PackTarget>((ref, target) async {
   final index = await ref.watch(packIndexProvider.future);

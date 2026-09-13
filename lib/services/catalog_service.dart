@@ -19,20 +19,15 @@ const _iaMetadataBase = 'https://archive.org/metadata/';
 const _iaDownloadBase = 'https://archive.org/download/';
 
 class CatalogService {
-  /// O catálogo fundido de todos os addons instalados. Um só, porque a lista
-  /// de addons é uma só. Invalidado por `clearCache`, que toda escrita de
-  /// catálogo chama.
+  /// The merged catalog of every installed addon. Invalidated by `clearCache`,
+  /// which every catalog write calls.
   static MergedCatalog? _merged;
   final BoxartService _boxartService = BoxartService();
 
-  /// Os consoles de todos os addons instalados, fundidos.
-  ///
-  /// O parâmetro `consolesFilePath` que este método tinha nunca foi usado com
-  /// valor diferente do padrão pelos nove chamadores, e não sobreviveria à
-  /// lista de addons, onde não existe "o arquivo".
+  /// The consoles of every installed addon, merged.
   Future<Map<String, Console>> getConsoles() async => (await mergedCatalog()).consoles;
 
-  /// De onde vem cada url de um console, na mesma ordem de `console.urls`.
+  /// Where each url of a console comes from, in `console.urls` order.
   Future<List<ConsoleSource>> sourcesFor(String consoleId) async => (await mergedCatalog()).sources[consoleId] ?? const [];
 
   Future<MergedCatalog> mergedCatalog() async {
@@ -46,34 +41,27 @@ class CatalogService {
     }
   }
 
-  /// Lê e funde os catálogos dos addons de [store].
-  ///
-  /// Público porque `AddonStore.open()` passa por `path_provider`, que num
-  /// teste sem plataforma lança `MissingPluginException`. Com o store entrando
-  /// por parâmetro, o teste monta uma raiz em `Directory.systemTemp` e
-  /// exercita disco de verdade.
+  /// Reads and merges the catalogs of [store]'s addons.
   Future<MergedCatalog> buildCatalog(AddonStore store) async {
-    final catalogos = <AddonCatalog>[];
+    final catalogs = <AddonCatalog>[];
     for (final addon in store.load()) {
-      final cru = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
-      if (cru == null) continue;
+      final raw = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
+      if (raw == null) continue;
       try {
-        catalogos.add((addonId: addon.id, consoles: parseConsoles(cru)));
+        catalogs.add((addonId: addon.id, consoles: parseConsoles(raw)));
       } catch (e) {
-        // Um addon com JSON quebrado não pode derrubar os outros: o usuário
-        // perderia a biblioteca inteira por causa de uma fonte de terceiro.
-        debugPrint('Catálogo ilegível do addon ${addon.id}: $e');
+        // One addon's broken JSON must not take the others down.
+        debugPrint('Unreadable catalog for addon ${addon.id}: $e');
       }
     }
-    final merged = mergeCatalogs(catalogos);
+    final merged = mergeCatalogs(catalogs);
     if (!merged.isEmpty) _merged = merged;
     return merged;
   }
 
-  /// O catálogo de exemplo empacotado no app (`assets/catalog/`, git-ignored).
-  ///
-  /// Só o embutido tem um, e é a terceira e última precedência dele: arquivo
-  /// do usuário, asset, nada. É a mesma precedência de antes da fatia 4.
+  /// The example catalog bundled in the app (`assets/catalog/`, git-ignored).
+  /// Only the built-in has one, as its last precedence: user file, asset,
+  /// nothing.
   static Future<String?> _bundledCatalog(String addonId) async {
     if (addonId != kBuiltinAddonId) return null;
     try {
@@ -83,7 +71,7 @@ class CatalogService {
     }
   }
 
-  /// Esquece o catálogo fundido. Toda escrita de catálogo chama.
+  /// Forgets the merged catalog. Every catalog write calls this.
   static void clearCache() => _merged = null;
 
   static Console? consoleByIdSync(String? id) {
@@ -114,7 +102,7 @@ class CatalogService {
     final consoles = <String, Console>{};
     if (decoded is List) {
       // PyGame-compatible array format: each item is a system object with a "name".
-      // Entries with "list_systems: true" are discovery endpoints — skip them here.
+      // Entries with "list_systems: true" are discovery endpoints: skip them here.
       for (final item in decoded) {
         if (item is! Map<String, dynamic>) continue;
         if (item['list_systems'] == true) continue;
@@ -137,40 +125,33 @@ class CatalogService {
     return File(path.join(supportDir.path, 'config', consolesFilePath));
   }
 
-  /// Tira `auth.token` de todo o catálogo e guarda o que achou no cofre.
+  /// Strips `auth.token` from the whole catalog and stores what it finds in the
+  /// vault.
   ///
-  /// O catálogo é o arquivo que o usuário compartilha com outra pessoa. O
-  /// formato permite token lá dentro, e a seção 6.3 do spec manda mover para o
-  /// cofre na instalação. Esta é a metade da correção que vale em toda
-  /// plataforma: tirar do arquivo não depende de haver chaveiro.
+  /// The catalog is the file the user shares, and its format allows a token
+  /// inside; moving it to the vault on install keeps the secret out of that
+  /// shared file. Where a `token` was, leaves `requires_token: true` so the
+  /// user still gets the screen to type one.
   ///
-  /// Onde havia `token`, deixa `requires_token: true`. A marca não é segredo:
-  /// ela diz que o console pede token, não qual é, e o arquivo que descreve o
-  /// console é exatamente o lugar dela. Sem a marca, [Console.hasTokenAuth]
-  /// viraria falso e o usuário perderia a tela onde digitaria o token.
-  ///
-  /// Devolve o JSON limpo. Não valida formato: quem valida é
-  /// [setCatalogFromJson], que tem mensagem de erro própria, e levantar aqui
-  /// trocaria essa mensagem por um stack trace.
+  /// Returns the cleaned JSON. Does not validate format; [setCatalogFromJson]
+  /// does.
   static Future<String> harvestAuthTokens(String jsonStr, {required SecretVault vault, required String addonId}) async {
     final decoded = jsonDecode(jsonStr);
 
-    Future<void> colher(String id, Map<dynamic, dynamic> item) async {
+    Future<void> harvest(String id, Map<dynamic, dynamic> item) async {
       final auth = item['auth'];
       if (auth is! Map) return;
       if (!auth.containsKey('token')) return;
       final token = auth.remove('token');
-      // A marca entra mesmo quando o token vem vazio, porque é o `containsKey`
-      // que ela substitui, não o valor. `{'token': ''}` é como um catálogo
-      // compartilhado diz "este console pede token e eu não estou te dando o
-      // meu": quem lê tem que continuar sabendo disso.
+      // The marker replaces `containsKey`, not the value, so it stays even when
+      // the token is empty.
       auth['requires_token'] = true;
       if (token is! String || token.isEmpty) return;
-      final chave = SecretRef.addonToken(addonId, id);
-      // O que já está no cofre é o mais novo: reinstalar um catálogo velho não
-      // pode devolver ao usuário um token que ele já trocou.
-      if (await vault.read(chave) != null) return;
-      await vault.write(chave, token);
+      final key = SecretRef.addonToken(addonId, id);
+      // What is already in the vault is the newest: reinstalling an old catalog
+      // must not restore a token the user has since rotated.
+      if (await vault.read(key) != null) return;
+      await vault.write(key, token);
     }
 
     if (decoded is List) {
@@ -178,16 +159,15 @@ class CatalogService {
         if (item is! Map) continue;
         final name = item['name'] as String? ?? '';
         if (name.isEmpty) continue;
-        // As entradas de descoberta (`list_systems`) não viram console, e ainda
-        // assim entram aqui: o arquivo compartilhado é o mesmo e o token lá
-        // dentro vaza igual.
-        await colher(_nameToId(name), item);
+        // Discovery entries (`list_systems`) still pass through here: a token
+        // inside one leaks just the same.
+        await harvest(_nameToId(name), item);
       }
     } else if (decoded is Map) {
-      for (final entrada in decoded.entries) {
-        final valor = entrada.value;
-        if (valor is! Map) continue;
-        await colher(entrada.key.toString(), valor);
+      for (final entry in decoded.entries) {
+        final value = entry.value;
+        if (value is! Map) continue;
+        await harvest(entry.key.toString(), value);
       }
     } else {
       return jsonStr;
@@ -199,14 +179,14 @@ class CatalogService {
   /// Validates [jsonStr] parses into at least one console, saves it as the
   /// active catalog source, and clears caches. Throws on invalid content.
   Future<void> setCatalogFromJson(String jsonStr, {required SecretVault vault, required String addonId}) async {
-    final limpo = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
-    final consoles = parseConsoles(limpo);
+    final cleaned = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
+    final consoles = parseConsoles(cleaned);
     if (consoles.isEmpty) {
       throw const FormatException('No consoles found in the provided catalog.');
     }
     final file = await _userConsolesFile();
     await file.parent.create(recursive: true);
-    await file.writeAsString(limpo);
+    await file.writeAsString(cleaned);
     clearCache();
   }
 
@@ -349,17 +329,11 @@ class CatalogService {
     return catalog;
   }
 
-  /// Busca todas as [sources] em paralelo e devolve os jogos de todas, cada um
-  /// já marcado com o addon que o serviu, ordenados por título.
+  /// Fetches every source in [sources] in parallel and returns all their games,
+  /// each tagged with the addon that served it, sorted by title.
   ///
-  /// Público e sem disco por uma razão de teste: `_fetchCatalog` grava o cache
-  /// por `getApplicationCacheDirectory`, que é `path_provider`, e num teste sem
-  /// plataforma lança. Aqui entra um `HttpClient` e sai uma lista.
-  ///
-  /// Cada fonte fala com a auth do addon que a declarou e com o token daquele
-  /// addon (`tokens[addonId]`). Antes da fatia 4 era uma auth e um token para
-  /// todas as urls do console, o que, com dois addons, mandaria o token do
-  /// primeiro para o servidor do segundo.
+  /// Each source speaks with the auth and token of the addon that declared it
+  /// (`tokens[addonId]`), so one addon's token never reaches another's server.
   Future<List<Game>> fetchSources(HttpClient client, Console console, List<ConsoleSource> sources,
       {String? iaAccessKey,
       String? iaSecretKey,
@@ -376,8 +350,8 @@ class CatalogService {
             onProgress?.call(++done, total);
             return games;
           }).catchError((Object e) {
-            // Mantém o resultado parcial quando só algumas páginas falham;
-            // o erro só sobe quando nenhuma entregou nada (ex.: auth exigida).
+            // Keep the partial result when only some pages fail; the error
+            // rises only when none delivered anything.
             firstError ??= e;
             onProgress?.call(++done, total);
             return <Game>[];
@@ -398,8 +372,8 @@ class CatalogService {
     }
 
     final request = await client.getUrl(Uri.parse(url));
-    // `source.auth` e não `console.auth`: a auth pertence à url, não ao
-    // console, porque dois addons podem servir o mesmo console.
+    // `source.auth`, not `console.auth`: auth belongs to the url, since two
+    // addons can serve the same console.
     final headers = buildDownloadHeaders(url, buildConsoleAuthHeaders(source.auth, tokenOverride: authToken));
     headers.forEach(request.headers.set);
 
@@ -477,21 +451,19 @@ class CatalogService {
     }
   }
 
-  /// Esquece tudo que dependia da lista de addons: os arquivos de cache de
-  /// jogo de cada console **e depois** a fusão de catálogos.
+  /// Forgets everything that depended on the addon list: each console's game
+  /// cache files, and then the merged catalog.
   ///
-  /// A ordem não é estilo. `clearCatalogCache` descobre quais arquivos apagar
-  /// iterando `getConsoles()`, então ela precisa do catálogo **antigo**.
-  /// Invertida, a varredura rodaria com a lista nova e deixaria para trás o
-  /// cache de um console que só o addon removido servia, e esse arquivo
-  /// continuaria alimentando a grade depois da remoção.
+  /// Order matters: `clearCatalogCache` iterates `getConsoles()` to find which
+  /// files to delete, so it needs the old catalog. Reversed, it would leave
+  /// behind the cache of a console only the removed addon served.
   Future<void> invalidateForAddonChange() async {
     await clearCatalogCache();
     clearCache();
   }
 }
 
-// Top-level isolate functions — cannot be instance methods.
+// Top-level isolate functions: cannot be instance methods.
 
 List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
   final body = args[0] as String;
@@ -529,7 +501,7 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
     final sizeRaw = file['size'];
     final size = int.tryParse(sizeRaw?.toString() ?? '') ?? 0;
     final downloadUrl = '$_iaDownloadBase$itemId/${Uri.encodeComponent(name)}';
-    // Items may nest files in subdirectories — the title is the basename.
+    // Items may nest files in subdirectories: the title is the basename.
     final title = name.split('/').last;
     final metadata = TitleMetadataParser.parseRomTitle(title).toJson();
 
@@ -620,7 +592,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
   final out = <Map<String, dynamic>>[];
 
   for (final match in matches) {
-    // Resolve the download URL — prefer id+template, fall back to href.
+    // Resolve the download URL: prefer id+template, fall back to href.
     String? fullUrl;
     final idGroup = _tryNamedGroup(match, 'id');
     final hrefGroup = _tryNamedGroup(match, 'href');
@@ -663,7 +635,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     final size = sizeStr != null ? _parseSizeBytesIsolate(sizeStr) : 0;
 
     final metadata = TitleMetadataParser.parseRomTitle(title).toJson();
-    // Some configs (e.g. ultranx) capture a banner_url group — use it as the
+    // Some configs (e.g. ultranx) capture a banner_url group: use it as the
     // boxart, resolving relative paths against the catalog host.
     final banner = _tryNamedGroup(match, 'banner_url');
     out.add({

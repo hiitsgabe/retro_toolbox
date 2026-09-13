@@ -4,113 +4,101 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 
-PackGridEntry _e(String title, {bool comFonte = true, String? id}) => PackGridEntry(
+PackGridEntry _e(String title, {bool withSource = true, String? id}) => PackGridEntry(
       game: PackGame(id: id ?? 'snes/${title.toLowerCase()}', title: title, dumps: const []),
-      sources: comFonte
-          ? [const MatchedSource(filename: 'a.zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1)]
+      sources: withSource
+          ? [const MatchedSource(filename: 'a.zip', sourceId: 'listing', confidence: MatchConfidence.likely, size: 1)]
           : const [],
     );
 
 void main() {
-  test('busca vazia devolve tudo', () {
-    final saida = filterPackEntries([_e('Super Metroid'), _e('Chrono Trigger')], '');
+  test('an empty query returns everything', () {
+    final out = filterPackEntries([_e('Super Vectron'), _e('Crystal Vanguard')], '');
 
-    expect(saida.length, 2);
+    expect(out.length, 2);
   });
 
-  test('a saída sai ordenada por título, não na ordem do pacote', () {
-    final saida = filterPackEntries([_e('Super Metroid'), _e('Chrono Trigger'), _e('EarthBound')], '');
+  test('output is sorted by title, not by pack order', () {
+    final out = filterPackEntries([_e('Super Vectron'), _e('Crystal Vanguard'), _e('Emberfall')], '');
 
-    expect(saida.map((e) => e.game.title), ['Chrono Trigger', 'EarthBound', 'Super Metroid']);
+    expect(out.map((e) => e.game.title), ['Crystal Vanguard', 'Emberfall', 'Super Vectron']);
   });
 
-  test('a busca ignora caixa e acento', () {
-    // `norm` já dobra acento e baixa a caixa desde a fatia 2. Não reimplemente.
-    final saida = filterPackEntries([_e('Pokémon Red'), _e('Super Metroid')], 'pokemon');
+  test('the search ignores case and accents', () {
+    final out = filterPackEntries([_e('Prismón Red'), _e('Super Vectron')], 'prismon');
 
-    expect(saida.single.game.title, 'Pokémon Red');
+    expect(out.single.game.title, 'Prismón Red');
   });
 
-  test('a busca casa pedaço do meio do título', () {
-    final saida = filterPackEntries([_e('The Legend of Zelda'), _e('Super Metroid')], 'zelda');
+  test('the search matches a substring in the middle of the title', () {
+    final out = filterPackEntries([_e('The Legend of Kaelis'), _e('Super Vectron')], 'kaelis');
 
-    expect(saida.single.game.title, 'The Legend of Zelda');
+    expect(out.single.game.title, 'The Legend of Kaelis');
   });
 
-  test('busca sem resultado devolve lista vazia', () {
-    final saida = filterPackEntries([_e('Super Metroid')], 'halo');
+  test('a search with no results returns an empty list', () {
+    final out = filterPackEntries([_e('Super Vectron')], 'cryptmanor');
 
-    expect(saida, isEmpty);
+    expect(out, isEmpty);
   });
 
-  test('jogo sem fonte continua aparecendo, porque a grade mostra tudo', () {
-    // Decisão travada do projeto inteiro: a grade mostra todos os jogos do
-    // pacote e marca a exceção. Filtrar por disponibilidade aqui é o erro que
-    // esta linha existe para impedir.
-    final saida = filterPackEntries([_e('Super Metroid', comFonte: false)], '');
+  test('a sourceless game still shows, because the grid shows everything', () {
+    final out = filterPackEntries([_e('Super Vectron', withSource: false)], '');
 
-    expect(saida.single.hasSource, isFalse);
+    expect(out.single.hasSource, isFalse);
   });
 
-  test('títulos iguais saem sempre na mesma ordem, desempatados pelo id', () {
-    // Todo outro teste de ordenação usa títulos distintos, então `byTitle != 0`
-    // é sempre verdadeiro e o ramo do desempate nunca roda. Sem este caso,
-    // apagar o desempate ou invertê-lo não deixa nenhum teste vermelho.
-    //
-    // As duas chamadas são o ponto: a entrada vai nas duas ordens possíveis e a
-    // saída tem que ser a mesma. Uma chamada só passaria por acaso, porque em
-    // lista de dois elementos o `sort` do Dart cai em inserção, que preserva a
-    // ordem de entrada quando o comparador devolve 0.
-    final usa = _e('Final Fantasy', id: 'snes/ff-usa');
-    final eur = _e('Final Fantasy', id: 'snes/ff-eur');
+  test('equal titles sort stably, broken by id', () {
+    // Every other sort test uses distinct titles, so the tie-break branch never
+    // runs without this case; both call orders must yield the same output.
+    final usa = _e('Fabled Frontier', id: 'snes/ff-usa');
+    final eur = _e('Fabled Frontier', id: 'snes/ff-eur');
 
     expect(filterPackEntries([usa, eur], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
     expect(filterPackEntries([eur, usa], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
   });
 
-  test('espaço em volta da busca não conta', () {
-    final saida = filterPackEntries([_e('Super Metroid')], '  metroid  ');
+  test('whitespace around the query does not count', () {
+    final out = filterPackEntries([_e('Super Vectron')], '  vectron  ');
 
-    expect(saida.length, 1);
+    expect(out.length, 1);
   });
 
-  test('a seleção devolve as entradas na ordem da lista, não na ordem em que foram marcadas', () {
-    final entradas = [_e('Chrono Trigger'), _e('EarthBound'), _e('Super Metroid')];
+  test('selection returns entries in list order, not in the order they were checked', () {
+    final entries = [_e('Crystal Vanguard'), _e('Emberfall'), _e('Super Vectron')];
 
-    final saida = entriesForSelection(entradas, {entradas[2].selectionKey, entradas[0].selectionKey});
+    final out = entriesForSelection(entries, {entries[2].selectionKey, entries[0].selectionKey});
 
-    expect(saida.map((e) => e.game.title), ['Chrono Trigger', 'Super Metroid']);
+    expect(out.map((e) => e.game.title), ['Crystal Vanguard', 'Super Vectron']);
   });
 
-  test('chave que não existe mais no pacote é ignorada, sem explodir', () {
-    // Acontece quando o pacote é republicado com um slug diferente enquanto a
-    // seleção do usuário ainda aponta para o antigo.
-    expect(entriesForSelection([_e('Chrono Trigger')], {'pack:snes/jogo-que-sumiu'}), isEmpty);
+  test('a key no longer in the pack is ignored, without throwing', () {
+    expect(entriesForSelection([_e('Crystal Vanguard')], {'pack:snes/game-that-vanished'}), isEmpty);
   });
 
-  test('chave de MODO FONTE não traz entrada de pack nenhuma', () {
-    expect(entriesForSelection([_e('Chrono Trigger')], {'snes/Chrono Trigger (USA).zip'}), isEmpty);
+  test('a source-mode key brings back no pack entry', () {
+    expect(entriesForSelection([_e('Crystal Vanguard')], {'snes/Crystal Vanguard (USA).zip'}), isEmpty);
   });
 
-  test('em MODO PACK só as chaves com prefixo pack: contam', () {
-    final saida = selectionKeysFor(
-      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+  test('in pack mode only pack-prefixed keys count', () {
+    final out = selectionKeysFor(
+      {'pack:snes/crystal-vanguard', 'snes/Crystal Vanguard (USA).zip'},
       pack: true,
     );
 
-    expect(saida, {'pack:snes/chrono-trigger'});
+    expect(out, {'pack:snes/crystal-vanguard'});
   });
 
-  test('em MODO FONTE só as chaves sem prefixo contam', () {
-    final saida = selectionKeysFor(
-      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+  test('in source mode only unprefixed keys count', () {
+    final out = selectionKeysFor(
+      {'pack:snes/crystal-vanguard', 'snes/Crystal Vanguard (USA).zip'},
       pack: false,
     );
 
-    expect(saida, {'snes/Chrono Trigger (USA).zip'});
+    expect(out, {'snes/Crystal Vanguard (USA).zip'});
   });
 
-  test('seleção vazia devolve conjunto vazio nos dois modos', () {
+  test('an empty selection returns an empty set in both modes', () {
     expect(selectionKeysFor(const {}, pack: true), isEmpty);
     expect(selectionKeysFor(const {}, pack: false), isEmpty);
   });

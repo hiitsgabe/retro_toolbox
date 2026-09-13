@@ -6,107 +6,106 @@ Console _console(String id, List<String> urls, {String? regex, Map<String, dynam
     Console(id: id, name: name ?? id, urls: urls, regex: regex, auth: auth);
 
 void main() {
-  test('lista vazia dá catálogo vazio', () {
+  test('empty list yields empty catalog', () {
     final merged = mergeCatalogs(const []);
     expect(merged.consoles, isEmpty);
     expect(merged.sources, isEmpty);
     expect(merged.isEmpty, isTrue);
   });
 
-  test('um addon só: os consoles saem iguais e cada fonte carrega o id do addon', () {
+  test('single addon: consoles pass through and each source carries the addon id', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
     ]);
     expect(merged.consoles.keys, ['snes']);
     expect(merged.consoles['snes']!.urls, ['https://a/']);
-    expect(merged.sources['snes']!.single.addonId, 'um');
+    expect(merged.sources['snes']!.single.addonId, 'one');
     expect(merged.sources['snes']!.single.url, 'https://a/');
   });
 
-  test('console que só o segundo addon declara entra do mesmo jeito', () {
+  test('console declared only by the second addon is included', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
-      (addonId: 'dois', consoles: {'nes': _console('nes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'two', consoles: {'nes': _console('nes', ['https://b/'])}),
     ]);
     expect(merged.consoles.keys, containsAll(['snes', 'nes']));
-    expect(merged.sources['nes']!.single.addonId, 'dois');
+    expect(merged.sources['nes']!.single.addonId, 'two');
   });
 
-  test('mesmo console nos dois: os metadados são do PRIMEIRO addon', () {
+  test('same console in both addons: metadata comes from the FIRST addon', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'], name: 'Super Nintendo', regex: 'DO UM')}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'], name: 'SNES', regex: 'DO DOIS')}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'], name: 'Super Nintendo', regex: 'FROM ONE')}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'], name: 'SNES', regex: 'FROM TWO')}),
     ]);
     expect(merged.consoles['snes']!.name, 'Super Nintendo');
-    expect(merged.consoles['snes']!.regex, 'DO UM');
+    expect(merged.consoles['snes']!.regex, 'FROM ONE');
   });
 
-  test('mesmo console nos dois: as urls concatenam na ordem dos addons', () {
+  test('same console in both addons: urls concatenate in addon order', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/', 'https://a2/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/', 'https://a2/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'])}),
     ]);
     expect(merged.consoles['snes']!.urls, ['https://a/', 'https://a2/', 'https://b/']);
   });
 
-  test('url repetida entre dois addons entra uma vez só, do primeiro', () {
+  test('duplicate url across addons enters once, from the first', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://mesma/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://mesma/', 'https://outra/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://same/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://same/', 'https://other/'])}),
     ]);
-    expect(merged.consoles['snes']!.urls, ['https://mesma/', 'https://outra/']);
-    expect(merged.sources['snes']!.map((f) => f.addonId), ['um', 'dois']);
+    expect(merged.consoles['snes']!.urls, ['https://same/', 'https://other/']);
+    expect(merged.sources['snes']!.map((f) => f.addonId), ['one', 'two']);
   });
 
-  test('url repetida dentro do mesmo addon entra uma vez só', () {
+  test('duplicate url within the same addon enters once', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/', 'https://a/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/', 'https://a/'])}),
     ]);
     expect(merged.consoles['snes']!.urls, ['https://a/']);
   });
 
-  test('a auth de cada fonte é a do addon que declarou AQUELA url', () {
+  test('each source auth comes from the addon that declared that url', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'], auth: {'token': 'nao usado', 'cookies': true})}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'], auth: {'type': 'ia_s3'})}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'], auth: {'token': 'unused', 'cookies': true})}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'], auth: {'type': 'ia_s3'})}),
     ]);
-    final fontes = merged.sources['snes']!;
-    expect(fontes[0].auth!['cookies'], true);
-    expect(fontes[1].auth!['type'], 'ia_s3');
+    final sources = merged.sources['snes']!;
+    expect(sources[0].auth!['cookies'], true);
+    expect(sources[1].auth!['type'], 'ia_s3');
   });
 
-  test('o invariante: as urls do console são as urls das fontes, na mesma ordem', () {
+  test('invariant: console urls match source urls in the same order', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/']), 'nes': _console('nes', ['https://n1/', 'https://n2/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/']), 'nes': _console('nes', ['https://n1/', 'https://n2/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'])}),
     ]);
     for (final id in merged.consoles.keys) {
       expect(merged.sources[id]!.map((f) => f.url).toList(), merged.consoles[id]!.urls, reason: 'console $id');
     }
   });
 
-  test('console sem url nenhuma entra com lista de fontes vazia', () {
+  test('console with no urls enters with an empty source list', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', const [])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', const [])}),
     ]);
     expect(merged.consoles.containsKey('snes'), isTrue);
     expect(merged.sources['snes'], isEmpty);
   });
 
-  test('addon sem console nenhum não atrapalha os outros', () {
+  test('addon with no consoles does not affect others', () {
     final merged = mergeCatalogs([
-      (addonId: 'vazio', consoles: const {}),
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'empty', consoles: const {}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
     ]);
     expect(merged.consoles.keys, ['snes']);
-    expect(merged.sources['snes']!.single.addonId, 'um');
+    expect(merged.sources['snes']!.single.addonId, 'one');
   });
 
-  test('withUrls troca as urls e não perde nenhum dos outros campos', () {
-    // Todo campo aqui vale o CONTRÁRIO do padrão do construtor. Se algum
-    // valesse o padrão, apagar a linha correspondente do `withUrls` passaria
-    // despercebido: o construtor repõe o mesmo valor e o teste segue verde.
-    const cheio = Console(
+  test('withUrls replaces urls without losing any other field', () {
+    // Every field is the OPPOSITE of its constructor default, so a dropped
+    // `withUrls` line cannot be masked by the constructor restoring the default.
+    const full = Console(
       id: 'snes',
       name: 'Super Nintendo',
       urls: ['https://a/'],
@@ -120,9 +119,9 @@ void main() {
       usaRegex: r'\(USA\)',
       shouldDecompressNsz: true,
       ignoreExtensionFiltering: true,
-      downloadUrl: 'https://baixa/',
+      downloadUrl: 'https://download/',
       auth: {'type': 'cookies'},
-      listUrl: 'https://lista/',
+      listUrl: 'https://list/',
       listJsonFileLocation: 'items',
       listItemId: 'title',
       listSystems: true,
@@ -130,28 +129,28 @@ void main() {
       convert3dsToCia: true,
     );
 
-    final copia = cheio.withUrls(['https://b/', 'https://c/']);
+    final copy = full.withUrls(['https://b/', 'https://c/']);
 
-    expect(copia.urls, ['https://b/', 'https://c/']);
-    expect(copia.id, cheio.id);
-    expect(copia.name, cheio.name);
-    expect(copia.regex, cheio.regex);
-    expect(copia.boxarts, cheio.boxarts);
-    expect(copia.fileFormat, cheio.fileFormat);
-    expect(copia.romsFolder, cheio.romsFolder);
-    expect(copia.shouldUnzip, cheio.shouldUnzip);
-    expect(copia.extractContents, cheio.extractContents);
-    expect(copia.shouldFilterUsa, cheio.shouldFilterUsa);
-    expect(copia.usaRegex, cheio.usaRegex);
-    expect(copia.shouldDecompressNsz, cheio.shouldDecompressNsz);
-    expect(copia.ignoreExtensionFiltering, cheio.ignoreExtensionFiltering);
-    expect(copia.downloadUrl, cheio.downloadUrl);
-    expect(copia.auth, cheio.auth);
-    expect(copia.listUrl, cheio.listUrl);
-    expect(copia.listJsonFileLocation, cheio.listJsonFileLocation);
-    expect(copia.listItemId, cheio.listItemId);
-    expect(copia.listSystems, cheio.listSystems);
-    expect(copia.added, cheio.added);
-    expect(copia.convert3dsToCia, cheio.convert3dsToCia);
+    expect(copy.urls, ['https://b/', 'https://c/']);
+    expect(copy.id, full.id);
+    expect(copy.name, full.name);
+    expect(copy.regex, full.regex);
+    expect(copy.boxarts, full.boxarts);
+    expect(copy.fileFormat, full.fileFormat);
+    expect(copy.romsFolder, full.romsFolder);
+    expect(copy.shouldUnzip, full.shouldUnzip);
+    expect(copy.extractContents, full.extractContents);
+    expect(copy.shouldFilterUsa, full.shouldFilterUsa);
+    expect(copy.usaRegex, full.usaRegex);
+    expect(copy.shouldDecompressNsz, full.shouldDecompressNsz);
+    expect(copy.ignoreExtensionFiltering, full.ignoreExtensionFiltering);
+    expect(copy.downloadUrl, full.downloadUrl);
+    expect(copy.auth, full.auth);
+    expect(copy.listUrl, full.listUrl);
+    expect(copy.listJsonFileLocation, full.listJsonFileLocation);
+    expect(copy.listItemId, full.listItemId);
+    expect(copy.listSystems, full.listSystems);
+    expect(copy.added, full.added);
+    expect(copy.convert3dsToCia, full.convert3dsToCia);
   });
 }

@@ -8,13 +8,13 @@ import 'package:roms_downloader/services/pack_matcher.dart';
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
 
-/// CRCs do pacote de teste, na forma numérica que o diretório central grava.
-const chronoUsa = 0x2D206BF7;
+/// CRCs of the test pack, in the numeric form the central directory stores.
+const crystalUsa = 0x2D206BF7;
 const smwEurope = 0xA31BEAD4;
 
 void main() {
   late PackMatcher matcher;
-  final uri = Uri.parse('https://exemplo/arquivo.zip');
+  final uri = Uri.parse('https://example/file.zip');
 
   setUp(() => matcher = PackMatcher(buildPack()));
 
@@ -23,46 +23,46 @@ void main() {
         fetch: FakeRangeServer(zip).fetch,
       );
 
-  test('não vai à rede quando o nome não termina em .zip', () async {
-    var chamadas = 0;
+  test('skips the network when the filename does not end in .zip', () async {
+    var calls = 0;
     final service = CrcConfirmService(
       matcher: matcher,
       fetch: (u, r) async {
-        chamadas++;
-        throw StateError('não deveria ter ido à rede');
+        calls++;
+        throw StateError('should not have gone to the network');
       },
     );
-    final byName = matcher.match('Chrono Trigger (USA).sfc');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).sfc', byName);
-    expect(chamadas, 0);
+    final byName = matcher.match('Crystal Vanguard (USA).sfc');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).sfc', byName);
+    expect(calls, 0);
     expect(out, same(byName));
   });
 
-  test('confirma o palpite de nome quando o CRC aponta o mesmo jogo', () async {
+  test('confirms the name guess when the CRC points to the same game', () async {
     final service = serving(
-        buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
-    expect(out!.game.id, 'snes/chrono-trigger');
+        buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
+    expect(out!.game.id, 'snes/crystal-vanguard');
     expect(out.tier, MatchTier.checksum);
     expect(out.confidence, MatchConfidence.confirmed);
-    expect(out.dump?.name, 'Chrono Trigger (USA)');
+    expect(out.dump?.name, 'Crystal Vanguard (USA)');
   });
 
-  test('corrige o palpite de nome quando o CRC aponta outro jogo', () async {
-    // O arquivo se chama Chrono Trigger mas contém Super Mario World. O nome
-    // mente, o CRC não.
+  test('corrects the name guess when the CRC points to a different game', () async {
+    // The file is named Crystal Vanguard but contains Super Pixel World.
+    // The name lies; the CRC does not.
     final service = serving(
         buildZip([cdEntry('rom.sfc', smwEurope)]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    expect(byName!.game.id, 'snes/chrono-trigger');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
-    expect(out!.game.id, 'snes/super-mario-world');
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    expect(byName!.game.id, 'snes/crystal-vanguard');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
+    expect(out!.game.id, 'snes/super-pixel-world');
     expect(out.tier, MatchTier.checksum);
-    expect(out.dump?.name, 'Super Mario World (Europe)');
+    expect(out.dump?.name, 'Super Pixel World (Europe)');
   });
 
-  test('fica com o nome quando o servidor não fala Range', () async {
+  test('keeps the name match when the server does not support Range', () async {
     final service = CrcConfirmService(
       matcher: matcher,
       fetch: FakeRangeServer(
@@ -70,36 +70,35 @@ void main() {
         status: 200,
       ).fetch,
     );
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
     expect(out, same(byName));
   });
 
-  test('fica com o nome quando o zip tem dois jogos diferentes dentro',
+  test('keeps the name match when the zip contains two different games',
       () async {
     final service = serving(buildZip([
-      cdEntry('Chrono Trigger (USA).sfc', chronoUsa),
-      cdEntry('Super Mario World (Europe).sfc', smwEurope),
+      cdEntry('Crystal Vanguard (USA).sfc', crystalUsa),
+      cdEntry('Super Pixel World (Europe).sfc', smwEurope),
     ]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
     expect(out, same(byName));
   });
 
-  test('ignora o que não é ROM e decide pela única que é', () async {
-    // Se o filtro de extensão não existisse, o bonus.zip entraria com o CRC do
-    // Super Mario World, viraria dois jogos, e o zip seria descartado como
-    // inconclusivo. Ver 5.8, limite 1.
+  test('ignores non-ROM entries and decides by the single ROM', () async {
+    // Without the extension filter, bonus.zip would carry the Super Pixel World
+    // CRC, produce two games, and the zip would be discarded as inconclusive.
     final service = serving(buildZip([
-      cdEntry('leiame.txt', 0x00000009),
+      cdEntry('readme.txt', 0x00000009),
       cdEntry('bonus.zip', smwEurope),
-      cdEntry('Chrono Trigger (USA).sfc', chronoUsa),
+      cdEntry('Crystal Vanguard (USA).sfc', crystalUsa),
     ]));
-    final byName = matcher.match('qualquer coisa.zip');
+    final byName = matcher.match('random thing.zip');
     expect(byName, isNull);
-    final out = await service.confirm(uri, 'qualquer coisa.zip', byName);
-    expect(out!.game.id, 'snes/chrono-trigger');
+    final out = await service.confirm(uri, 'random thing.zip', byName);
+    expect(out!.game.id, 'snes/crystal-vanguard');
     expect(out.tier, MatchTier.checksum);
-    expect(out.sourceName, 'qualquer coisa.zip');
+    expect(out.sourceName, 'random thing.zip');
   });
 }

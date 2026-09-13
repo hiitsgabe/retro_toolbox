@@ -19,9 +19,8 @@ class TaskQueueService {
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
-    // Por fonte, e não por console. Um console servido por um addon aberto e
-    // por um privado bloquearia o arquivo do aberto por causa da conta do
-    // privado, que é conta que aquele download não usa.
+    // Per source, not per console: an open addon's file must not be blocked by
+    // a private addon's account that the download does not use.
     for (final addonId in addonsThatNeedToken(games, await catalogService.sourcesFor(console.id))) {
       if ((await settingsNotifier.readAddonToken(addonId, console.id)).isEmpty) {
         return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
@@ -137,7 +136,7 @@ class TaskQueueService {
   static Future<void> _executeNszDecompressionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — nszDecompress manages its own queue-status updates.
+    // Fire and forget: nszDecompress manages its own queue-status updates.
     extractionNotifier.nszDecompress(
       taskId: task.params['taskId'] as String,
       nszFilePath: task.params['nszFilePath'] as String,
@@ -149,7 +148,7 @@ class TaskQueueService {
   static Future<void> _executeChdConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — chdConvert manages its own queue-status updates.
+    // Fire and forget: chdConvert manages its own queue-status updates.
     extractionNotifier.chdConvert(
       taskId: task.params['taskId'] as String,
       inputPath: task.params['inputPath'] as String,
@@ -161,7 +160,7 @@ class TaskQueueService {
   static Future<void> _executeCia3dsConversionTask(Ref ref, QueuedTask task, TaskQueueNotifier notifier) async {
     final extractionNotifier = ref.read(extractionProvider.notifier);
 
-    // Fire and forget — cia3dsConvert manages its own queue-status updates.
+    // Fire and forget: cia3dsConvert manages its own queue-status updates.
     extractionNotifier.cia3dsConvert(
       taskId: task.params['taskId'] as String,
       inputPath: task.params['inputPath'] as String,

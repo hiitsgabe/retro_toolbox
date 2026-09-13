@@ -20,86 +20,81 @@ import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 
 import 'support/favorites_stub.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
 PackGame _pg() => const PackGame(
-      id: 'snes/chrono-trigger',
-      title: 'Chrono Trigger',
-      dumps: [PackDump(name: 'Chrono Trigger (USA)')],
-      synopsis: 'Um garoto, uma feira e uma máquina do tempo.',
+      id: 'snes/crystal-vanguard',
+      title: 'Crystal Vanguard',
+      dumps: [PackDump(name: 'Crystal Vanguard (USA)')],
+      synopsis: 'A boy, a fair and a time machine.',
       genre: 'RPG',
       publisher: 'Square',
       year: 1995,
     );
 
-// Sem `cover` de propósito em todo teste: com URL, o `CachedNetworkImage`
-// tentaria rede dentro do teste.
-PackGridEntry _entrada({List<MatchedSource> fontes = const []}) =>
-    PackGridEntry(game: _pg(), sources: fontes);
+// No `cover` on purpose in every test: with a URL, `CachedNetworkImage` would
+// hit the network inside the test.
+PackGridEntry _entry({List<MatchedSource> sources = const []}) =>
+    PackGridEntry(game: _pg(), sources: sources);
 
-MatchedSource _fonte(
+MatchedSource _source(
   String filename, {
   int size = 4 * 1024 * 1024,
-  MatchConfidence confianca = MatchConfidence.likely,
-  String sourceId = 'listagem',
+  MatchConfidence confidence = MatchConfidence.likely,
+  String sourceId = 'listing',
 }) =>
     MatchedSource(
       filename: filename,
       sourceId: sourceId,
-      confidence: confianca,
+      confidence: confidence,
       size: size,
     );
 
 Game _game(String filename) => Game(
       title: filename,
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: 4 * 1024 * 1024,
       consoleId: 'snes',
     );
 
-// Função de topo, e não variável com lambda, por causa do lint
-// `prefer_function_declarations_over_variables`, que vem ligado no
-// `flutter_lints`.
-Game? _resolvePadrao(MatchedSource source) => _game(source.filename);
+// A top-level function, not a lambda variable, to satisfy
+// `prefer_function_declarations_over_variables`.
+Game? _resolveDefault(MatchedSource source) => _game(source.filename);
 
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   VoidCallback? onBatchDownload,
   GameResolver? resolver,
-  SourceVerification Function(String filename)? verificacao,
-  List<String> prioridade = const [],
-  Map<String, String> nomes = const {},
+  SourceVerification Function(String filename)? verification,
+  List<String> priority = const [],
+  Map<String, String> names = const {},
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packTargetProvider.overrideWithValue(_alvo),
+      withoutFavoritesDisk,
+      packTargetProvider.overrideWithValue(_target),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
-      gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
-      // Obrigatória, e não conveniência: sem ela o provider de verdade seria
-      // construído, e ele lê `addonProvider`, que abre `AddonStore` por
-      // `path_provider`. Num teste de widget sem plataforma isso lança
-      // `MissingPluginException` dentro de um `Future` que ninguém espera.
-      sourcePriorityProvider.overrideWithValue(prioridade),
-      addonNamesProvider.overrideWithValue(nomes),
-      // Sobrescrita da família inteira, que vale para qualquer argumento.
-      // Conferido que compila no Riverpod 2.6: `familia.overrideWith((ref,
-      // arg) => ...)`, sem parênteses de argumento antes do `overrideWith`.
-      sourceVerificationProvider.overrideWith((ref, pedido) {
-        final estado = verificacao?.call(pedido.filename) ?? SourceVerification.notVerified;
-        // `verifying` não é valor que o provider devolva: ele é o
-        // `AsyncLoading`. Um `Completer` que nunca completa segura a tela
-        // nesse estado sem deixar timer pendente no fim do teste.
-        if (estado == SourceVerification.verifying) {
+      gameResolverProvider.overrideWithValue(resolver ?? _resolveDefault),
+      // Required, not convenience: without it the real provider reads
+      // `addonProvider`, which opens `AddonStore` via `path_provider` and throws
+      // `MissingPluginException` in a widget test with no platform.
+      sourcePriorityProvider.overrideWithValue(priority),
+      addonNamesProvider.overrideWithValue(names),
+      sourceVerificationProvider.overrideWith((ref, request) {
+        final state = verification?.call(request.filename) ?? SourceVerification.notVerified;
+        // `verifying` is not a value the provider returns; it is `AsyncLoading`.
+        // A never-completing `Completer` holds the screen there without leaving
+        // a pending timer at the end of the test.
+        if (state == SourceVerification.verifying) {
           return Completer<SourceVerification>().future;
         }
-        return estado;
+        return state;
       }),
     ],
     child: MaterialApp(
       home: GameDetailScreen(
-        entry: entrada,
+        entry: entry,
         onDownload: onDownload ?? (_) {},
         onBatchDownload: onBatchDownload ?? () {},
       ),
@@ -108,56 +103,56 @@ Widget _host(
 }
 
 void main() {
-  testWidgets('mostra título, sistema, ano, publisher e gênero', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('shows title, system, year, publisher and genre', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
-    expect(find.text('Chrono Trigger'), findsWidgets);
+    expect(find.text('Crystal Vanguard'), findsWidgets);
     expect(find.text('Super Nintendo, 1995, Square, RPG'), findsOneWidget);
   });
 
-  testWidgets('mostra a sinopse', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('shows the synopsis', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
-    expect(find.text('Um garoto, uma feira e uma máquina do tempo.'), findsOneWidget);
+    expect(find.text('A boy, a fair and a time machine.'), findsOneWidget);
   });
 
-  testWidgets('o card de destaque traz arquivo, tamanho e motivo', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('the highlight card carries file, size and reason', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    expect(find.text('Chrono Trigger (USA).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem'), findsOneWidget);
-    // O motivo é obrigatório, não decorativo (seção 7).
-    expect(find.text('escolhido pela sua região preferida (USA)'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (USA).zip'), findsOneWidget);
+    expect(find.text('4.0 MB, listing'), findsOneWidget);
+    // The reason is required, not decorative.
+    expect(find.text('chosen by your preferred region (USA)'), findsOneWidget);
   });
 
-  testWidgets('o botão Baixar devolve a escolha inteira', (tester) async {
-    final baixados = <String>[];
+  testWidgets('the Download button returns the whole pick', (tester) async {
+    final downloaded = <String>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      onDownload: (pick) => baixados.add(pick.game.filename),
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
+      onDownload: (pick) => downloaded.add(pick.game.filename),
     ));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Baixar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
     await tester.pump();
 
-    // O `Game` que sai do callback é o que a fila entende, não um sintético.
-    expect(baixados, ['Chrono Trigger (USA).zip']);
+    // The `Game` from the callback is the one the queue understands, not a synthetic.
+    expect(downloaded, ['Crystal Vanguard (USA).zip']);
   });
 
-  testWidgets('sem fonte a tela abre inteira e sem card de destaque', (tester) async {
-    await tester.pumpWidget(_host(_entrada()));
+  testWidgets('with no source the screen still opens without a highlight card', (tester) async {
+    await tester.pumpWidget(_host(_entry()));
 
-    // Os 3% da seção 3.1: o jogo continua existindo e continua favoritável.
-    expect(find.text('Um garoto, uma feira e uma máquina do tempo.'), findsOneWidget);
+    // The game still exists and is still favoritable.
+    expect(find.text('A boy, a fair and a time machine.'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('o coração alterna o favorito', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('the heart toggles the favorite', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     await tester.tap(find.byIcon(Icons.favorite_border));
@@ -166,23 +161,23 @@ void main() {
     expect(find.byIcon(Icons.favorite), findsOneWidget);
   });
 
-  testWidgets('o checkbox alterna a seleção pela chave de pack', (tester) async {
-    late WidgetRef capturado;
+  testWidgets('the checkbox toggles selection by pack key', (tester) async {
+    late WidgetRef captured;
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        semDiscoDeFavoritos,
-        packTargetProvider.overrideWithValue(_alvo),
+        withoutFavoritesDisk,
+        packTargetProvider.overrideWithValue(_target),
         preferredRegionsProvider.overrideWithValue(const {'USA'}),
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
-        sourceVerificationProvider.overrideWith((ref, pedido) => SourceVerification.notVerified),
+        sourceVerificationProvider.overrideWith((ref, request) => SourceVerification.notVerified),
         sourcePriorityProvider.overrideWithValue(const []),
         addonNamesProvider.overrideWithValue(const {}),
       ],
       child: MaterialApp(
         home: Consumer(builder: (context, ref, _) {
-          capturado = ref;
+          captured = ref;
           return GameDetailScreen(
-            entry: _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+            entry: _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
             onDownload: (_) {},
             onBatchDownload: () {},
           );
@@ -194,316 +189,310 @@ void main() {
     await tester.pump();
 
     expect(
-      capturado.read(catalogProvider).selectedGames,
-      contains('pack:snes/chrono-trigger'),
+      captured.read(catalogProvider).selectedGames,
+      contains('pack:snes/crystal-vanguard'),
     );
   });
 
-  testWidgets('sem fonte, a faixa diz por que não há de onde baixar', (tester) async {
-    await tester.pumpWidget(_host(_entrada()));
+  testWidgets('with no source, the band says why there is nothing to download', (tester) async {
+    await tester.pumpWidget(_host(_entry()));
 
-    // A mesma string que a folha de lote mostra para o mesmo jogo. Se você
-    // acabou de escrever um texto novo aqui, ele já existe em
-    // `source_pick_service.dart` e tem que sair de lá.
-    expect(find.text('nenhuma fonte instalada tem este jogo'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    // The same string the batch sheet shows for the same game: it comes from
+    // `source_pick_service.dart`, do not write a new one here.
+    expect(find.text('no installed source has this game'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('quando a fonte não resolve, a faixa usa o outro motivo', (tester) async {
+  testWidgets('when the source does not resolve, the band uses the other reason', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
       resolver: (_) => null,
     ));
 
-    expect(find.text('a fonte saiu da listagem antes de a fila começar'), findsOneWidget);
+    expect(find.text('the source left the listing before the queue started'), findsOneWidget);
   });
 
-  testWidgets('sem pick, a fonte que não resolveu ainda aparece na lista', (tester) async {
+  testWidgets('with no pick, the unresolved source still appears in the list', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
       resolver: (_) => null,
     ));
 
-    // Nada foi escolhido, então nenhuma fonte é "a outra". Mesmo assim a
-    // lista abre: esconder o que existe deixaria a faixa parecendo mentira.
-    expect(find.text('outra fonte'), findsOneWidget);
+    // Nothing was picked, so no source is "the other". The list still opens:
+    // hiding what exists would make the band look like a lie.
+    expect(find.text('other source'), findsOneWidget);
   });
 
-  testWidgets('com uma fonte só, não existe lista de outras fontes', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('with a single source there is no other-sources list', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
-    // Este teste passa antes e depois da implementação. Ele não é uma trava
-    // de implementação, é uma trava contra a lista aparecer vazia depois.
+    // A guard against the list showing up empty, not an implementation lock.
     expect(find.byType(ExpansionTile), findsNothing);
   });
 
-  testWidgets('com três fontes, o contador diz outras 2 fontes', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
-      _fonte('Chrono Trigger (Europe).zip'),
+  testWidgets('with three sources, the counter says 2 other sources', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
+      _source('Crystal Vanguard (Europe).zip'),
     ])));
 
-    expect(find.text('outras 2 fontes'), findsOneWidget);
+    expect(find.text('2 other sources'), findsOneWidget);
   });
 
-  testWidgets('com duas fontes, o contador vai no singular', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('with two sources, the counter is singular', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    // "outras 1 fontes" seria o texto que sai de um contador escrito sem
-    // pensar, e o spec de UI escreve contadores em português.
-    expect(find.text('outra fonte'), findsOneWidget);
+    // Guards against a naive counter emitting "1 other sources".
+    expect(find.text('other source'), findsOneWidget);
   });
 
-  testWidgets('a lista começa fechada', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('the list starts collapsed', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    expect(find.text('outra fonte'), findsOneWidget);
-    expect(find.text('Chrono Trigger (Japan).zip'), findsNothing);
+    expect(find.text('other source'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsNothing);
   });
 
-  testWidgets('expandida, cada linha traz arquivo, tamanho, addon, tipo e confiança', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('expanded, each row carries file, size, addon, type and confidence', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, HTTP, casamento provável'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, HTTP, likely match'), findsOneWidget);
   });
 
-  testWidgets('a linha de palpite mostra o casamento no chute', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (USA).zip'),
-      _fonte('Chrono Trigger (Japan).zip', confianca: MatchConfidence.guess),
+  testWidgets('the guess row shows a guessed match', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (USA).zip'),
+      _source('Crystal Vanguard (Japan).zip', confidence: MatchConfidence.guess),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    // É a confiança do casamento, não o CRC. Ver a "Segunda decisão travada".
-    expect(find.text('4.0 MB, listagem, HTTP, casamento no chute'), findsOneWidget);
+    // Match confidence, not CRC.
+    expect(find.text('4.0 MB, listing, HTTP, guessed match'), findsOneWidget);
   });
 
-  testWidgets('duas fontes idênticas: a escolhida sai da lista uma vez só', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (USA).zip', size: 10),
-      _fonte('Chrono Trigger (USA).zip', size: 20),
+  testWidgets('two identical sources: the pick leaves the list only once', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[
+      _source('Crystal Vanguard (USA).zip', size: 10),
+      _source('Crystal Vanguard (USA).zip', size: 20),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    // A de 10 bytes venceu pelo desempate de ordem (Task 14). Se a lista
-    // tirasse todas as fontes de mesmo nome, a de 20 sumiria junto e o
-    // usuário perderia uma fonte real de vista.
-    expect(find.text('10.0 B, listagem'), findsOneWidget);
-    expect(find.text('20.0 B, listagem, HTTP, casamento provável'), findsOneWidget);
+    // The 10-byte one won on the order tiebreak. Removing every same-named
+    // source would drop the 20-byte one too and hide a real source.
+    expect(find.text('10.0 B, listing'), findsOneWidget);
+    expect(find.text('20.0 B, listing, HTTP, likely match'), findsOneWidget);
   });
 
-  testWidgets('o card de destaque marca o tipo da fonte', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('the highlight card marks the source type', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
-    // O `HTTP` do canto direito do mockup da seção 7. Com uma fonte só não há
-    // lista, então este é o único `HTTP` da tela.
+    // With a single source there is no list, so this is the only `HTTP` on screen.
     expect(find.text('HTTP'), findsOneWidget);
   });
 
-  testWidgets('enquanto verifica, o botão diz Baixar mesmo assim', (tester) async {
+  testWidgets('while verifying, the button says Download anyway', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      verificacao: (_) => SourceVerification.verifying,
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
+      verification: (_) => SourceVerification.verifying,
     ));
 
-    expect(find.widgetWithText(FilledButton, 'Baixar mesmo assim'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, verificando'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download anyway'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, verifying'), findsOneWidget);
   });
 
-  testWidgets('CRC ok troca o motivo pelo motivo do CRC', (tester) async {
+  testWidgets('CRC ok swaps the reason for the CRC reason', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      verificacao: (_) => SourceVerification.crcOk,
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
+      verification: (_) => SourceVerification.crcOk,
     ));
 
-    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, CRC ok'), findsOneWidget);
-    // Com certeza dada, o botão não hesita.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
+    expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, CRC ok'), findsOneWidget);
+    // With certainty given, the button does not hesitate.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
 
-  testWidgets('a fonte descartada sai do destaque e a outra sobe', (tester) async {
+  testWidgets('the discarded source leaves the highlight and the other rises', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcDiscarded
           : SourceVerification.crcOk,
     ));
 
-    // Por nome, a USA ganharia pela região preferida. O CRC desmentiu, e o
-    // destaque trocou de arquivo. É o ponto inteiro da seção 8.
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    expect(find.text('outra fonte, 1 descartada'), findsOneWidget);
+    // By name, USA would win on preferred region. CRC overruled it and the
+    // highlight switched file.
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    expect(find.text('other source, 1 discarded'), findsOneWidget);
   });
 
-  testWidgets('a linha descartada aparece marcada', (tester) async {
+  testWidgets('the discarded row shows up flagged', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcDiscarded
           : SourceVerification.crcOk,
     ));
 
-    await tester.tap(find.text('outra fonte, 1 descartada'));
+    await tester.tap(find.text('other source, 1 discarded'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('4.0 MB, listagem, HTTP, casamento provável, descartada pelo CRC'),
+      find.text('4.0 MB, listing, HTTP, likely match, discarded by CRC'),
       findsOneWidget,
     );
   });
 
-  testWidgets('com uma confirmada, a que ainda verifica não faz o botão hesitar', (tester) async {
+  testWidgets('with one confirmed, a still-verifying source does not make the button hesitate', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.verifying
           : SourceVerification.crcOk,
     ));
 
-    // A leitura que ainda roda é de uma fonte que já perdeu, então ela não
-    // pode mais mudar o destaque.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
-    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
+    // The still-running read is of a source that already lost, so it can no
+    // longer change the highlight.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
+    expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
   });
 
-  testWidgets('nenhuma verificável: o card diz que não tem certeza de nenhuma', (tester) async {
+  testWidgets('none verifiable: the card says it is not sure about any', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.impossible,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    expect(find.text('não tenho certeza de nenhuma'), findsOneWidget);
-    // Nada em destaque significa nada de motivo de escolha por nome.
-    expect(find.text('escolhido pela sua região preferida (USA)'), findsNothing);
+    expect(find.text('not sure about any of them'), findsOneWidget);
+    // Nothing highlighted means no name-based pick reason.
+    expect(find.text('chosen by your preferred region (USA)'), findsNothing);
   });
 
-  testWidgets('nesse estado a lista já abre e cada linha tem o seu Baixar', (tester) async {
+  testWidgets('in that state the list opens and each row has its own Download', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.impossible,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    // Sem tap nenhum: a lista nasce aberta.
-    expect(find.text('Chrono Trigger (USA).zip'), findsOneWidget);
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    // Dois botões, e nenhum terceiro: não há card de destaque.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNWidgets(2));
+    // No tap: the list is born open.
+    expect(find.text('Crystal Vanguard (USA).zip'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    // Two buttons, no third: there is no highlight card.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNWidgets(2));
   });
 
-  testWidgets('o Baixar da linha devolve aquela fonte, marcada como incerta', (tester) async {
-    final baixados = <SourcePick>[];
+  testWidgets('the row Download returns that source, flagged uncertain', (tester) async {
+    final downloaded = <SourcePick>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      onDownload: baixados.add,
-      verificacao: (_) => SourceVerification.impossible,
+      onDownload: downloaded.add,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Baixar').first);
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
     await tester.pump();
 
-    expect(baixados.single.filename, 'Chrono Trigger (USA).zip');
-    expect(baixados.single.uncertain, isTrue);
+    expect(downloaded.single.filename, 'Crystal Vanguard (USA).zip');
+    expect(downloaded.single.uncertain, isTrue);
   });
 
-  testWidgets('todas descartadas: a faixa diz que nenhuma passou', (tester) async {
+  testWidgets('all discarded: the band says none passed', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.crcDiscarded,
+      verification: (_) => SourceVerification.crcDiscarded,
     ));
 
-    expect(find.text('nenhuma fonte passou na verificação por CRC'), findsOneWidget);
-    expect(find.text('outras 2 fontes, 2 descartadas'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    expect(find.text('no source passed CRC verification'), findsOneWidget);
+    expect(find.text('2 other sources, 2 discarded'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('a fonte impossível de verificar diz isso na linha', (tester) async {
+  testWidgets('the unverifiable source says so on its row', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcOk
           : SourceVerification.impossible,
     ));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('4.0 MB, listagem, HTTP, casamento provável, sem como verificar'),
+      find.text('4.0 MB, listing, HTTP, likely match, cannot verify'),
       findsOneWidget,
     );
   });
 
-  testWidgets('sem seleção a tela de detalhe não mostra barra', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('with no selection the detail screen shows no bar', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
-    // A `SelectionBar` está sempre montada e se encolhe até zero quando a
-    // seleção está vazia (Task 2). Por isso o teste mede a altura em vez de
-    // procurar o widget.
+    // The `SelectionBar` is always mounted and shrinks to zero when the
+    // selection is empty, so the test measures height instead of finding it.
     expect(tester.getSize(find.byType(SelectionBar)).height, 0);
   });
 
-  testWidgets('marcar pelo checkbox faz a barra aparecer com a contagem', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('checking the checkbox makes the bar appear with the count', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources:[_source('Crystal Vanguard (USA).zip')])));
 
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    expect(find.text('1 selecionado'), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
     expect(tester.getSize(find.byType(SelectionBar)).height, greaterThan(0));
   });
 
-  testWidgets('o Baixar da barra é o do lote, não o do destaque', (tester) async {
-    // Os dois botões dizem "Baixar" e fazem coisas diferentes: o do card
-    // enfileira este jogo, o da barra abre a folha do lote. Trocar um pelo
-    // outro é o erro que este teste tranca.
-    final chamados = <String>[];
+  testWidgets('the bar Download is the batch one, not the highlight one', (tester) async {
+    // Both buttons say "Download" and do different things: the card one queues
+    // this game, the bar one opens the batch sheet. Swapping them is the bug
+    // this test locks.
+    final called = <String>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      onDownload: (_) => chamados.add('destaque'),
-      onBatchDownload: () => chamados.add('lote'),
+      _entry(sources:[_source('Crystal Vanguard (USA).zip')]),
+      onDownload: (_) => called.add('highlight'),
+      onBatchDownload: () => called.add('batch'),
     ));
 
     await tester.tap(find.byType(Checkbox));
@@ -511,92 +500,90 @@ void main() {
 
     await tester.tap(find.descendant(
       of: find.byType(SelectionBar),
-      matching: find.text('Baixar'),
+      matching: find.text('Download'),
     ));
     await tester.pump();
 
-    expect(chamados, ['lote']);
+    expect(called, ['batch']);
   });
 
-  testWidgets('a prioridade do usuário decide o destaque entre fontes empatadas', (tester) async {
-    // Mesmo nome de arquivo nas duas, então região, revisão e confiança
-    // empatam e sobra só o eixo de addon. O `size` difere porque ele não
-    // entra no desempate e serve de observável: é ele que diz qual das duas
-    // ganhou, e não só o que o motivo escreveu.
+  testWidgets('the user priority decides the highlight between tied sources', (tester) async {
+    // Same filename on both, so region, revision and confidence tie and only
+    // the addon axis remains. `size` differs as an observable of which one won.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
       ]),
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     ));
 
-    // Pela ordem de chegada venceria a de 10 bytes. Venceu a de 20.
-    expect(find.text('20.0 B, rapido'), findsOneWidget);
+    // By arrival order the 10-byte one would win. The 20-byte one won.
+    expect(find.text('20.0 B, fast'), findsOneWidget);
   });
 
-  testWidgets('invertida a ordem dos addons, o destaque troca', (tester) async {
-    // O par do caso acima, com a ordem de chegada invertida junto com a
-    // prioridade. Os dois juntos são o que separa "a tela passa a lista do
-    // usuário" de "a tela passa uma lista qualquer que por sorte acertou".
+  testWidgets('reversing addon order swaps the highlight', (tester) async {
+    // The pair of the case above, with arrival order reversed alongside
+    // priority: together they separate "the screen passes the user's list" from
+    // "the screen passes any list that happened to be right".
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
       ]),
-      prioridade: const ['lento', 'rapido'],
+      priority: const ['slow', 'fast'],
     ));
 
-    expect(find.text('10.0 B, lento'), findsOneWidget);
+    expect(find.text('10.0 B, slow'), findsOneWidget);
   });
 
-  testWidgets('sem addon na lista, o desempate volta para a ordem de chegada', (tester) async {
-    // O estado de um usuário que removeu todos os addons e ficou só com o
-    // cache. Lista vazia não pode virar exceção nem sumir com o destaque.
+  testWidgets('with no addon in the list, the tiebreak falls back to arrival order', (tester) async {
+    // A user who removed every addon and kept only the cache. An empty list
+    // must not throw nor drop the highlight.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
       ]),
-      prioridade: const [],
+      priority: const [],
     ));
 
-    expect(find.text('10.0 B, lento'), findsOneWidget);
+    expect(find.text('10.0 B, slow'), findsOneWidget);
   });
 
-  testWidgets('o destaque mostra o nome do addon, não o id', (tester) async {
+  testWidgets('the highlight shows the addon name, not the id', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'myrient_org_files')]),
-      nomes: const {'myrient_org_files': 'Myrient'},
+      _entry(sources:[_source('Crystal Vanguard (USA).zip', sourceId: 'myrient_org_files')]),
+      names: const {'myrient_org_files': 'Myrient'},
     ));
 
     expect(find.text('4.0 MB, Myrient'), findsOneWidget);
   });
 
-  testWidgets('a lista de outras fontes também mostra o nome', (tester) async {
+  testWidgets('the other-sources list also shows the name', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'myrient_org_files'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'arquivo_do_fulano'),
+      _entry(sources:[
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'myrient_org_files'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'someones_archive'),
       ]),
-      nomes: const {'myrient_org_files': 'Myrient', 'arquivo_do_fulano': 'Arquivo do Fulano'},
+      names: const {'myrient_org_files': 'Myrient', 'someones_archive': "Someone's Files"},
     ));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    expect(find.text('20.0 B, Arquivo do Fulano, HTTP, casamento provável'), findsOneWidget);
+    expect(find.text("20.0 B, Someone's Files, HTTP, likely match"), findsOneWidget);
   });
 
-  testWidgets('addon que não está mais na lista cai no id, e não em branco', (tester) async {
-    // O usuário removeu o addon e o cache de jogo dele ainda está em disco.
-    // A informação vira ruim, e tem que continuar existindo: "4.0 MB, " com
-    // a vírgula pendurada é pior que um id feio.
+  testWidgets('an addon no longer in the list falls back to the id, not blank', (tester) async {
+    // The user removed the addon and its game cache is still on disk. The info
+    // goes stale and must still exist: "4.0 MB, " with a dangling comma is worse
+    // than an ugly id.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'addon_removido')]),
-      nomes: const {},
+      _entry(sources:[_source('Crystal Vanguard (USA).zip', sourceId: 'addon_removed')]),
+      names: const {},
     ));
 
-    expect(find.text('4.0 MB, addon_removido'), findsOneWidget);
+    expect(find.text('4.0 MB, addon_removed'), findsOneWidget);
   });
 }

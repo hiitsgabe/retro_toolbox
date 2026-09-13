@@ -30,94 +30,86 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  /// O plano do lote, pelo modo corrente.
-  ///
-  /// Os dois ramos devolvem o mesmo tipo e caem na mesma folha, no mesmo
-  /// enfileiramento e na mesma limpeza de seleção. Se você se pegar
-  /// escrevendo um segundo `showModalBottomSheet` aqui, parou no lugar
-  /// errado: o que varia entre os modos é só como o `BatchPlan` nasce.
-  BatchPlan _planoDaSelecao(Set<String> selecionadas) {
+  /// The batch plan for the current mode. Both branches return the same type
+  /// and fall into the same sheet, queue and clear; only how the `BatchPlan` is
+  /// built varies between modes.
+  BatchPlan _selectionPlan(Set<String> selected) {
     if (ref.read(gridModeProvider) == GridMode.pack) {
-      // A regra da seção 6, a mesma que escolhe o destaque da tela de
-      // detalhe. `allPackEntriesProvider` e não `packGridEntriesProvider`:
-      // ver o Problema 1 no topo desta Task.
+      // `allPackEntriesProvider`, not `packGridEntriesProvider`: the batch acts
+      // on the whole selection, not just the filtered grid.
       return planFromEntries(
-        entriesForSelection(ref.read(allPackEntriesProvider), selecionadas),
+        entriesForSelection(ref.read(allPackEntriesProvider), selected),
         preferredRegions: ref.read(preferredRegionsProvider),
         resolveGame: ref.read(gameResolverProvider),
         sourcePriority: ref.read(sourcePriorityProvider),
       );
     }
-    // MODO FONTE: cada chave já é um arquivo, nada a escolher.
+    // SOURCE MODE: each key is already a file, nothing to pick.
     final games = ref.read(catalogProvider).games;
-    return planFromGames(games.where((game) => selecionadas.contains(game.gameId)).toList());
+    return planFromGames(games.where((game) => selected.contains(game.gameId)).toList());
   }
 
-  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
-  Future<void> _confirmarLote(Set<String> selecionadas) async {
-    var plano = _planoDaSelecao(selecionadas);
-    // Um plano só de falhas **não** é vazio: a folha abre para dizer por que
-    // nada vai ser baixado. Ver `BatchPlan.isEmpty`, na Task 4.
-    if (plano.isEmpty) return;
+  /// Opens the confirmation sheet, and only queues what comes back from it.
+  Future<void> _confirmBatch(Set<String> selected) async {
+    var plan = _selectionPlan(selected);
+    // A failures-only plan is not empty: the sheet opens to explain why nothing
+    // will be downloaded.
+    if (plan.isEmpty) return;
 
-    final confirmado = await showModalBottomSheet<BatchPlan>(
+    final confirmed = await showModalBottomSheet<BatchPlan>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (_, setSheetState) => BatchConfirmSheet(
-          plan: plano,
+          plan: plan,
           onConfirm: (p) => Navigator.of(sheetContext).pop(p),
-          onRemove: (gameId) => setSheetState(() => plano = plano.withoutPick(gameId)),
+          onRemove: (gameId) => setSheetState(() => plan = plan.withoutPick(gameId)),
         ),
       ),
     );
-    if (confirmado == null || !mounted) return;
+    if (confirmed == null || !mounted) return;
 
     await TaskQueueService.startDownloads(
       ref,
       context,
-      confirmado.picks.map((pick) => pick.game).toList(),
+      confirmed.picks.map((pick) => pick.game).toList(),
       ref.read(appStateProvider).selectedConsole?.id,
     );
     if (!mounted) return;
     ref.read(catalogProvider.notifier).clearSelection();
   }
 
-  /// Empurra a tela de detalhe.
+  /// Pushes the detail screen.
   ///
-  /// A grade não navega (Task 12) e a tela não conhece a fila (Task 15). Os
-  /// dois cabos soltos se encontram aqui, e é o único lugar em que se
-  /// encontram.
-  void _abrirDetalhe(PackGridEntry entry) {
+  /// The grid does not navigate and the screen does not know the queue; the two
+  /// loose ends meet here, and only here.
+  void _openDetail(PackGridEntry entry) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => GameDetailScreen(
         entry: entry,
-        onDownload: _baixarUm,
-        onBatchDownload: () => _confirmarLote(_selecaoDoModo),
+        onDownload: _downloadOne,
+        onBatchDownload: () => _confirmBatch(_modeSelection),
       ),
     ));
   }
 
-  /// A seleção do modo corrente, lida na hora do toque.
+  /// The current mode's selection, read at tap time.
   ///
-  /// O `build` calcula a mesma coisa para a contagem da barra, mas o lote lê
-  /// aqui, e não daquele valor, porque a folha pode ser aberta pela tela de
-  /// detalhe, que fica **em cima** desta. Ler no momento do toque tira a
-  /// pergunta "aquele valor ainda é o de agora" do caminho.
-  Set<String> get _selecaoDoModo => selectionKeysFor(
+  /// `build` computes the same thing for the bar count, but the batch reads
+  /// here because the sheet can be opened from the detail screen sitting on top
+  /// of this one.
+  Set<String> get _modeSelection => selectionKeysFor(
         ref.read(catalogProvider).selectedGames,
         pack: ref.read(gridModeProvider) == GridMode.pack,
       );
 
-  /// Uma escolha só, vinda da tela de detalhe, vai direto para a fila.
+  /// A single pick from the detail screen goes straight to the queue.
   ///
-  /// Sem folha de confirmação, e isso é decisão, não esquecimento: a tela de
-  /// detalhe **é** a confirmação. Ela já mostra o arquivo escolhido, o
-  /// tamanho, o motivo por extenso e o veredito do CRC. Abrir por cima disso
-  /// uma folha de lote de um item só seria perguntar duas vezes a mesma
-  /// coisa. A folha existe para o lote, onde o usuário não viu escolha
-  /// nenhuma antes de apertar Baixar.
-  Future<void> _baixarUm(SourcePick pick) async {
+  /// No confirmation sheet, and that is a decision, not an oversight: the detail
+  /// screen is the confirmation. It already shows the chosen file, its size, the
+  /// full reason and the CRC verdict. The sheet exists for the batch, where the
+  /// user saw no pick before pressing Download.
+  Future<void> _downloadOne(SourcePick pick) async {
     await TaskQueueService.startDownloads(
       ref,
       context,
@@ -133,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
     final gridMode = ref.watch(gridModeProvider);
-    final selecionadas = selectionKeysFor(
+    final selected = selectionKeysFor(
       ref.watch(catalogProvider.select((s) => s.selectedGames)),
       pack: gridMode == GridMode.pack,
     );
@@ -200,7 +192,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       )
                     : switch (gridMode) {
-                        GridMode.pack => PackGrid(onOpenGame: _abrirDetalhe),
+                        GridMode.pack => PackGrid(onOpenGame: _openDetail),
                         GridMode.source => switch (appState.viewMode) {
                             ViewMode.grid => GameGrid(),
                             ViewMode.coverflow => const GameCoverFlow(),
@@ -209,9 +201,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       },
           ),
           SelectionBar(
-            count: selecionadas.length,
+            count: selected.length,
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: () => _confirmarLote(_selecaoDoModo),
+            onDownload: () => _confirmBatch(_modeSelection),
           ),
           Footer(),
         ],

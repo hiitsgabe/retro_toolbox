@@ -26,12 +26,9 @@ import 'package:roms_downloader/screens/rts_server_screen.dart';
 import 'package:roms_downloader/screens/fbi_server_screen.dart';
 import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
 
-/// As tiles de Tools, fora do `build` para terem teste.
-///
-/// [push] entra por parâmetro porque a navegação de dentro do `MenuScreen`
-/// depende do `context` dele, e um teste que precisasse desse context teria
-/// que montar a tela inteira, com fila de tarefas e tudo.
-List<MenuTile> toolsTiles(void Function(Widget tela) push) => [
+/// The Tools tiles, kept outside `build` so they can be tested. [push] is a
+/// parameter because navigation depends on the `MenuScreen` context.
+List<MenuTile> toolsTiles(void Function(Widget screen) push) => [
       MenuTile(label: 'Addons', icon: Icons.extension, accentColor: const Color(0xFF2E7D5B), onTap: () => push(const AddonsScreen())),
       MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => push(const NszDecompressScreen())),
       MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => push(SteamShortcutScreen())),

@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 
-/// A folha de confirmação da seção 6 do spec de UI.
-///
-/// Widget puro: recebe o plano e dois callbacks. Quem abre em
-/// `showModalBottomSheet` e quem enfileira é o chamador.
+/// The batch confirmation sheet.
 class BatchConfirmSheet extends StatelessWidget {
   final BatchPlan plan;
   final ValueChanged<BatchPlan> onConfirm;
 
-  /// Recebe o `gameId` da linha a tirar do lote. O chamador é quem guarda o
-  /// plano corrente e aplica `plan.withoutPick`.
+  /// Receives the `gameId` of the row to drop from the batch.
   final ValueChanged<String> onRemove;
 
   const BatchConfirmSheet({
@@ -25,7 +21,7 @@ class BatchConfirmSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final n = plan.picks.length;
-    final cabecalho = '$n ${n == 1 ? 'jogo' : 'jogos'}, ${formatBytes(plan.totalBytes)}';
+    final header = '$n ${n == 1 ? 'game' : 'games'}, ${formatBytes(plan.totalBytes)}';
 
     return SafeArea(
       child: Column(
@@ -37,13 +33,13 @@ class BatchConfirmSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    cabecalho,
+                    header,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (plan.uncertainCount > 0)
                   Text(
-                    '${plan.uncertainCount} incerto${plan.uncertainCount == 1 ? '' : 's'}',
+                    '${plan.uncertainCount} uncertain',
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                   ),
               ],
@@ -56,15 +52,13 @@ class BatchConfirmSheet extends StatelessWidget {
                 for (final pick in plan.picks)
                   ListTile(
                     dense: true,
-                    // O selo de incerteza da seção 6. Ele mora AQUI e não no
-                    // tile da grade: ver "Armadilha de leitura" no topo.
                     leading: pick.uncertain ? const Icon(Icons.help_outline, size: 20) : null,
                     title: Text(pick.filename, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text(pick.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
                     trailing: IconButton(
                       key: ValueKey('remove-${pick.gameId}'),
                       icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Tirar do lote',
+                      tooltip: 'Remove from batch',
                       onPressed: () => onRemove(pick.gameId),
                     ),
                   ),
@@ -73,7 +67,7 @@ class BatchConfirmSheet extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Text(
-                      'Não vão para a fila',
+                      'Not going to the queue',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -81,12 +75,12 @@ class BatchConfirmSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final falha in plan.failures)
+                  for (final failure in plan.failures)
                     ListTile(
                       dense: true,
                       leading: Icon(Icons.cloud_off_rounded, size: 20, color: scheme.onSurfaceVariant),
-                      title: Text(falha.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(falha.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(failure.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(failure.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
                     ),
                 ],
               ],
@@ -98,14 +92,14 @@ class BatchConfirmSheet extends StatelessWidget {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).maybePop(),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancel'),
                 ),
                 const Spacer(),
                 FilledButton(
-                  // Sem nada escolhido não há o que enfileirar, mas a folha
-                  // continua aberta para mostrar os motivos das falhas.
+                  // With nothing picked there is nothing to queue, but the
+                  // sheet stays open to show the failure reasons.
                   onPressed: plan.picks.isEmpty ? null : () => onConfirm(plan),
-                  child: const Text('Baixar'),
+                  child: const Text('Download'),
                 ),
               ],
             ),

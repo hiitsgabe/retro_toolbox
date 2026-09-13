@@ -6,13 +6,10 @@ import 'package:roms_downloader/providers/owned_games_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
-/// A grade de MODO PACK: um tile por jogo do pacote.
-///
-/// Não substitui `GameGrid`, convive com ela. Quem escolhe qual das duas
-/// desenhar é o `HomeScreen`, pelo `gridModeProvider` (Task 19).
+/// The PACK MODE grid: one tile per game in the pack.
 class PackGrid extends ConsumerWidget {
-  /// Chamado no toque curto de um tile. A grade não conhece `Navigator`: quem
-  /// empurra a rota do detalhe é o `HomeScreen`.
+  /// Called on a short tap of a tile. The grid does not know `Navigator`:
+  /// `HomeScreen` pushes the detail route.
   final void Function(PackGridEntry entry) onOpenGame;
 
   const PackGrid({super.key, required this.onOpenGame});
@@ -22,35 +19,28 @@ class PackGrid extends ConsumerWidget {
     final entries = ref.watch(packGridEntriesProvider);
     final index = ref.watch(sourceIndexProvider);
     final selected = ref.watch(catalogProvider.select((s) => s.selectedGames));
-    // A varredura da biblioteca (Task 13). `valueOrNull` é o que entrega a
-    // regra da seção 3.1 de graça: enquanto ela não resolve, o conjunto é
-    // vazio e nenhum tile ganha borda.
+    // While the library scan is unresolved the set is empty and no tile gets a
+    // border.
     final owned = ref.watch(ownedGameIdsProvider).valueOrNull ?? const <String>{};
     final catalogNotifier = ref.read(catalogProvider.notifier);
 
-    // Seção 4 do spec de UI: a visibilidade do checkbox é global e depende só
-    // de haver seleção em curso. Com seleção vazia, capa limpa em todo tile.
     final selectionActive = selected.isNotEmpty;
 
-    // Seção 3.2. Nesta fatia "nenhuma fonte" quer dizer "a listagem deste
-    // console não casou com nenhum jogo do pacote". Na fatia 4 a condição
-    // passa a ser "nenhum addon instalado cobre este console" e o texto fica.
-    final semCobertura = (index?.matchedGameCount ?? 0) == 0;
+    final noCoverage = (index?.matchedGameCount ?? 0) == 0;
 
     return Column(
       children: [
-        if (semCobertura) const _SemCoberturaBanner(),
+        if (noCoverage) const _NoCoverageBanner(),
         Expanded(
           child: entries.isEmpty
-              ? const _VazioDeBusca()
+              ? const _SearchEmpty()
               : Padding(
                   padding: const EdgeInsets.fromLTRB(6, 6, 6, 3),
                   child: GridView.builder(
                     padding: EdgeInsets.zero,
-                    // Proporção fixa, ao contrário de `GameGrid`, que mede a
-                    // primeira capa da listagem. As capas do pacote vêm todas
-                    // da mesma origem e já são consistentes, então medir seria
-                    // um round-trip de imagem por troca de console, de graça.
+                    // Fixed aspect ratio: pack covers share one origin and are
+                    // already consistent, so measuring the first one would cost
+                    // an image round-trip per console switch for nothing.
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: 180,
                       childAspectRatio: 0.75,
@@ -81,8 +71,8 @@ class PackGrid extends ConsumerWidget {
   }
 }
 
-class _SemCoberturaBanner extends StatelessWidget {
-  const _SemCoberturaBanner();
+class _NoCoverageBanner extends StatelessWidget {
+  const _NoCoverageBanner();
 
   @override
   Widget build(BuildContext context) {
@@ -101,11 +91,11 @@ class _SemCoberturaBanner extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Nenhuma fonte cobre este console',
+                  'No source covers this console',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  'Os jogos aparecem para consulta, mas não há nada para baixar.',
+                  'Games show up for browsing, but there is nothing to download.',
                   style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ],
@@ -117,14 +107,14 @@ class _SemCoberturaBanner extends StatelessWidget {
   }
 }
 
-class _VazioDeBusca extends StatelessWidget {
-  const _VazioDeBusca();
+class _SearchEmpty extends StatelessWidget {
+  const _SearchEmpty();
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        'Nenhum jogo com esse nome',
+        'No game with that name',
         style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );

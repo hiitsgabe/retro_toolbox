@@ -2,30 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
-// `coverUrl` fica nulo em todo teste de propósito: com URL, o
-// `CachedNetworkImage` tentaria rede dentro do teste. A capa é coberta à mão.
+// `coverUrl` is null in every test on purpose: with a URL, CachedNetworkImage
+// would hit the network inside the test.
 Widget _host(
   Widget child, {
-  double largura = 200,
+  double width = 200,
 }) =>
-    MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: largura, child: child))));
+    MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: width, child: child))));
 
 void main() {
-  testWidgets('mostra o título do jogo', (tester) async {
+  testWidgets('shows the game title', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
       onToggleSelection: () {},
     )));
 
-    expect(find.text('Chrono Trigger'), findsOneWidget);
+    expect(find.text('Crystal Vanguard'), findsOneWidget);
   });
 
-  testWidgets('sem fonte ganha a marca de nuvem cortada', (tester) async {
+  testWidgets('a sourceless tile gets the cloud-off badge', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: false,
       onTap: () {},
       onLongPress: () {},
@@ -35,10 +35,9 @@ void main() {
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
   });
 
-  testWidgets('com fonte não ganha marca nenhuma', (tester) async {
-    // A premissa da seção 3.1: marca-se a exceção, não a regra.
+  testWidgets('a tile with a source gets no badge', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
@@ -48,12 +47,11 @@ void main() {
     expect(find.byIcon(Icons.cloud_off_rounded), findsNothing);
   });
 
-  testWidgets('o tile é igual com fonte confirmada e com fonte no chute', (tester) async {
-    // Não existe parâmetro de confiança neste widget, e este teste existe para
-    // que a ausência seja intencional e visível. Se alguém acrescentar
-    // `confidence:` aqui, este teste não compila mais e é isso que se quer.
+  testWidgets('the tile is identical for a confirmed and a guessed source', (tester) async {
+    // This widget has no confidence parameter; adding `confidence:` here should
+    // stop compiling, which is the point.
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
@@ -64,9 +62,9 @@ void main() {
     expect(find.byIcon(Icons.verified_outlined), findsNothing);
   });
 
-  testWidgets('sem seleção ativa não há checkbox', (tester) async {
+  testWidgets('no checkbox without an active selection', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: false,
       onTap: () {},
@@ -77,9 +75,9 @@ void main() {
     expect(find.byType(Checkbox), findsNothing);
   });
 
-  testWidgets('com seleção ativa todo tile mostra checkbox, marcado ou não', (tester) async {
+  testWidgets('with an active selection every tile shows a checkbox, checked or not', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
       isSelected: false,
@@ -91,9 +89,9 @@ void main() {
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
   });
 
-  testWidgets('o tile selecionado mostra o checkbox marcado', (tester) async {
+  testWidgets('the selected tile shows the checkbox checked', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
       isSelected: true,
@@ -105,14 +103,14 @@ void main() {
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
   });
 
-  testWidgets('toque curto abre e toque longo seleciona', (tester) async {
-    var abriu = 0;
-    var selecionou = 0;
+  testWidgets('short tap opens and long press selects', (tester) async {
+    var opened = 0;
+    var selected = 0;
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
-      onTap: () => abriu++,
-      onLongPress: () => selecionou++,
+      onTap: () => opened++,
+      onLongPress: () => selected++,
       onToggleSelection: () {},
     )));
 
@@ -120,32 +118,32 @@ void main() {
     await tester.longPress(find.byType(PackGridItem));
     await tester.pump();
 
-    expect(abriu, 1);
-    expect(selecionou, 1);
+    expect(opened, 1);
+    expect(selected, 1);
   });
 
-  testWidgets('o checkbox alterna a seleção sem abrir o detalhe', (tester) async {
-    var abriu = 0;
-    var alternou = 0;
+  testWidgets('the checkbox toggles the selection without opening the detail', (tester) async {
+    var opened = 0;
+    var toggled = 0;
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
-      onTap: () => abriu++,
+      onTap: () => opened++,
       onLongPress: () {},
-      onToggleSelection: () => alternou++,
+      onToggleSelection: () => toggled++,
     )));
 
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    expect(alternou, 1);
-    expect(abriu, 0);
+    expect(toggled, 1);
+    expect(opened, 0);
   });
 
-  testWidgets('a borda grossa aparece quando o jogo já está no disco', (tester) async {
+  testWidgets('the thick border appears when the game is already on disk', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       isOwned: true,
       onTap: () {},
@@ -153,20 +151,20 @@ void main() {
       onToggleSelection: () {},
     )));
 
-    final borda = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
-    expect((borda.decoration as BoxDecoration).border!.top.width, 3);
+    final border = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
+    expect((border.decoration as BoxDecoration).border!.top.width, 3);
   });
 
-  testWidgets('sem estado nenhum a borda é fina', (tester) async {
+  testWidgets('with no state the border is thin', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
       onToggleSelection: () {},
     )));
 
-    final borda = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
-    expect((borda.decoration as BoxDecoration).border!.top.width, 1);
+    final border = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
+    expect((border.decoration as BoxDecoration).border!.top.width, 1);
   });
 }

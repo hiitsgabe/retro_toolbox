@@ -1,35 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/game_model.dart';
 
-/// Uma versão escolhida para um jogo, com o motivo escrito por extenso.
-///
-/// O motivo é obrigatório e não é decorativo: ele é a única coisa que separa
-/// "o app escolheu por você" de "o app escolheu ao acaso" (spec de UI, seção 7).
+/// A chosen version for a game, with the reason spelled out. The reason is
+/// required: it separates "the app chose for you" from "the app chose at random".
 @immutable
 class SourcePick {
-  /// A chave de seleção do jogo. Em MODO FONTE é `Game.gameId`; em MODO PACK
-  /// é `'pack:${packGame.id}'`. A folha não precisa saber qual dos dois é.
+  /// The game's selection key: `Game.gameId` in SOURCE mode, `'pack:${id}'`
+  /// in PACK mode. The sheet need not know which.
   final String gameId;
   final String title;
   final String filename;
 
-  /// Bytes. Zero quando a fonte não declara tamanho, e nesse caso a folha
-  /// mostra o total como aproximado.
+  /// Bytes. Zero when the source declares no size, and then the sheet shows
+  /// the total as approximate.
   final int size;
 
-  /// De qual addon veio, pelo id de [Addon]. É o que a linha "4.0 MB,
-  /// Myrient" da seção 7 mostra, depois de a tela resolver o id para o nome
-  /// (Task 17). Vem de `Game.sourceId`, carimbado pelo `CatalogService` na
-  /// hora de buscar a listagem.
+  /// Which addon it came from, by [Addon] id. Comes from `Game.sourceId`.
   final String sourceId;
   final String reason;
 
-  /// Marca o selo de incerteza da seção 6. É `true` quando a confiança do
-  /// match é `guess`. O lote **não** verifica CRC antes de enfileirar.
+  /// `true` when the match confidence is `guess`. The batch does not verify
+  /// CRC before enqueueing.
   final bool uncertain;
 
-  /// O que efetivamente vai para a fila. A folha nunca lê este campo: ela
-  /// desenha os campos de exibição acima e devolve os picks inteiros.
+  /// What actually goes to the queue. The sheet never reads this field.
   final Game game;
 
   const SourcePick({
@@ -44,7 +38,7 @@ class SourcePick {
   });
 }
 
-/// Um jogo selecionado que não vai para a fila, com o motivo.
+/// A selected game that will not go to the queue, with the reason.
 @immutable
 class PickFailure {
   final String gameId;
@@ -58,7 +52,7 @@ class PickFailure {
   });
 }
 
-/// O que a folha de confirmação da seção 6 desenha: o que vai e o que não vai.
+/// What the confirmation sheet draws: what goes and what does not.
 @immutable
 class BatchPlan {
   final List<SourcePick> picks;
@@ -70,11 +64,11 @@ class BatchPlan {
 
   int get uncertainCount => picks.where((pick) => pick.uncertain).length;
 
-  /// Vazio de verdade: nada a baixar e nada a explicar. Um plano só de
-  /// falhas **não** é vazio, porque a folha precisa abrir para dizer por quê.
+  /// Truly empty: nothing to download and nothing to explain. A failures-only
+  /// plan is not empty, because the sheet must open to say why.
   bool get isEmpty => picks.isEmpty && failures.isEmpty;
 
-  /// Tira um item do lote. Devolve um plano novo; o original não muda.
+  /// Removes an item from the batch. Returns a new plan; the original is unchanged.
   BatchPlan withoutPick(String gameId) => BatchPlan(
         picks: picks.where((pick) => pick.gameId != gameId).toList(),
         failures: failures,

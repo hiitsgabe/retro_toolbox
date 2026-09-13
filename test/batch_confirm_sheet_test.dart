@@ -9,10 +9,10 @@ SourcePick _pick(String name, int size, {bool uncertain = false}) => SourcePick(
       title: name,
       filename: name,
       size: size,
-      sourceId: 'listagem',
-      reason: 'escolhido pela sua região preferida',
+      sourceId: 'listing',
+      reason: 'chosen by your preferred region',
       uncertain: uncertain,
-      game: Game(title: name, url: 'https://exemplo/$name', size: size, consoleId: 'snes'),
+      game: Game(title: name, url: 'https://example/$name', size: size, consoleId: 'snes'),
     );
 
 Widget _host(BatchPlan plan, {ValueChanged<BatchPlan>? onConfirm, ValueChanged<String>? onRemove}) {
@@ -28,48 +28,48 @@ Widget _host(BatchPlan plan, {ValueChanged<BatchPlan>? onConfirm, ValueChanged<S
 }
 
 void main() {
-  testWidgets('mostra a contagem e o total no cabeçalho', (tester) async {
+  testWidgets('shows the count and total in the header', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [
       _pick('a.zip', 1024 * 1024),
       _pick('b.zip', 1024 * 1024),
     ])));
 
-    expect(find.text('2 jogos, 2.0 MB'), findsOneWidget);
+    expect(find.text('2 games, 2.0 MB'), findsOneWidget);
   });
 
-  testWidgets('usa singular com um jogo só', (tester) async {
+  testWidgets('uses singular with a single game', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [_pick('a.zip', 1024)])));
 
-    expect(find.text('1 jogo, 1.0 KB'), findsOneWidget);
+    expect(find.text('1 game, 1.0 KB'), findsOneWidget);
   });
 
-  testWidgets('lista o nome do arquivo e o motivo de cada escolha', (tester) async {
-    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('Chrono.zip', 1024)])));
+  testWidgets('lists the filename and the reason for each pick', (tester) async {
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('Crystal.zip', 1024)])));
 
-    expect(find.text('Chrono.zip'), findsOneWidget);
-    expect(find.text('escolhido pela sua região preferida'), findsOneWidget);
+    expect(find.text('Crystal.zip'), findsOneWidget);
+    expect(find.text('chosen by your preferred region'), findsOneWidget);
   });
 
-  testWidgets('marca com selo só as escolhas incertas', (tester) async {
+  testWidgets('badges only the uncertain picks', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
     ])));
 
     expect(find.byIcon(Icons.help_outline), findsOneWidget);
   });
 
-  testWidgets('separa os que não entram na fila, com o motivo', (tester) async {
+  testWidgets('separates the ones not entering the queue, with the reason', (tester) async {
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'Sem Fonte', reason: 'nenhum addon tem este jogo')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'No source', reason: 'no addon has this game')],
     )));
 
-    expect(find.text('Não vão para a fila'), findsOneWidget);
-    expect(find.text('Sem Fonte'), findsOneWidget);
-    expect(find.text('nenhum addon tem este jogo'), findsOneWidget);
+    expect(find.text('Not going to the queue'), findsOneWidget);
+    expect(find.text('No source'), findsOneWidget);
+    expect(find.text('no addon has this game'), findsOneWidget);
   });
 
-  testWidgets('o botão de remover devolve o gameId daquela linha', (tester) async {
+  testWidgets('the remove button returns that row\'s gameId', (tester) async {
     final removed = <String>[];
     await tester.pumpWidget(_host(
       BatchPlan(picks: [_pick('a.zip', 1024), _pick('b.zip', 1024)]),
@@ -82,54 +82,49 @@ void main() {
     expect(removed, ['snes/b.zip']);
   });
 
-  testWidgets('confirmar devolve o plano inteiro', (tester) async {
-    BatchPlan? confirmado;
+  testWidgets('confirming returns the whole plan', (tester) async {
+    BatchPlan? confirmed;
     final plan = BatchPlan(picks: [_pick('a.zip', 1024)]);
-    await tester.pumpWidget(_host(plan, onConfirm: (p) => confirmado = p));
+    await tester.pumpWidget(_host(plan, onConfirm: (p) => confirmed = p));
 
-    await tester.tap(find.text('Baixar'));
+    await tester.tap(find.text('Download'));
     await tester.pump();
 
-    expect(confirmado, same(plan));
+    expect(confirmed, same(plan));
   });
 
-  testWidgets('sem escolha nenhuma o botão de baixar fica desligado', (tester) async {
+  testWidgets('with no pick the download button is disabled', (tester) async {
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     )));
 
-    final botao = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Baixar'));
-    expect(botao.onPressed, isNull);
+    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Download'));
+    expect(button.onPressed, isNull);
   });
 
-  testWidgets('o cabeçalho conta as incertezas, e some quando não há nenhuma', (tester) async {
-    // O selo por linha já tinha teste; a contagem do cabeçalho não tinha, e
-    // ela tem plural próprio. Os três ramos num caso só de propósito: é uma
-    // regra de texto, e três casos separados custariam três vezes o mesmo
-    // cenário para provar a mesma frase.
+  testWidgets('the header counts the uncertain picks and drops when there are none', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
-      _pick('outra.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
+      _pick('other.zip', 1024, uncertain: true),
     ])));
-    expect(find.text('2 incertos'), findsOneWidget);
+    expect(find.text('2 uncertain'), findsOneWidget);
 
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
     ])));
-    expect(find.text('1 incerto'), findsOneWidget);
+    expect(find.text('1 uncertain'), findsOneWidget);
 
-    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certo.zip', 1024)])));
-    expect(find.textContaining('incerto'), findsNothing);
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certain.zip', 1024)])));
+    expect(find.textContaining('uncertain'), findsNothing);
   });
 
-  testWidgets('Cancelar fecha a folha sem confirmar nada', (tester) async {
-    // Precisa de rota de verdade: a folha chama `maybePop`, e com ela montada
-    // direto no `body` não há o que desempilhar, então o teste passaria sem
-    // provar nada. Aqui ela sobe como modal, do jeito que `_confirmarLote`
-    // sobe em produção.
-    var confirmou = 0;
+  testWidgets('Cancel closes the sheet without confirming anything', (tester) async {
+    // Needs a real modal route the way `_confirmBatch` mounts it: the sheet
+    // calls `maybePop`, so mounted straight in `body` it has nothing to pop and
+    // the test would prove nothing.
+    var confirmedCount = 0;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -138,36 +133,36 @@ void main() {
               context: context,
               builder: (_) => BatchConfirmSheet(
                 plan: BatchPlan(picks: [_pick('a.zip', 1024)]),
-                onConfirm: (_) => confirmou++,
+                onConfirm: (_) => confirmedCount++,
                 onRemove: (_) {},
               ),
             ),
-            child: const Text('abrir'),
+            child: const Text('open'),
           ),
         ),
       ),
     ));
 
-    await tester.tap(find.text('abrir'));
+    await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.byType(BatchConfirmSheet), findsOneWidget);
 
-    await tester.tap(find.text('Cancelar'));
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(find.byType(BatchConfirmSheet), findsNothing);
-    expect(confirmou, 0);
+    expect(confirmedCount, 0);
   });
 
-  testWidgets('só com falhas o cabeçalho diz zero jogos, e a folha continua aberta', (tester) async {
-    // A folha não se fecha sozinha quando nada pode ser baixado: ela existe
-    // justamente para mostrar o motivo (seção 6). O cabeçalho tem que dizer a
-    // verdade nesse estado, e o plural de zero é "jogos".
+  testWidgets('failures-only header says zero games and the sheet stays open', (tester) async {
+    // The sheet does not close itself when nothing can be downloaded: it exists
+    // to show the reason. The header must tell the truth, and zero pluralizes to
+    // "games".
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     )));
 
-    expect(find.text('0 jogos, 0 B'), findsOneWidget);
-    expect(find.text('sem fonte'), findsOneWidget);
+    expect(find.text('0 games, 0 B'), findsOneWidget);
+    expect(find.text('no source'), findsOneWidget);
   });
 }

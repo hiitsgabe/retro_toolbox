@@ -16,89 +16,67 @@ import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 
 import 'support/fake_addon_store.dart';
 
-const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
+const _warning = 'Credentials are stored in plain text on this device.';
 
-/// Semeia as prefs antes de montar qualquer coisa que leia `settingsProvider`.
-///
-/// Função de topo e não duas linhas dentro do `_host` porque o último caso não
-/// usa o `_host` e precisa disto do mesmo jeito: ele monta a
-/// `AddonDetailScreen`, que monta `ConsoleAuthSetting`, que lê
-/// `settingsProvider` no `_carregarToken` de `console_auth_setting.dart`. Sem
-/// número de linha de propósito: a Task 25 inseriu o campo `onSaved` acima dele
-/// e o `48` que estava escrito aqui virou `58` num commit que não tocou neste
-/// arquivo. Sem semear, aquele caso
-/// só passa porque os quatro anteriores rodaram antes e deixaram o mock de pé,
-/// e quebra quando alguém o roda sozinho com `--plain-name`.
-void _semearPrefs() {
+/// Seeds prefs before mounting anything that reads `settingsProvider`.
+/// A top-level function because the last case does not use `_host` yet still
+/// needs it, since it mounts `AddonDetailScreen` which reads `settingsProvider`.
+void _seedPrefs() {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
 }
 
-Widget _host(Override cofre, {Widget child = const VaultWarning()}) {
-  _semearPrefs();
+Widget _host(Override vault, {Widget child = const VaultWarning()}) {
+  _seedPrefs();
   return ProviderScope(
-    overrides: [cofre],
+    overrides: [vault],
     child: MaterialApp(home: Scaffold(body: child)),
   );
 }
 
-Override _cofre({required bool cifra}) =>
-    vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: cifra));
+Override _vault({required bool encrypted}) =>
+    vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: encrypted));
 
 void main() {
-  testWidgets('cofre que não cifra avisa', (tester) async {
-    await tester.pumpWidget(_host(_cofre(cifra: false)));
+  testWidgets('non-encrypting vault warns', (tester) async {
+    await tester.pumpWidget(_host(_vault(encrypted: false)));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsOneWidget);
+    expect(find.text(_warning), findsOneWidget);
   });
 
-  testWidgets('cofre que cifra não avisa nada', (tester) async {
-    await tester.pumpWidget(_host(_cofre(cifra: true)));
+  testWidgets('encrypting vault warns nothing and takes no space', (tester) async {
+    await tester.pumpWidget(_host(_vault(encrypted: true)));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsNothing);
-    // Nem um espaço: o aviso ausente não pode deixar buraco no layout da tela
-    // de contas, que é onde ele mais aparece.
+    expect(find.text(_warning), findsNothing);
     expect(tester.getSize(find.byType(VaultWarning)), Size.zero);
   });
 
-  testWidgets('enquanto sonda o chaveiro, não avisa', (tester) async {
-    // Um aviso que pisca em todo boot de máquina que tem chaveiro é um aviso
-    // que o usuário aprende a ignorar.
-    final travado = Completer<VaultChoice>();
-    // Sem `const`: `MemoryVault` guarda um mapa mutável e não tem construtor
-    // const. E o `complete` no teardown existe para o `Completer` pendurado
-    // não deixar o teste vazando um future para sempre.
-    addTearDown(() => travado.complete(VaultChoice(MemoryVault(), encryptedAtRest: true)));
+  testWidgets('does not warn while the keyring is being probed', (tester) async {
+    final pending = Completer<VaultChoice>();
+    // Complete in teardown so the pending Completer does not leak a future.
+    addTearDown(() => pending.complete(VaultChoice(MemoryVault(), encryptedAtRest: true)));
 
-    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) => travado.future)));
+    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) => pending.future)));
     await tester.pump();
 
-    expect(find.text(_aviso), findsNothing);
+    expect(find.text(_warning), findsNothing);
   });
 
-  testWidgets('cofre nenhum abriu avisa, e avisa pior', (tester) async {
-    // O ramo de `error` **não** é o chaveiro falhando. Chaveiro que não abre é
-    // o caminho previsto: a sonda engole a exceção, devolve `false`, e a
-    // escolha cai para a reserva, o que chega aqui como `data` com
-    // `encryptedAtRest: false`, que é o primeiro caso deste arquivo. Para o
-    // `error` acontecer é preciso a **reserva** levantar, ou seja
-    // `PrefsVault.open()` (`vault_provider.dart:33`, fora de qualquer `try`).
-    // Por isso o que se espera fala em cofre e não em chaveiro, e por isso o
-    // erro levantado aqui não é "sem D-Bus": sem D-Bus não chega neste ramo.
-    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('nem a reserva abriu'))));
+  testWidgets('no vault opened warns harder', (tester) async {
+    // The `error` branch needs the fallback itself to throw; a missing keyring
+    // is swallowed and arrives as `data` with `encryptedAtRest: false`.
+    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('not even the fallback opened'))));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Não deu para abrir cofre nenhum'), findsOneWidget);
+    expect(find.textContaining('Could not open any vault'), findsOneWidget);
   });
 
-  testWidgets('o detalhe do addon avisa junto do formulário de conta', (tester) async {
-    // O aviso tem que estar onde o segredo é digitado. Só em Accounts, ele não
-    // alcança quem configura o token pela tela do addon, que é o caminho novo.
-    _semearPrefs();
+  testWidgets('the addon detail warns next to the account form', (tester) async {
+    _seedPrefs();
     const console = Console(id: 'switch', name: 'Switch', urls: ['https://m/switch/'], auth: {'requires_token': true});
-    const fundido = MergedCatalog(
+    const merged = MergedCatalog(
       consoles: {'switch': console},
       sources: {
         'switch': [ConsoleSource(addonId: 'myrient', url: 'https://m/switch/', auth: {'requires_token': true})],
@@ -107,17 +85,17 @@ void main() {
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        _cofre(cifra: false),
+        _vault(encrypted: false),
         addonProvider.overrideWith((ref) => AddonNotifier(
               Future.value(FakeAddonStore(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://m/c.json')])),
-              invalidarCache: () async {},
+              invalidateCache: () async {},
             )),
-        mergedCatalogProvider.overrideWith((ref) async => fundido),
+        mergedCatalogProvider.overrideWith((ref) async => merged),
       ],
       child: const MaterialApp(home: AddonDetailScreen(addonId: 'myrient')),
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsOneWidget);
+    expect(find.text(_warning), findsOneWidget);
   });
 }

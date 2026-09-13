@@ -15,37 +15,35 @@ Widget _host({required int count, VoidCallback? onClear, VoidCallback? onDownloa
 }
 
 void main() {
-  testWidgets('não ocupa altura nenhuma quando a seleção está vazia', (tester) async {
+  testWidgets('takes no height when the selection is empty', (tester) async {
     await tester.pumpWidget(_host(count: 0));
 
     expect(find.byIcon(Icons.close), findsNothing);
-    expect(find.text('Baixar'), findsNothing);
+    expect(find.text('Download'), findsNothing);
     expect(tester.getSize(find.byType(SelectionBar)).height, 0);
   });
 
-  testWidgets('conta no singular com um item', (tester) async {
+  testWidgets('singular count with one item', (tester) async {
     await tester.pumpWidget(_host(count: 1));
 
-    expect(find.text('1 selecionado'), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
   });
 
-  testWidgets('conta no plural com mais de um item', (tester) async {
+  testWidgets('plural count with more than one item', (tester) async {
     await tester.pumpWidget(_host(count: 3));
 
-    expect(find.text('3 selecionados'), findsOneWidget);
+    expect(find.text('3 selected'), findsOneWidget);
   });
 
-  testWidgets('ocupa exatamente 48 de altura com seleção', (tester) async {
+  testWidgets('is exactly 48 high with a selection', (tester) async {
     await tester.pumpWidget(_host(count: 3));
 
-    // O contrário do primeiro caso, e não uma redundância dele: o `IconButton`
-    // e o `FilledButton` medem 48 sozinhos por causa do alvo de toque padrão
-    // do Material, então o `SizedBox(height: 48)` não tem folga nenhuma.
-    // Qualquer padding a mais estoura a faixa, e sem este caso nada avisa.
+    // The IconButton and FilledButton are 48 on their own from the Material
+    // touch target, so `SizedBox(height: 48)` has no slack; extra padding overflows.
     expect(tester.getSize(find.byType(SelectionBar)).height, 48);
   });
 
-  testWidgets('o × chama onClear e o botão chama onDownload', (tester) async {
+  testWidgets('the close icon calls onClear and the button calls onDownload', (tester) async {
     final fired = <String>[];
     await tester.pumpWidget(_host(
       count: 3,
@@ -55,7 +53,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.close));
     await tester.pump();
-    await tester.tap(find.text('Baixar'));
+    await tester.tap(find.text('Download'));
     await tester.pump();
 
     expect(fired, ['clear', 'download']);

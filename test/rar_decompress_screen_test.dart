@@ -9,12 +9,9 @@ void main() {
     expect(find.text('Extract'), findsOneWidget);
     expect(find.text('No file selected'), findsOneWidget);
 
-    // `FilledButton.icon` é factory e devolve `_FilledButtonWithIcon`, uma
-    // subclasse privada. `find.byType` casa por tipo exato
-    // (`finders.dart`: `candidate.widget.runtimeType == widgetType`), então o
-    // `widgetWithText(FilledButton, ...)` que estava aqui não achava o botão e
-    // o teste morria em `Bad state: No element` antes de afirmar coisa alguma.
-    // O predicado casa por `is`, que é o que a asserção sempre quis dizer.
+    // `find.byType` matches the exact runtime type, which misses the private
+    // `_FilledButtonWithIcon` from `FilledButton.icon`; the predicate matches
+    // by `is`.
     final button = tester.widget<FilledButton>(
       find.ancestor(
         of: find.text('Extract'),

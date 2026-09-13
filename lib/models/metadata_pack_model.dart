@@ -1,18 +1,12 @@
 import 'dart:convert';
 
-/// Um dump concreto de um jogo, como o DAT do No-Intro ou do Redump descreve.
-/// [name] é o nome do jogo no DAT, sem extensão, com as tags de região e
-/// revisão preservadas, porque é ele que o matcher compara com o nome do
-/// arquivo remoto.
+/// A concrete dump of a game, as a No-Intro or Redump DAT describes it.
+/// [name] is the DAT name, without extension, with region and revision tags
+/// preserved, because the matcher compares it against the remote filename.
 ///
-/// [crc] e [sha1] são normalizados para maiúsculas, porque são hexadecimais e a
-/// comparação precisa ser estável entre o DAT e o que o app calcula. O [serial]
-/// não é: ele é uma string de catálogo do fabricante, com maiúsculas e hifens
-/// que fazem parte do valor, e é gravado exatamente como o DAT emite.
-/// [region] é a região declarada no DAT, quando existe. Nem todo bloco traz
-/// uma: no SNES 293 dos 4268 blocos não têm, no GameCube 33 de 2268. Por isso é
-/// opcional. Ela existe para a regra de região preferida do download em lote e
-/// para o cartão de detalhe mostrar "(USA)" sem reparsear o nome em runtime.
+/// [crc] and [sha1] are uppercased for stable comparison; [serial] is not, as
+/// its case and hyphens are part of the value. [region] is the DAT region when
+/// present, and is optional because not every dump declares one.
 class PackDump {
   final String name;
   final String? crc;
@@ -45,7 +39,7 @@ class PackDump {
       };
 }
 
-/// Um jogo canônico: um título, várias versões.
+/// A canonical game: one title, several versions.
 class PackGame {
   final String id;
   final String title;
@@ -96,7 +90,7 @@ class PackGame {
       };
 }
 
-/// O pacote de um console inteiro.
+/// The pack for a whole console.
 class MetadataPack {
   final String pack;
   final String system;
@@ -112,8 +106,7 @@ class MetadataPack {
 
   Map<String, PackGame>? _byCrc;
 
-  /// CRC32 em maiúsculas para o jogo dono daquele dump. Construído sob demanda
-  /// e guardado, porque um pacote grande tem dezenas de milhares de dumps.
+  /// Uppercase CRC32 to the game owning that dump. Built lazily and cached.
   Map<String, PackGame> get byCrc {
     final cached = _byCrc;
     if (cached != null) return cached;

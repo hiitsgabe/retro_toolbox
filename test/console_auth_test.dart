@@ -5,67 +5,65 @@ import 'package:roms_downloader/utils/network.dart';
 
 void main() {
   group('buildConsoleAuthHeaders', () {
-    test('o token que está no catálogo é ignorado', () {
-      // A falha da seção 6.3, literal. O catálogo é o arquivo que o usuário
-      // manda para outra pessoa; nada o cifra e nada avisa que tem segredo
-      // dentro. Depois desta Task ele pode até conter o campo, que não
-      // autentica ninguém.
-      final headers = buildConsoleAuthHeaders({'token': 'tok-do-arquivo'});
+    test('token from the catalog file is ignored', () {
+      // The catalog is a file the user shares; nothing encrypts it and nothing
+      // warns that a secret is inside. After this fix, the field can be present
+      // but it does not authenticate anyone.
+      final headers = buildConsoleAuthHeaders({'token': 'tok-from-file'});
 
       expect(headers, isEmpty);
     });
 
-    test('o token de quem chama monta Bearer', () {
-      final headers = buildConsoleAuthHeaders({}, tokenOverride: 'tok-do-cofre');
+    test('caller token builds a Bearer header', () {
+      final headers = buildConsoleAuthHeaders({}, tokenOverride: 'tok-from-vault');
 
-      expect(headers, {'Authorization': 'Bearer tok-do-cofre'});
+      expect(headers, {'Authorization': 'Bearer tok-from-vault'});
     });
 
-    test('com cookies, monta Cookie com o nome do catálogo', () {
+    test('cookies mode builds a Cookie header with the catalog name', () {
       final headers = buildConsoleAuthHeaders(
         {'cookies': true, 'cookie_name': 'ultranx_session'},
-        tokenOverride: 'tok-do-cofre',
+        tokenOverride: 'tok-from-vault',
       );
 
-      expect(headers, {'Cookie': 'ultranx_session=tok-do-cofre'});
+      expect(headers, {'Cookie': 'ultranx_session=tok-from-vault'});
     });
 
-    test('sem cookie_name, o nome padrão é auth_token', () {
-      final headers = buildConsoleAuthHeaders({'cookies': true}, tokenOverride: 'tok-do-cofre');
+    test('missing cookie_name falls back to auth_token', () {
+      final headers = buildConsoleAuthHeaders({'cookies': true}, tokenOverride: 'tok-from-vault');
 
-      expect(headers, {'Cookie': 'auth_token=tok-do-cofre'});
+      expect(headers, {'Cookie': 'auth_token=tok-from-vault'});
     });
 
-    test('ia_s3 não monta header nem com token de quem chama', () {
-      // O Internet Archive assina de outro jeito, e um Bearer aqui quebraria
-      // o download em vez de autenticar.
-      final headers = buildConsoleAuthHeaders({'type': 'ia_s3'}, tokenOverride: 'tok-do-cofre');
+    test('ia_s3 type builds no header even with a caller token', () {
+      // Internet Archive signs requests differently; a Bearer here would break
+      // the download instead of authenticating.
+      final headers = buildConsoleAuthHeaders({'type': 'ia_s3'}, tokenOverride: 'tok-from-vault');
 
       expect(headers, isEmpty);
     });
 
-    test('console sem auth não monta header', () {
-      expect(buildConsoleAuthHeaders(null, tokenOverride: 'tok-do-cofre'), isEmpty);
+    test('null auth builds no header', () {
+      expect(buildConsoleAuthHeaders(null, tokenOverride: 'tok-from-vault'), isEmpty);
     });
   });
 
   group('consoleHasToken', () {
-    test('o token do catálogo não conta como conectado', () {
-      // Este é o caso que o spec não lista. Sem ele, a tela do Tinfoil e o
-      // assistente mostram "conectado" lendo um campo que a Task inteira
-      // acabou de tirar do caminho de autenticação.
+    test('catalog token does not count as connected', () {
+      // Without this case the Tinfoil screen and the wizard show "connected"
+      // reading a field that the fix just removed from the auth path.
       const settings = AppSettings();
 
       expect(consoleHasToken(settings, 'ultranx'), isFalse);
     });
 
-    test('o token das settings conta', () {
-      const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: 'tok-do-cofre')});
+    test('settings token counts as connected', () {
+      const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: 'tok-from-vault')});
 
       expect(consoleHasToken(settings, 'ultranx'), isTrue);
     });
 
-    test('token vazio não conta', () {
+    test('empty token does not count as connected', () {
       const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: '')});
 
       expect(consoleHasToken(settings, 'ultranx'), isFalse);

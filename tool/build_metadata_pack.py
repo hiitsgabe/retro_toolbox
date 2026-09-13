@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Builds one metadata pack per console for the app's "Stremio de jogos" grid.
+"""Builds one metadata pack per console for the app's game grid.
 
-Sources, all public and without accounts:
-  - libretro-database (CC BY-SA 4.0): the No-Intro and Redump DATs under
-    metadat/, plus the per-field side files (genre, developer, publisher,
-    releaseyear, franchise, esrb, serial) that key on CRC32.
-  - OpenVGDB v29.0: synopsis and a fallback cover, joined by CRC32.
-  - libretro-thumbnails: the preferred cover URL, checked for existence via
-    the GitHub tree API so the pack never ships a dead link.
+Usage:
+  python3 tool/build_metadata_pack.py --built YYYY-MM-DD [--out DIR] [--only ID]
 
-Output: <pack>.json.gz per system plus an index.json, both meant to be
-uploaded to a GitHub release with the fixed tag "packs". The pack stores the
-cover URL, never the image bytes.
+Writes <pack>.json.gz per system plus an index.json, meant for a GitHub
+release with the tag "packs". Sources: libretro-database, OpenVGDB v29.0,
+libretro-thumbnails.
 """
 import argparse
 import gzip
@@ -33,8 +28,6 @@ THUMBS_API = "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/
 THUMBS_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/{repo}/master/Named_Boxarts/{name}"
 OPENVGDB_URL = "https://github.com/OpenVGDB/OpenVGDB/releases/download/v29.0/openvgdb.zip"
 
-# Os side files por campo só existem para sistemas No-Intro. Para Redump o
-# builder recebe 404 e segue em frente com o OpenVGDB.
 SIDE_FIELDS = {
     "genre": "genre",
     "developer": "developer",
@@ -45,11 +38,6 @@ SIDE_FIELDS = {
     "serial": "serial",
 }
 
-# system: nome do sistema no libretro-database, e também o que vira o pack id.
-# group: qual pasta de metadat tem o DAT principal.
-# thumbs: repositório do libretro-thumbnails, que nem sempre casa com o nome
-#         do sistema (Wii U Digital usa o repo do Wii U).
-# aliases: como o console pode se chamar no catálogo do usuário.
 SYSTEMS = [
     {"system": "Coleco - ColecoVision", "group": "no-intro",
      "thumbs": "Coleco_-_ColecoVision", "aliases": ["colecovision", "coleco"]},
@@ -110,9 +98,8 @@ GAME_RE = re.compile(r"game \(\s*(.*?)\n\)", re.S)
 NAME_RE = re.compile(r'^\s*name "([^"]+)"', re.M)
 SERIAL_RE = re.compile(r'^\s*serial "([^"]+)"', re.M)
 REGION_RE = re.compile(r'^\s*region "([^"]+)"', re.M)
-# O md5 é capturado só para o grupo do sha1 cair na posição certa. Ele não vai
-# para o pacote: nenhum dos três eixos de identidade da fatia 2 usa md5, e
-# guardar um hash a mais por dump inflaria o pacote sem comprador.
+# md5 is captured only so the sha1 group lands in the right position; it is
+# discarded.
 ROM_RE = re.compile(
     r'rom \( name "([^"]+)"(?:\s+size \d+)?\s+crc (\w+)'
     r"(?:\s+md5 (\w+))?(?:\s+sha1 (\w+))?"
@@ -121,20 +108,14 @@ CRC_RE = re.compile(r"crc (\w+)")
 
 
 def normalize(value):
-    """Mesma regra do CatalogService._nameToId no app."""
+    """Same rule as CatalogService._nameToId in the app."""
     return re.sub(r"^_+|_+$", "", re.sub(r"[^a-z0-9]+", "_", value.lower()))
 
 
 def parse_dat(text):
-    """DAT principal do No-Intro ou do Redump para uma lista de dumps.
+    """Parses a No-Intro or Redump main DAT into a list of dumps.
 
-    Só a primeira linha rom de cada bloco entra: em jogos de disco as demais
-    são faixas de áudio, cujo CRC não serve para identificar o arquivo que o
-    usuário baixa.
-
-    O crc e o sha1 sobem para maiúsculas porque são hexadecimais e a comparação
-    precisa ser estável. O serial não: ele é uma string de catálogo do
-    fabricante e vai para o pacote exatamente como o DAT emite.
+    Only the first rom line of each block is kept; crc and sha1 are uppercased.
     """
     entries = []
     for block in GAME_RE.findall(text):
@@ -155,7 +136,7 @@ def parse_dat(text):
 
 
 def parse_side_dat(text, field):
-    """Side file por campo para um mapa CRC32 em maiúsculas para valor."""
+    """Parses a per-field side file into an uppercase-CRC32 to value map."""
     field_re = re.compile(field + r' "([^"]+)"')
     out = {}
     for block in GAME_RE.findall(text):
@@ -183,8 +164,8 @@ def strip_ext(name):
 
 
 def norm(value):
-    """Forma comparável do nome do arquivo: sem extensão, sem acento, sem
-    pontuação, mas com as tags de região e revisão preservadas."""
+    """Comparable form of a filename: no extension, accents, or punctuation,
+    but region and revision tags preserved."""
     value = strip_ext(value)
     value = unicodedata.normalize("NFKD", value)
     value = "".join(c for c in value if not unicodedata.combining(c))
@@ -194,12 +175,8 @@ def norm(value):
 
 
 def display_title(dat_name):
-    """Título de exibição a partir do nome do DAT: sem extensão, sem tags de
-    região e revisão, com o artigo de volta na frente.
-
-    A troca do artigo acontece aqui, no nome cru, e não depois de norm, porque
-    norm come a vírgula que separa "Legend of Zelda" de "The".
-    """
+    """Display title from a DAT name: no extension, no region or revision tags,
+    with the trailing article moved to the front."""
     value = TAG_RE.sub(" ", strip_ext(dat_name))
     value = re.sub(r"\s+", " ", value).strip().strip(",").strip()
     match = ARTICLE_RE.match(value)
@@ -209,8 +186,8 @@ def display_title(dat_name):
 
 
 def canon(value):
-    """Título canônico do jogo, a chave de agrupamento: o título de exibição
-    passado por norm."""
+    """Canonical game title, the grouping key: the display title run through
+    norm."""
     return norm(display_title(value))
 
 
@@ -219,7 +196,7 @@ def slug(value):
 
 
 def collapse(entries, pack_id):
-    """Dumps do DAT para jogos canônicos, na ordem em que aparecem."""
+    """Collapses DAT dumps into canonical games, in order of appearance."""
     games = []
     by_canon = {}
     used_slugs = {}
@@ -235,8 +212,6 @@ def collapse(entries, pack_id):
             game_slug = base if count == 1 else f"{base}-{count}"
             game = {
                 "id": f"{pack_id}/{game_slug}",
-                # O título vem do primeiro dump, que preserva a grafia e os
-                # acentos do DAT. O canon serve só para agrupar e para o slug.
                 "title": display_title(entry["name"]),
                 "dumps": [],
             }
@@ -250,8 +225,6 @@ def collapse(entries, pack_id):
     return games
 
 
-# Campo do side file para chave no JSON do jogo. O serial é o único que não
-# descreve o jogo e sim o dump, então tem tratamento próprio.
 GAME_FIELDS = {
     "genre": "genre",
     "developer": "developer",
@@ -262,11 +235,8 @@ GAME_FIELDS = {
 
 
 def enrich_from_side(games, side_maps):
-    """Preenche os campos do jogo a partir dos mapas CRC para valor.
-
-    Um jogo tem vários dumps; o primeiro dump que tiver valor para o campo
-    ganha, o que torna o resultado determinístico.
-    """
+    """Fills game fields from the CRC-to-value maps; the first dump with a
+    value for a field wins."""
     for game in games:
         for source, target in GAME_FIELDS.items():
             table = side_maps.get(source)
@@ -294,7 +264,7 @@ def enrich_from_side(games, side_maps):
                     dump["serial"] = value
 
 
-# O libretro-thumbnails troca estes caracteres por "_" no nome do arquivo.
+# libretro-thumbnails replaces these characters with "_" in the filename.
 THUMB_FORBIDDEN_RE = re.compile(r"[&*/:`<>?\\|]")
 REGION_ORDER = ["(usa", "(world", "(europe", "(japan"]
 YEAR_RE = re.compile(r"(19|20)\d{2}")
@@ -313,8 +283,8 @@ def region_rank(dat_name):
 
 
 def attach_thumbnail_covers(games, available, repo):
-    """Escolhe a capa do libretro-thumbnails do dump de melhor região que
-    realmente existe no repositório."""
+    """Picks the libretro-thumbnails cover of the best-region dump that
+    actually exists in the repository."""
     for game in games:
         best = None
         for dump in sorted(game["dumps"], key=lambda d: region_rank(d["name"])):
@@ -330,7 +300,7 @@ def attach_thumbnail_covers(games, available, repo):
 
 
 def openvgdb_index(conn):
-    """CRC32 em maiúsculas para os campos úteis do OpenVGDB."""
+    """Maps uppercase CRC32 to the useful OpenVGDB fields."""
     rows = conn.execute(
         "SELECT r.romHashCRC, rel.releaseDescription, rel.releaseCoverFront, "
         "rel.releaseDeveloper, rel.releasePublisher, rel.releaseGenre, rel.releaseDate "
@@ -354,8 +324,7 @@ def openvgdb_index(conn):
 
 
 def enrich_from_openvgdb(games, index):
-    """Só preenche buraco. O libretro-database sempre ganha do OpenVGDB, que
-    não tem licença declarada e é a fonte menos confiável das duas."""
+    """Fills gaps only; libretro-database always wins over OpenVGDB."""
     for game in games:
         for dump in game["dumps"]:
             record = index.get(dump.get("crc"))
@@ -368,7 +337,7 @@ def enrich_from_openvgdb(games, index):
 
 
 def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
-    """Junta tudo num documento de pacote pronto para serializar."""
+    """Assembles everything into a pack document ready to serialize."""
     pack_id = normalize(system["system"])
     games = collapse(parse_dat(dat_text), pack_id)
     side_maps = {
@@ -382,8 +351,8 @@ def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
 
 
 def pack_bytes(pack):
-    """JSON compacto em gzip determinístico: mtime zerado para que uma
-    rebuild sem mudança produza bytes idênticos."""
+    """Compact JSON in deterministic gzip: mtime zeroed so an unchanged
+    rebuild produces identical bytes."""
     raw = json.dumps(pack, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     buffer = io.BytesIO()
     with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as out:
@@ -404,8 +373,7 @@ def build_index(packs, aliases, built):
 
 
 def fetch_text(url, optional=False):
-    """Baixa texto. Com optional=True um 404 vira None, que é o caso normal
-    dos side files: eles só existem para os sistemas No-Intro."""
+    """Downloads text. With optional=True a 404 returns None."""
     try:
         with urllib.request.urlopen(url, timeout=180) as response:
             return response.read().decode("utf-8", "replace")
@@ -424,22 +392,20 @@ def fetch_json(url, token=None):
 
 
 def thumbnail_names(repo, token=None):
-    """Nomes de arquivo em Named_Boxarts. A árvore de um diretório único cabe
-    numa chamada; se vier truncada o builder devolve conjunto vazio em vez de
-    inventar URL que não existe."""
+    """Filenames in Named_Boxarts; a truncated tree returns an empty set."""
     try:
         tree = fetch_json(THUMBS_API.format(repo=repo), token)
     except urllib.error.HTTPError as error:
-        print(f"  thumbnails de {repo} indisponiveis: HTTP {error.code}", file=sys.stderr)
+        print(f"  thumbnails for {repo} unavailable: HTTP {error.code}", file=sys.stderr)
         return set()
     if tree.get("truncated"):
-        print(f"  arvore de {repo} truncada, ignorando capas", file=sys.stderr)
+        print(f"  tree for {repo} truncated, skipping covers", file=sys.stderr)
         return set()
     return {entry["path"] for entry in tree.get("tree", [])}
 
 
 def download_openvgdb(dest_dir):
-    """Baixa e descompacta o openvgdb.sqlite, devolvendo a conexão."""
+    """Downloads and unzips openvgdb.sqlite, returning the connection."""
     zip_path = os.path.join(dest_dir, "openvgdb.zip")
     urllib.request.urlretrieve(OPENVGDB_URL, zip_path)
     with zipfile.ZipFile(zip_path) as archive:
@@ -449,10 +415,10 @@ def download_openvgdb(dest_dir):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default="dist/packs", help="diretorio de saida")
-    parser.add_argument("--built", required=True, help="data da build, YYYY-MM-DD")
+    parser.add_argument("--out", default="dist/packs", help="output directory")
+    parser.add_argument("--built", required=True, help="build date, YYYY-MM-DD")
     parser.add_argument("--only", action="append", default=[],
-                        help="constroi so estes pack ids, repetivel")
+                        help="build only these pack ids, repeatable")
     args = parser.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
@@ -460,7 +426,7 @@ def main():
     selected = [s for s in SYSTEMS
                 if not args.only or normalize(s["system"]) in args.only]
     if not selected:
-        raise SystemExit(f"nenhum sistema casa com {args.only}")
+        raise SystemExit(f"no system matches {args.only}")
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = download_openvgdb(tmp)
@@ -488,8 +454,8 @@ def main():
             pack = build_pack(system, dat_text, side_texts, thumbs, openvgdb, args.built)
             with_cover = sum(1 for g in pack["games"] if g.get("cover"))
             with_synopsis = sum(1 for g in pack["games"] if g.get("synopsis"))
-            print(f"  {len(pack['games'])} jogos, {with_cover} com capa, "
-                  f"{with_synopsis} com sinopse")
+            print(f"  {len(pack['games'])} games, {with_cover} with cover, "
+                  f"{with_synopsis} with synopsis")
             path = os.path.join(args.out, f"{pack_id}.json.gz")
             with open(path, "wb") as out:
                 out.write(pack_bytes(pack))
@@ -499,7 +465,7 @@ def main():
         index = build_index(packs, aliases, args.built)
         with open(os.path.join(args.out, "index.json"), "w", encoding="utf-8") as out:
             json.dump(index, out, ensure_ascii=False, indent=2)
-        print(f"{len(packs)} pacotes em {args.out}")
+        print(f"{len(packs)} packs in {args.out}")
 
 
 if __name__ == "__main__":

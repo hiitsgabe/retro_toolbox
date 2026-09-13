@@ -3,22 +3,16 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Corte do tier 3, na escala 0 a 100 do `rapidfuzz.ratio`.
-///
-/// O valor vem da PoC, que usou `difflib.SequenceMatcher` com corte 0.90. A
-/// seção 5.9 do spec registra que as duas métricas resolvem os mesmos 26
-/// arquivos para os mesmos alvos neste corte, então a troca de biblioteca não
-/// pede recalibragem.
+/// Tier 3 cutoff, on the 0 to 100 scale of `rapidfuzz.ratio`.
 const fuzzyCutoff = 90.0;
 
-/// Casa um nome de arquivo com um jogo do metadata pack.
+/// Matches a filename against a game from the metadata pack.
 ///
-/// Três tiers de nome, na ordem da seção 5.5 do spec: nome exato, título
-/// canônico, similaridade de edição. Mais um quarto eixo, o `matchCrc`, que é
-/// o único que não erra.
+/// Three name tiers: exact name, canonical title, edit similarity. Plus a
+/// fourth axis, `matchCrc`, the only one that never errs.
 ///
-/// Dart puro de propósito: `tool/verify_matcher.dart` roda esta classe fora do
-/// Flutter. Não adicione import de `package:flutter`.
+/// Pure Dart on purpose: `tool/verify_matcher.dart` runs this outside Flutter.
+/// Do not add a `package:flutter` import.
 class PackMatcher {
   final MetadataPack pack;
 
@@ -40,15 +34,14 @@ class PackMatcher {
     }
   }
 
-  /// Os quatro primeiros caracteres do primeiro token. Mesmo balde da PoC:
-  /// serve só para o tier 3 não varrer o pacote inteiro a cada falha.
+  /// The first four characters of the first token. A bucket so tier 3 does not
+  /// scan the whole pack on every miss.
   static String _head(String canonKey) {
     final first = canonKey.split(' ').first;
     return first.length <= 4 ? first : first.substring(0, 4);
   }
 
-  /// Quantos jogos e quantas chaves canônicas o matcher indexou. Serve para o
-  /// `tool/verify_matcher.dart` e para diagnóstico.
+  /// How many games and canonical keys the matcher indexed.
   int get indexedGames => pack.games.length;
   int get indexedCanonKeys => _byCanon.length;
 
@@ -94,11 +87,10 @@ class PackMatcher {
     );
   }
 
-  /// O eixo que não erra. [crc] pode vir em qualquer caixa.
+  /// The axis that never errs. [crc] may come in any case.
   ///
-  /// Cuidado de quem chama: o CRC tem que ser o da **ROM**, não o do arquivo
-  /// que a fonte serve. Um ZIP tem CRC próprio, e ele não está no pacote. Ver
-  /// a seção 5.8 do spec, limite 1.
+  /// Caller beware: the CRC must be the ROM's, not the served file's. A ZIP has
+  /// its own CRC and it is not in the pack.
   GameMatch? matchCrc(String crc, {String sourceName = ''}) {
     final upper = crc.toUpperCase();
     final game = pack.byCrc[upper];

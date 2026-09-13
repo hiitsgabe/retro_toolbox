@@ -1,245 +1,245 @@
-# Fatia 3, Grade e modos: plano de implementação
+# Slice 3, Grid and modes: implementation plan
 
-> **Para quem executa:** SUB-SKILL OBRIGATÓRIA: use `superpowers:subagent-driven-development` (recomendado) ou `superpowers:executing-plans` para executar tarefa a tarefa. Os passos usam checkbox (`- [ ]`) para acompanhamento.
+> **For whoever executes:** MANDATORY SUB-SKILL: use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to execute task by task. The steps use checkboxes (`- [ ]`) for tracking.
 
-**Goal:** fazer o tile da grade representar um **jogo** em vez de um **arquivo**, quando o console tem metadata pack, sem regredir em nada o console que não tem.
+**Goal:** make the grid tile represent a **game** instead of a **file**, when the console has a metadata pack, without regressing at all the console that does not have one.
 
-**Architecture:** o app passa a ter dois modos de grade, decididos por um único predicado, "existe pack para este console". O MODO FONTE é o app de hoje, byte por byte. O MODO PACK é uma grade nova, alimentada por um tipo novo de entrada (`PackGridEntry`), que junta um `PackGame` do pacote com a lista de arquivos que o `PackMatcher` da fatia 2 casou com ele. A escolha de qual arquivo baixar sai do tile e vai para a tela de detalhe e para a folha de lote, as duas movidas pela mesma regra determinística. A seleção múltipla, a barra do rodapé e a folha de confirmação não dependem de pack nenhum e são feitas primeiro, isoladas, já melhorando o app de hoje.
+**Architecture:** the app gains two grid modes, decided by a single predicate, "a pack exists for this console". SOURCE MODE is today's app, byte for byte. PACK MODE is a new grid, fed by a new entry type (`PackGridEntry`), which joins a `PackGame` from the pack with the list of files that the slice 2 `PackMatcher` matched to it. The choice of which file to download leaves the tile and goes to the detail screen and to the batch sheet, both driven by the same deterministic rule. Multiple selection, the footer bar and the confirmation sheet do not depend on any pack and are done first, in isolation, already improving today's app.
 
-**Tech Stack:** Flutter, Riverpod (`flutter_riverpod: ^2.6.1`), Material 3 com seed `#7C4DEF` e ChakraPetch, `cached_network_image` para as capas, `flutter_test` sem mockito, injeção por construtor. Nenhuma dependência nova no `pubspec.yaml`.
+**Tech Stack:** Flutter, Riverpod (`flutter_riverpod: ^2.6.1`), Material 3 with seed `#7C4DEF` and ChakraPetch, `cached_network_image` for the covers, `flutter_test` without mockito, constructor injection. No new dependency in `pubspec.yaml`.
 
-> **Nota posterior à execução, sobre o `-1`.** Todo "Esperado: `+N -1`" deste plano conta com uma falha permanente, `test/rar_decompress_screen_test.dart`. Ela foi consertada em `5d21b14`, **depois** de a fatia fechar. Num HEAD a partir dali, cada um desses passos dá `+N` e nenhuma falha, e **qualquer** falha é regressão. O detalhe está no Step 5 da Task 22.
+> **Post-execution note, about the `-1`.** Every "Expected: `+N -1`" in this plan counts on a permanent failure, `test/rar_decompress_screen_test.dart`. It was fixed in `5d21b14`, **after** the slice closed. On a HEAD from there on, each of these steps gives `+N` and no failure, and **any** failure is a regression. The detail is in Step 5 of Task 22.
 
 ---
 
-## Antes de começar: leia estas quatro coisas
+## Before starting: read these four things
 
-1. **`docs/stremio-de-jogos-ui.md` inteiro.** Este plano implementa as seções 3, 4, 5, 6, 7 e a UI da seção 8. As seções 9 e 10 são das fatias 4 e 6 e **não** são suas. A seção 12 lista o que está fora de escopo, e ela vale: coverflow e lista continuam como estão.
-2. **`docs/stremio-de-jogos-design.md`, seção 7, "Modos de grade"**, linhas 428 a 445. São dezoito linhas e elas definem a fatia inteira. Leia junto com a "Armadilha de leitura" logo abaixo neste plano, porque a seção 7 tem uma linha que engana.
-3. **`docs/plano-fatia-2-identidade.md`**, ao menos a tabela de "Estrutura de arquivos". Tudo que aquela fatia entregou é insumo desta, e nada dela deve ser reimplementado.
-4. **`lib/models/metadata_pack_model.dart` e `lib/models/game_match_model.dart`.** São os dois tipos que atravessam esta fatia inteira. `PackGame` é um jogo canônico com uma lista de `PackDump`; `GameMatch` é o veredito do matcher sobre um nome de arquivo.
+1. **`docs/stremio-de-jogos-ui.md` in full.** This plan implements sections 3, 4, 5, 6, 7 and the UI of section 8. Sections 9 and 10 belong to slices 4 and 6 and are **not** yours. Section 12 lists what is out of scope, and it holds: coverflow and list stay as they are.
+2. **`docs/stremio-de-jogos-design.md`, section 7, "Grid modes"**, lines 428 to 445. It is eighteen lines and they define the whole slice. Read it together with the "Reading pitfall" further below in this plan, because section 7 has one line that misleads.
+3. **`docs/plano-fatia-2-identidade.md`**, at least the "File structure" table. Everything that slice delivered is input to this one, and none of it should be reimplemented.
+4. **`lib/models/metadata_pack_model.dart` and `lib/models/game_match_model.dart`.** These are the two types that cross this whole slice. `PackGame` is a canonical game with a list of `PackDump`; `GameMatch` is the matcher's verdict about a file name.
 
-### Comandos deste repositório
+### Commands for this repository
 
-O `flutter` não está no PATH. Toda linha de comando deste plano assume:
+`flutter` is not on the PATH. Every command line in this plan assumes:
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 cd /home/exedev/Workspace/retro_toolbox
 ```
 
-- Suíte inteira: `flutter test`
-- Um arquivo só: `flutter test test/selection_bar_test.dart`
-- Análise: `flutter analyze`
+- Whole suite: `flutter test`
+- A single file: `flutter test test/selection_bar_test.dart`
+- Analysis: `flutter analyze`
 
-A saída do `flutter test` usa retorno de carro, então `flutter test | tail` mostra lixo. Para ver o fim:
+The `flutter test` output uses carriage returns, so `flutter test | tail` shows garbage. To see the end:
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -20
 ```
 
-**Linha de base antes desta fatia**, conferida rodando, não por relato: `flutter test` sai em `+178 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, e é anterior à fatia 1. Não é sua, não tente consertar, e ela tem que continuar sendo a única no fim. `flutter analyze` sai com **22 findings e zero erro**. A quebra exata, porque um allowlist vago já custou uma rodada de QA na fatia 2:
+**Baseline before this slice**, checked by running, not by report: `flutter test` exits at `+178 -1`. The only failure is `test/rar_decompress_screen_test.dart`, in the case `renders with extract disabled until a file and folder are picked`, and it predates slice 1. It is not yours, do not try to fix it, and it has to remain the only one at the end. `flutter analyze` exits with **22 findings and zero errors**. The exact breakdown, because a vague allowlist already cost a round of QA in slice 2:
 
-| Arquivo | Regra | Quantos | Origem |
+| File | Rule | How many | Origin |
 | --- | --- | --- | --- |
-| `tool/verify_matcher.dart` | `avoid_print` | 11 | fatia 2, aceito |
-| `tool/probe_zip_cd.dart` | `avoid_print` | 1 | fatia 2, aceito |
-| `lib/widgets/settings/network_address_setting.dart` | `deprecated_member_use` | 6 | pré-existente |
-| `lib/screens/fbi_server_screen.dart` | `use_build_context_synchronously` | 2 | pré-existente |
-| `test/webdav_server_test.dart` | `unnecessary_non_null_assertion` | 1 | pré-existente |
-| `lib/utils/rom_search.dart` | `dangling_library_doc_comments` | 1 | pré-existente |
+| `tool/verify_matcher.dart` | `avoid_print` | 11 | slice 2, accepted |
+| `tool/probe_zip_cd.dart` | `avoid_print` | 1 | slice 2, accepted |
+| `lib/widgets/settings/network_address_setting.dart` | `deprecated_member_use` | 6 | preexisting |
+| `lib/screens/fbi_server_screen.dart` | `use_build_context_synchronously` | 2 | preexisting |
+| `test/webdav_server_test.dart` | `unnecessary_non_null_assertion` | 1 | preexisting |
+| `lib/utils/rom_search.dart` | `dangling_library_doc_comments` | 1 | preexisting |
 
-O critério de aceitação desta fatia é **22, e nenhum finding novo em arquivo tocado por ela**. Não é "só `avoid_print` é aceitável": os dez findings de baixo já estavam lá antes da fatia 1 e não são trabalho seu.
+The acceptance criterion for this slice is **22, and no new finding in a file it touched**. It is not "only `avoid_print` is acceptable": the ten findings at the bottom were already there before slice 1 and are not your work.
 
-### `pubspec.lock` vive sujo e nunca entra em commit
+### `pubspec.lock` lives dirty and never enters a commit
 
-`git log -- pubspec.lock` para em `c637fd5`, muito antes da fatia 1, e mesmo assim `git status` mostra o arquivo modificado com 18 linhas trocadas. São downgrades de pacote transitivo (`matcher` 0.12.20 para 0.12.17, `material_color_utilities` 0.13.0 para 0.11.1, `characters` 1.4.1 para 1.4.0) que o Flutter 3.35.7 local reescreve a cada `pub get`. Não é trabalho de ninguém e volta sozinho.
+`git log -- pubspec.lock` stops at `c637fd5`, well before slice 1, and even so `git status` shows the file modified with 18 lines changed. These are transitive package downgrades (`matcher` 0.12.20 to 0.12.17, `material_color_utilities` 0.13.0 to 0.11.1, `characters` 1.4.1 to 1.4.0) that the local Flutter 3.35.7 rewrites on every `pub get`. It is nobody's work and comes back on its own.
 
-Consequência prática, e ela é obrigatória: **`git add` sempre por caminho explícito**. Nunca `git add -A`, nunca `git add .`, nunca `git commit -a`. Cada comando de commit deste plano já vem com os caminhos escritos.
+Practical consequence, and it is mandatory: **`git add` always by explicit path**. Never `git add -A`, never `git add .`, never `git commit -a`. Every commit command in this plan already comes with the paths written out.
 
 ---
 
-## Armadilha de leitura: o badge não é confiança
+## Reading pitfall: the badge is not confidence
 
-A seção 7 do spec de arquitetura desenha os dois modos assim (design:437-441):
+Section 7 of the architecture spec draws the two modes like this (design:435-439):
 
 ```
-                    MODO PACK           MODO FONTE
-        grade = jogos do pack        grade = listagem do addon
-        capa/sinopse = pack          capa = console.boxarts
-        badge = match do subsist. 2  badge = sempre disponível
+                    PACK MODE           SOURCE MODE
+        grid = pack games            grid = addon listing
+        cover/synopsis = pack        cover = console.boxarts
+        badge = subsystem 2 match    badge = always available
 ```
 
-Lida ao pé da letra, a linha `badge = match do subsist. 2` parece mandar pintar a **confiança** do match no tile. **Ela não manda, e fazer isso é erro.**
+Read literally, the line `badge = subsystem 2 match` seems to order painting the match **confidence** on the tile. **It does not, and doing so is an error.**
 
-O eixo daquela tabela é **disponibilidade**, não confiança. Em MODO FONTE tudo que está na listagem existe por definição, então o badge é sempre "disponível". Em MODO PACK a disponibilidade vem de o matcher ter achado alguma coisa. Ou seja:
+The axis of that table is **availability**, not confidence. In SOURCE MODE everything in the listing exists by definition, so the badge is always "available". In PACK MODE availability comes from the matcher having found something. In other words:
 
-> O badge do tile depende de `sources.isEmpty`, **nunca** de `match.confidence`. As três confianças (`confirmed`, `likely`, `guess`) dão exatamente o mesmo tile.
+> The tile badge depends on `sources.isEmpty`, **never** on `match.confidence`. The three confidences (`confirmed`, `likely`, `guess`) give exactly the same tile.
 
-Isso é a CONCLUSÃO 3 e a CONCLUSÃO 7 da revisão de design (task #10), e é decisão travada da seção 2 do spec de UI, linha 32: *"Confiança de match não aparece no tile. Confiança é propriedade da fonte, e fonte só aparece no detalhe. O jogo existe, o que é incerto é uma das fontes dele."*
+This is CONCLUSION 3 and CONCLUSION 7 of the design review (task #10), and it is a locked decision of section 2 of the UI spec, line 32: *"Match confidence does not appear on the tile. Confidence is a property of the source, and a source only appears in the detail. The game exists, what is uncertain is one of its sources."*
 
-O motivo não é estético, é de categoria: o tile representa um **jogo**, e um jogo pode ter várias fontes com confianças diferentes, então não existe uma confiança única do tile para pintar.
+The reason is not aesthetic, it is categorical: the tile represents a **game**, and a game can have several sources with different confidences, so there is no single tile confidence to paint.
 
-Dois revisores de design independentes já propuseram um badge de incerteza no tile, e as duas vezes foi rejeitado. Se você está lendo isto e achando que um badgezinho de incerteza no tile resolveria, você é o terceiro. Não resolve.
+Two independent design reviewers already proposed an uncertainty badge on the tile, and both times it was rejected. If you are reading this and thinking that a little uncertainty badge on the tile would solve it, you are the third. It does not.
 
-## Segunda decisão travada: CRC não é `MatchConfidence`
+## Second locked decision: CRC is not `MatchConfidence`
 
-`MatchConfidence` é a confiança **a priori**, derivada do tier de nome, e a fatia 2 já a produz. O resultado da verificação por CRC da seção 8 do spec de UI é **a posteriori** e é outro eixo:
+`MatchConfidence` is the **a priori** confidence, derived from the name tier, and slice 2 already produces it. The result of the CRC verification of section 8 of the UI spec is **a posteriori** and is another axis:
 
-| Eixo | Tipo | Valores | Quem produz |
+| Axis | Type | Values | Who produces it |
 | --- | --- | --- | --- |
-| A priori | `MatchConfidence` (já existe) | `confirmed`, `likely`, `guess` | fatia 2, `game_match_model.dart` |
-| A posteriori | `SourceVerification` (Task 18) | `notVerified`, `verifying`, `crcOk`, `crcDiscarded`, `impossible` | esta fatia |
+| A priori | `MatchConfidence` (already exists) | `confirmed`, `likely`, `guess` | slice 2, `game_match_model.dart` |
+| A posteriori | `SourceVerification` (Task 18) | `notVerified`, `verifying`, `crcOk`, `crcDiscarded`, `impossible` | this slice |
 
-Um `confirmed` já nasce com CRC batido e nunca passa por `verifying`. Um `guess` passa por `verifying` e cai em `crcOk`, `crcDiscarded` ou `impossible`.
+A `confirmed` is born with a matched CRC and never goes through `verifying`. A `guess` goes through `verifying` and lands in `crcOk`, `crcDiscarded` or `impossible`.
 
-**Se você se pegar acrescentando um valor `crcOk` ao `MatchConfidence`, pare: está errado.** É a CONCLUSÃO 6 da task #10, à qual os dois revisores chegaram de forma independente.
+**If you catch yourself adding a `crcOk` value to `MatchConfidence`, stop: it is wrong.** It is CONCLUSION 6 of task #10, which the two reviewers reached independently.
 
-## Terceira decisão travada: em MODO PACK não se sintetiza `Game`
+## Third locked decision: in PACK MODE no `Game` is synthesized
 
-Havia duas saídas para alimentar a grade de pack: sintetizar um `Game` falso por `PackGame`, reaproveitando toda a grade de hoje, ou criar um tipo novo de entrada. **É o tipo novo.** Três razões, todas verificadas no código:
+There were two ways out to feed the pack grid: synthesize a fake `Game` per `PackGame`, reusing the whole grid of today, or create a new entry type. **It is the new type.** Three reasons, all verified in the code:
 
-1. `gameStateProvider` é um `Provider.family<GameState, Game>` (game_state_provider.dart:14) chaveado por `game.gameId` (:16), e resolve o estado chamando `snap.getStatus(game.filename)` (:164) e `path.join(downloadDir, game.filename)` (:247). Ele é **file-keyed até o osso**. Um `Game` sintético sem arquivo real faria esse provider mentir sobre estado de download.
-2. `FilteringService._matchesFilter` tem literalmente `if (metadata == null) return true;` (filtering_service.dart:59-60). Um `Game` sintético sem metadata passaria por todos os filtros de região, revisão e qualidade de dump, ou seja os chips de filtro ficariam decorativos e mentirosos.
-3. `_filterLatestRevisions` (filtering_service.dart:116-147) monta a chave `'$baseTitle|$regions|$languages|$diskNumber'`, que com metadata nulo colapsa em `'$title|||'`, e a filtragem final compara por **identidade de objeto** (`latestByGameIdentity[gameIdentity] == game`). Como `Game` não tem `operator ==`, dois sintéticos de mesmo título viram um só, silenciosamente. Medido no pacote SNES real: 2415 jogos, 2415 títulos distintos, zero colisão. O risco não se materializa hoje, então este é o **terceiro** argumento e não o primeiro, mas é um alçapão que não faz sentido deixar armado.
+1. `gameStateProvider` is a `Provider.family<GameState, Game>` (game_state_provider.dart:14) keyed by `game.gameId` (:16), and resolves state by calling `snap.getStatus(game.filename)` (:164) and `path.join(downloadDir, game.filename)` (:247). It is **file-keyed to the bone**. A synthetic `Game` without a real file would make this provider lie about download state.
+2. `FilteringService._matchesFilter` literally has `if (metadata == null) return true;` (filtering_service.dart:59-60). A synthetic `Game` without metadata would pass through all the region, revision and dump quality filters, meaning the filter chips would become decorative and lying.
+3. `_filterLatestRevisions` (filtering_service.dart:116-147) builds the key `'$baseTitle|$regions|$languages|$diskNumber'`, which with null metadata collapses into `'$title|||'`, and the final filtering compares by **object identity** (`latestByGameIdentity[gameIdentity] == game`). Since `Game` has no `operator ==`, two synthetics of the same title become one, silently. Measured on the real SNES pack: 2415 games, 2415 distinct titles, zero collision. The risk does not materialize today, so this is the **third** argument and not the first, but it is a trapdoor that makes no sense to leave armed.
 
-Consequência: `game_grid_item.dart`, `game_grid.dart` e `filtering_service.dart` **não são modificados por esta fatia**. O MODO PACK ganha widgets próprios. Isso é uma divergência deliberada da tabela da seção 11 do spec de UI, que fala em "duas variantes por modo" dentro de `game_grid_item.dart`; a divergência protege o `GameCoverFlow`, que reusa `GameGridItem` e está explicitamente fora de escopo (spec de UI, seção 12).
+Consequence: `game_grid_item.dart`, `game_grid.dart` and `filtering_service.dart` **are not modified by this slice**. PACK MODE gets its own widgets. This is a deliberate divergence from the table of section 11 of the UI spec, which speaks of "two variants per mode" inside `game_grid_item.dart`; the divergence protects `GameCoverFlow`, which reuses `GameGridItem` and is explicitly out of scope (UI spec, section 12).
 
-## Quarta decisão travada: a chave de seleção em MODO PACK
+## Fourth locked decision: the selection key in PACK MODE
 
-A seleção já existe e é um `Set<String>` em `CatalogState` (catalog_model.dart:13), lida por `gameSelectionProvider`, um `Provider.family<bool, String>` (catalog_provider.dart:17). Todo esse encanamento serve sem modificação, **desde que a string de MODO PACK não colida com a de MODO FONTE**.
+Selection already exists and is a `Set<String>` in `CatalogState` (catalog_model.dart:13), read by `gameSelectionProvider`, a `Provider.family<bool, String>` (catalog_provider.dart:17). All this plumbing serves without modification, **as long as the PACK MODE string does not collide with the SOURCE MODE one**.
 
-- Em MODO FONTE a chave é `Game.gameId`, que é `'$consoleId/$filename'` (game_model.dart:86).
-- `consoleId` sai de `CatalogService._nameToId` (catalog_service.dart:61-63), que é `[a-z0-9_]+`.
-- `PackGame.id` é `'<pack_id>/<slug>'` (`tool/build_metadata_pack.py:237`), por exemplo `snes/chrono-trigger`. **Também tem barra, e também começa com `[a-z0-9]`.** Usar `PackGame.id` cru como chave de seleção não é comprovadamente disjunto de `Game.gameId`.
+- In SOURCE MODE the key is `Game.gameId`, which is `'$consoleId/$filename'` (game_model.dart:86).
+- `consoleId` comes from `CatalogService._nameToId` (catalog_service.dart:61-63), which is `[a-z0-9_]+`.
+- `PackGame.id` is `'<pack_id>/<slug>'` (`tool/build_metadata_pack.py:237`), for example `snes/crystal-vanguard`. **It also has a slash, and it also starts with `[a-z0-9]`.** Using raw `PackGame.id` as the selection key is not provably disjoint from `Game.gameId`.
 
-Por isso a chave de MODO PACK é **`'pack:${packGame.id}'`**, com o prefixo literal. O caractere `:` não pode aparecer num `consoleId` gerado por `_nameToId`, então a colisão fica impossível pelo caminho normal.
+That is why the PACK MODE key is **`'pack:${packGame.id}'`**, with the literal prefix. The `:` character cannot appear in a `consoleId` generated by `_nameToId`, so the collision becomes impossible through the normal path.
 
-Edge conhecido e aceito: `catalog_service.dart:95-96` aceita um `consoles.json` no formato de mapa legado e usa a chave do mapa **verbatim**, sem passar por `_nameToId`. Um `consoles.json` escrito à mão com um console de id `pack:snes` e um arquivo de nome `chrono-trigger` colidiria. Não vale código para isso; vale a linha de comentário que a Task 10 manda escrever.
+Known and accepted edge: `catalog_service.dart:95-96` accepts a `consoles.json` in the legacy map format and uses the map key **verbatim**, without passing it through `_nameToId`. A hand-written `consoles.json` with a console whose id is `pack:snes` and a file named `crystal-vanguard` would collide. It is not worth code for this; it is worth the comment line that Task 10 orders written.
 
-## Quinta decisão travada: busca sim, chips de versão não
+## Fifth locked decision: search yes, version chips no
 
-Em MODO PACK a grade não passa pelo `FilteringService`, porque aquele serviço opera sobre `List<Game>` e a grade de pack não tem `Game`. Então:
+In PACK MODE the grid does not pass through `FilteringService`, because that service operates over `List<Game>` and the pack grid has no `Game`. So:
 
-- **A caixa de busca continua funcionando, e continua sendo a mesma.** `SearchField` (header.dart:102-107 e :145-150) segue chamando `catalogNotifier.updateFilterText(text)` (catalog_provider.dart:223-226), que segue guardando `filterText` no `CatalogState`. O que muda é só o consumidor: em MODO PACK quem lê `filterText` é `filterPackEntries` (Task 9), Dart puro, sem isolate. São 2415 entradas e um `contains` em string minúscula; medir isso em isolate seria cerimônia sem ganho.
-- **Os chips de região, revisão e qualidade de dump ficam fora da grade de pack.** Região, revisão e qualidade são propriedades de uma **versão**, e em MODO PACK a grade não tem versão, então esses filtros não têm sujeito. Filtrar a grade por "tem dump nessa região" esconderia jogos com base numa propriedade que o tile nem mostra, contrariando a premissa inteira da seção 3.1 do spec de UI ("o tile marca só a exceção", e não "o tile some").
-- `filter.regions` **não morre**: ele passa a alimentar a regra de escolha de versão (Task 14), que é onde região tem sujeito. É exatamente o que a tabela da seção 11 do spec de UI prevê para `catalog_filter_model.dart`.
-- Consequência de UI, e ela é obrigatória: em MODO PACK o botão de funil do header **não some**, ele muda de rótulo. A Task 19 trata disso.
-
----
-
-## Sexta decisão travada: nenhum teste toca o disco de favoritos
-
-Esta seção existe porque a primeira versão deste plano estava **errada** neste ponto, e o erro foi pego rodando o código na Task 1. Está escrito aqui inteiro para que ninguém repita.
-
-`CatalogNotifier` escuta `favoritesProvider` no construtor (`catalog_provider.dart:38`), e `FavoritesNotifier` chama `_loadFavorites()` dentro do próprio construtor (`favorites_provider.dart:9`), que vai ao disco por `path_provider`. Qualquer teste que construa um `catalogProvider` de verdade, em `ProviderContainer` ou em `ProviderScope`, herda isso. **Verificado rodando**, e são dois defeitos distintos, não um:
-
-1. Sem nada, o teste passa e **depois** estoura `MissingPluginException(No implementation found for method getApplicationSupportDirectory on channel plugins.flutter.io/path_provider)`. O `flutter test` conta isso como falha do caso que já tinha passado.
-2. Registrando um handler falso para o canal do `path_provider`, o `MissingPluginException` some e aparece o segundo defeito, mais difícil: `_loadFavorites` é `async` e a atribuição `state = await ...` completa **depois** do `addTearDown(container.dispose)`, então estoura `Bad state: Tried to use FavoritesNotifier after 'dispose' was called`. Com um caso só isso às vezes não aparece, por sorte de escalonamento. Com dois, aparece sempre.
-
-`TestWidgetsFlutterBinding.ensureInitialized()` **não conserta nem um nem outro**. O binding não registra o canal do `path_provider`, e não tem nada a ver com a corrida do `dispose`. Se você viu essa linha em algum lugar deste plano como sendo o conserto, o plano estava errado.
-
-**O conserto, e ele é obrigatório:** sobrescrever `favoritesProvider` por uma versão em memória. A Task 1 cria `test/support/favorites_stub.dart` com `InMemoryFavoritesNotifier` e a constante `semDiscoDeFavoritos`, e **todo** teste desta fatia que construa `catalogProvider` de verdade tem que pôr `semDiscoDeFavoritos` na lista de `overrides`. São eles: Task 1, Task 12, Task 15, Task 16, Task 18 e Task 21.
-
-O stub guarda favorito em memória de verdade, com `toggleFavorite` que funciona, e **não** é um no-op. Isso não é capricho: os testes das Tasks 15 e 18 apertam o coração e esperam o ícone virar `Icons.favorite`. Com um stub que não faz nada, esses testes falhariam, e o conserto errado seria afrouxar a asserção.
+- **The search box keeps working, and keeps being the same one.** `SearchField` (header.dart:102-107 and :145-150) keeps calling `catalogNotifier.updateFilterText(text)` (catalog_provider.dart:223-226), which keeps storing `filterText` in the `CatalogState`. What changes is only the consumer: in PACK MODE the one who reads `filterText` is `filterPackEntries` (Task 9), pure Dart, no isolate. It is 2415 entries and a `contains` on a lowercase string; measuring that in an isolate would be ceremony without gain.
+- **The region, revision and dump quality chips stay out of the pack grid.** Region, revision and quality are properties of a **version**, and in PACK MODE the grid has no version, so these filters have no subject. Filtering the grid by "has a dump in that region" would hide games based on a property that the tile does not even show, contradicting the whole premise of section 3.1 of the UI spec ("the tile marks only the exception", not "the tile disappears").
+- `filter.regions` **does not die**: it goes on to feed the version choice rule (Task 14), which is where region has a subject. It is exactly what the table of section 11 of the UI spec foresees for `catalog_filter_model.dart`.
+- UI consequence, and it is mandatory: in PACK MODE the header funnel button **does not disappear**, it changes label. Task 19 handles this.
 
 ---
 
-## Estrutura de arquivos
+## Sixth locked decision: no test touches the favorites disk
 
-Quinze arquivos de produção novos. **Três** arquivos de produção existentes modificados. `pubspec.yaml` não muda.
+This section exists because the first version of this plan was **wrong** on this point, and the error was caught by running the code in Task 1. It is written here in full so that nobody repeats it.
 
-### Novos
+`CatalogNotifier` listens to `favoritesProvider` in the constructor (`catalog_provider.dart:38`), and `FavoritesNotifier` calls `_loadFavorites()` inside its own constructor (`favorites_provider.dart:9`), which goes to disk via `path_provider`. Any test that builds a real `catalogProvider`, in a `ProviderContainer` or in a `ProviderScope`, inherits this. **Verified by running**, and there are two distinct defects, not one:
 
-| Arquivo | Responsabilidade | Depende de |
+1. With nothing, the test passes and **then** throws `MissingPluginException(No implementation found for method getApplicationSupportDirectory on channel plugins.flutter.io/path_provider)`. `flutter test` counts this as a failure of the case that had already passed.
+2. Registering a fake handler for the `path_provider` channel, the `MissingPluginException` disappears and the second, harder defect appears: `_loadFavorites` is `async` and the assignment `state = await ...` completes **after** the `addTearDown(container.dispose)`, so it throws `Bad state: Tried to use FavoritesNotifier after 'dispose' was called`. With a single case this sometimes does not appear, by scheduling luck. With two, it always does.
+
+`TestWidgetsFlutterBinding.ensureInitialized()` **fixes neither one**. The binding does not register the `path_provider` channel, and it has nothing to do with the `dispose` race. If you saw that line somewhere in this plan as the fix, the plan was wrong.
+
+**The fix, and it is mandatory:** override `favoritesProvider` with an in-memory version. Task 1 creates `test/support/favorites_stub.dart` with `InMemoryFavoritesNotifier` and the constant `withoutFavoritesDisk`, and **every** test of this slice that builds a real `catalogProvider` has to put `withoutFavoritesDisk` in the `overrides` list. They are: Task 1, Task 12, Task 15, Task 16, Task 18 and Task 21.
+
+The stub keeps favorites in memory for real, with a `toggleFavorite` that works, and is **not** a no-op. This is not a whim: the tests of Tasks 15 and 18 hold their breath and expect the icon to become `Icons.favorite`. With a stub that does nothing, those tests would fail, and the wrong fix would be to loosen the assertion.
+
+---
+
+## File structure
+
+Fifteen new production files. **Three** existing production files modified. `pubspec.yaml` does not change.
+
+### New
+
+| File | Responsibility | Depends on |
 | --- | --- | --- |
-| `lib/models/grid_entry_model.dart` | `PackGridEntry` (um `PackGame` mais as fontes casadas com ele), `MatchedSource` (uma fonte casada, com confiança e tamanho) e `kPackSelectionPrefix`. Dart puro. | `metadata_pack_model`, `game_match_model` |
-| `lib/models/source_verification_model.dart` | `SourceVerification`, o eixo a posteriori do CRC. Dart puro. | nada |
-| `lib/models/source_pick_model.dart` | `SourcePick`, `PickFailure` e `kBuiltinSourceId`. Dart puro. | `game_model` |
-| `lib/services/source_index.dart` | Índice invertido jogo para fontes, construído uma vez por console. Dart puro. | `pack_matcher`, `game_match_model` |
-| `lib/services/pack_grid_filter.dart` | Busca por texto e ordenação da grade de pack (`filterPackEntries`, Task 9), mais o recorte da seleção por modo (`entriesForSelection` e `selectionKeysFor`, Task 20). Dart puro. | `grid_entry_model`, `pack_naming` |
-| `lib/services/source_pick_service.dart` | Produz `BatchPlan`. Nasce na Task 6 com o caso trivial de MODO FONTE (`planFromGames`) e ganha na Task 14 a regra da seção 6 do spec de UI: região, revisão, confiança, prioridade. Dart puro. | `game_model`, `grid_entry_model`, `source_pick_model` |
-| `lib/providers/pack_grid_provider.dart` | `gridModeProvider`, `sourceIndexProvider`, `allPackEntriesProvider`, `packGridEntriesProvider`, e os dois seams de teste `packTargetProvider` e `catalogGamesProvider`. | tudo acima, `identity_provider`, `catalog_provider` |
-| `lib/providers/owned_games_provider.dart` | Conjunto de ids de `PackGame` que já estão no disco. | `identity_provider`, `settings_provider` |
-| `lib/services/source_verification_service.dart` | Responde "este arquivo remoto contém um dump deste jogo?" lendo o CRC por `Range`. Dart puro. | `pack_matcher`, `zip_central_directory`, `source_verification_model` |
-| `lib/providers/source_verification_provider.dart` | Disparo e cache da verificação por CRC, por (fonte, arquivo). | `source_verification_service`, `identity_provider` |
-| `lib/widgets/footer/selection_bar.dart` | A faixa roxa da seção 5 do spec de UI. Widget puro. | nada |
-| `lib/widgets/game_grid/batch_confirm_sheet.dart` | A folha de confirmação da seção 6. Widget puro. | `source_pick_model` |
-| `lib/widgets/game_grid/pack_grid_item.dart` | O tile de MODO PACK. Widget puro. | nada (recebe primitivos) |
-| `lib/widgets/game_grid/pack_grid.dart` | A grade de MODO PACK, com a faixa de estado vazio da seção 3.2. | `pack_grid_item`, `pack_grid_provider` |
-| `lib/screens/game_detail_screen.dart` | A tela das seções 7 e 8. | quase tudo acima |
+| `lib/models/grid_entry_model.dart` | `PackGridEntry` (a `PackGame` plus the sources matched to it), `MatchedSource` (a matched source, with confidence and size) and `kPackSelectionPrefix`. Pure Dart. | `metadata_pack_model`, `game_match_model` |
+| `lib/models/source_verification_model.dart` | `SourceVerification`, the a posteriori CRC axis. Pure Dart. | nothing |
+| `lib/models/source_pick_model.dart` | `SourcePick`, `PickFailure` and `kBuiltinAddonId`. Pure Dart. | `game_model` |
+| `lib/services/source_index.dart` | Inverted index game to sources, built once per console. Pure Dart. | `pack_matcher`, `game_match_model` |
+| `lib/services/pack_grid_filter.dart` | Text search and sorting of the pack grid (`filterPackEntries`, Task 9), plus the per-mode selection slicing (`entriesForSelection` and `selectionKeysFor`, Task 20). Pure Dart. | `grid_entry_model`, `pack_naming` |
+| `lib/services/source_pick_service.dart` | Produces `BatchPlan`. Born in Task 6 with the trivial SOURCE MODE case (`planFromGames`) and gains in Task 14 the rule of section 6 of the UI spec: region, revision, confidence, priority. Pure Dart. | `game_model`, `grid_entry_model`, `source_pick_model` |
+| `lib/providers/pack_grid_provider.dart` | `gridModeProvider`, `sourceIndexProvider`, `allPackEntriesProvider`, `packGridEntriesProvider`, and the two test seams `packTargetProvider` and `catalogGamesProvider`. | everything above, `identity_provider`, `catalog_provider` |
+| `lib/providers/owned_games_provider.dart` | Set of `PackGame` ids that are already on disk. | `identity_provider`, `settings_provider` |
+| `lib/services/source_verification_service.dart` | Answers "does this remote file contain a dump of this game?" by reading the CRC via `Range`. Pure Dart. | `pack_matcher`, `zip_central_directory`, `source_verification_model` |
+| `lib/providers/source_verification_provider.dart` | Trigger and cache of the CRC verification, per (source, file). | `source_verification_service`, `identity_provider` |
+| `lib/widgets/footer/selection_bar.dart` | The purple strip of section 5 of the UI spec. Pure widget. | nothing |
+| `lib/widgets/game_grid/batch_confirm_sheet.dart` | The confirmation sheet of section 6. Pure widget. | `source_pick_model` |
+| `lib/widgets/game_grid/pack_grid_item.dart` | The PACK MODE tile. Pure widget. | nothing (receives primitives) |
+| `lib/widgets/game_grid/pack_grid.dart` | The PACK MODE grid, with the empty state strip of section 3.2. | `pack_grid_item`, `pack_grid_provider` |
+| `lib/screens/game_detail_screen.dart` | The screen of sections 7 and 8. | almost everything above |
 
-### Modificados
+### Modified
 
-| Arquivo | O que muda | Na Task |
+| File | What changes | In Task |
 | --- | --- | --- |
-| `lib/providers/catalog_provider.dart` | ganha `clearSelection()` | 1 |
-| `lib/widgets/header/header.dart` | sai o botão "Download Selected" (`:184-195`), o funil ganha rótulo por modo | 3 e 19 |
-| `lib/screens/home_screen.dart` | entra a `SelectionBar`, a folha de lote e o roteamento de modo | 3, 6 e 19 |
-| `lib/services/task_queue_service.dart` | nenhuma. **Está aqui de propósito.** Uma versão anterior desta tabela prometia um `startDownloadsFromPicks`. Ele não existe: o corpo seria `startDownloads(ref, context, picks.map((p) => p.game).toList(), consoleId)` e nada mais, porque `SourcePick` já carrega o `Game` inteiro. Apelido de uma linha não se testa e não paga o arquivo tocado | nenhuma |
-| `lib/widgets/footer/footer.dart` | nenhuma. **Está aqui de propósito, para dizer que não muda.** A barra de seleção senta *acima* dele, como irmã no `Column`, e não dentro dele | nenhuma |
+| `lib/providers/catalog_provider.dart` | gains `clearSelection()` | 1 |
+| `lib/widgets/header/header.dart` | the "Download Selected" button goes away (`:184-195`), the funnel gains a per-mode label | 3 and 19 |
+| `lib/screens/home_screen.dart` | the `SelectionBar`, the batch sheet and the mode routing come in | 3, 6 and 19 |
+| `lib/services/task_queue_service.dart` | none. **It is here on purpose.** An earlier version of this table promised a `startDownloadsFromPicks`. It does not exist: the body would be `startDownloads(ref, context, picks.map((p) => p.game).toList(), consoleId)` and nothing else, because `SourcePick` already carries the whole `Game`. A one-line alias is not tested and does not pay for the file touched | none |
+| `lib/widgets/footer/footer.dart` | none. **It is here on purpose, to say that it does not change.** The selection bar sits *above* it, as a sibling in the `Column`, and not inside it | none |
 
-### Intocados, e isso é requisito
+### Untouched, and this is a requirement
 
-`lib/widgets/game_grid/game_grid_item.dart`, `lib/widgets/game_grid/game_grid.dart`, `lib/widgets/game_grid/game_cover_flow.dart`, `lib/services/filtering_service.dart`, `lib/widgets/game_list/` inteiro. Note o caminho do coverflow: ele mora **dentro** de `lib/widgets/game_grid/`, e não num diretório próprio, então a conferência daquele diretório é arquivo a arquivo e não de uma vez, porque a fatia cria três arquivos novos lá dentro. O MODO FONTE é o app de hoje e tem que continuar sendo. A Task 22 prova isso com `git diff --stat`.
+`lib/widgets/game_grid/game_grid_item.dart`, `lib/widgets/game_grid/game_grid.dart`, `lib/widgets/game_grid/game_cover_flow.dart`, `lib/services/filtering_service.dart`, the whole of `lib/widgets/game_list/`. Note the coverflow path: it lives **inside** `lib/widgets/game_grid/`, and not in a directory of its own, so the check of that directory is file by file and not all at once, because the slice creates three new files in there. SOURCE MODE is today's app and has to remain so. Task 22 proves this with `git diff --stat`.
 
 ---
 
-**Um arquivo de apoio de teste**, que não é de produção e por isso não aparece na conferência de `lib/` da Task 22:
+**One test support file**, which is not production and therefore does not appear in the `lib/` check of Task 22:
 
-| Arquivo | Responsabilidade | Depende de |
+| File | Responsibility | Depends on |
 |---|---|---|
-| `test/support/favorites_stub.dart` | `InMemoryFavoritesNotifier` e a constante `semDiscoDeFavoritos`, a sobrescrita de `favoritesProvider` que tira o disco e a corrida de `async` do caminho. Criado na Task 1, usado pelas Tasks 1, 12, 15, 16, 18 e 21. Ver a "Sexta decisão travada". | `favorites_provider`, `favorites_model` |
+| `test/support/favorites_stub.dart` | `InMemoryFavoritesNotifier` and the constant `withoutFavoritesDisk`, the `favoritesProvider` override that removes the disk and the `async` race from the path. Created in Task 1, used by Tasks 1, 12, 15, 16, 18 and 21. See the "Sixth locked decision". | `favorites_provider`, `favorites_model` |
 
-## Convenção de commit desta fatia
+## Commit convention for this slice
 
-Cada Task abaixo é dividida entre um agente de teste e um agente de produção, e por isso **cada Task traz duas mensagens de commit**, nunca uma:
+Each Task below is split between a test agent and a production agent, and therefore **each Task brings two commit messages**, never one:
 
-- `test(<escopo>): <texto>` para o commit que só toca `test/`
-- `feat(<escopo>): <mesmo texto>` para o commit que só toca `lib/`
+- `test(<scope>): <text>` for the commit that only touches `test/`
+- `feat(<scope>): <same text>` for the commit that only touches `lib/`
 
-O texto descritivo é o mesmo nos dois. Na fatia 2 a falta dessa regra gerou onze pares de commits com mensagem idêntica, e resolver "qual é qual" só deu por `git show --stat`.
+The descriptive text is the same in both. In slice 2 the absence of this rule produced eleven pairs of commits with identical messages, and resolving "which is which" only worked through `git show --stat`.
 
-**Regra de homogeneidade:** um commit toca ou só `lib/`, ou só `test/`. As duas exceções legítimas são `tool/` e `docs/`, que podem acompanhar qualquer um dos dois. Na fatia 2 o QA teve que decidir isso sozinho no commit `15520e2`; agora está escrito.
+**Homogeneity rule:** a commit touches either only `lib/`, or only `test/`. The two legitimate exceptions are `tool/` and `docs/`, which can accompany either of the two. In slice 2 the QA had to decide this alone in commit `15520e2`; now it is written.
 
-Escopos usados nesta fatia: `selecao`, `lote`, `grade`, `detalhe`, `crc`.
-
----
-
-# Grupo 1: seleção e lote
-
-Este grupo não toca em pack, matcher nem addon. Ele melhora o app de hoje sozinho e pode começar antes de qualquer outra coisa. É a "exceção útil" da seção 13 do spec de UI.
+Scopes used in this slice: `selecao`, `lote`, `grade`, `detalhe`, `crc`.
 
 ---
 
-### Task 1: `clearSelection` no `CatalogNotifier`
+# Group 1: selection and batch
+
+This group does not touch pack, matcher or addon. It improves today's app on its own and can start before anything else. It is the "useful exception" of section 13 of the UI spec.
+
+---
+
+### Task 1: `clearSelection` on `CatalogNotifier`
 
 **Files:**
 - Modify: `lib/providers/catalog_provider.dart`
 - Test: `test/catalog_selection_test.dart`
 
-O `×` da barra do rodapé precisa limpar a seleção inteira, e esse método não existe. Hoje só há `toggleGameSelection` (`:228`), `selectGame` (`:240`) e `deselectGame` (`:246`).
+The `×` of the footer bar needs to clear the entire selection, and that method does not exist. Today there is only `toggleGameSelection` (`:228`), `selectGame` (`:240`) and `deselectGame` (`:246`).
 
-- [ ] **Step 1: Crie o stub de favoritos que a fatia inteira vai usar**
+- [ ] **Step 1: Create the favorites stub that the whole slice will use**
 
-Leia a "Sexta decisão travada" antes deste passo. Em resumo: `catalogProvider` de verdade vai ao disco e estoura depois do teste, e este arquivo é o conserto, usado por seis Tasks.
+Read the "Sixth locked decision" before this step. In short: a real `catalogProvider` goes to disk and throws after the test, and this file is the fix, used by six Tasks.
 
-Crie `test/support/favorites_stub.dart`:
+Create `test/support/favorites_stub.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/models/favorites_model.dart';
 import 'package:roms_downloader/providers/favorites_provider.dart';
 
-/// Favoritos em memória, sem disco e sem `async` que sobreviva ao teste.
+/// In-memory favorites, no disk and no `async` that outlives the test.
 ///
-/// O `FavoritesNotifier` de verdade chama `_loadFavorites()` no construtor,
-/// que vai ao `path_provider`. Em teste isso dá `MissingPluginException`, e
-/// se você calar o canal, dá `Bad state: Tried to use FavoritesNotifier
-/// after dispose` porque o `await` completa depois do teardown.
+/// The real `FavoritesNotifier` calls `_loadFavorites()` in the constructor,
+/// which goes to `path_provider`. In tests this gives `MissingPluginException`,
+/// and if you silence the channel, it gives `Bad state: Tried to use
+/// FavoritesNotifier after dispose` because the `await` completes after teardown.
 ///
-/// Guarda favorito de verdade, e não é no-op: as Tasks 15 e 18 apertam o
-/// coração e esperam o ícone virar.
+/// Keeps favorites for real, and is not a no-op: Tasks 15 and 18 hold their
+/// breath and expect the icon to flip.
 class InMemoryFavoritesNotifier extends StateNotifier<Favorites>
     implements FavoritesNotifier {
   InMemoryFavoritesNotifier()
@@ -280,15 +280,15 @@ class InMemoryFavoritesNotifier extends StateNotifier<Favorites>
   bool isFavorite(String gameId) => state.isFavorite(gameId);
 }
 
-/// Ponha isto na lista de `overrides` de todo teste que construa
-/// `catalogProvider` de verdade, em container ou em `ProviderScope`.
-final semDiscoDeFavoritos =
+/// Put this in the `overrides` list of every test that builds a real
+/// `catalogProvider`, in a container or in a `ProviderScope`.
+final withoutFavoritesDisk =
     favoritesProvider.overrideWith((_) => InMemoryFavoritesNotifier());
 ```
 
-- [ ] **Step 2: Escreva os testes que falham**
+- [ ] **Step 2: Write the tests that fail**
 
-Crie `test/catalog_selection_test.dart`:
+Create `test/catalog_selection_test.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -298,8 +298,8 @@ import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'support/favorites_stub.dart';
 
 void main() {
-  test('clearSelection zera a seleção inteira', () {
-    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
+  test('clearSelection empties the whole selection', () {
+    final container = ProviderContainer(overrides: [withoutFavoritesDisk]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -312,8 +312,8 @@ void main() {
     expect(container.read(catalogProvider).selectedGames, isEmpty);
   });
 
-  test('clearSelection não emite estado quando a seleção já está vazia', () {
-    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
+  test('clearSelection emits no state when the selection is already empty', () {
+    final container = ProviderContainer(overrides: [withoutFavoritesDisk]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -322,75 +322,75 @@ void main() {
 
     notifier.clearSelection();
 
-    // A grade inteira reconstrói a cada emissão do catalogProvider. Limpar
-    // uma seleção que já está vazia não pode custar isso.
+    // The whole grid rebuilds on every catalogProvider emission. Clearing a
+    // selection that is already empty must not cost that.
     expect(emissions, 0);
   });
 }
 ```
 
-- [ ] **Step 3: Rode e veja falhar**
+- [ ] **Step 3: Run and watch it fail**
 
 ```bash
 flutter test test/catalog_selection_test.dart
 ```
 
-Esperado: falha de compilação, `The method 'clearSelection' isn't defined for the type 'CatalogNotifier'`.
+Expected: compile failure, `The method 'clearSelection' isn't defined for the type 'CatalogNotifier'`.
 
-Se em vez disso você vir `MissingPluginException` ou `Tried to use FavoritesNotifier after dispose`, o Step 1 não foi feito ou o `semDiscoDeFavoritos` não entrou nos `overrides`.
+If instead you see `MissingPluginException` or `Tried to use FavoritesNotifier after dispose`, Step 1 was not done or `withoutFavoritesDisk` did not enter the `overrides`.
 
-- [ ] **Step 4: Implemente**
+- [ ] **Step 4: Implement**
 
-Em `lib/providers/catalog_provider.dart`, logo depois de `deselectGame` (que termina na linha 250), acrescente:
+In `lib/providers/catalog_provider.dart`, right after `deselectGame` (which ends at line 250), add:
 
 ```dart
-  /// Limpa a seleção inteira. É o `×` da barra do rodapé.
+  /// Clears the whole selection. It is the `×` of the footer bar.
   ///
-  /// A guarda de vazio não é micro-otimização: toda a grade escuta
-  /// `catalogProvider`, então emitir estado igual custa um rebuild da tela.
+  /// The empty guard is not a micro-optimization: the whole grid listens to
+  /// `catalogProvider`, so emitting an equal state costs a screen rebuild.
   void clearSelection() {
     if (state.selectedGames.isEmpty) return;
     state = state.copyWith(selectedGames: {});
   }
 ```
 
-- [ ] **Step 5: Rode e veja passar**
+- [ ] **Step 5: Run and watch it pass**
 
 ```bash
 flutter test test/catalog_selection_test.dart
 ```
 
-Esperado: `+2`, zero falha.
+Expected: `+2`, zero failures.
 
 - [ ] **Step 6: Commit**
 
-Duas mensagens, uma por agente. O stub vai junto do commit de teste, porque é arquivo de teste:
+Two messages, one per agent. The stub goes with the test commit, because it is a test file:
 
 ```bash
-# agente de teste
+# test agent
 git add test/support/favorites_stub.dart test/catalog_selection_test.dart
 git commit -m "test(selecao): clearSelection zera a selecao sem emitir a toa"
 
-# agente de producao
+# production agent
 git add lib/providers/catalog_provider.dart
 git commit -m "feat(selecao): clearSelection zera a selecao sem emitir a toa"
 ```
 
 ---
 
-### Task 2: o widget `SelectionBar`
+### Task 2: the `SelectionBar` widget
 
 **Files:**
 - Create: `lib/widgets/footer/selection_bar.dart`
 - Test: `test/selection_bar_test.dart`
 
-A faixa roxa da seção 5 do spec de UI. Ela senta **acima** do `Footer`, como irmã dele no `Column` do `HomeScreen`, e **não dentro** dele: `footer.dart` não é modificado por esta fatia.
+The purple strip of section 5 of the UI spec. It sits **above** the `Footer`, as its sibling in the `HomeScreen` `Column`, and **not inside** it: `footer.dart` is not modified by this slice.
 
-Widget puro, no idioma da casa: recebe número e callbacks, não conhece Riverpod, e é testado avulso dentro de `MaterialApp`/`Scaffold` sem `ProviderScope`. O modelo é `test/menu_grid_test.dart`.
+Pure widget, in the house idiom: it receives a number and callbacks, does not know Riverpod, and is tested standalone inside `MaterialApp`/`Scaffold` without a `ProviderScope`. The model is `test/menu_grid_test.dart`.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/selection_bar_test.dart`:
+Create `test/selection_bar_test.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -410,37 +410,37 @@ Widget _host({required int count, VoidCallback? onClear, VoidCallback? onDownloa
 }
 
 void main() {
-  testWidgets('não ocupa altura nenhuma quando a seleção está vazia', (tester) async {
+  testWidgets('takes no height when the selection is empty', (tester) async {
     await tester.pumpWidget(_host(count: 0));
 
     expect(find.byIcon(Icons.close), findsNothing);
-    expect(find.text('Baixar'), findsNothing);
+    expect(find.text('Download'), findsNothing);
     expect(tester.getSize(find.byType(SelectionBar)).height, 0);
   });
 
-  testWidgets('conta no singular com um item', (tester) async {
+  testWidgets('singular count with one item', (tester) async {
     await tester.pumpWidget(_host(count: 1));
 
-    expect(find.text('1 selecionado'), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
   });
 
-  testWidgets('conta no plural com mais de um item', (tester) async {
+  testWidgets('plural count with more than one item', (tester) async {
     await tester.pumpWidget(_host(count: 3));
 
-    expect(find.text('3 selecionados'), findsOneWidget);
+    expect(find.text('3 selected'), findsOneWidget);
   });
 
-  testWidgets('ocupa exatamente 48 de altura com seleção', (tester) async {
+  testWidgets('takes exactly 48 height with a selection', (tester) async {
     await tester.pumpWidget(_host(count: 3));
 
-    // O contrário do primeiro caso, e não uma redundância dele: o `IconButton`
-    // e o `FilledButton` medem 48 sozinhos por causa do alvo de toque padrão
-    // do Material, então o `SizedBox(height: 48)` não tem folga nenhuma.
-    // Qualquer padding a mais estoura a faixa, e sem este caso nada avisa.
+    // The opposite of the first case, not a redundancy of it: `IconButton`
+    // and `FilledButton` measure 48 on their own because of Material's default
+    // touch target, so `SizedBox(height: 48)` has no slack. Any extra padding
+    // overflows the strip, and without this case nothing warns.
     expect(tester.getSize(find.byType(SelectionBar)).height, 48);
   });
 
-  testWidgets('o × chama onClear e o botão chama onDownload', (tester) async {
+  testWidgets('the × calls onClear and the button calls onDownload', (tester) async {
     final fired = <String>[];
     await tester.pumpWidget(_host(
       count: 3,
@@ -450,7 +450,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.close));
     await tester.pump();
-    await tester.tap(find.text('Baixar'));
+    await tester.tap(find.text('Download'));
     await tester.pump();
 
     expect(fired, ['clear', 'download']);
@@ -458,28 +458,28 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/selection_bar_test.dart
 ```
 
-Esperado: erro de compilação, `Target of URI doesn't exist: 'package:roms_downloader/widgets/footer/selection_bar.dart'`.
+Expected: compilation error, `Target of URI doesn't exist: 'package:roms_downloader/widgets/footer/selection_bar.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/widgets/footer/selection_bar.dart`:
+Create `lib/widgets/footer/selection_bar.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
 
-/// A faixa de seleção da seção 5 do spec de UI.
+/// The selection strip of section 5 of the UI spec.
 ///
-/// Senta acima do `Footer`, como irmã dele no Column do HomeScreen, nunca
-/// dentro dele: as duas ficam ativas ao mesmo tempo e nenhuma esconde a outra.
+/// Sits above the `Footer`, as its sibling in the HomeScreen Column, never
+/// inside it: the two stay active at the same time and neither hides the other.
 ///
-/// Widget puro de propósito: recebe número e callbacks e não conhece Riverpod.
-/// Quem liga no provider é o HomeScreen (Task 3).
+/// Pure widget on purpose: it receives a number and callbacks and does not know
+/// Riverpod. The one that wires the provider is the HomeScreen (Task 3).
 class SelectionBar extends StatelessWidget {
   final int count;
   final VoidCallback onClear;
@@ -494,8 +494,8 @@ class SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Some sozinha quando zera. SizedBox.shrink e não Visibility, porque a
-    // barra não deve reservar altura nenhuma com seleção vazia.
+    // Disappears on its own when it zeroes. SizedBox.shrink and not Visibility,
+    // because the bar must reserve no height with an empty selection.
     if (count == 0) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
@@ -509,17 +509,17 @@ class SelectionBar extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.close),
               color: scheme.onPrimary,
-              tooltip: 'Limpar seleção',
+              tooltip: 'Clear selection',
               onPressed: onClear,
             ),
             Expanded(
               child: Text(
-                count == 1 ? '1 selecionado' : '$count selecionados',
-                // Mesma política do `footer.dart:99-100`, e pelo mesmo motivo:
-                // a faixa tem altura fixa, então com `textScaler` grande em
-                // tela estreita o parágrafo pede mais altura do que recebe e
-                // é cortado no meio da palavra, sem reticência e sem a faixa
-                // amarela de overflow. Medido em 320dp e 360dp com escala 2.0.
+                count == 1 ? '1 selected' : '$count selected',
+                // Same policy as `footer.dart:99-100`, and for the same reason:
+                // the strip has a fixed height, so with a large `textScaler` on
+                // a narrow screen the paragraph asks for more height than it gets
+                // and is clipped mid-word, with no ellipsis and no yellow
+                // overflow strip. Measured at 320dp and 360dp with scale 2.0.
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -533,7 +533,7 @@ class SelectionBar extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: FilledButton.tonal(
                 onPressed: onDownload,
-                child: const Text('Baixar'),
+                child: const Text('Download'),
               ),
             ),
           ],
@@ -544,46 +544,46 @@ class SelectionBar extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/selection_bar_test.dart
 ```
 
-Esperado: `+5`, zero falha.
+Expected: `+5`, zero failures.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/selection_bar_test.dart
 git commit -m "test(selecao): barra do rodape com contador, x e botao baixar"
 
-# agente de producao
+# production agent
 git add lib/widgets/footer/selection_bar.dart
 git commit -m "feat(selecao): barra do rodape com contador, x e botao baixar"
 ```
 
 ---
 
-### Task 3: ligar a barra e tirar o botão do header
+### Task 3: wire the bar and remove the button from the header
 
 **Files:**
 - Modify: `lib/screens/home_screen.dart:96`
 - Modify: `lib/widgets/header/header.dart:183-196`
-- Test: nenhum novo. Ver a nota de teste abaixo.
+- Test: none new. See the test note below.
 
-**Nota de teste, leia antes de reclamar da ausência.** `HomeScreen` depende de `appStateProvider`, que carrega o catálogo do disco e da rede no construtor, e `Header` depende de `CatalogService`. Montar essa tela num teste de widget exigiria falsificar meia dúzia de providers, e o valor disso é baixo perto do custo: o widget já está testado avulso na Task 2 e o notifier na Task 1. O que esta Task muda é fiação de três linhas. A prova dela é `flutter analyze` limpo mais a suíte inteira verde, no Step 4.
+**Test note, read before complaining about the absence.** `HomeScreen` depends on `appStateProvider`, which loads the catalog from disk and network in the constructor, and `Header` depends on `CatalogService`. Mounting that screen in a widget test would require faking half a dozen providers, and the value of that is low next to the cost: the widget is already tested standalone in Task 2 and the notifier in Task 1. What this Task changes is three lines of wiring. Its proof is a clean `flutter analyze` plus the whole suite green, in Step 4.
 
-- [ ] **Step 1: Ligue a barra no `HomeScreen`**
+- [ ] **Step 1: Wire the bar into the `HomeScreen`**
 
-Em `lib/screens/home_screen.dart`, acrescente o import junto dos outros de widget (depois da linha 10):
+In `lib/screens/home_screen.dart`, add the import together with the other widget ones (after line 10):
 
 ```dart
 import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 ```
 
-E troque a linha 96, que hoje é só `Footer(),`, por:
+And replace line 96, which today is just `Footer(),`, with:
 
 ```dart
           SelectionBar(
@@ -599,25 +599,25 @@ E troque a linha 96, que hoje é só `Footer(),`, por:
           Footer(),
 ```
 
-O `select` sobre `selectedGames.length` é de propósito: ele corta as reconstruções a cada mexida no catálogo e deixa passar só as em que o **número** muda.
+The `select` over `selectedGames.length` is on purpose: it cuts the rebuilds on every catalog change and lets through only the ones where the **number** changes.
 
-**Mas diga isso com precisão, porque a primeira versão deste parágrafo estava errada e uma revisão de QA pegou.** O `watch` está dentro do `build` de `_HomeScreenState`, então quem reconstrói quando o número muda é o `HomeScreen` inteiro, não a barra sozinha. Um `select` estreita o gatilho, nunca o alvo: o alvo é sempre o widget que chamou o `watch`. Estreitar o alvo de verdade seria pôr um `Consumer` em volta da barra, e isso esta fatia não faz: a Task 21 mexe na barra de novo e a decisão de onde ela mora fica para lá.
+**But say that precisely, because the first version of this paragraph was wrong and a QA review caught it.** The `watch` is inside the `build` of `_HomeScreenState`, so what rebuilds when the number changes is the whole `HomeScreen`, not the bar alone. A `select` narrows the trigger, never the target: the target is always the widget that called the `watch`. Narrowing the target for real would be to put a `Consumer` around the bar, and this slice does not do that: Task 21 touches the bar again and the decision of where it lives stays there.
 
-O corpo do `onDownload` é o mesmo que estava no header (`header.dart:190-191`), com **uma** troca obrigatória: lá o console vem de `widget.selectedConsole?.id`, porque `Header` recebe o console por parâmetro; aqui vem de `appState.selectedConsole?.id`, porque `HomeScreen` já lê o `appStateProvider`. Copiar `widget.selectedConsole` para dentro do `HomeScreen` não compila. Fora isso é a mesma linha. Na Task 5 ela passa a chamar a folha de confirmação; aqui ela só muda de lugar, para o commit ser uma coisa só.
+The body of `onDownload` is the same one that was in the header (`header.dart:190-191`), with **one** mandatory swap: there the console comes from `widget.selectedConsole?.id`, because `Header` receives the console as a parameter; here it comes from `appState.selectedConsole?.id`, because `HomeScreen` already reads `appStateProvider`. Copying `widget.selectedConsole` into `HomeScreen` does not compile. Other than that it is the same line. In Task 5 it goes on to call the confirmation sheet; here it only changes place, so the commit is a single thing.
 
-Acrescente também o import do serviço da fila:
+Also add the import of the queue service:
 
 ```dart
 import 'package:roms_downloader/services/task_queue_service.dart';
 ```
 
-- [ ] **Step 2: Tire o botão do header**
+- [ ] **Step 2: Remove the button from the header**
 
-Em `lib/widgets/header/header.dart`, apague as linhas **183 a 195, inclusive**. Confira antes de apagar que a 183 é `      SizedBox(width: 4),`, a 184 é `      _buildActionButton(` e a **195 é `      ),`**.
+In `lib/widgets/header/header.dart`, delete lines **183 to 195, inclusive**. Check before deleting that 183 is `      SizedBox(width: 4),`, 184 is `      _buildActionButton(` and **195 is `      ),`**.
 
-> **Atenção ao intervalo.** A seção 11 e a seção 5 do spec de UI dizem `:186-194`. Está errado nas duas pontas. O bloco real é `184-195`, e há um `SizedBox(width: 4)` dos **dois** lados, na 183 e na 196. Apagar até a 194 deixa um `),` órfão e não compila; apagar 184-195 sem levar um espaçador junto deixa espaço dobrado entre o funil e o botão de modo de visualização. Por isso o intervalo a apagar é 183-195: leva o espaçador de cima junto.
+> **Mind the range.** Section 11 and section 5 of the UI spec say `:186-194`. It is wrong at both ends. The real block is `184-195`, and there is a `SizedBox(width: 4)` on **both** sides, at 183 and 196. Deleting up to 194 leaves an orphan `),` and does not compile; deleting 184-195 without taking a spacer along leaves double spacing between the funnel and the view mode button. That is why the range to delete is 183-195: it takes the top spacer along.
 
-Depois de apagar, `_buildActionWidgets` tem que ficar assim (linhas 175 em diante, com o funil colado no botão de modo de visualização):
+After deleting, `_buildActionWidgets` has to look like this (lines 175 onward, with the funnel next to the view mode button):
 
 ```dart
     return [
@@ -632,28 +632,28 @@ Depois de apagar, `_buildActionWidgets` tem que ficar assim (linhas 175 em diant
       _buildActionButton(
 ```
 
-- [ ] **Step 3: Limpe o que sobrou**
+- [ ] **Step 3: Clean up what is left**
 
-Apagar aquele bloco deixa `canDownload` e o import de `TaskQueueService` possivelmente sem uso em `header.dart`. Rode:
+Deleting that block leaves `canDownload` and the `TaskQueueService` import possibly unused in `header.dart`. Run:
 
 ```bash
 flutter analyze lib/widgets/header/header.dart
 ```
 
-Se aparecer `unused_import` ou `unused_element`, apague o que ele apontar. Se `canDownload` ainda for usado por outro botão, deixe. **Não adivinhe: rode e obedeça ao analisador.**
+If `unused_import` or `unused_element` shows up, delete what it points at. If `canDownload` is still used by another button, leave it. **Do not guess: run and obey the analyzer.**
 
-- [ ] **Step 4: Prove que não quebrou nada**
+- [ ] **Step 4: Prove nothing broke**
 
 ```bash
 flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+185 -1` na suíte (178 da linha de base mais 2 da Task 1 e 5 da Task 2).
+Expected: 22 findings and zero errors in analyze; `+185 -1` in the suite (178 from the baseline plus 2 from Task 1 and 5 from Task 2).
 
 - [ ] **Step 5: Commit**
 
-Esta Task é só produção, então tem **uma** mensagem só, e isso é a exceção, não a regra:
+This Task is production only, so it has **one** message only, and this is the exception, not the rule:
 
 ```bash
 git add lib/screens/home_screen.dart lib/widgets/header/header.dart
@@ -662,19 +662,19 @@ git commit -m "feat(selecao): barra do rodape substitui o botao Download Selecte
 
 ---
 
-### Task 4: `SourcePick`, `PickFailure` e `BatchPlan`
+### Task 4: `SourcePick`, `PickFailure` and `BatchPlan`
 
 **Files:**
 - Create: `lib/models/source_pick_model.dart`
 - Test: `test/source_pick_model_test.dart`
 
-O resultado da regra de lote da seção 6 do spec de UI. Ele nasce aqui, no Grupo 1, mesmo que a regra que o produz só chegue na Task 14, porque a folha de confirmação da Task 5 precisa de um tipo para desenhar e a alternativa seria desenhar sobre `Game` e reescrever tudo depois.
+The result of the batch rule of section 6 of the UI spec. It is born here, in Group 1, even though the rule that produces it only arrives in Task 14, because the confirmation sheet of Task 5 needs a type to draw and the alternative would be to draw over `Game` and rewrite everything later.
 
-Em MODO FONTE cada item selecionado **já é** um arquivo, então a "escolha" é trivial e o motivo é o mesmo para todos. Em MODO PACK a Task 14 preenche `reason` e `uncertain` de verdade. O tipo é o mesmo nos dois casos, e é isso que faz a folha ser escrita uma vez só.
+In SOURCE MODE each selected item **already is** a file, so the "choice" is trivial and the reason is the same for all. In PACK MODE Task 14 fills `reason` and `uncertain` for real. The type is the same in both cases, and that is what makes the sheet be written only once.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/source_pick_model_test.dart`:
+Create `test/source_pick_model_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -683,7 +683,7 @@ import 'package:roms_downloader/models/source_pick_model.dart';
 
 Game _game(String name, int size) => Game(
       title: name,
-      url: 'https://exemplo/$name',
+      url: 'https://example/$name',
       size: size,
       consoleId: 'snes',
     );
@@ -693,27 +693,27 @@ SourcePick _pick(String name, int size, {bool uncertain = false}) => SourcePick(
       title: name,
       filename: name,
       size: size,
-      sourceId: 'listagem',
-      reason: 'escolhido pela sua região preferida',
+      sourceId: 'listing',
+      reason: 'chosen by your preferred region',
       uncertain: uncertain,
       game: _game(name, size),
     );
 
 void main() {
-  test('totalBytes soma o tamanho de todas as escolhas', () {
+  test('totalBytes sums the size of every pick', () {
     final plan = BatchPlan(picks: [_pick('a.zip', 1000), _pick('b.zip', 2400)]);
 
     expect(plan.totalBytes, 3400);
   });
 
-  test('totalBytes é zero num plano sem escolha', () {
+  test('totalBytes is zero in a plan with no picks', () {
     const plan = BatchPlan();
 
     expect(plan.totalBytes, 0);
     expect(plan.isEmpty, isTrue);
   });
 
-  test('uncertainCount conta só as escolhas marcadas como incertas', () {
+  test('uncertainCount counts only the picks marked uncertain', () {
     final plan = BatchPlan(picks: [
       _pick('a.zip', 10),
       _pick('b.zip', 10, uncertain: true),
@@ -723,98 +723,99 @@ void main() {
     expect(plan.uncertainCount, 2);
   });
 
-  test('withoutPick tira uma escolha e preserva as falhas', () {
+  test('withoutPick removes a pick and preserves the failures', () {
     final plan = BatchPlan(
       picks: [_pick('a.zip', 10), _pick('b.zip', 20)],
-      failures: const [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: const [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     );
 
-    final menor = plan.withoutPick('snes/a.zip');
+    final smaller = plan.withoutPick('snes/a.zip');
 
-    expect(menor.picks.map((p) => p.gameId), ['snes/b.zip']);
-    expect(menor.failures.single.title, 'C');
-    // O plano original não muda: a folha guarda o anterior para desfazer.
+    expect(smaller.picks.map((p) => p.gameId), ['snes/b.zip']);
+    expect(smaller.failures.single.title, 'C');
+    // The original plan does not change: the sheet keeps the previous one to undo.
     expect(plan.picks.length, 2);
   });
 
-  test('withoutPick de um id que não está no plano devolve o mesmo conteúdo', () {
+  test('withoutPick of an id not in the plan returns the same content', () {
     final plan = BatchPlan(picks: [_pick('a.zip', 10)]);
 
-    expect(plan.withoutPick('snes/nao-existe').picks.length, 1);
+    expect(plan.withoutPick('snes/does-not-exist').picks.length, 1);
   });
 
-  test('um plano só de falhas não está vazio', () {
+  test('a failures-only plan is not empty', () {
     const plan = BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     );
 
-    // Importa porque a folha precisa abrir para explicar por que nada vai
-    // ser baixado, em vez de sumir sem dizer nada.
+    // Matters because the sheet must open to explain why nothing will be
+    // downloaded, instead of disappearing without saying anything.
     expect(plan.isEmpty, isFalse);
     expect(plan.picks, isEmpty);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_pick_model_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/models/source_pick_model.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/models/source_pick_model.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/models/source_pick_model.dart`:
+Create `lib/models/source_pick_model.dart`:
 
 ```dart
 import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/game_model.dart';
 
-/// O id de fonte das listagens que já vêm no `consoles.json`.
+/// The source id of the listings that already ship in `consoles.json`.
 ///
-/// Nesta fatia só existe uma fonte por console, então o valor é constante. Na
-/// fatia 4 ele vira o id do addon que serviu o arquivo, e é por isso que
-/// [SourcePick.sourceId] e `MatchedSource.sourceId` são campos em vez de
-/// serem implícitos.
+/// In this slice there is only one source per console, so the value is
+/// constant. In slice 4 it becomes the id of the addon that served the file,
+/// and that is why [SourcePick.sourceId] and `MatchedSource.sourceId` are
+/// fields instead of being implicit.
 ///
-/// Mora neste arquivo por uma razão de ordem, não de gosto: ele é o primeiro
-/// arquivo Dart puro desta fatia a existir, e tanto `source_pick_service.dart`
-/// (Task 6) quanto `pack_grid_provider.dart` (Task 10) precisam da constante.
-/// Pô-la no provider arrastaria Riverpod para dentro de um serviço que roda
-/// fora do Flutter; pô-la em `grid_entry_model.dart` a faria nascer três
-/// Tasks depois do primeiro uso.
-const kBuiltinSourceId = 'listagem';
+/// It lives in this file for a reason of order, not of taste: it is the first
+/// pure Dart file of this slice to exist, and both `source_pick_service.dart`
+/// (Task 6) and `pack_grid_provider.dart` (Task 10) need the constant. Putting
+/// it in the provider would drag Riverpod into a service that runs outside
+/// Flutter; putting it in `grid_entry_model.dart` would make it be born three
+/// Tasks after the first use.
+const kBuiltinAddonId = 'builtin';
 
-/// Uma versão escolhida para um jogo, com o motivo escrito por extenso.
+/// A chosen version for a game, with the reason written out in full.
 ///
-/// O motivo é obrigatório e não é decorativo: ele é a única coisa que separa
-/// "o app escolheu por você" de "o app escolheu ao acaso" (spec de UI, seção 7).
+/// The reason is mandatory and not decorative: it is the only thing that
+/// separates "the app chose for you" from "the app chose at random" (UI spec,
+/// section 7).
 @immutable
 class SourcePick {
-  /// A chave de seleção do jogo. Em MODO FONTE é `Game.gameId`; em MODO PACK
-  /// é `'pack:${packGame.id}'`. A folha não precisa saber qual dos dois é.
+  /// The game's selection key. In SOURCE MODE it is `Game.gameId`; in PACK MODE
+  /// it is `'pack:${packGame.id}'`. The sheet does not need to know which.
   final String gameId;
   final String title;
   final String filename;
 
-  /// Bytes. Zero quando a fonte não declara tamanho, e nesse caso a folha
-  /// mostra o total como aproximado.
+  /// Bytes. Zero when the source declares no size, and in that case the sheet
+  /// shows the total as approximate.
   final int size;
 
-  /// De qual fonte veio. Nesta fatia é sempre [kBuiltinSourceId] e na fatia 4
-  /// é o id do addon. É o que a linha "4.0 MB, Myrient" da seção 7 mostra, e
-  /// é por isso que ele nasce aqui em vez de nascer na fatia 4.
+  /// Which source it came from. In this slice it is always [kBuiltinAddonId]
+  /// and in slice 4 it is the addon id. It is what the "4.0 MB, Myrient" line
+  /// of section 7 shows, and that is why it is born here instead of in slice 4.
   final String sourceId;
   final String reason;
 
-  /// Marca o selo de incerteza da seção 6. É `true` quando a confiança do
-  /// match é `guess`. O lote **não** verifica CRC antes de enfileirar.
+  /// Marks the uncertainty badge of section 6. It is `true` when the match
+  /// confidence is `guess`. The batch does **not** verify CRC before enqueueing.
   final bool uncertain;
 
-  /// O que efetivamente vai para a fila. A folha nunca lê este campo: ela
-  /// desenha os campos de exibição acima e devolve os picks inteiros.
+  /// What actually goes to the queue. The sheet never reads this field: it draws
+  /// the display fields above and returns the whole picks.
   final Game game;
 
   const SourcePick({
@@ -829,7 +830,7 @@ class SourcePick {
   });
 }
 
-/// Um jogo selecionado que não vai para a fila, com o motivo.
+/// A selected game that does not go to the queue, with the reason.
 @immutable
 class PickFailure {
   final String gameId;
@@ -843,7 +844,7 @@ class PickFailure {
   });
 }
 
-/// O que a folha de confirmação da seção 6 desenha: o que vai e o que não vai.
+/// What the confirmation sheet of section 6 draws: what goes and what does not.
 @immutable
 class BatchPlan {
   final List<SourcePick> picks;
@@ -855,11 +856,11 @@ class BatchPlan {
 
   int get uncertainCount => picks.where((pick) => pick.uncertain).length;
 
-  /// Vazio de verdade: nada a baixar e nada a explicar. Um plano só de
-  /// falhas **não** é vazio, porque a folha precisa abrir para dizer por quê.
+  /// Truly empty: nothing to download and nothing to explain. A failures-only
+  /// plan is **not** empty, because the sheet needs to open to say why.
   bool get isEmpty => picks.isEmpty && failures.isEmpty;
 
-  /// Tira um item do lote. Devolve um plano novo; o original não muda.
+  /// Removes an item from the batch. Returns a new plan; the original does not change.
   BatchPlan withoutPick(String gameId) => BatchPlan(
         picks: picks.where((pick) => pick.gameId != gameId).toList(),
         failures: failures,
@@ -867,43 +868,43 @@ class BatchPlan {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_pick_model_test.dart
 ```
 
-Esperado: `+6`, zero falha.
+Expected: `+6`, zero failures.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_pick_model_test.dart
 git commit -m "test(lote): SourcePick, PickFailure e os totais do BatchPlan"
 
-# agente de producao
+# production agent
 git add lib/models/source_pick_model.dart
 git commit -m "feat(lote): SourcePick, PickFailure e os totais do BatchPlan"
 ```
 
 ---
 
-### Task 5: a folha de confirmação de lote
+### Task 5: the batch confirmation sheet
 
 **Files:**
 - Create: `lib/widgets/game_grid/batch_confirm_sheet.dart`
 - Test: `test/batch_confirm_sheet_test.dart`
 
-A seção 6 do spec de UI: "40 jogos, 1.2 GB", a lista do que foi escolhido, e os que não entram aparecendo separados com o motivo.
+Section 6 of the UI spec: "40 games, 1.2 GB", the list of what was chosen, and the ones that do not go in appearing separately with the reason.
 
-**Escopo desta Task, e leia esta linha antes de reclamar de escopo curto.** A seção 6 fala em "override por item". Override tem dois sentidos: *tirar do lote* e *trocar a versão escolhida*. Tirar do lote é o que esta Task faz, e funciona nos dois modos. Trocar a versão só tem sujeito em MODO PACK, onde existe mais de uma versão, e chega na Task 20. Não invente um seletor de versão aqui: não há o que selecionar.
+**Scope of this Task, and read this line before complaining about short scope.** Section 6 speaks of "per-item override". Override has two meanings: *remove from the batch* and *swap the chosen version*. Removing from the batch is what this Task does, and it works in both modes. Swapping the version only has a subject in PACK MODE, where there is more than one version, and it arrives in Task 20. Do not invent a version selector here: there is nothing to select.
 
-O widget é puro: recebe um `BatchPlan` e dois callbacks, e não conhece Riverpod nem `showModalBottomSheet`. Quem abre a folha é a Task 6.
+The widget is pure: it receives a `BatchPlan` and two callbacks, and does not know Riverpod nor `showModalBottomSheet`. The one that opens the sheet is Task 6.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/batch_confirm_sheet_test.dart`:
+Create `test/batch_confirm_sheet_test.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -917,10 +918,10 @@ SourcePick _pick(String name, int size, {bool uncertain = false}) => SourcePick(
       title: name,
       filename: name,
       size: size,
-      sourceId: 'listagem',
-      reason: 'escolhido pela sua região preferida',
+      sourceId: 'listing',
+      reason: 'chosen by your preferred region',
       uncertain: uncertain,
-      game: Game(title: name, url: 'https://exemplo/$name', size: size, consoleId: 'snes'),
+      game: Game(title: name, url: 'https://example/$name', size: size, consoleId: 'snes'),
     );
 
 Widget _host(BatchPlan plan, {ValueChanged<BatchPlan>? onConfirm, ValueChanged<String>? onRemove}) {
@@ -936,48 +937,48 @@ Widget _host(BatchPlan plan, {ValueChanged<BatchPlan>? onConfirm, ValueChanged<S
 }
 
 void main() {
-  testWidgets('mostra a contagem e o total no cabeçalho', (tester) async {
+  testWidgets('shows the count and total in the header', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [
       _pick('a.zip', 1024 * 1024),
       _pick('b.zip', 1024 * 1024),
     ])));
 
-    expect(find.text('2 jogos, 2.0 MB'), findsOneWidget);
+    expect(find.text('2 games, 2.0 MB'), findsOneWidget);
   });
 
-  testWidgets('usa singular com um jogo só', (tester) async {
+  testWidgets('uses singular with a single game', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [_pick('a.zip', 1024)])));
 
-    expect(find.text('1 jogo, 1.0 KB'), findsOneWidget);
+    expect(find.text('1 game, 1.0 KB'), findsOneWidget);
   });
 
-  testWidgets('lista o nome do arquivo e o motivo de cada escolha', (tester) async {
-    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('Chrono.zip', 1024)])));
+  testWidgets('lists the file name and the reason of each pick', (tester) async {
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('Crystal.zip', 1024)])));
 
-    expect(find.text('Chrono.zip'), findsOneWidget);
-    expect(find.text('escolhido pela sua região preferida'), findsOneWidget);
+    expect(find.text('Crystal.zip'), findsOneWidget);
+    expect(find.text('chosen by your preferred region'), findsOneWidget);
   });
 
-  testWidgets('marca com selo só as escolhas incertas', (tester) async {
+  testWidgets('badges only the uncertain picks', (tester) async {
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
     ])));
 
     expect(find.byIcon(Icons.help_outline), findsOneWidget);
   });
 
-  testWidgets('separa os que não entram na fila, com o motivo', (tester) async {
+  testWidgets('separates the ones that do not go to the queue, with the reason', (tester) async {
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'Sem Fonte', reason: 'nenhum addon tem este jogo')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'No source', reason: 'no addon has this game')],
     )));
 
-    expect(find.text('Não vão para a fila'), findsOneWidget);
-    expect(find.text('Sem Fonte'), findsOneWidget);
-    expect(find.text('nenhum addon tem este jogo'), findsOneWidget);
+    expect(find.text('Not going to the queue'), findsOneWidget);
+    expect(find.text('No source'), findsOneWidget);
+    expect(find.text('no addon has this game'), findsOneWidget);
   });
 
-  testWidgets('o botão de remover devolve o gameId daquela linha', (tester) async {
+  testWidgets('the remove button returns the gameId of that row', (tester) async {
     final removed = <String>[];
     await tester.pumpWidget(_host(
       BatchPlan(picks: [_pick('a.zip', 1024), _pick('b.zip', 1024)]),
@@ -990,54 +991,54 @@ void main() {
     expect(removed, ['snes/b.zip']);
   });
 
-  testWidgets('confirmar devolve o plano inteiro', (tester) async {
-    BatchPlan? confirmado;
+  testWidgets('confirm returns the whole plan', (tester) async {
+    BatchPlan? confirmed;
     final plan = BatchPlan(picks: [_pick('a.zip', 1024)]);
-    await tester.pumpWidget(_host(plan, onConfirm: (p) => confirmado = p));
+    await tester.pumpWidget(_host(plan, onConfirm: (p) => confirmed = p));
 
-    await tester.tap(find.text('Baixar'));
+    await tester.tap(find.text('Download'));
     await tester.pump();
 
-    expect(confirmado, same(plan));
+    expect(confirmed, same(plan));
   });
 
-  testWidgets('sem escolha nenhuma o botão de baixar fica desligado', (tester) async {
+  testWidgets('with no picks the download button is disabled', (tester) async {
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     )));
 
-    final botao = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Baixar'));
-    expect(botao.onPressed, isNull);
+    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Download'));
+    expect(button.onPressed, isNull);
   });
 
-  testWidgets('o cabeçalho conta as incertezas, e some quando não há nenhuma', (tester) async {
-    // O selo por linha já tinha teste; a contagem do cabeçalho não tinha, e
-    // ela tem plural próprio. Os três ramos num caso só de propósito: é uma
-    // regra de texto, e três casos separados custariam três vezes o mesmo
-    // cenário para provar a mesma frase.
+  testWidgets('the header counts the uncertainties, and disappears when there are none', (tester) async {
+    // The per-row badge already had a test; the header count did not, and it
+    // has its own plural. The three branches in a single case on purpose: it is
+    // a text rule, and three separate cases would cost three times the same
+    // scenario to prove the same sentence.
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
-      _pick('outra.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
+      _pick('other.zip', 1024, uncertain: true),
     ])));
-    expect(find.text('2 incertos'), findsOneWidget);
+    expect(find.text('2 uncertain'), findsOneWidget);
 
     await tester.pumpWidget(_host(BatchPlan(picks: [
-      _pick('certo.zip', 1024),
-      _pick('duvida.zip', 1024, uncertain: true),
+      _pick('certain.zip', 1024),
+      _pick('doubt.zip', 1024, uncertain: true),
     ])));
-    expect(find.text('1 incerto'), findsOneWidget);
+    expect(find.text('1 uncertain'), findsOneWidget);
 
-    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certo.zip', 1024)])));
-    expect(find.textContaining('incerto'), findsNothing);
+    await tester.pumpWidget(_host(BatchPlan(picks: [_pick('certain.zip', 1024)])));
+    expect(find.textContaining('uncertain'), findsNothing);
   });
 
-  testWidgets('Cancelar fecha a folha sem confirmar nada', (tester) async {
-    // Precisa de rota de verdade: a folha chama `maybePop`, e com ela montada
-    // direto no `body` não há o que desempilhar, então o teste passaria sem
-    // provar nada. Aqui ela sobe como modal, do jeito que `_confirmarLote`
-    // sobe em produção.
-    var confirmou = 0;
+  testWidgets('Cancel closes the sheet without confirming anything', (tester) async {
+    // Needs a real route: the sheet calls `maybePop`, and with it mounted
+    // straight in the `body` there is nothing to pop, so the test would pass
+    // without proving anything. Here it comes up as a modal, the way
+    // `_confirmBatch` brings it up in production.
+    var confirmedCount = 0;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: Builder(
@@ -1046,70 +1047,70 @@ void main() {
               context: context,
               builder: (_) => BatchConfirmSheet(
                 plan: BatchPlan(picks: [_pick('a.zip', 1024)]),
-                onConfirm: (_) => confirmou++,
+                onConfirm: (_) => confirmedCount++,
                 onRemove: (_) {},
               ),
             ),
-            child: const Text('abrir'),
+            child: const Text('open'),
           ),
         ),
       ),
     ));
 
-    await tester.tap(find.text('abrir'));
+    await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     expect(find.byType(BatchConfirmSheet), findsOneWidget);
 
-    await tester.tap(find.text('Cancelar'));
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(find.byType(BatchConfirmSheet), findsNothing);
-    expect(confirmou, 0);
+    expect(confirmedCount, 0);
   });
 
-  testWidgets('só com falhas o cabeçalho diz zero jogos, e a folha continua aberta', (tester) async {
-    // A folha não se fecha sozinha quando nada pode ser baixado: ela existe
-    // justamente para mostrar o motivo (seção 6). O cabeçalho tem que dizer a
-    // verdade nesse estado, e o plural de zero é "jogos".
+  testWidgets('with only failures the header says zero games, and the sheet stays open', (tester) async {
+    // The sheet does not close itself when nothing can be downloaded: it exists
+    // precisely to show the reason (section 6). The header must tell the truth
+    // in that state, and the plural of zero is "games".
     await tester.pumpWidget(_host(const BatchPlan(
-      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'sem fonte')],
+      failures: [PickFailure(gameId: 'snes/c', title: 'C', reason: 'no source')],
     )));
 
-    expect(find.text('0 jogos, 0 B'), findsOneWidget);
-    expect(find.text('sem fonte'), findsOneWidget);
+    expect(find.text('0 games, 0 B'), findsOneWidget);
+    expect(find.text('no source'), findsOneWidget);
   });
 }
 ```
 
-> **Os três últimos casos entraram depois**, numa ressalva de QA aceita quando a fatia já estava na Task 13. Eles cobriam três coisas que a folha fazia e nenhum teste afirmava: a contagem de incertezas no cabeçalho, o botão `Cancelar` e o cabeçalho no estado "só falhas". Quem executa a Task 5 do zero escreve os onze de uma vez; o acumulado da tabela no fim do plano já conta os onze.
+> **The last three cases came in later**, in a QA caveat accepted when the slice was already at Task 13. They covered three things the sheet did and no test asserted: the uncertainty count in the header, the `Cancel` button and the header in the "failures only" state. Whoever executes Task 5 from scratch writes the eleven at once; the table cumulative at the end of the plan already counts the eleven.
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/batch_confirm_sheet_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: '.../batch_confirm_sheet.dart'`.
+Expected: `Target of URI doesn't exist: '.../batch_confirm_sheet.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/widgets/game_grid/batch_confirm_sheet.dart`:
+Create `lib/widgets/game_grid/batch_confirm_sheet.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 
-/// A folha de confirmação da seção 6 do spec de UI.
+/// The confirmation sheet of section 6 of the UI spec.
 ///
-/// Widget puro: recebe o plano e dois callbacks. Quem abre em
-/// `showModalBottomSheet` e quem enfileira é o chamador.
+/// Pure widget: it receives the plan and two callbacks. The one that opens it
+/// in `showModalBottomSheet` and the one that enqueues is the caller.
 class BatchConfirmSheet extends StatelessWidget {
   final BatchPlan plan;
   final ValueChanged<BatchPlan> onConfirm;
 
-  /// Recebe o `gameId` da linha a tirar do lote. O chamador é quem guarda o
-  /// plano corrente e aplica `plan.withoutPick`.
+  /// Receives the `gameId` of the row to remove from the batch. The caller is
+  /// the one that keeps the current plan and applies `plan.withoutPick`.
   final ValueChanged<String> onRemove;
 
   const BatchConfirmSheet({
@@ -1123,7 +1124,7 @@ class BatchConfirmSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final n = plan.picks.length;
-    final cabecalho = '$n ${n == 1 ? 'jogo' : 'jogos'}, ${formatBytes(plan.totalBytes)}';
+    final header = '$n ${n == 1 ? 'game' : 'games'}, ${formatBytes(plan.totalBytes)}';
 
     return SafeArea(
       child: Column(
@@ -1135,13 +1136,13 @@ class BatchConfirmSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    cabecalho,
+                    header,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (plan.uncertainCount > 0)
                   Text(
-                    '${plan.uncertainCount} incerto${plan.uncertainCount == 1 ? '' : 's'}',
+                    '${plan.uncertainCount} uncertain',
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                   ),
               ],
@@ -1154,15 +1155,15 @@ class BatchConfirmSheet extends StatelessWidget {
                 for (final pick in plan.picks)
                   ListTile(
                     dense: true,
-                    // O selo de incerteza da seção 6. Ele mora AQUI e não no
-                    // tile da grade: ver "Armadilha de leitura" no topo.
+                    // The uncertainty badge of section 6. It lives HERE and not
+                    // on the grid tile: see "Reading pitfall" at the top.
                     leading: pick.uncertain ? const Icon(Icons.help_outline, size: 20) : null,
                     title: Text(pick.filename, maxLines: 1, overflow: TextOverflow.ellipsis),
                     subtitle: Text(pick.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
                     trailing: IconButton(
                       key: ValueKey('remove-${pick.gameId}'),
                       icon: const Icon(Icons.close, size: 18),
-                      tooltip: 'Tirar do lote',
+                      tooltip: 'Remove from batch',
                       onPressed: () => onRemove(pick.gameId),
                     ),
                   ),
@@ -1171,7 +1172,7 @@ class BatchConfirmSheet extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Text(
-                      'Não vão para a fila',
+                      'Not going to the queue',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1179,12 +1180,12 @@ class BatchConfirmSheet extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final falha in plan.failures)
+                  for (final failure in plan.failures)
                     ListTile(
                       dense: true,
                       leading: Icon(Icons.cloud_off_rounded, size: 20, color: scheme.onSurfaceVariant),
-                      title: Text(falha.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(falha.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      title: Text(failure.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(failure.reason, maxLines: 2, overflow: TextOverflow.ellipsis),
                     ),
                 ],
               ],
@@ -1196,14 +1197,14 @@ class BatchConfirmSheet extends StatelessWidget {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).maybePop(),
-                  child: const Text('Cancelar'),
+                  child: const Text('Cancel'),
                 ),
                 const Spacer(),
                 FilledButton(
-                  // Sem nada escolhido não há o que enfileirar, mas a folha
-                  // continua aberta para mostrar os motivos das falhas.
+                  // With nothing chosen there is nothing to enqueue, but the
+                  // sheet stays open to show the reasons of the failures.
                   onPressed: plan.picks.isEmpty ? null : () => onConfirm(plan),
-                  child: const Text('Baixar'),
+                  child: const Text('Download'),
                 ),
               ],
             ),
@@ -1215,46 +1216,46 @@ class BatchConfirmSheet extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/batch_confirm_sheet_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Expected: `+11`, zero failures.
 
-Se `2 jogos, 2.0 MB` falhar por causa do formato, confira `formatBytes` em `lib/utils/formatters.dart:6-13`: ele usa uma casa decimal por padrão e a escala 1024. **Ajuste o teste ao `formatBytes`, não o `formatBytes` ao teste**: ele já é usado em outras telas e mudá-lo é regressão fora de escopo.
+If `2 games, 2.0 MB` fails because of the format, check `formatBytes` in `lib/utils/formatters.dart:6-13`: it uses one decimal place by default and the 1024 scale. **Adjust the test to `formatBytes`, not `formatBytes` to the test**: it is already used in other screens and changing it is an out-of-scope regression.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/batch_confirm_sheet_test.dart
 git commit -m "test(lote): folha de confirmacao com total, motivos e o que nao vai"
 
-# agente de producao
+# production agent
 git add lib/widgets/game_grid/batch_confirm_sheet.dart
 git commit -m "feat(lote): folha de confirmacao com total, motivos e o que nao vai"
 ```
 
 ---
 
-### Task 6: o lote passa pela folha antes de virar fila
+### Task 6: the batch passes through the sheet before becoming a queue
 
 **Files:**
 - Create: `lib/services/source_pick_service.dart`
 - Modify: `lib/screens/home_screen.dart`
 - Test: `test/source_pick_service_test.dart`
 
-A Task 3 mudou o botão de lugar e a Task 5 desenhou a folha, mas as duas ainda não se falam: apertar "Baixar" na barra enfileira tudo direto, sem confirmação. Esta Task fecha o Grupo 1.
+Task 3 moved the button and Task 5 drew the sheet, but the two still do not talk: pressing "Download" on the bar enqueues everything directly, without confirmation. This Task closes Group 1.
 
-O `BatchPlan` do MODO FONTE nasce aqui, e ele é o caso trivial: cada item selecionado **já é** um arquivo, todo arquivo da listagem existe, então nenhuma escolha é incerta e nenhuma falha é possível. Mesmo assim ele passa pela mesma função e pela mesma folha do MODO PACK, porque é isso que faz a Task 20 ser pequena.
+The SOURCE MODE `BatchPlan` is born here, and it is the trivial case: each selected item **already is** a file, every file in the listing exists, so no pick is uncertain and no failure is possible. Even so it passes through the same function and the same sheet as PACK MODE, because that is what makes Task 20 small.
 
-**Por que uma função e não um `map` inline no `HomeScreen`.** Porque `HomeScreen` não se testa (ver a nota de teste da Task 3) e uma função de topo em `lib/services/` se testa. A regra de verdade chega na Task 14, no mesmo arquivo, e vai querer o mesmo lugar.
+**Why a function and not an inline `map` in `HomeScreen`.** Because `HomeScreen` is not tested (see the test note of Task 3) and a top-level function in `lib/services/` is tested. The real rule arrives in Task 14, in the same file, and will want the same place.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/source_pick_service_test.dart`:
+Create `test/source_pick_service_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1263,25 +1264,25 @@ import 'package:roms_downloader/services/source_pick_service.dart';
 
 Game _game(String filename, int size) => Game(
       title: filename.replaceAll('.zip', ''),
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: size,
       consoleId: 'snes',
     );
 
 void main() {
-  test('cada jogo selecionado vira uma escolha, na mesma ordem', () {
+  test('each selected game becomes one pick, in the same order', () {
     final plan = planFromGames([
-      _game('Chrono Trigger (USA).zip', 4 * 1024 * 1024),
-      _game('Super Metroid (USA).zip', 3 * 1024 * 1024),
+      _game('Crystal Vanguard (USA).zip', 4 * 1024 * 1024),
+      _game('Super Vectron (USA).zip', 3 * 1024 * 1024),
     ]);
 
     expect(plan.picks.map((p) => p.filename),
-        ['Chrono Trigger (USA).zip', 'Super Metroid (USA).zip']);
+        ['Crystal Vanguard (USA).zip', 'Super Vectron (USA).zip']);
     expect(plan.totalBytes, 7 * 1024 * 1024);
   });
 
-  test('a chave e o Game inteiro viajam junto, porque é o que vai para a fila', () {
-    final game = _game('Chrono Trigger (USA).zip', 1024);
+  test('the key and the whole Game travel together, because that is what goes to the queue', () {
+    final game = _game('Crystal Vanguard (USA).zip', 1024);
     final pick = planFromGames([game]).picks.single;
 
     expect(pick.gameId, game.gameId);
@@ -1289,10 +1290,10 @@ void main() {
     expect(pick.size, 1024);
   });
 
-  test('em MODO FONTE nada é incerto e nada fica de fora', () {
-    // A folha existe para mostrar incerteza e falha. Em MODO FONTE ela não
-    // tem nenhuma das duas para mostrar, e isso é correto, não é bug: o
-    // arquivo que o usuário marcou é o arquivo que ele vai receber.
+  test('in SOURCE MODE nothing is uncertain and nothing is left out', () {
+    // The sheet exists to show uncertainty and failure. In SOURCE MODE it has
+    // neither of the two to show, and that is correct, not a bug: the file the
+    // user marked is the file they will receive.
     final plan = planFromGames([_game('a.zip', 1), _game('b.zip', 2)]);
 
     expect(plan.uncertainCount, 0);
@@ -1300,37 +1301,37 @@ void main() {
     expect(plan.picks.every((p) => p.reason.isNotEmpty), isTrue);
   });
 
-  test('sem jogo nenhum o plano fica vazio de verdade', () {
+  test('with no game the plan is truly empty', () {
     expect(planFromGames(const []).isEmpty, isTrue);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/services/source_pick_service.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/services/source_pick_service.dart'`.
 
-- [ ] **Step 3: Implemente a função**
+- [ ] **Step 3: Implement the function**
 
-Crie `lib/services/source_pick_service.dart`:
+Create `lib/services/source_pick_service.dart`:
 
 ```dart
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/source_pick_model.dart';
 
-/// O plano de lote do MODO FONTE.
+/// The SOURCE MODE batch plan.
 ///
-/// Não há escolha a fazer aqui: cada `Game` selecionado já é um arquivo, e
-/// todo arquivo da listagem existe. Por isso nenhum pick é incerto e a lista
-/// de falhas é sempre vazia.
+/// There is no choice to make here: each selected `Game` already is a file, and
+/// every file in the listing exists. That is why no pick is uncertain and the
+/// failures list is always empty.
 ///
-/// A regra de verdade da seção 6 do spec de UI, com região, revisão,
-/// confiança e prioridade de addon, mora em `planFromEntries` (Task 14) e só
-/// tem sujeito em MODO PACK, onde existe mais de uma versão do mesmo jogo.
+/// The real rule of section 6 of the UI spec, with region, revision, confidence
+/// and addon priority, lives in `planFromEntries` (Task 14) and only has a
+/// subject in PACK MODE, where there is more than one version of the same game.
 BatchPlan planFromGames(List<Game> games) {
   return BatchPlan(
     picks: [
@@ -1340,8 +1341,8 @@ BatchPlan planFromGames(List<Game> games) {
           title: game.displayTitle,
           filename: game.filename,
           size: game.size,
-          sourceId: kBuiltinSourceId,
-          reason: 'você escolheu este arquivo',
+          sourceId: kBuiltinAddonId,
+          reason: 'you picked this file',
           game: game,
         ),
     ],
@@ -1349,17 +1350,17 @@ BatchPlan planFromGames(List<Game> games) {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `+4`, zero falha.
+Expected: `+4`, zero failures.
 
-- [ ] **Step 5: Ligue a folha no `HomeScreen`**
+- [ ] **Step 5: Wire the sheet into the `HomeScreen`**
 
-Em `lib/screens/home_screen.dart`, acrescente os imports que faltam:
+In `lib/screens/home_screen.dart`, add the missing imports:
 
 ```dart
 import 'package:roms_downloader/models/source_pick_model.dart';
@@ -1367,37 +1368,37 @@ import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/widgets/game_grid/batch_confirm_sheet.dart';
 ```
 
-Dentro de `_HomeScreenState`, antes do `build`, escreva o método:
+Inside `_HomeScreenState`, before `build`, write the method:
 
 ```dart
-  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
-  Future<void> _confirmarLote() async {
+  /// Opens the sheet of section 6, and only enqueues what comes back from it.
+  Future<void> _confirmBatch() async {
     final catalogState = ref.read(catalogProvider);
-    final selecionados =
+    final games =
         catalogState.games.where((g) => catalogState.selectedGames.contains(g.gameId)).toList();
-    if (selecionados.isEmpty) return;
+    if (games.isEmpty) return;
 
-    // O plano corrente vive aqui, e não dentro da folha, porque a folha é um
-    // widget puro (Task 5): ela avisa que uma linha saiu e quem guarda o
-    // resultado é este método.
-    var plano = planFromGames(selecionados);
-    final confirmado = await showModalBottomSheet<BatchPlan>(
+    // The current plan lives here, and not inside the sheet, because the sheet
+    // is a pure widget (Task 5): it announces that a row left and the one that
+    // keeps the result is this method.
+    var plan = planFromGames(games);
+    final confirmed = await showModalBottomSheet<BatchPlan>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (_, setSheetState) => BatchConfirmSheet(
-          plan: plano,
+          plan: plan,
           onConfirm: (p) => Navigator.of(sheetContext).pop(p),
-          onRemove: (gameId) => setSheetState(() => plano = plano.withoutPick(gameId)),
+          onRemove: (gameId) => setSheetState(() => plan = plan.withoutPick(gameId)),
         ),
       ),
     );
-    if (confirmado == null || !mounted) return;
+    if (confirmed == null || !mounted) return;
 
     await TaskQueueService.startDownloads(
       ref,
       context,
-      confirmado.picks.map((pick) => pick.game).toList(),
+      confirmed.picks.map((pick) => pick.game).toList(),
       ref.read(appStateProvider).selectedConsole?.id,
     );
     if (!mounted) return;
@@ -1405,70 +1406,70 @@ Dentro de `_HomeScreenState`, antes do `build`, escreva o método:
   }
 ```
 
-E troque o `onDownload` da `SelectionBar`, que a Task 3 deixou com o corpo antigo do header, por uma linha:
+And replace the `onDownload` of the `SelectionBar`, which Task 3 left with the old header body, with a single line:
 
 ```dart
           SelectionBar(
             count: ref.watch(catalogProvider.select((s) => s.selectedGames.length)),
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: _confirmarLote,
+            onDownload: _confirmBatch,
           ),
 ```
 
-Três coisas nesse método não são estilo, são requisito:
+Three things in this method are not style, they are requirements:
 
-1. **`if (!mounted) return;` depois de cada `await`.** Sem isso o `flutter analyze` ganha dois `use_build_context_synchronously` novos, e o critério de aceitação desta fatia é 22 findings e nenhum novo. Num `State` o analisador entende `mounted`; não troque por `context.mounted` sem rodar o analisador.
-2. **A seleção é limpa depois de enfileirar.** Isso é diferente do app de hoje, que deixava os 40 jogos marcados depois de mandar baixar. Hoje isso passava porque não havia como desmarcar tudo de uma vez; a partir da Task 1 há, e deixar a barra roxa acesa sobre uma fila já enviada é convite para enfileirar duas vezes.
-3. **`Navigator.pop` mora no `onConfirm`, não dentro da folha.** A folha não conhece navegação (Task 5), e é isso que permite testá-la sem `Navigator`.
+1. **`if (!mounted) return;` after every `await`.** Without it `flutter analyze` gains two new `use_build_context_synchronously`, and the acceptance criterion of this slice is 22 findings and none new. In a `State` the analyzer understands `mounted`; do not swap it for `context.mounted` without running the analyzer.
+2. **The selection is cleared after enqueueing.** This is different from today's app, which left the 40 games marked after telling them to download. Today that passed because there was no way to unmark everything at once; from Task 1 on there is, and leaving the purple bar lit over an already-sent queue is an invitation to enqueue twice.
+3. **`Navigator.pop` lives in the `onConfirm`, not inside the sheet.** The sheet does not know navigation (Task 5), and that is what allows testing it without a `Navigator`.
 
-- [ ] **Step 6: Prove que não quebrou nada**
+- [ ] **Step 6: Prove nothing broke**
 
 ```bash
 flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+206 -1` na suíte. A conta: 178 da linha de base, mais 2 da Task 1, 5 da Task 2, 6 da Task 4, 11 da Task 5 e 4 desta.
+Expected: 22 findings and zero errors; `+206 -1` in the suite. The math: 178 from the baseline, plus 2 from Task 1, 5 from Task 2, 6 from Task 4, 11 from Task 5 and 4 from this one.
 
-Confira à mão, porque nenhum teste cobre isso: rode o app, marque três jogos, aperte "Baixar", tire um da folha, confirme, e veja que dois entram na fila e a barra roxa apaga.
+Check by hand, because no test covers it: run the app, mark three games, press "Download", remove one from the sheet, confirm, and see that two enter the queue and the purple bar goes out.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_pick_service_test.dart
 git commit -m "test(lote): plano de lote do MODO FONTE, um pick por arquivo selecionado"
 
-# agente de producao
+# production agent
 git add lib/services/source_pick_service.dart lib/screens/home_screen.dart
 git commit -m "feat(lote): plano de lote do MODO FONTE, um pick por arquivo selecionado"
 ```
 
-O commit de produção leva os dois arquivos junto de propósito: a função sozinha não tem chamador e a tela sozinha não compila.
+The production commit takes both files together on purpose: the function alone has no caller and the screen alone does not compile.
 
 ---
 
-# Grupo 2: o índice invertido e os dados da grade
+# Group 2: the inverted index and the grid data
 
-Aqui começa o MODO PACK. Este grupo é Dart puro do começo ao fim, exceto o último arquivo, que é de providers. Nenhum widget é tocado. Se um agente deste grupo abrir um arquivo em `lib/widgets/`, ele saiu do escopo.
+Here PACK MODE begins. This group is pure Dart from start to finish, except the last file, which is a providers one. No widget is touched. If an agent of this group opens a file in `lib/widgets/`, it left the scope.
 
-O insumo é a fatia 2 inteira: `PackMatcher` casa nome de arquivo com `PackGame`, e `MetadataPack` traz os jogos. O que falta é a direção contrária, que é a que a grade precisa: **dado um jogo, quais arquivos existem para ele.**
+The input is the whole of slice 2: `PackMatcher` matches a file name with a `PackGame`, and `MetadataPack` brings the games. What is missing is the opposite direction, which is the one the grid needs: **given a game, which files exist for it.**
 
 ---
 
-### Task 7: `PackGridEntry`, uma entrada da grade de pack
+### Task 7: `PackGridEntry`, an entry of the pack grid
 
 **Files:**
 - Create: `lib/models/grid_entry_model.dart`
 - Test: `test/grid_entry_model_test.dart`
 
-O tipo que a grade de MODO PACK desenha. Um `PackGame` mais as fontes que o matcher casou com ele. Dart puro, sem Flutter.
+The type that the PACK MODE grid draws. A `PackGame` plus the sources that the matcher matched to it. Pure Dart, no Flutter.
 
-Leia a "Terceira decisão travada" no topo antes de começar: este tipo existe justamente para **não** sintetizar `Game`.
+Read the "Third locked decision" at the top before starting: this type exists precisely so as **not** to synthesize a `Game`.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/grid_entry_model_test.dart`:
+Create `test/grid_entry_model_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1479,41 +1480,41 @@ import 'package:roms_downloader/models/metadata_pack_model.dart';
 PackGame _pg(String id, String title) => PackGame(id: id, title: title, dumps: const []);
 
 MatchedSource _src(String filename, {MatchConfidence confidence = MatchConfidence.likely}) =>
-    MatchedSource(filename: filename, sourceId: 'listagem', confidence: confidence, size: 1024);
+    MatchedSource(filename: filename, sourceId: 'listing', confidence: confidence, size: 1024);
 
 void main() {
-  test('sem fonte nenhuma a entrada não está disponível', () {
-    final entry = PackGridEntry(game: _pg('snes/chrono-trigger', 'Chrono Trigger'), sources: const []);
+  test('with no source the entry is not available', () {
+    final entry = PackGridEntry(game: _pg('snes/crystal-vanguard', 'Crystal Vanguard'), sources: const []);
 
     expect(entry.hasSource, isFalse);
     expect(entry.sourceCount, 0);
   });
 
-  test('com pelo menos uma fonte a entrada está disponível', () {
+  test('with at least one source the entry is available', () {
     final entry = PackGridEntry(
-      game: _pg('snes/chrono-trigger', 'Chrono Trigger'),
-      sources: [_src('Chrono Trigger (USA).zip')],
+      game: _pg('snes/crystal-vanguard', 'Crystal Vanguard'),
+      sources: [_src('Crystal Vanguard (USA).zip')],
     );
 
     expect(entry.hasSource, isTrue);
     expect(entry.sourceCount, 1);
   });
 
-  test('a chave de seleção tem o prefixo pack:, e não colide com gameId', () {
-    // Ver "Quarta decisão travada" no topo do plano. `Game.gameId` é
-    // 'snes/arquivo.zip' e `PackGame.id` é 'snes/chrono-trigger': os dois
-    // começam com letra e têm barra. O prefixo é o que os separa.
-    final entry = PackGridEntry(game: _pg('snes/chrono-trigger', 'Chrono Trigger'), sources: const []);
+  test('the selection key has the pack: prefix, and does not collide with gameId', () {
+    // See "Fourth locked decision" at the top of the plan. `Game.gameId` is
+    // 'snes/file.zip' and `PackGame.id` is 'snes/crystal-vanguard': both start
+    // with a letter and have a slash. The prefix is what separates them.
+    final entry = PackGridEntry(game: _pg('snes/crystal-vanguard', 'Crystal Vanguard'), sources: const []);
 
-    expect(entry.selectionKey, 'pack:snes/chrono-trigger');
+    expect(entry.selectionKey, 'pack:snes/crystal-vanguard');
   });
 
-  test('a entrada não inventa confiança própria a partir das fontes', () {
-    // Ver "Armadilha de leitura" no topo. Um jogo com uma fonte confirmada e
-    // uma no chute continua sendo um jogo só, e o tile dele é igual ao de
-    // qualquer outro jogo com fonte.
+  test('the entry does not invent its own confidence from the sources', () {
+    // See "Reading pitfall" at the top. A game with one confirmed source and
+    // one guessed one is still a single game, and its tile is the same as that
+    // of any other game with a source.
     final entry = PackGridEntry(
-      game: _pg('snes/chrono-trigger', 'Chrono Trigger'),
+      game: _pg('snes/crystal-vanguard', 'Crystal Vanguard'),
       sources: [
         _src('a.zip', confidence: MatchConfidence.confirmed),
         _src('b.zip', confidence: MatchConfidence.guess),
@@ -1522,45 +1523,45 @@ void main() {
 
     expect(entry.hasSource, isTrue);
     expect(entry.sourceCount, 2);
-    // Se você acabou de escrever `entry.confidence`, apague: não existe e não
-    // vai existir.
+    // If you just wrote `entry.confidence`, delete it: it does not exist and
+    // will not exist.
   });
 }
 ```
 
-- [ ] **Step 2: Confira o nome real de `MatchedSource`**
+- [ ] **Step 2: Check the real name of `MatchedSource`**
 
-Este é o passo que evita reescrever a Task inteira depois. `MatchedSource` **não existe ainda**: a fatia 2 entregou `GameMatch`, que é o veredito do matcher sobre **um nome de arquivo** e aponta para o `PackGame`. A grade precisa do sentido inverso e com o tamanho do arquivo junto, que o matcher não conhece.
+This is the step that avoids rewriting the whole Task later. `MatchedSource` **does not exist yet**: slice 2 delivered `GameMatch`, which is the matcher's verdict about **one file name** and points to the `PackGame`. The grid needs the inverse direction and with the file size along, which the matcher does not know.
 
-Abra `lib/models/game_match_model.dart` e confira, com os seus olhos, os nomes de `MatchTier`, `MatchConfidence` e dos campos de `GameMatch`. Se algum nome deste plano divergir do arquivo, **o arquivo ganha**, e você corrige o plano ao passar.
+Open `lib/models/game_match_model.dart` and check, with your own eyes, the names of `MatchTier`, `MatchConfidence` and of the `GameMatch` fields. If any name in this plan diverges from the file, **the file wins**, and you fix the plan on the way through.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/models/grid_entry_model.dart`:
+Create `lib/models/grid_entry_model.dart`:
 
 ```dart
 import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
-/// Um arquivo de uma fonte que o matcher casou com um `PackGame`.
+/// A file from a source that the matcher matched to a `PackGame`.
 ///
-/// É o `GameMatch` da fatia 2 virado do avesso: lá a chave é o nome do
-/// arquivo e o valor é o jogo; aqui a chave é o jogo e isto é um dos valores.
-/// O tamanho vem da listagem, não do matcher.
+/// It is the slice 2 `GameMatch` turned inside out: there the key is the file
+/// name and the value is the game; here the key is the game and this is one of
+/// the values. The size comes from the listing, not from the matcher.
 @immutable
 class MatchedSource {
   final String filename;
 
-  /// De qual fonte veio. Nesta fatia é sempre a listagem do console; na
-  /// fatia 4 passa a ser o id do addon, e é por isso que o campo já existe.
+  /// Which source it came from. In this slice it is always the console listing;
+  /// in slice 4 it becomes the addon id, and that is why the field already exists.
   final String sourceId;
   final MatchConfidence confidence;
 
-  /// Bytes, ou zero quando a listagem não declara tamanho.
+  /// Bytes, or zero when the listing declares no size.
   final int size;
 
-  /// A URL de download. Fica nula quando a fonte não a fornece de imediato.
+  /// The download URL. Stays null when the source does not provide it upfront.
   final String? url;
 
   const MatchedSource({
@@ -1572,10 +1573,10 @@ class MatchedSource {
   });
 }
 
-/// Uma entrada da grade em MODO PACK: um jogo canônico e as fontes dele.
+/// An entry of the grid in PACK MODE: a canonical game and its sources.
 ///
-/// A grade desenha isto, e não `Game`. Ver "Terceira decisão travada" no
-/// plano da fatia 3.
+/// The grid draws this, and not `Game`. See "Third locked decision" in the
+/// slice 3 plan.
 @immutable
 class PackGridEntry {
   final PackGame game;
@@ -1583,54 +1584,54 @@ class PackGridEntry {
 
   const PackGridEntry({required this.game, this.sources = const []});
 
-  /// O único eixo que o tile pinta. Ver "Armadilha de leitura": o tile mostra
-  /// **disponibilidade**, nunca confiança.
+  /// The only axis the tile paints. See "Reading pitfall": the tile shows
+  /// **availability**, never confidence.
   bool get hasSource => sources.isNotEmpty;
 
   int get sourceCount => sources.length;
 
-  /// A chave de seleção em MODO PACK. O prefixo `pack:` é obrigatório porque
-  /// `Game.gameId` e `PackGame.id` não são provadamente disjuntos, e `:` não
-  /// pode aparecer num id gerado por `_nameToId` (`catalog_service.dart:61-63`).
+  /// The selection key in PACK MODE. The `pack:` prefix is mandatory because
+  /// `Game.gameId` and `PackGame.id` are not provably disjoint, and `:` cannot
+  /// appear in an id generated by `_nameToId` (`catalog_service.dart:61-63`).
   String get selectionKey => 'pack:${game.id}';
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/grid_entry_model_test.dart
 ```
 
-Esperado: `+4`, zero falha.
+Expected: `+4`, zero failures.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/grid_entry_model_test.dart
 git commit -m "test(grade): entrada de grade de pack, disponibilidade e chave de selecao"
 
-# agente de producao
+# production agent
 git add lib/models/grid_entry_model.dart
 git commit -m "feat(grade): entrada de grade de pack, disponibilidade e chave de selecao"
 ```
 
 ---
 
-### Task 8: `SourceIndex`, o matcher virado do avesso
+### Task 8: `SourceIndex`, the matcher turned inside out
 
 **Files:**
 - Create: `lib/services/source_index.dart`
 - Test: `test/source_index_test.dart`
 
-O `PackMatcher` da fatia 2 responde "que jogo é este arquivo". A grade precisa do contrário: "que arquivos existem para este jogo". Este é o índice invertido, construído uma vez por console e consultado por tile.
+The slice 2 `PackMatcher` answers "which game is this file". The grid needs the opposite: "which files exist for this game". This is the inverted index, built once per console and consulted per tile.
 
-**Custo, porque isso decide a forma.** São 2415 jogos e alguns milhares de arquivos no console médio. Construir de uma vez é uma passada; perguntar por tile durante o scroll seria uma passada por tile. Por isso `build` é estático e o resultado é guardado num provider (Task 10), nunca recalculado no `build` de um widget.
+**Cost, because this decides the shape.** It is 2415 games and a few thousand files in the average console. Building all at once is one pass; asking per tile during the scroll would be one pass per tile. That is why `build` is static and the result is kept in a provider (Task 10), never recomputed in a widget's `build`.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/source_index_test.dart`:
+Create `test/source_index_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1650,122 +1651,123 @@ PackMatcher _matcher() => PackMatcher(MetadataPack(
       system: 'Super Nintendo',
       built: '2026-01-01',
       games: [
-        _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
-        _pg('snes/super-metroid', 'Super Metroid (USA)'),
-        _pg('snes/earthbound', 'EarthBound (USA)'),
+        _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
+        _pg('snes/super-vectron', 'Super Vectron (USA)'),
+        _pg('snes/emberfall', 'Emberfall (USA)'),
       ],
     ));
 
 SourceFile _f(String filename, {int size = 1024}) =>
-    (filename: filename, sourceId: 'listagem', size: size, url: null);
+    (filename: filename, sourceId: 'listing', size: size, url: null);
 
 void main() {
-  test('cada arquivo casado entra na lista do jogo dele', () {
+  test('each matched file enters the list of its game', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),
-      _f('Super Metroid (USA).zip'),
+      _f('Crystal Vanguard (USA).zip'),
+      _f('Super Vectron (USA).zip'),
     ]);
 
-    expect(index.sourcesFor('snes/chrono-trigger').single.filename, 'Chrono Trigger (USA).zip');
-    expect(index.sourcesFor('snes/super-metroid').single.filename, 'Super Metroid (USA).zip');
-    expect(index.hasSource('snes/earthbound'), isFalse);
+    expect(index.sourcesFor('snes/crystal-vanguard').single.filename, 'Crystal Vanguard (USA).zip');
+    expect(index.sourcesFor('snes/super-vectron').single.filename, 'Super Vectron (USA).zip');
+    expect(index.hasSource('snes/emberfall'), isFalse);
   });
 
-  test('duas versões do mesmo jogo ficam juntas, na ordem da listagem', () {
+  test('two versions of the same game stay together, in listing order', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),
-      _f('Chrono Trigger (Europe).zip'),
+      _f('Crystal Vanguard (USA).zip'),
+      _f('Crystal Vanguard (Europe).zip'),
     ]);
 
     expect(
-      index.sourcesFor('snes/chrono-trigger').map((s) => s.filename),
-      ['Chrono Trigger (USA).zip', 'Chrono Trigger (Europe).zip'],
+      index.sourcesFor('snes/crystal-vanguard').map((s) => s.filename),
+      ['Crystal Vanguard (USA).zip', 'Crystal Vanguard (Europe).zip'],
     );
   });
 
-  test('a confiança de cada fonte vem do tier daquele arquivo', () {
+  test('each source confidence comes from that file tier', () {
     final index = SourceIndex.build(_matcher(), [
-      _f('Chrono Trigger (USA).zip'),   // nome exato
-      _f('Chrono Triggr (USA).zip'),    // erro de digitação, cai no fuzzy
+      _f('Crystal Vanguard (USA).zip'),   // exact name
+      _f('Crystal Vanguar (USA).zip'),    // typo, falls into fuzzy
     ]);
 
-    final fontes = index.sourcesFor('snes/chrono-trigger');
-    expect(fontes.map((s) => s.confidence),
+    final sources = index.sourcesFor('snes/crystal-vanguard');
+    expect(sources.map((s) => s.confidence),
         [MatchConfidence.likely, MatchConfidence.guess]);
   });
 
-  test('o tamanho e a fonte de origem sobrevivem à travessia', () {
-    final index = SourceIndex.build(_matcher(), [_f('Chrono Trigger (USA).zip', size: 4096)]);
+  test('the size and the origin source survive the crossing', () {
+    final index = SourceIndex.build(_matcher(), [_f('Crystal Vanguard (USA).zip', size: 4096)]);
 
-    final fonte = index.sourcesFor('snes/chrono-trigger').single;
-    expect(fonte.size, 4096);
-    expect(fonte.sourceId, 'listagem');
+    final source = index.sourcesFor('snes/crystal-vanguard').single;
+    expect(source.size, 4096);
+    expect(source.sourceId, 'listing');
   });
 
-  test('arquivo que não casa com jogo nenhum vira um não reconhecido', () {
-    final index = SourceIndex.build(_matcher(), [_f('Jogo Que Nao Existe (USA).zip')]);
+  test('a file that matches no game becomes an unmatched one', () {
+    final index = SourceIndex.build(_matcher(), [_f('Game That Does Not Exist (USA).zip')]);
 
-    expect(index.unmatched, ['Jogo Que Nao Existe (USA).zip']);
+    expect(index.unmatched, ['Game That Does Not Exist (USA).zip']);
     expect(index.matchedGameCount, 0);
   });
 
-  test('o que não é ROM é ignorado, e não conta como não reconhecido', () {
-    // A listagem do archive.org vem cheia de .txt, .png e .xml de índice.
-    // Chamar isso de "não reconhecido" mentiria na faixa da Task 12.
+  test('what is not a ROM is ignored, and does not count as unmatched', () {
+    // The archive.org listing comes full of index .txt, .png and .xml. Calling
+    // that "unmatched" would lie in the strip of Task 12.
     final index = SourceIndex.build(_matcher(), [
-      _f('leiame.txt'),
-      _f('Chrono Trigger (USA).zip'),
+      _f('readme.txt'),
+      _f('Crystal Vanguard (USA).zip'),
     ]);
 
     expect(index.unmatched, isEmpty);
     expect(index.matchedGameCount, 1);
   });
 
-  test('jogo sem fonte devolve lista vazia, nunca nulo', () {
+  test('a game with no source returns an empty list, never null', () {
     final index = SourceIndex.build(_matcher(), const []);
 
-    expect(index.sourcesFor('snes/earthbound'), isEmpty);
-    expect(index.sourcesFor('id/que/nao/existe'), isEmpty);
+    expect(index.sourcesFor('snes/emberfall'), isEmpty);
+    expect(index.sourcesFor('id/that/does/not/exist'), isEmpty);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_index_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/services/source_index.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/services/source_index.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/services/source_index.dart`:
+Create `lib/services/source_index.dart`:
 
 ```dart
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Um arquivo cru de uma fonte, antes de o matcher opinar sobre ele.
+/// A raw file from a source, before the matcher has an opinion about it.
 ///
-/// É um registro e não uma classe porque não tem comportamento nenhum e
-/// porque quem o produz muda por fatia: nesta é a listagem do console, na
-/// fatia 4 é o addon. `pack_matcher.dart:25` já usa registro pelo mesmo motivo.
+/// It is a record and not a class because it has no behavior at all and because
+/// the one that produces it changes per slice: in this one it is the console
+/// listing, in slice 4 it is the addon. `pack_matcher.dart:25` already uses a
+/// record for the same reason.
 typedef SourceFile = ({String filename, String sourceId, int size, String? url});
 
-/// Índice invertido: dado o id de um `PackGame`, quais arquivos existem.
+/// Inverted index: given a `PackGame` id, which files exist.
 ///
-/// O `PackMatcher` responde "que jogo é este arquivo". Isto responde
-/// "que arquivos são este jogo", que é o que a grade pergunta.
+/// The `PackMatcher` answers "which game is this file". This answers "which
+/// files are this game", which is what the grid asks.
 ///
-/// Construa uma vez por console, em `build`, e guarde. Não construa dentro do
-/// `build` de um widget: são milhares de chamadas de `match` por vez.
+/// Build once per console, in `build`, and keep it. Do not build inside a
+/// widget's `build`: it is thousands of `match` calls at a time.
 class SourceIndex {
   final Map<String, List<MatchedSource>> _byGameId;
 
-  /// Nomes com extensão de ROM que o matcher não atribuiu a jogo nenhum.
-  /// O que não é ROM nunca entra aqui: seria ruído de índice de listagem.
+  /// Names with a ROM extension that the matcher assigned to no game. What is
+  /// not a ROM never enters here: it would be listing index noise.
   final List<String> unmatched;
 
   const SourceIndex._(this._byGameId, this.unmatched);
@@ -1793,55 +1795,55 @@ class SourceIndex {
     return SourceIndex._(byGameId, unmatched);
   }
 
-  /// As fontes daquele jogo, **na ordem da listagem**. Quem ordena por
-  /// preferência é a regra de escolha (Task 14), não o índice.
+  /// That game's sources, **in listing order**. Ordering by preference is the
+  /// choice rule (Task 14), not the index.
   List<MatchedSource> sourcesFor(String gameId) => _byGameId[gameId] ?? const [];
 
   bool hasSource(String gameId) => _byGameId.containsKey(gameId);
 
-  /// Quantos jogos do pacote têm ao menos uma fonte. É o que decide a faixa
-  /// de estado vazio da Task 12.
+  /// How many games in the pack have at least one source. It is what decides
+  /// the empty state strip of Task 12.
   int get matchedGameCount => _byGameId.length;
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_index_test.dart
 ```
 
-Esperado: `+7`, zero falha.
+Expected: `+7`, zero failures.
 
-Se o caso do fuzzy falhar dizendo que a confiança veio `likely` em vez de `guess`, não mexa no `SourceIndex`: leia `pack_matcher.dart:12`, onde mora `fuzzyCutoff = 90.0`, e confirme que `Chrono Triggr` ainda cai acima do corte. O teste está aí justamente para avisar se o corte mudar.
+If the fuzzy case fails saying that the confidence came `likely` instead of `guess`, do not touch `SourceIndex`: read `pack_matcher.dart:12`, where `fuzzyCutoff = 90.0` lives, and confirm that `Crystal Vanguar` still falls above the cutoff. The test is there precisely to warn if the cutoff changes.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_index_test.dart
 git commit -m "test(grade): indice invertido de jogo para fontes casadas"
 
-# agente de producao
+# production agent
 git add lib/services/source_index.dart
 git commit -m "feat(grade): indice invertido de jogo para fontes casadas"
 ```
 
 ---
 
-### Task 9: `filterPackEntries`, a busca da grade de pack
+### Task 9: `filterPackEntries`, the search of the pack grid
 
 **Files:**
 - Create: `lib/services/pack_grid_filter.dart`
 - Test: `test/pack_grid_filter_test.dart`
 
-Leia a "Quinta decisão travada" no topo antes de começar. Resumo em uma linha: **busca por texto sim, chips de região e revisão não.** Se você se pegar escrevendo `filter.regions` neste arquivo, parou no lugar errado.
+Read the "Fifth locked decision" at the top before starting. One-line summary: **text search yes, region and revision chips no.** If you catch yourself writing `filter.regions` in this file, you stopped at the wrong place.
 
-Duas funções em uma: filtra pelo texto que veio da caixa de busca do header e ordena. A ordenação está aqui, e não no provider, porque ordenar é decisão de apresentação e porque assim ela se testa sem Riverpod.
+Two functions in one: it filters by the text that came from the header search box and sorts. The sorting is here, and not in the provider, because sorting is a presentation decision and because this way it is tested without Riverpod.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/pack_grid_filter_test.dart`:
+Create `test/pack_grid_filter_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1850,108 +1852,109 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 
-PackGridEntry _e(String title, {bool comFonte = true, String? id}) => PackGridEntry(
+PackGridEntry _e(String title, {bool withSource = true, String? id}) => PackGridEntry(
       game: PackGame(id: id ?? 'snes/${title.toLowerCase()}', title: title, dumps: const []),
-      sources: comFonte
-          ? [const MatchedSource(filename: 'a.zip', sourceId: 'listagem', confidence: MatchConfidence.likely, size: 1)]
+      sources: withSource
+          ? [const MatchedSource(filename: 'a.zip', sourceId: 'listing', confidence: MatchConfidence.likely, size: 1)]
           : const [],
     );
 
 void main() {
-  test('busca vazia devolve tudo', () {
-    final saida = filterPackEntries([_e('Super Metroid'), _e('Chrono Trigger')], '');
+  test('an empty query returns everything', () {
+    final out = filterPackEntries([_e('Super Vectron'), _e('Crystal Vanguard')], '');
 
-    expect(saida.length, 2);
+    expect(out.length, 2);
   });
 
-  test('a saída sai ordenada por título, não na ordem do pacote', () {
-    final saida = filterPackEntries([_e('Super Metroid'), _e('Chrono Trigger'), _e('EarthBound')], '');
+  test('the output comes sorted by title, not in pack order', () {
+    final out = filterPackEntries([_e('Super Vectron'), _e('Crystal Vanguard'), _e('Emberfall')], '');
 
-    expect(saida.map((e) => e.game.title), ['Chrono Trigger', 'EarthBound', 'Super Metroid']);
+    expect(out.map((e) => e.game.title), ['Crystal Vanguard', 'Emberfall', 'Super Vectron']);
   });
 
-  test('a busca ignora caixa e acento', () {
-    // `norm` já dobra acento e baixa a caixa desde a fatia 2. Não reimplemente.
-    final saida = filterPackEntries([_e('Pokémon Red'), _e('Super Metroid')], 'pokemon');
+  test('the search ignores case and accent', () {
+    // `norm` already folds accents and lowercases since slice 2. Do not reimplement.
+    final out = filterPackEntries([_e('Prismón Red'), _e('Super Vectron')], 'prismon');
 
-    expect(saida.single.game.title, 'Pokémon Red');
+    expect(out.single.game.title, 'Prismón Red');
   });
 
-  test('a busca casa pedaço do meio do título', () {
-    final saida = filterPackEntries([_e('The Legend of Zelda'), _e('Super Metroid')], 'zelda');
+  test('the search matches a chunk in the middle of the title', () {
+    final out = filterPackEntries([_e('The Legend of Kaelis'), _e('Super Vectron')], 'kaelis');
 
-    expect(saida.single.game.title, 'The Legend of Zelda');
+    expect(out.single.game.title, 'The Legend of Kaelis');
   });
 
-  test('busca sem resultado devolve lista vazia', () {
-    final saida = filterPackEntries([_e('Super Metroid')], 'halo');
+  test('a search with no result returns an empty list', () {
+    final out = filterPackEntries([_e('Super Vectron')], 'cryptmanor');
 
-    expect(saida, isEmpty);
+    expect(out, isEmpty);
   });
 
-  test('jogo sem fonte continua aparecendo, porque a grade mostra tudo', () {
-    // Decisão travada do projeto inteiro: a grade mostra todos os jogos do
-    // pacote e marca a exceção. Filtrar por disponibilidade aqui é o erro que
-    // esta linha existe para impedir.
-    final saida = filterPackEntries([_e('Super Metroid', comFonte: false)], '');
+  test('a game with no source keeps appearing, because the grid shows everything', () {
+    // Locked decision of the whole project: the grid shows all games in the
+    // pack and marks the exception. Filtering by availability here is the error
+    // this line exists to prevent.
+    final out = filterPackEntries([_e('Super Vectron', withSource: false)], '');
 
-    expect(saida.single.hasSource, isFalse);
+    expect(out.single.hasSource, isFalse);
   });
 
-  test('títulos iguais saem sempre na mesma ordem, desempatados pelo id', () {
-    // Todo outro teste de ordenação usa títulos distintos, então `byTitle != 0`
-    // é sempre verdadeiro e o ramo do desempate nunca roda. Sem este caso,
-    // apagar o desempate ou invertê-lo não deixa nenhum teste vermelho.
+  test('equal titles always come out in the same order, broken by id', () {
+    // Every other sorting test uses distinct titles, so `byTitle != 0` is always
+    // true and the tie-break branch never runs. Without this case, deleting the
+    // tie-break or inverting it leaves no test red.
     //
-    // As duas chamadas são o ponto: a entrada vai nas duas ordens possíveis e a
-    // saída tem que ser a mesma. Uma chamada só passaria por acaso, porque em
-    // lista de dois elementos o `sort` do Dart cai em inserção, que preserva a
-    // ordem de entrada quando o comparador devolve 0.
-    final usa = _e('Final Fantasy', id: 'snes/ff-usa');
-    final eur = _e('Final Fantasy', id: 'snes/ff-eur');
+    // The two calls are the point: the input goes in both possible orders and
+    // the output has to be the same. A single call would pass by chance, because
+    // in a two-element list Dart's `sort` falls into insertion, which preserves
+    // the input order when the comparator returns 0.
+    final usa = _e('Fabled Frontier', id: 'snes/ff-usa');
+    final eur = _e('Fabled Frontier', id: 'snes/ff-eur');
 
     expect(filterPackEntries([usa, eur], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
     expect(filterPackEntries([eur, usa], '').map((e) => e.game.id), ['snes/ff-eur', 'snes/ff-usa']);
   });
 
-  test('espaço em volta da busca não conta', () {
-    final saida = filterPackEntries([_e('Super Metroid')], '  metroid  ');
+  test('whitespace around the query does not count', () {
+    final out = filterPackEntries([_e('Super Vectron')], '  vectron  ');
 
-    expect(saida.length, 1);
+    expect(out.length, 1);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_filter_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/services/pack_grid_filter.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/services/pack_grid_filter.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/services/pack_grid_filter.dart`:
+Create `lib/services/pack_grid_filter.dart`:
 
 ```dart
 import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Busca e ordenação da grade em MODO PACK.
+/// Search and sorting of the grid in PACK MODE.
 ///
-/// Dart puro e síncrono de propósito. O MODO FONTE usa `FilteringService` num
-/// isolate porque lá o filtro é caro (regex de região, revisão, agrupamento de
-/// revisão mais recente). Aqui é um `contains` sobre alguns milhares de
-/// títulos já normalizados; mandar isso para um isolate custaria mais em
-/// serialização do que o próprio filtro.
+/// Pure and synchronous Dart on purpose. SOURCE MODE uses `FilteringService` in
+/// an isolate because there the filter is expensive (region regex, revision,
+/// latest-revision grouping). Here it is a `contains` over a few thousand
+/// already-normalized titles; sending that to an isolate would cost more in
+/// serialization than the filter itself.
 ///
-/// **Não** filtra por região, revisão ou qualidade de dump. Ver "Quinta
-/// decisão travada" no plano da fatia 3: essas são propriedades de uma versão,
-/// e em MODO PACK a grade não tem versão.
+/// It does **not** filter by region, revision or dump quality. See "Fifth
+/// locked decision" in the slice 3 plan: those are properties of a version, and
+/// in PACK MODE the grid has no version.
 ///
-/// **Não** filtra por disponibilidade. A grade mostra o pacote inteiro e marca
-/// a exceção; esconder o que não tem fonte é o oposto do que o spec pede.
+/// It does **not** filter by availability. The grid shows the whole pack and
+/// marks the exception; hiding what has no source is the opposite of what the
+/// spec asks.
 List<PackGridEntry> filterPackEntries(List<PackGridEntry> entries, String query) {
   final needle = norm(query);
   final out = needle.isEmpty
@@ -1960,52 +1963,52 @@ List<PackGridEntry> filterPackEntries(List<PackGridEntry> entries, String query)
 
   out.sort((a, b) {
     final byTitle = norm(a.game.title).compareTo(norm(b.game.title));
-    // Desempate estável por id: dois jogos de título igual existem (uma
-    // reedição, um homônimo de região), e sem isto a ordem da grade mudaria
-    // de uma reconstrução para a outra.
+    // Stable tie-break by id: two games with the same title exist (a reissue, a
+    // region homonym), and without this the grid order would change from one
+    // rebuild to the next.
     return byTitle != 0 ? byTitle : a.game.id.compareTo(b.game.id);
   });
   return out;
 }
 ```
 
-Uma nota sobre `norm`, conferida rodando e não por leitura: ele apara extensão de ROM (`pack_naming.dart:80`), mas só quando o texto **termina** com a extensão, ponto incluso. `norm('md')` é `'md'` e `norm('bin')` é `'bin'`, então buscar por essas letras funciona normalmente. O único caso degenerado é uma busca que seja exatamente uma extensão com o ponto, como `.md`: `norm` devolve string vazia e a grade mostra tudo. Ninguém digita isso, e consertar exigiria uma segunda função de normalização só para busca. Não conserte nesta fatia.
+A note about `norm`, checked by running and not by reading: it trims the ROM extension (`pack_naming.dart:80`), but only when the text **ends** with the extension, dot included. `norm('md')` is `'md'` and `norm('bin')` is `'bin'`, so searching for those letters works normally. The only degenerate case is a search that is exactly an extension with the dot, like `.md`: `norm` returns an empty string and the grid shows everything. Nobody types that, and fixing it would require a second normalization function just for search. Do not fix it in this slice.
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_filter_test.dart
 ```
 
-Esperado: `+8`, zero falha.
+Expected: `+8`, zero failures.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_filter_test.dart
 git commit -m "test(grade): busca e ordenacao da grade de pack, sem chip de versao"
 
-# agente de producao
+# production agent
 git add lib/services/pack_grid_filter.dart
 git commit -m "feat(grade): busca e ordenacao da grade de pack, sem chip de versao"
 ```
 
 ---
 
-### Task 10: os providers da grade de pack
+### Task 10: the pack grid providers
 
 **Files:**
 - Create: `lib/providers/pack_grid_provider.dart`
 - Test: `test/pack_grid_provider_test.dart`
 
-Seis providers pequenos. Três são entradas, e existem para que os outros três se testem sem tocar em `AppStateNotifier` nem em `CatalogNotifier`, que fazem IO no construtor.
+Six small providers. Three are inputs, and exist so that the other three are tested without touching `AppStateNotifier` nor `CatalogNotifier`, which do IO in the constructor.
 
-**A decisão que este arquivo trava, e ela é a mais importante da fatia:** enquanto o pacote não chegou, e também se ele nunca chegar, o modo é **FONTE**. Nada de spinner novo, nada de tela em branco. O MODO FONTE é o app de hoje, e cair nele é por definição não regredir. Um console sem pacote, um usuário sem rede e o primeiro segundo de qualquer sessão são o mesmo caso, e todos eles veem exatamente o app que já viam.
+**The decision this file locks, and it is the most important of the slice:** while the pack has not arrived, and also if it never arrives, the mode is **SOURCE**. No new spinner, no blank screen. SOURCE MODE is today's app, and falling into it is by definition not regressing. A console with no pack, a user with no network and the first second of any session are the same case, and all of them see exactly the app they already saw.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/pack_grid_provider_test.dart`:
+Create `test/pack_grid_provider_test.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2018,7 +2021,7 @@ import 'package:roms_downloader/providers/identity_provider.dart';
 import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
 PackGame _pg(String id, String dumpName) =>
     PackGame(id: id, title: dumpName, dumps: [PackDump(name: dumpName)]);
@@ -2028,115 +2031,115 @@ MetadataPack _pack() => MetadataPack(
       system: 'Super Nintendo',
       built: '2026-01-01',
       games: [
-        _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
-        _pg('snes/super-metroid', 'Super Metroid (USA)'),
+        _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
+        _pg('snes/super-vectron', 'Super Vectron (USA)'),
       ],
     );
 
 Game _game(String filename) => Game(
       title: filename,
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: 2048,
       consoleId: 'snes',
     );
 
 ProviderContainer _container({
-  PackTarget? alvo = _alvo,
-  Future<MetadataPack?>? pacote,
-  List<Game> jogos = const [],
-  String busca = '',
+  PackTarget? target = _target,
+  Future<MetadataPack?>? pack,
+  List<Game> games = const [],
+  String search = '',
 }) {
   final container = ProviderContainer(overrides: [
-    packTargetProvider.overrideWithValue(alvo),
-    if (alvo != null)
-      metadataPackProvider(alvo).overrideWith((ref) => pacote ?? Future.value(_pack())),
-    catalogGamesProvider.overrideWithValue(jogos),
-    gridSearchQueryProvider.overrideWithValue(busca),
+    packTargetProvider.overrideWithValue(target),
+    if (target != null)
+      metadataPackProvider(target).overrideWith((ref) => pack ?? Future.value(_pack())),
+    catalogGamesProvider.overrideWithValue(games),
+    gridSearchQueryProvider.overrideWithValue(search),
   ]);
   addTearDown(container.dispose);
   return container;
 }
 
-/// Espera o pacote e o matcher resolverem. Sem isto os providers síncronos
-/// ainda estão vendo `AsyncLoading`, que é um estado legítimo e testado à parte.
-Future<void> _pronto(ProviderContainer container) async {
-  await container.read(metadataPackProvider(_alvo).future);
-  await container.read(packMatcherProvider(_alvo).future);
+/// Waits for the pack and the matcher to resolve. Without this the synchronous
+/// providers are still seeing `AsyncLoading`, a legitimate state tested apart.
+Future<void> _ready(ProviderContainer container) async {
+  await container.read(metadataPackProvider(_target).future);
+  await container.read(packMatcherProvider(_target).future);
 }
 
 void main() {
-  test('sem console selecionado o modo é FONTE e a grade fica vazia', () {
-    final container = _container(alvo: null);
+  test('with no console selected the mode is SOURCE and the grid is empty', () {
+    final container = _container(target: null);
 
     expect(container.read(gridModeProvider), GridMode.source);
     expect(container.read(packGridEntriesProvider), isEmpty);
     expect(container.read(sourceIndexProvider), isNull);
   });
 
-  test('enquanto o pacote carrega o modo é FONTE', () {
-    // Sem `await`. É este o estado do primeiro quadro de toda sessão.
-    final container = _container(pacote: Future.delayed(const Duration(seconds: 1), _pack));
+  test('while the pack loads the mode is SOURCE', () {
+    // No `await`. This is the state of the first frame of every session.
+    final container = _container(pack: Future.delayed(const Duration(seconds: 1), _pack));
 
     expect(container.read(gridModeProvider), GridMode.source);
   });
 
-  test('console sem pacote fica em MODO FONTE', () async {
-    final container = _container(pacote: Future.value(null));
-    await container.read(metadataPackProvider(_alvo).future);
+  test('a console with no pack stays in SOURCE MODE', () async {
+    final container = _container(pack: Future.value(null));
+    await container.read(metadataPackProvider(_target).future);
 
     expect(container.read(gridModeProvider), GridMode.source);
     expect(container.read(packGridEntriesProvider), isEmpty);
   });
 
-  test('erro ao buscar o pacote cai em MODO FONTE, não em tela de erro', () async {
-    final container = _container(pacote: Future.error(Exception('sem rede')));
-    await expectLater(container.read(metadataPackProvider(_alvo).future), throwsException);
+  test('an error fetching the pack falls into SOURCE MODE, not an error screen', () async {
+    final container = _container(pack: Future.error(Exception('no network')));
+    await expectLater(container.read(metadataPackProvider(_target).future), throwsException);
 
     expect(container.read(gridModeProvider), GridMode.source);
   });
 
-  test('com pacote o modo é PACK e a grade traz todos os jogos do pacote', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('with a pack the mode is PACK and the grid brings all the pack games', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     expect(container.read(gridModeProvider), GridMode.pack);
-    final entradas = container.read(packGridEntriesProvider);
-    expect(entradas.map((e) => e.game.id), ['snes/chrono-trigger', 'snes/super-metroid']);
-    // O que não tem fonte continua na grade, marcado, e não some dela.
-    expect(entradas.map((e) => e.hasSource), [true, false]);
+    final entries = container.read(packGridEntriesProvider);
+    expect(entries.map((e) => e.game.id), ['snes/crystal-vanguard', 'snes/super-vectron']);
+    // What has no source stays in the grid, marked, and does not disappear from it.
+    expect(entries.map((e) => e.hasSource), [true, false]);
   });
 
-  test('a fonte casada carrega o tamanho e o id de fonte embutido', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the matched source carries the size and the builtin source id', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
-    final fonte = container.read(packGridEntriesProvider).first.sources.single;
-    expect(fonte.filename, 'Chrono Trigger (USA).zip');
-    expect(fonte.size, 2048);
-    expect(fonte.sourceId, kBuiltinSourceId);
-    expect(fonte.url, 'https://exemplo.org/snes/Chrono Trigger (USA).zip');
+    final source = container.read(packGridEntriesProvider).first.sources.single;
+    expect(source.filename, 'Crystal Vanguard (USA).zip');
+    expect(source.size, 2048);
+    expect(source.sourceId, kBuiltinAddonId);
+    expect(source.url, 'https://example.org/snes/Crystal Vanguard (USA).zip');
   });
 
-  test('a busca do header filtra a grade de pack', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')], busca: 'metroid');
-    await _pronto(container);
+  test('the header search filters the pack grid', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')], search: 'vectron');
+    await _ready(container);
 
-    expect(container.read(packGridEntriesProvider).single.game.id, 'snes/super-metroid');
+    expect(container.read(packGridEntriesProvider).single.game.id, 'snes/super-vectron');
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/providers/pack_grid_provider.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/providers/pack_grid_provider.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/providers/pack_grid_provider.dart`:
+Create `lib/providers/pack_grid_provider.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2151,48 +2154,48 @@ import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 import 'package:roms_downloader/services/source_index.dart';
 
-/// Os dois modos de grade da seção 7 do spec de arquitetura.
+/// The two grid modes of section 7 of the architecture spec.
 enum GridMode {
-  /// A grade de hoje: um tile por arquivo da listagem.
+  /// Today's grid: one tile per listing file.
   source,
 
-  /// A grade nova: um tile por jogo do pacote.
+  /// The new grid: one tile per pack game.
   pack,
 }
 
-/// O console selecionado, na forma que o provider de pacote entende.
+/// The selected console, in the shape the pack provider understands.
 ///
-/// Este é o seam de teste: sobrescreva **este** provider, nunca o
-/// `appStateProvider`, que faz IO de disco e de rede no construtor.
+/// This is the test seam: override **this** provider, never `appStateProvider`,
+/// which does disk and network IO in the constructor.
 ///
-/// Nota sobre colisão de chave, que é a "Quarta decisão travada" do plano da
-/// fatia 3: a chave de seleção em MODO PACK é `'pack:${packGame.id}'`. O `:`
-/// não pode sair de `CatalogService._nameToId` (`catalog_service.dart:61-63`),
-/// então ela não colide com `Game.gameId`. O único caminho de colisão é um
-/// `consoles.json` no formato de mapa legado (`catalog_service.dart:95-96`),
-/// que usa a chave do mapa verbatim: um console escrito à mão com id
-/// `pack:snes` colidiria. É edge conhecido e aceito, sem código de defesa.
+/// Note about key collision, which is the "Fourth locked decision" of the slice
+/// 3 plan: the selection key in PACK MODE is `'pack:${packGame.id}'`. The `:`
+/// cannot come out of `CatalogService._nameToId` (`catalog_service.dart:61-63`),
+/// so it does not collide with `Game.gameId`. The only collision path is a
+/// `consoles.json` in the legacy map format (`catalog_service.dart:95-96`),
+/// which uses the map key verbatim: a hand-written console with id `pack:snes`
+/// would collide. It is a known and accepted edge, with no defense code.
 final packTargetProvider = Provider<PackTarget?>((ref) {
   final console = ref.watch(appStateProvider.select((s) => s.selectedConsole));
   if (console == null) return null;
   return PackTarget(console.id, console.name);
 });
 
-/// A listagem do console. Seam de teste pelo mesmo motivo acima.
+/// The console listing. Test seam for the same reason as above.
 final catalogGamesProvider =
     Provider<List<Game>>((ref) => ref.watch(catalogProvider.select((s) => s.games)));
 
-/// O texto da caixa de busca do header. A mesma caixa dos dois modos: o que
-/// muda é só quem consome. Ver "Quinta decisão travada" no plano.
+/// The text of the header search box. The same box in both modes: what changes
+/// is only who consumes it. See "Fifth locked decision" in the plan.
 final gridSearchQueryProvider =
     Provider<String>((ref) => ref.watch(catalogProvider.select((s) => s.filterText)));
 
-/// Qual grade desenhar.
+/// Which grid to draw.
 ///
-/// **Tudo que não é "o pacote chegou" é MODO FONTE**: sem console, pacote
-/// carregando, console sem pacote, erro de rede. O MODO FONTE é o app de hoje,
-/// então degradar para ele nunca é regressão, e essa é a única razão de este
-/// provider ser síncrono em vez de devolver `AsyncValue`.
+/// **Everything that is not "the pack arrived" is SOURCE MODE**: no console,
+/// pack loading, console with no pack, network error. SOURCE MODE is today's
+/// app, so degrading to it is never a regression, and that is the only reason
+/// this provider is synchronous instead of returning `AsyncValue`.
 final gridModeProvider = Provider<GridMode>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return GridMode.source;
@@ -2200,11 +2203,11 @@ final gridModeProvider = Provider<GridMode>((ref) {
   return pack == null ? GridMode.source : GridMode.pack;
 });
 
-/// O índice invertido do console atual. Null enquanto não há matcher.
+/// The inverted index of the current console. Null while there is no matcher.
 ///
-/// Reconstrói quando a listagem muda, o que acontece uma vez por carga de
-/// catálogo. **Não** reconstrói a cada tecla digitada: a busca é aplicada
-/// depois, no provider de entradas.
+/// Rebuilds when the listing changes, which happens once per catalog load. It
+/// does **not** rebuild on every keystroke: the search is applied later, in the
+/// entries provider.
 final sourceIndexProvider = Provider<SourceIndex?>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return null;
@@ -2212,14 +2215,14 @@ final sourceIndexProvider = Provider<SourceIndex?>((ref) {
   if (matcher == null) return null;
   return SourceIndex.build(matcher, <SourceFile>[
     for (final game in ref.watch(catalogGamesProvider))
-      (filename: game.filename, sourceId: kBuiltinSourceId, size: game.size, url: game.url),
+      (filename: game.filename, sourceId: kBuiltinAddonId, size: game.size, url: game.url),
   ]);
 });
 
-/// O que a grade de MODO PACK desenha, já filtrado e ordenado.
+/// What the PACK MODE grid draws, already filtered and sorted.
 ///
-/// Em MODO FONTE ninguém lê este provider, e ele devolve lista vazia sem
-/// custo, porque `metadataPackProvider` já resolveu para null.
+/// In SOURCE MODE nobody reads this provider, and it returns an empty list at
+/// no cost, because `metadataPackProvider` already resolved to null.
 final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return const [];
@@ -2234,88 +2237,88 @@ final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
 });
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `+7`, zero falha.
+Expected: `+7`, zero failures.
 
-Dois tropeços prováveis, e os dois têm conserto conhecido:
+Two likely stumbles, and both have a known fix:
 
-- Se `metadataPackProvider(alvo).overrideWith(...)` não compilar, confira a versão do Riverpod em `pubspec.yaml`. Em 2.6 a sobrescrita de um membro de família é `provider(arg).overrideWith((ref) => valor)`. Não troque por `overrideWithValue` num `FutureProvider`: essa forma foi removida.
-- Se o caso do erro de rede fizer o teste inteiro falhar em vez de passar, é o `ProviderContainer` propagando o erro no descarte. O `expectLater(..., throwsException)` antes da asserção existe para consumir esse erro; mantenha-o.
+- If `metadataPackProvider(target).overrideWith(...)` does not compile, check the Riverpod version in `pubspec.yaml`. In 2.6 overriding a family member is `provider(arg).overrideWith((ref) => value)`. Do not swap it for `overrideWithValue` on a `FutureProvider`: that form was removed.
+- If the network error case makes the whole test fail instead of pass, it is the `ProviderContainer` propagating the error on disposal. The `expectLater(..., throwsException)` before the assertion exists to consume that error; keep it.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_provider_test.dart
 git commit -m "test(grade): providers de modo, indice e entradas da grade de pack"
 
-# agente de producao
+# production agent
 git add lib/providers/pack_grid_provider.dart
 git commit -m "feat(grade): providers de modo, indice e entradas da grade de pack"
 ```
 
 ---
 
-# Grupo 3: o tile, a grade e o roteamento
+# Group 3: the tile, the grid and the routing
 
-Agora a UI. Os dois widgets deste grupo são puros: recebem primitivos e callbacks, não conhecem Riverpod, e por isso se testam sozinhos num `MaterialApp`, sem `ProviderScope`. O modelo é `test/menu_grid_test.dart`, 31 linhas.
+Now the UI. The two widgets of this group are pure: they receive primitives and callbacks, do not know Riverpod, and therefore test themselves alone in a `MaterialApp`, without a `ProviderScope`. The model is `test/menu_grid_test.dart`, 31 lines.
 
-Lembrete que vale para o grupo inteiro: **`game_grid_item.dart` e `game_grid.dart` não são tocados.** O que a seção 3.1 do spec de UI descreve como "sai do tile" já nasce fora do tile novo.
+Reminder for the whole group: **`game_grid_item.dart` and `game_grid.dart` are not touched.** What section 3.1 of the UI spec describes as "leaves the tile" is already born outside the new tile.
 
 ---
 
-### Task 11: `PackGridItem`, o tile de um jogo
+### Task 11: `PackGridItem`, the tile of a game
 
 **Files:**
 - Create: `lib/widgets/game_grid/pack_grid_item.dart`
 - Test: `test/pack_grid_item_test.dart`
 
-O tile da seção 3.1. Capa, título sobreposto, a marca de "sem fonte", o checkbox de seleção, a borda de estado.
+The tile of section 3.1. Cover, overlaid title, the "no source" mark, the selection checkbox, the state border.
 
-**O que este tile não faz nesta fatia, e por quê.** A seção 3.1 lista a barra de progresso entre o que o tile mantém. Ela **não** entra aqui. Progresso é propriedade de um arquivo, e este tile é um jogo com N arquivos; descobrir "alguma fonte deste jogo está baixando" exige ler o estado de N fontes por tile, a cada quadro de scroll, que é exatamente o custo que a Task 8 existe para evitar. Enquanto isso, a fila do rodapé continua mostrando todo download em andamento, e ela não muda nesta fatia. Quando alguém quiser a barra de volta, a receita é a mesma da Task 13: um `Set<String>` de jogos com download ativo, calculado uma vez, nunca por tile. **Não improvise isso agora.**
+**What this tile does not do in this slice, and why.** Section 3.1 lists the progress bar among what the tile keeps. It does **not** come in here. Progress is a property of a file, and this tile is a game with N files; finding out "some source of this game is downloading" requires reading the state of N sources per tile, on every scroll frame, which is exactly the cost that Task 8 exists to avoid. Meanwhile, the footer queue keeps showing every download in progress, and it does not change in this slice. When someone wants the bar back, the recipe is the same as Task 13: a `Set<String>` of games with an active download, computed once, never per tile. **Do not improvise that now.**
 
-**O hover do desktop também não entra, e é divergência anotada.** A seção 4 do spec de UI diz que no desktop o checkbox aparece no hover do tile mesmo com a seleção vazia. Fazer isso exige virar este widget em `StatefulWidget` só para guardar um `bool` de `MouseRegion`, e o teste de hover em `flutter_test` exige montar um ponteiro de mouse à mão. O que se perde sem ele é **descoberta**, não capacidade: o toque longo funciona com o mouse (pressionar e segurar), e assim que existe uma seleção o checkbox aparece em todos os tiles. Fica anotado como divergência deliberada, junto das outras três da tabela de "Estrutura de arquivos".
+**Desktop hover also does not come in, and it is a noted divergence.** Section 4 of the UI spec says that on desktop the checkbox appears on tile hover even with an empty selection. Doing this requires turning this widget into a `StatefulWidget` just to keep a `MouseRegion` `bool`, and the hover test in `flutter_test` requires setting up a mouse pointer by hand. What is lost without it is **discovery**, not capability: the long press works with the mouse (press and hold), and as soon as a selection exists the checkbox appears on all tiles. It is noted as a deliberate divergence, along with the other three of the "File structure" table.
 
-Leia a "Armadilha de leitura" no topo do plano antes do Step 1. O tile não pinta confiança. Ele pinta disponibilidade.
+Read the "Reading pitfall" at the top of the plan before Step 1. The tile does not paint confidence. It paints availability.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/pack_grid_item_test.dart`:
+Create `test/pack_grid_item_test.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
-// `coverUrl` fica nulo em todo teste de propósito: com URL, o
-// `CachedNetworkImage` tentaria rede dentro do teste. A capa é coberta à mão.
+// `coverUrl` is null in every test on purpose: with a URL, `CachedNetworkImage`
+// would attempt the network inside the test. The cover is covered by hand.
 Widget _host(
   Widget child, {
-  double largura = 200,
+  double width = 200,
 }) =>
-    MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: largura, child: child))));
+    MaterialApp(home: Scaffold(body: Center(child: SizedBox(width: width, child: child))));
 
 void main() {
-  testWidgets('mostra o título do jogo', (tester) async {
+  testWidgets('shows the game title', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
       onToggleSelection: () {},
     )));
 
-    expect(find.text('Chrono Trigger'), findsOneWidget);
+    expect(find.text('Crystal Vanguard'), findsOneWidget);
   });
 
-  testWidgets('sem fonte ganha a marca de nuvem cortada', (tester) async {
+  testWidgets('with no source it gets the crossed-cloud mark', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: false,
       onTap: () {},
       onLongPress: () {},
@@ -2325,10 +2328,10 @@ void main() {
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
   });
 
-  testWidgets('com fonte não ganha marca nenhuma', (tester) async {
-    // A premissa da seção 3.1: marca-se a exceção, não a regra.
+  testWidgets('with a source it gets no mark at all', (tester) async {
+    // The premise of section 3.1: the exception is marked, not the rule.
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
@@ -2338,12 +2341,12 @@ void main() {
     expect(find.byIcon(Icons.cloud_off_rounded), findsNothing);
   });
 
-  testWidgets('o tile é igual com fonte confirmada e com fonte no chute', (tester) async {
-    // Não existe parâmetro de confiança neste widget, e este teste existe para
-    // que a ausência seja intencional e visível. Se alguém acrescentar
-    // `confidence:` aqui, este teste não compila mais e é isso que se quer.
+  testWidgets('the tile is the same with a confirmed source and a guessed source', (tester) async {
+    // There is no confidence parameter on this widget, and this test exists so
+    // that the absence is intentional and visible. If someone adds `confidence:`
+    // here, this test stops compiling and that is what is wanted.
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
@@ -2354,9 +2357,9 @@ void main() {
     expect(find.byIcon(Icons.verified_outlined), findsNothing);
   });
 
-  testWidgets('sem seleção ativa não há checkbox', (tester) async {
+  testWidgets('with no active selection there is no checkbox', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: false,
       onTap: () {},
@@ -2367,9 +2370,9 @@ void main() {
     expect(find.byType(Checkbox), findsNothing);
   });
 
-  testWidgets('com seleção ativa todo tile mostra checkbox, marcado ou não', (tester) async {
+  testWidgets('with an active selection every tile shows a checkbox, checked or not', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
       isSelected: false,
@@ -2381,9 +2384,9 @@ void main() {
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
   });
 
-  testWidgets('o tile selecionado mostra o checkbox marcado', (tester) async {
+  testWidgets('the selected tile shows the checkbox checked', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
       isSelected: true,
@@ -2395,14 +2398,14 @@ void main() {
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
   });
 
-  testWidgets('toque curto abre e toque longo seleciona', (tester) async {
-    var abriu = 0;
-    var selecionou = 0;
+  testWidgets('short tap opens and long press selects', (tester) async {
+    var opened = 0;
+    var selected = 0;
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
-      onTap: () => abriu++,
-      onLongPress: () => selecionou++,
+      onTap: () => opened++,
+      onLongPress: () => selected++,
       onToggleSelection: () {},
     )));
 
@@ -2410,32 +2413,32 @@ void main() {
     await tester.longPress(find.byType(PackGridItem));
     await tester.pump();
 
-    expect(abriu, 1);
-    expect(selecionou, 1);
+    expect(opened, 1);
+    expect(selected, 1);
   });
 
-  testWidgets('o checkbox alterna a seleção sem abrir o detalhe', (tester) async {
-    var abriu = 0;
-    var alternou = 0;
+  testWidgets('the checkbox toggles the selection without opening the detail', (tester) async {
+    var opened = 0;
+    var toggled = 0;
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       selectionActive: true,
-      onTap: () => abriu++,
+      onTap: () => opened++,
       onLongPress: () {},
-      onToggleSelection: () => alternou++,
+      onToggleSelection: () => toggled++,
     )));
 
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    expect(alternou, 1);
-    expect(abriu, 0);
+    expect(toggled, 1);
+    expect(opened, 0);
   });
 
-  testWidgets('a borda grossa aparece quando o jogo já está no disco', (tester) async {
+  testWidgets('the thick border appears when the game is already on disk', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       isOwned: true,
       onTap: () {},
@@ -2443,71 +2446,72 @@ void main() {
       onToggleSelection: () {},
     )));
 
-    final borda = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
-    expect((borda.decoration as BoxDecoration).border!.top.width, 3);
+    final border = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
+    expect((border.decoration as BoxDecoration).border!.top.width, 3);
   });
 
-  testWidgets('sem estado nenhum a borda é fina', (tester) async {
+  testWidgets('with no state at all the border is thin', (tester) async {
     await tester.pumpWidget(_host(PackGridItem(
-      title: 'Chrono Trigger',
+      title: 'Crystal Vanguard',
       hasSource: true,
       onTap: () {},
       onLongPress: () {},
       onToggleSelection: () {},
     )));
 
-    final borda = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
-    expect((borda.decoration as BoxDecoration).border!.top.width, 1);
+    final border = tester.widget<Container>(find.byKey(const ValueKey('pack-tile-border')));
+    expect((border.decoration as BoxDecoration).border!.top.width, 1);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_item_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: '.../pack_grid_item.dart'`.
+Expected: `Target of URI doesn't exist: '.../pack_grid_item.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/widgets/game_grid/pack_grid_item.dart`:
+Create `lib/widgets/game_grid/pack_grid_item.dart`:
 
 ```dart
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-/// O tile de MODO PACK: representa um **jogo**, não um arquivo.
+/// The PACK MODE tile: it represents a **game**, not a file.
 ///
-/// Widget puro de propósito. Ele não sabe o que é `PackGridEntry`, não lê
-/// provider nenhum e não decide nada: quem monta é `PackGrid` (Task 12).
+/// Pure widget on purpose. It does not know what a `PackGridEntry` is, reads no
+/// provider and decides nothing: the one that assembles it is `PackGrid` (Task 12).
 ///
-/// O que ele **não** tem, e a ausência é a parte importante:
-/// - nenhum parâmetro de confiança de match. O tile mostra disponibilidade,
-///   e um jogo com uma fonte confirmada e uma no chute é um jogo só. Ver
-///   "Armadilha de leitura" no plano da fatia 3.
-/// - nenhum botão de baixar. O tile não sabe qual arquivo baixar, então não
-///   pode ter botão de baixar (spec de UI, seção 3.1).
-/// - nenhuma tag de região, revisão ou disco. Essas descrevem uma versão.
+/// What it does **not** have, and the absence is the important part:
+/// - no match confidence parameter. The tile shows availability, and a game
+///   with one confirmed source and one guessed one is a single game. See
+///   "Reading pitfall" in the slice 3 plan.
+/// - no download button. The tile does not know which file to download, so it
+///   cannot have a download button (UI spec, section 3.1).
+/// - no region, revision or disc tag. Those describe a version.
 class PackGridItem extends StatelessWidget {
   final String title;
 
-  /// URL da capa do pacote. Nulo cai no marcador de capa ausente.
+  /// The pack cover URL. Null falls into the missing-cover placeholder.
   final String? coverUrl;
 
-  /// Se algum addon tem algum arquivo para este jogo. **É o único eixo que
-  /// muda o desenho do tile.**
+  /// Whether any addon has any file for this game. **It is the only axis that
+  /// changes the tile's drawing.**
   final bool hasSource;
 
-  /// Se alguma versão deste jogo já está no disco (Task 13). Enquanto o scan
-  /// não terminou vem `false`, porque borda errada é pior que borda ausente.
+  /// Whether some version of this game is already on disk (Task 13). While the
+  /// scan is not finished it comes `false`, because a wrong border is worse
+  /// than a missing one.
   final bool isOwned;
 
   final bool isSelected;
 
-  /// Se há seleção em curso. Com seleção vazia o checkbox some de **todos**
-  /// os tiles, para a capa ficar limpa (spec de UI, seção 4).
+  /// Whether a selection is in progress. With an empty selection the checkbox
+  /// disappears from **all** tiles, to keep the cover clean (UI spec, section 4).
   final bool selectionActive;
 
   final double aspectRatio;
@@ -2553,14 +2557,15 @@ class PackGridItem extends StatelessWidget {
         ),
         child: Tooltip(
           message: title,
-          // Sem `manual` o `Tooltip` monta um `LongPressGestureRecognizer`
-          // proprio, porque `TooltipTriggerMode.longPress` e o padrao em
-          // mobile e o `flutter_test` roda como Android. Esse reconhecedor e
-          // o mais interno, ganha a arena e engole o toque longo do
-          // `GestureDetector` de fora, entao a selecao nunca dispara.
-          // `manual` tira so o gatilho de toque e mantem o hover de desktop,
-          // que e onde a dica de titulo truncado serve para alguma coisa. Em
-          // mobile o toque longo e da selecao, e isso e decisao travada.
+          // Without `manual` the `Tooltip` builds its own
+          // `LongPressGestureRecognizer`, because `TooltipTriggerMode.longPress`
+          // is the default on mobile and `flutter_test` runs as Android. That
+          // recognizer is the innermost one, wins the arena and swallows the
+          // long press of the outer `GestureDetector`, so the selection never
+          // fires. `manual` removes only the tap trigger and keeps the desktop
+          // hover, which is where the truncated-title hint serves any purpose. On
+          // mobile the long press belongs to the selection, and that is a
+          // locked decision.
           triggerMode: TooltipTriggerMode.manual,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
@@ -2586,9 +2591,9 @@ class PackGridItem extends StatelessWidget {
                       ),
                     ),
                   ),
-                // Dois sinais redundantes para "sem fonte": a capa dessaturada
-                // e este ícone. Cinza sozinho confunde com "carregando", e
-                // muita capa de época já é quase monocromática.
+                // Two redundant signals for "no source": the desaturated cover
+                // and this icon. Gray alone gets confused with "loading", and
+                // many period covers are already nearly monochrome.
                 if (!hasSource)
                   Positioned(
                     top: 8,
@@ -2638,7 +2643,7 @@ class PackGridItem extends StatelessWidget {
 
   Widget _cover(BuildContext context) {
     final url = coverUrl;
-    final capa = url == null
+    final cover = url == null
         ? _placeholder(context)
         : CachedNetworkImage(
             imageUrl: url,
@@ -2646,9 +2651,8 @@ class PackGridItem extends StatelessWidget {
             errorWidget: (context, _, __) => _placeholder(context),
             errorListener: (_) {},
           );
-    if (hasSource) return capa;
-    // Matriz de saturação zero. É o mesmo truque do `ColorFilter.mode` com
-    // cinza, mas preserva o brilho da arte em vez de achatá-la.
+    if (hasSource) return cover;
+    // Zero-saturation matrix: greys the art while preserving its brightness.
     return ColorFiltered(
       colorFilter: const ColorFilter.matrix(<double>[
         0.2126, 0.7152, 0.0722, 0, 0,
@@ -2656,7 +2660,7 @@ class PackGridItem extends StatelessWidget {
         0.2126, 0.7152, 0.0722, 0, 0,
         0, 0, 0, 1, 0,
       ]),
-      child: capa,
+      child: cover,
     );
   }
 
@@ -2685,49 +2689,49 @@ class PackGridItem extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_item_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Expected: `+11`, zero failures.
 
-Se `tester.tap(find.byType(PackGridItem))` reclamar de alvo ambíguo ou de ponteiro fora da tela, aumente a `largura` do `_host`: o tile respeita `aspectRatio` e um `SizedBox` estreito demais pode estourar a altura da tela de teste.
+If `tester.tap(find.byType(PackGridItem))` complains of an ambiguous target or a pointer off screen, increase the `width` of `_host`: the tile respects `aspectRatio` and a too-narrow `SizedBox` can overflow the test screen height.
 
-Se o caso `toque curto abre e toque longo seleciona` falhar com `Expected: <1> Actual: <0>` na linha do `selecionou`, o `triggerMode: TooltipTriggerMode.manual` do Step 3 nao foi transcrito. Medido nas duas direcoes: com o `Tooltip` padrao da `abriu=1 selecionou=0`, com `manual` da `abriu=1 selecionou=1`. Nao conserte trocando o teste por `longPressAt`, nem tirando o `Tooltip`, nem pondo `behavior:` no `GestureDetector`: o conserto e o `triggerMode`.
+If the `short tap opens and long press selects` case fails with `Expected: <1> Actual: <0>` on the `selected` line, the `triggerMode: TooltipTriggerMode.manual` of Step 3 was not transcribed. Measured in both directions: with the default `Tooltip` it gives `opened=1 selected=0`, with `manual` it gives `opened=1 selected=1`. Do not fix it by swapping the test for `longPressAt`, nor by removing the `Tooltip`, nor by putting `behavior:` on the `GestureDetector`: the fix is the `triggerMode`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_item_test.dart
 git commit -m "test(grade): tile de jogo com marca de sem fonte e selecao por toque longo"
 
-# agente de producao
+# production agent
 git add lib/widgets/game_grid/pack_grid_item.dart
 git commit -m "feat(grade): tile de jogo com marca de sem fonte e selecao por toque longo"
 ```
 
 ---
 
-### Task 12: `PackGrid`, a grade de MODO PACK
+### Task 12: `PackGrid`, the PACK MODE grid
 
 **Files:**
 - Create: `lib/widgets/game_grid/pack_grid.dart`
 - Test: `test/pack_grid_test.dart`
 
-A grade que desenha os tiles da Task 11 a partir dos providers da Task 10, mais a faixa de estado vazio da seção 3.2.
+The grid that draws the Task 11 tiles from the Task 10 providers, plus the empty state strip of section 3.2.
 
-**A grade não navega.** O toque curto chama `onOpenGame`, e quem empurra a rota é o `HomeScreen`, na Task 19. Isso não é purismo: é o que permite testar a grade sem `Navigator` e sem a tela de detalhe, que só existe a partir da Task 15.
+**The grid does not navigate.** The short tap calls `onOpenGame`, and the one that pushes the route is `HomeScreen`, in Task 19. This is not purism: it is what allows testing the grid without a `Navigator` and without the detail screen, which only exists from Task 15 on.
 
-**A faixa de estado vazio nesta fatia.** A seção 3.2 fala em "nenhum addon instalado", e addon é fatia 4. Nesta fatia a única fonte é a listagem que já vem no `consoles.json`, então a condição equivalente, e verdadeira hoje, é **o índice não casou nenhum jogo**. Um pacote de SNES contra uma listagem de Nintendo Switch cai exatamente aí. Na fatia 4 a condição vira "nenhum addon cobre este console" e o texto já está pronto.
+**The empty state strip in this slice.** Section 3.2 speaks of "no addon installed", and addon is slice 4. In this slice the only source is the listing that already ships in `consoles.json`, so the equivalent condition, and a true one today, is **the index matched no game**. A SNES pack against a Nintendo Switch listing lands exactly there. In slice 4 the condition becomes "no addon covers this console" and the text is already ready.
 
-**A borda de "já baixado" não entra aqui.** `PackGridItem.isOwned` fica no padrão `false`. Ela chega na Task 13, que é a única que sabe o que está no disco.
+**The "already downloaded" border does not come in here.** `PackGridItem.isOwned` stays at the default `false`. It arrives in Task 13, which is the only one that knows what is on disk.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/pack_grid_test.dart`:
+Create `test/pack_grid_test.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -2747,38 +2751,38 @@ import 'support/favorites_stub.dart';
 
 PackGame _pg(String id, String title) => PackGame(id: id, title: title, dumps: [PackDump(name: '$title (USA)')]);
 
-PackGridEntry _entrada(String id, String title, {bool comFonte = true}) => PackGridEntry(
+PackGridEntry _entry(String id, String title, {bool withSource = true}) => PackGridEntry(
       game: _pg(id, title),
-      sources: comFonte
-          ? [MatchedSource(filename: '$title (USA).zip', sourceId: kBuiltinSourceId, confidence: MatchConfidence.likely, size: 1024)]
+      sources: withSource
+          ? [MatchedSource(filename: '$title (USA).zip', sourceId: kBuiltinAddonId, confidence: MatchConfidence.likely, size: 1024)]
           : const [],
     );
 
-/// Um índice de verdade, porque a faixa de estado vazio lê `matchedGameCount`
-/// e um índice falso não provaria nada.
-SourceIndex _indice({required bool casaAlgo}) {
+/// A real index, because the empty state strip reads `matchedGameCount` and a
+/// fake index would prove nothing.
+SourceIndex _index({required bool matchesSomething}) {
   final matcher = PackMatcher(MetadataPack(
     pack: 'snes',
     system: 'Super Nintendo',
     built: '2026-01-01',
-    games: [_pg('snes/chrono-trigger', 'Chrono Trigger')],
+    games: [_pg('snes/crystal-vanguard', 'Crystal Vanguard')],
   ));
   return SourceIndex.build(matcher, [
-    if (casaAlgo)
-      (filename: 'Chrono Trigger (USA).zip', sourceId: kBuiltinSourceId, size: 1024, url: null),
+    if (matchesSomething)
+      (filename: 'Crystal Vanguard (USA).zip', sourceId: kBuiltinAddonId, size: 1024, url: null),
   ]);
 }
 
 Widget _host(
-  List<PackGridEntry> entradas, {
-  SourceIndex? indice,
+  List<PackGridEntry> entries, {
+  SourceIndex? index,
   void Function(PackGridEntry)? onOpenGame,
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packGridEntriesProvider.overrideWithValue(entradas),
-      sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
+      withoutFavoritesDisk,
+      packGridEntriesProvider.overrideWithValue(entries),
+      sourceIndexProvider.overrideWithValue(index ?? _index(matchesSomething: true)),
     ],
     child: MaterialApp(
       home: Scaffold(body: PackGrid(onOpenGame: onOpenGame ?? (_) {})),
@@ -2787,76 +2791,76 @@ Widget _host(
 }
 
 void main() {
-  testWidgets('desenha um tile por entrada', (tester) async {
+  testWidgets('draws one tile per entry', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/super-metroid', 'Super Metroid'),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/super-vectron', 'Super Vectron'),
     ]));
 
     expect(find.byType(PackGridItem), findsNWidgets(2));
-    expect(find.text('Chrono Trigger'), findsOneWidget);
+    expect(find.text('Crystal Vanguard'), findsOneWidget);
   });
 
-  testWidgets('o jogo sem fonte continua na grade, marcado', (tester) async {
+  testWidgets('a sourceless game stays in the grid, badged', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/earthbound', 'EarthBound', comFonte: false),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/emberfall', 'Emberfall', withSource: false),
     ]));
 
     expect(find.byType(PackGridItem), findsNWidgets(2));
     expect(find.byIcon(Icons.cloud_off_rounded), findsOneWidget);
   });
 
-  testWidgets('com o índice vazio aparece a faixa de sem cobertura', (tester) async {
+  testWidgets('with an empty index the no-coverage strip appears', (tester) async {
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger', comFonte: false)],
-      indice: _indice(casaAlgo: false),
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard', withSource: false)],
+      index: _index(matchesSomething: false),
     ));
 
-    expect(find.text('Nenhuma fonte cobre este console'), findsOneWidget);
-    // A faixa é estado da grade, não do tile: os tiles continuam lá.
+    expect(find.text('No source covers this console'), findsOneWidget);
+    // The strip is grid state, not tile state: the tiles are still there.
     expect(find.byType(PackGridItem), findsOneWidget);
   });
 
-  testWidgets('com o índice cobrindo alguma coisa não há faixa', (tester) async {
-    await tester.pumpWidget(_host([_entrada('snes/chrono-trigger', 'Chrono Trigger')]));
+  testWidgets('with the index covering something there is no strip', (tester) async {
+    await tester.pumpWidget(_host([_entry('snes/crystal-vanguard', 'Crystal Vanguard')]));
 
-    expect(find.text('Nenhuma fonte cobre este console'), findsNothing);
+    expect(find.text('No source covers this console'), findsNothing);
   });
 
-  testWidgets('busca sem resultado mostra o vazio de busca, não o de cobertura', (tester) async {
+  testWidgets('a search with no result shows the search empty, not the coverage one', (tester) async {
     await tester.pumpWidget(_host(const []));
 
-    expect(find.text('Nenhum jogo com esse nome'), findsOneWidget);
-    expect(find.text('Nenhuma fonte cobre este console'), findsNothing);
+    expect(find.text('No game with that name'), findsOneWidget);
+    expect(find.text('No source covers this console'), findsNothing);
   });
 
-  testWidgets('o toque curto devolve a entrada tocada', (tester) async {
-    final abertas = <String>[];
+  testWidgets('the short tap returns the tapped entry', (tester) async {
+    final opened = <String>[];
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger'), _entrada('snes/super-metroid', 'Super Metroid')],
-      onOpenGame: (entry) => abertas.add(entry.game.id),
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard'), _entry('snes/super-vectron', 'Super Vectron')],
+      onOpenGame: (entry) => opened.add(entry.game.id),
     ));
 
-    await tester.tap(find.text('Super Metroid'));
+    await tester.tap(find.text('Super Vectron'));
     await tester.pump();
 
-    expect(abertas, ['snes/super-metroid']);
+    expect(opened, ['snes/super-vectron']);
   });
 
-  testWidgets('o toque longo seleciona, e aí o checkbox aparece em todo tile', (tester) async {
+  testWidgets('the long press selects, and then the checkbox appears on every tile', (tester) async {
     await tester.pumpWidget(_host([
-      _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-      _entrada('snes/super-metroid', 'Super Metroid'),
+      _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+      _entry('snes/super-vectron', 'Super Vectron'),
     ]));
 
     expect(find.byType(Checkbox), findsNothing);
 
-    await tester.longPress(find.text('Chrono Trigger'));
+    await tester.longPress(find.text('Crystal Vanguard'));
     await tester.pump();
 
-    // Dois checkboxes, um marcado. É a regra da seção 4: a visibilidade do
-    // checkbox é global, o valor dele é por tile.
+    // Two checkboxes, one checked. It is the rule of section 4: the checkbox
+    // visibility is global, its value is per tile.
     expect(find.byType(Checkbox), findsNWidgets(2));
     expect(
       tester.widgetList<Checkbox>(find.byType(Checkbox)).where((c) => c.value == true).length,
@@ -2866,17 +2870,17 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: '.../pack_grid.dart'`.
+Expected: `Target of URI doesn't exist: '.../pack_grid.dart'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/widgets/game_grid/pack_grid.dart`:
+Create `lib/widgets/game_grid/pack_grid.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -2886,13 +2890,13 @@ import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid_item.dart';
 
-/// A grade de MODO PACK: um tile por jogo do pacote.
+/// The PACK MODE grid: one tile per pack game.
 ///
-/// Não substitui `GameGrid`, convive com ela. Quem escolhe qual das duas
-/// desenhar é o `HomeScreen`, pelo `gridModeProvider` (Task 19).
+/// It does not replace `GameGrid`, it coexists with it. The one that chooses
+/// which of the two to draw is `HomeScreen`, via `gridModeProvider` (Task 19).
 class PackGrid extends ConsumerWidget {
-  /// Chamado no toque curto de um tile. A grade não conhece `Navigator`: quem
-  /// empurra a rota do detalhe é o `HomeScreen`.
+  /// Called on a tile's short tap. The grid does not know `Navigator`: the one
+  /// that pushes the detail route is `HomeScreen`.
   final void Function(PackGridEntry entry) onOpenGame;
 
   const PackGrid({super.key, required this.onOpenGame});
@@ -2904,29 +2908,30 @@ class PackGrid extends ConsumerWidget {
     final selected = ref.watch(catalogProvider.select((s) => s.selectedGames));
     final catalogNotifier = ref.read(catalogProvider.notifier);
 
-    // Seção 4 do spec de UI: a visibilidade do checkbox é global e depende só
-    // de haver seleção em curso. Com seleção vazia, capa limpa em todo tile.
+    // Section 4 of the UI spec: the checkbox visibility is global and depends
+    // only on there being a selection in progress. With an empty selection, a
+    // clean cover on every tile.
     final selectionActive = selected.isNotEmpty;
 
-    // Seção 3.2. Nesta fatia "nenhuma fonte" quer dizer "a listagem deste
-    // console não casou com nenhum jogo do pacote". Na fatia 4 a condição
-    // passa a ser "nenhum addon instalado cobre este console" e o texto fica.
-    final semCobertura = (index?.matchedGameCount ?? 0) == 0;
+    // Section 3.2. In this slice "no source" means "this console's listing
+    // matched no game in the pack". In slice 4 the condition becomes "no
+    // installed addon covers this console" and the text stays.
+    final noCoverage = (index?.matchedGameCount ?? 0) == 0;
 
     return Column(
       children: [
-        if (semCobertura) const _SemCoberturaBanner(),
+        if (noCoverage) const _NoCoverageBanner(),
         Expanded(
           child: entries.isEmpty
-              ? const _VazioDeBusca()
+              ? const _SearchEmpty()
               : Padding(
                   padding: const EdgeInsets.fromLTRB(6, 6, 6, 3),
                   child: GridView.builder(
                     padding: EdgeInsets.zero,
-                    // Proporção fixa, ao contrário de `GameGrid`, que mede a
-                    // primeira capa da listagem. As capas do pacote vêm todas
-                    // da mesma origem e já são consistentes, então medir seria
-                    // um round-trip de imagem por troca de console, de graça.
+                    // Fixed ratio, unlike `GameGrid`, which measures the first
+                    // cover of the listing. The pack covers all come from the
+                    // same origin and are already consistent, so measuring would
+                    // be an image round trip per console switch, for nothing.
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                       maxCrossAxisExtent: 180,
                       childAspectRatio: 0.75,
@@ -2956,8 +2961,8 @@ class PackGrid extends ConsumerWidget {
   }
 }
 
-class _SemCoberturaBanner extends StatelessWidget {
-  const _SemCoberturaBanner();
+class _NoCoverageBanner extends StatelessWidget {
+  const _NoCoverageBanner();
 
   @override
   Widget build(BuildContext context) {
@@ -2976,11 +2981,11 @@ class _SemCoberturaBanner extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Nenhuma fonte cobre este console',
+                  'No source covers this console',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  'Os jogos aparecem para consulta, mas não há nada para baixar.',
+                  'Games show up for browsing, but there is nothing to download.',
                   style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
                 ),
               ],
@@ -2992,14 +2997,14 @@ class _SemCoberturaBanner extends StatelessWidget {
   }
 }
 
-class _VazioDeBusca extends StatelessWidget {
-  const _VazioDeBusca();
+class _SearchEmpty extends StatelessWidget {
+  const _SearchEmpty();
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Text(
-        'Nenhum jogo com esse nome',
+        'No game with that name',
         style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
@@ -3007,54 +3012,54 @@ class _VazioDeBusca extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_test.dart
 ```
 
-Esperado: `+7`, zero falha.
+Expected: `+7`, zero failures.
 
-Dois tropeços prováveis:
+Two likely stumbles:
 
-- Se o toque longo não selecionar nada, o culpado é o `catalogProvider` de verdade dentro do `ProviderScope`. Ele é real de propósito, para provar a fiação inteira. O construtor dele escuta `favoritesProvider`, que vai ao disco, e é por isso que `semDiscoDeFavoritos` está nos `overrides`: sem ele o teste estoura com `MissingPluginException` ou com `Tried to use FavoritesNotifier after dispose`, os dois **depois** de o caso ter passado. Ver a "Sexta decisão travada". O que você **não** deve fazer é sobrescrever o `catalogProvider`, porque aí o teste para de provar a fiação e passa a provar o dublê.
-- Se `find.text('Super Metroid')` achar mais de um widget, é o `Tooltip` do tile duplicando o texto na árvore. Nesse caso use `find.byKey(const ValueKey('pack:snes/super-metroid'))`.
+- If the long press selects nothing, the culprit is the real `catalogProvider` inside the `ProviderScope`. It is real on purpose, to prove the whole wiring. Its constructor listens to `favoritesProvider`, which goes to disk, and that is why `withoutFavoritesDisk` is in the `overrides`: without it the test throws with `MissingPluginException` or with `Tried to use FavoritesNotifier after dispose`, both **after** the case passed. See the "Sixth locked decision". What you **must not** do is override the `catalogProvider`, because then the test stops proving the wiring and starts proving the stand-in.
+- If `find.text('Super Vectron')` finds more than one widget, it is the tile's `Tooltip` duplicating the text in the tree. In that case use `find.byKey(const ValueKey('pack:snes/super-vectron'))`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_test.dart
 git commit -m "test(grade): grade de pack com faixa de sem cobertura e selecao por toque longo"
 
-# agente de producao
+# production agent
 git add lib/widgets/game_grid/pack_grid.dart
 git commit -m "feat(grade): grade de pack com faixa de sem cobertura e selecao por toque longo"
 ```
 
 ---
 
-### Task 13: `ownedGameIdsProvider`, quem já está no disco
+### Task 13: `ownedGameIdsProvider`, who is already on disk
 
 **Files:**
 - Create: `lib/providers/owned_games_provider.dart`
 - Create: `test/owned_games_provider_test.dart`
-- Modify: `lib/widgets/game_grid/pack_grid.dart` (a grade passa a preencher `isOwned`)
-- Modify: `test/pack_grid_test.dart` (dois testes novos no fim)
+- Modify: `lib/widgets/game_grid/pack_grid.dart` (the grid starts filling `isOwned`)
+- Modify: `test/pack_grid_test.dart` (two new tests at the end)
 
-A borda de "já baixado" da seção 3.1. O tile já sabe desenhá-la desde a Task 11 e a grade já a deixou no padrão `false` na Task 12. Esta Task é a única que olha o disco.
+The "already downloaded" border of section 3.1. The tile already knows how to draw it since Task 11 and the grid already left it at the default `false` in Task 12. This Task is the only one that looks at the disk.
 
-**Uma varredura por console, nunca uma por tile.** É o mesmo argumento da Task 8. `identify` é uma chamada que pode calcular CRC, e chamá-la de dentro de um `itemBuilder` significa chamá-la de novo a cada quadro de scroll. Então a varredura roda uma vez, devolve um `Set<String>` de `PackGame.id`, e o tile faz `contains`.
+**One scan per console, never one per tile.** It is the same argument as Task 8. `identify` is a call that can compute a CRC, and calling it from inside an `itemBuilder` means calling it again on every scroll frame. So the scan runs once, returns a `Set<String>` of `PackGame.id`, and the tile does `contains`.
 
-**Enquanto a varredura não termina, ninguém ganha borda.** `AsyncValue.valueOrNull ?? {}` resolve isso sozinho, e é o que a seção 3.1 pede: "não mostra nada enquanto está varrendo". Borda errada é pior que borda ausente.
+**While the scan is not finished, nobody gets a border.** `AsyncValue.valueOrNull ?? {}` solves this on its own, and it is what section 3.1 asks for: "shows nothing while scanning". A wrong border is worse than a missing one.
 
-**Similaridade não pinta borda.** `LocalIdentityService.identify` pode devolver um casamento de tier 3, `MatchTier.fuzzyName`, que vira `MatchConfidence.guess`. Isso serve para sugerir, não para afirmar que o arquivo está no disco. `guess` é descartado aqui. Nome exato, título canônico e CRC entram.
+**Similarity does not paint a border.** `LocalIdentityService.identify` can return a tier 3 match, `MatchTier.fuzzyName`, which becomes `MatchConfidence.guess`. That serves to suggest, not to assert that the file is on disk. `guess` is discarded here. Exact name, canonical title and CRC come in.
 
-**A borda não se atualiza sozinha quando um download termina.** Isso é deliberado nesta fatia: o gancho ficaria dentro do `task_queue_service` / `download_provider`, que esta fatia não toca (ver a tabela de intocados no topo, que a Task 22 confere com `git diff --stat`). A receita para quando alguém quiser, e são duas linhas, é `ref.invalidate(ownedGameIdsProvider)` no ponto em que o download é marcado como concluído. **Não improvise isso agora**, porque tocar o download provider quebra o critério da Task 22.
+**The border does not update itself when a download finishes.** This is deliberate in this slice: the hook would live inside `task_queue_service` / `download_provider`, which this slice does not touch (see the untouched table at the top, which Task 22 checks with `git diff --stat`). The recipe for when someone wants it, and it is two lines, is `ref.invalidate(ownedGameIdsProvider)` at the point where the download is marked as done. **Do not improvise that now**, because touching the download provider breaks the Task 22 criterion.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Crie `test/owned_games_provider_test.dart`:
+Create `test/owned_games_provider_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -3070,36 +3075,36 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/local_identity_service.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
-final _pacote = MetadataPack(
+final _pack = MetadataPack(
   pack: 'snes',
   system: 'Super Nintendo',
   built: '2026-01-01',
   games: [
     PackGame(
-      id: 'snes/chrono-trigger',
-      title: 'Chrono Trigger',
-      dumps: [PackDump(name: 'Chrono Trigger (USA)', crc: 'AABBCCDD')],
+      id: 'snes/crystal-vanguard',
+      title: 'Crystal Vanguard',
+      dumps: [PackDump(name: 'Crystal Vanguard (USA)', crc: 'AABBCCDD')],
     ),
     PackGame(
-      id: 'snes/super-metroid',
-      title: 'Super Metroid',
-      dumps: [PackDump(name: 'Super Metroid (Japan, USA)')],
+      id: 'snes/super-vectron',
+      title: 'Super Vectron',
+      dumps: [PackDump(name: 'Super Vectron (Japan, USA)')],
     ),
   ],
 );
 
-/// CRC fixo de propósito: nenhum teste aqui é sobre checksum, e ler o disco
-/// para calcular um deixaria o teste lento e dependente do conteúdo do
-/// arquivo. `FFFFFFFF` não está no pacote, então o eixo de CRC nunca casa e
-/// cada teste mede exatamente o eixo de nome que ele diz medir.
-LocalIdentityService _servico() => LocalIdentityService(
-      matcher: PackMatcher(_pacote),
+/// Fixed CRC on purpose: no test here is about checksum, and reading the disk
+/// to compute one would make the test slow and dependent on the file content.
+/// `FFFFFFFF` is not in the pack, so the CRC axis never matches and each test
+/// measures exactly the name axis it claims to measure.
+LocalIdentityService _service() => LocalIdentityService(
+      matcher: PackMatcher(_pack),
       crcOfFile: (_) async => 'FFFFFFFF',
     );
 
-Future<Directory> _pasta() async {
+Future<Directory> _dir() async {
   final dir = await Directory.systemTemp.createTemp('owned_games_test');
   addTearDown(() async {
     if (await dir.exists()) await dir.delete(recursive: true);
@@ -3107,8 +3112,8 @@ Future<Directory> _pasta() async {
   return dir;
 }
 
-Future<File> _arquivo(Directory dir, String nome) async {
-  final file = File(p.join(dir.path, nome));
+Future<File> _file(Directory dir, String name) async {
+  final file = File(p.join(dir.path, name));
   await file.parent.create(recursive: true);
   await file.writeAsString('rom');
   return file;
@@ -3116,17 +3121,17 @@ Future<File> _arquivo(Directory dir, String nome) async {
 
 ProviderContainer _container({
   required String? libraryDir,
-  PackTarget? alvo = _alvo,
-  LocalIdentityService? servico,
-  bool comServico = true,
+  PackTarget? target = _target,
+  LocalIdentityService? service,
+  bool withService = true,
 }) {
   final container = ProviderContainer(
     overrides: [
-      packTargetProvider.overrideWithValue(alvo),
+      packTargetProvider.overrideWithValue(target),
       libraryDirProvider.overrideWithValue(libraryDir),
-      if (alvo != null)
-        localIdentityServiceProvider(alvo).overrideWith(
-          (ref) => comServico ? (servico ?? _servico()) : null,
+      if (target != null)
+        localIdentityServiceProvider(target).overrideWith(
+          (ref) => withService ? (service ?? _service()) : null,
         ),
     ],
   );
@@ -3135,67 +3140,67 @@ ProviderContainer _container({
 }
 
 void main() {
-  test('sem console selecionado o conjunto é vazio', () async {
-    final container = _container(libraryDir: null, alvo: null);
+  test('with no console selected the set is empty', () async {
+    final container = _container(libraryDir: null, target: null);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('sem pacote não há identidade, e o conjunto é vazio', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).sfc');
-    final container = _container(libraryDir: dir.path, comServico: false);
+  test('with no pack there is no identity, and the set is empty', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).sfc');
+    final container = _container(libraryDir: dir.path, withService: false);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('pasta que não existe não derruba a varredura', () async {
-    final container = _container(libraryDir: p.join(Directory.systemTemp.path, 'nao_existe_mesmo'));
+  test('a folder that does not exist does not bring down the scan', () async {
+    final container = _container(libraryDir: p.join(Directory.systemTemp.path, 'does_not_exist_at_all'));
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('a ROM que casa pelo nome entra no conjunto', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).sfc');
+  test('the ROM that matches by name enters the set', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
-    expect(await container.read(ownedGameIdsProvider.future), {'snes/chrono-trigger'});
+    expect(await container.read(ownedGameIdsProvider.future), {'snes/crystal-vanguard'});
   });
 
-  test('o que não é ROM é ignorado', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).txt');
-    await _arquivo(dir, 'Super Metroid (Japan, USA).nfo');
-    final container = _container(libraryDir: dir.path);
-
-    expect(await container.read(ownedGameIdsProvider.future), isEmpty);
-  });
-
-  test('a ROM que não casa com nada não entra', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Um Jogo Que Nao Existe (USA).sfc');
+  test('what is not a ROM is ignored', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).txt');
+    await _file(dir, 'Super Vectron (Japan, USA).nfo');
     final container = _container(libraryDir: dir.path);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('a ROM extraída dentro de uma subpasta também conta', () async {
-    final dir = await _pasta();
-    // É a forma que `extractToFolder` deixa no disco, e é a profundidade que
-    // `_scanLibraryDirIsolate` já varre hoje.
-    await _arquivo(dir, p.join('Super Metroid (Japan, USA)', 'Super Metroid (Japan, USA).sfc'));
+  test('a ROM that matches nothing does not enter', () async {
+    final dir = await _dir();
+    await _file(dir, 'A Game That Does Not Exist (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
-    expect(await container.read(ownedGameIdsProvider.future), {'snes/super-metroid'});
+    expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('casamento só por semelhança não conta como baixado', () async {
-    final dir = await _pasta();
-    // Tier 3: `ratio('chrono triggr', 'chrono trigger')` passa de 90, então
-    // o matcher devolve um `fuzzyName`. Bom o bastante para sugerir, não o
-    // bastante para pintar borda.
-    await _arquivo(dir, 'Chrono Triggr (USA).sfc');
+  test('a ROM extracted inside a subfolder also counts', () async {
+    final dir = await _dir();
+    // It is the shape that `extractToFolder` leaves on disk, and it is the depth
+    // that `_scanLibraryDirIsolate` already scans today.
+    await _file(dir, p.join('Super Vectron (Japan, USA)', 'Super Vectron (Japan, USA).sfc'));
+    final container = _container(libraryDir: dir.path);
+
+    expect(await container.read(ownedGameIdsProvider.future), {'snes/super-vectron'});
+  });
+
+  test('a similarity-only match does not count as downloaded', () async {
+    final dir = await _dir();
+    // Tier 3: `ratio('crystal vanguar', 'crystal vanguard')` passes 90, so the
+    // matcher returns a `fuzzyName`. Good enough to suggest, not good enough to
+    // paint a border.
+    await _file(dir, 'Crystal Vanguar (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
@@ -3203,17 +3208,17 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/owned_games_provider_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/providers/owned_games_provider.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/providers/owned_games_provider.dart'`.
 
-- [ ] **Step 3: Implemente o provider**
+- [ ] **Step 3: Implement the provider**
 
-Crie `lib/providers/owned_games_provider.dart`:
+Create `lib/providers/owned_games_provider.dart`:
 
 ```dart
 import 'dart:io';
@@ -3226,27 +3231,28 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Onde a biblioteca do console selecionado está no disco.
+/// Where the selected console's library is on disk.
 ///
-/// Existe separado do provider de baixo por um motivo só: é o ponto de
-/// injeção do teste. `getDownloadDir` mora no notifier de settings, e o
-/// construtor de `SettingsNotifier` lê o disco; sobrescrever este provider é o
-/// que permite varrer uma pasta temporária sem subir settings de verdade.
+/// It exists separate from the provider below for one reason only: it is the
+/// test injection point. `getDownloadDir` lives in the settings notifier, and
+/// the `SettingsNotifier` constructor reads the disk; overriding this provider
+/// is what allows scanning a temporary folder without booting real settings.
 final libraryDirProvider = Provider<String?>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return null;
-  // O `watch` é do estado e a chamada é no notifier. É esse par que faz este
-  // provider recalcular quando o usuário troca a pasta nas configurações.
+  // The `watch` is of the state and the call is on the notifier. It is that
+  // pair that makes this provider recompute when the user changes the folder in
+  // the settings.
   ref.watch(settingsProvider);
   final dir = ref.read(settingsProvider.notifier).getDownloadDir(target.consoleId);
   return dir.isEmpty ? null : dir;
 });
 
-/// Os `PackGame.id` que já têm alguma versão no disco.
+/// The `PackGame.id`s that already have some version on disk.
 ///
-/// Uma varredura por console, nunca uma por tile: `identify` pode calcular
-/// CRC, e chamá-la de dentro de um `itemBuilder` seria chamá-la de novo a
-/// cada quadro de scroll. O tile recebe o conjunto pronto e faz `contains`.
+/// One scan per console, never one per tile: `identify` can compute a CRC, and
+/// calling it from inside an `itemBuilder` would be calling it again on every
+/// scroll frame. The tile receives the ready set and does `contains`.
 final ownedGameIdsProvider = FutureProvider<Set<String>>((ref) async {
   final target = ref.watch(packTargetProvider);
   final dir = ref.watch(libraryDirProvider);
@@ -3259,22 +3265,22 @@ final ownedGameIdsProvider = FutureProvider<Set<String>>((ref) async {
   for (final file in await _libraryFiles(dir)) {
     if (!hasRomExtension(p.basename(file.path))) continue;
     final match = await identity.identify(file);
-    // `guess` é o tier de similaridade, e ele erra. Borda errada é pior que
-    // borda ausente (spec de UI, seção 3.1), então só nome exato, título
-    // canônico e CRC pintam.
+    // `guess` is the similarity tier, and it errs. A wrong border is worse than
+    // a missing one (UI spec, section 3.1), so only exact name, canonical title
+    // and CRC paint.
     if (match == null || match.confidence == MatchConfidence.guess) continue;
     owned.add(match.game.id);
   }
   return owned;
 });
 
-/// Os arquivos da pasta e de um nível abaixo dela.
+/// The files of the folder and of one level below it.
 ///
-/// O nível a mais não é capricho: com `extractToFolder` ligado a ROM extraída
-/// fica em `<pasta>/<nome do jogo>/`, e `_scanLibraryDirIsolate`
-/// (`lib/providers/library_snapshot_provider.dart:273-294`) já conta essa
-/// profundidade. Varrer diferente daria duas respostas para "eu já baixei
-/// isso?" dentro da mesma tela.
+/// The extra level is not a whim: with `extractToFolder` on, the extracted ROM
+/// lands in `<folder>/<game name>/`, and `_scanLibraryDirIsolate`
+/// (`lib/providers/library_snapshot_provider.dart:273-294`) already counts that
+/// depth. Scanning differently would give two answers to "did I already
+/// download this?" inside the same screen.
 Future<List<File>> _libraryFiles(String dir) async {
   final root = Directory(dir);
   if (!await root.exists()) return const [];
@@ -3290,67 +3296,68 @@ Future<List<File>> _libraryFiles(String dir) async {
             if (sub is File) files.add(sub);
           }
         } catch (_) {
-          // Subpasta sem permissão. Não é motivo para a grade inteira ficar
-          // sem borda.
+          // Subfolder with no permission. Not a reason for the whole grid to go
+          // without a border.
         }
       }
     }
   } catch (_) {
-    // Pasta apagada no meio da varredura, pendrive removido, permissão
-    // negada. Devolve o que deu para ler.
+    // Folder deleted mid-scan, USB stick removed, permission denied. Returns
+    // what it managed to read.
   }
   return files;
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/owned_games_provider_test.dart
 ```
 
-Esperado: `+8`, zero falha.
+Expected: `+8`, zero failures.
 
-Se o teste da subpasta falhar com o conjunto vazio, confira se `_arquivo` criou o pai: `File.writeAsString` não cria diretório, por isso o helper chama `file.parent.create(recursive: true)` antes.
+If the subfolder test fails with an empty set, check that `_file` created the parent: `File.writeAsString` does not create a directory, which is why the helper calls `file.parent.create(recursive: true)` first.
 
-- [ ] **Step 5: Commit do provider**
+- [ ] **Step 5: Commit the provider**
 
 ```bash
-# agente de teste
+# test agent
 git add test/owned_games_provider_test.dart
 git commit -m "test(grade): varredura da biblioteca devolve os jogos ja baixados"
 
-# agente de producao
+# production agent
 git add lib/providers/owned_games_provider.dart
 git commit -m "feat(grade): varredura da biblioteca devolve os jogos ja baixados"
 ```
 
-- [ ] **Step 6: Escreva os testes da grade com borda**
+- [ ] **Step 6: Write the grid-with-border tests**
 
-Em `test/pack_grid_test.dart`, troque o helper `_host` inteiro por esta versão, que ganha um parâmetro de jogos já baixados. **Repare que `semDiscoDeFavoritos` continua na lista de `overrides`**: ele veio da Task 12 e perdê-lo nesta troca quebra o caso do toque longo, que usa o `catalogProvider` de verdade.
+In `test/pack_grid_test.dart`, replace the whole `_host` helper with this version, which gains a parameter for already-downloaded games. **Note that `withoutFavoritesDisk` stays in the `overrides` list**: it came from Task 12 and losing it in this swap breaks the long-press case, which uses the real `catalogProvider`.
 
 ```dart
 Widget _host(
-  List<PackGridEntry> entradas, {
-  SourceIndex? indice,
+  List<PackGridEntry> entries, {
+  SourceIndex? index,
   void Function(PackGridEntry)? onOpenGame,
-  Set<String>? baixados,
-  bool varrendo = false,
+  Set<String>? downloaded,
+  bool scanning = false,
 }) {
   return ProviderScope(
     overrides: [
-      // Continua aqui, e é a linha mais fácil de perder nesta troca: o
-      // `catalogProvider` deste teste é o de verdade, e o construtor dele
-      // escuta `favoritesProvider`, que vai ao disco. Sem o stub o caso do
-      // toque longo estoura com `MissingPluginException` **depois** de ter
-      // passado. Ver a "Sexta decisão travada".
-      semDiscoDeFavoritos,
-      packGridEntriesProvider.overrideWithValue(entradas),
-      sourceIndexProvider.overrideWithValue(indice ?? _indice(casaAlgo: true)),
+      // Stays here, and it is the easiest line to lose in this swap: the
+      // `catalogProvider` of this test is the real one, and its constructor
+      // listens to `favoritesProvider`, which goes to disk. Without the stub the
+      // long-press case throws with `MissingPluginException` **after** having
+      // passed. See the "Sixth locked decision".
+      withoutFavoritesDisk,
+      packGridEntriesProvider.overrideWithValue(entries),
+      sourceIndexProvider.overrideWithValue(index ?? _index(matchesSomething: true)),
       ownedGameIdsProvider.overrideWith(
-        // Um `Completer` que ninguém completa é a varredura em curso. Um
-        // `Future.delayed` deixaria timer pendente e o teste falharia no fim.
-        (ref) => varrendo ? Completer<Set<String>>().future : Future.value(baixados ?? const <String>{}),
+        // A `Completer` that nobody completes is the scan in progress. A
+        // `Future.delayed` would leave a pending timer and the test would fail
+        // at the end.
+        (ref) => scanning ? Completer<Set<String>>().future : Future.value(downloaded ?? const <String>{}),
       ),
     ],
     child: MaterialApp(
@@ -3360,138 +3367,138 @@ Widget _host(
 }
 ```
 
-Acrescente os dois imports no topo do arquivo:
+Add the two imports at the top of the file:
 
 ```dart
 import 'dart:async';
 import 'package:roms_downloader/providers/owned_games_provider.dart';
 ```
 
-E acrescente os dois testes no fim de `main`:
+And add the two tests at the end of `main`:
 
 ```dart
-  testWidgets('o jogo que já está no disco vai marcado para o tile', (tester) async {
+  testWidgets('the game already on disk goes marked to the tile', (tester) async {
     await tester.pumpWidget(_host(
       [
-        _entrada('snes/chrono-trigger', 'Chrono Trigger'),
-        _entrada('snes/super-metroid', 'Super Metroid'),
+        _entry('snes/crystal-vanguard', 'Crystal Vanguard'),
+        _entry('snes/super-vectron', 'Super Vectron'),
       ],
-      baixados: {'snes/chrono-trigger'},
+      downloaded: {'snes/crystal-vanguard'},
     ));
     await tester.pump();
 
     final tiles = tester.widgetList<PackGridItem>(find.byType(PackGridItem)).toList();
-    expect(tiles.firstWhere((t) => t.title == 'Chrono Trigger').isOwned, isTrue);
-    expect(tiles.firstWhere((t) => t.title == 'Super Metroid').isOwned, isFalse);
+    expect(tiles.firstWhere((t) => t.title == 'Crystal Vanguard').isOwned, isTrue);
+    expect(tiles.firstWhere((t) => t.title == 'Super Vectron').isOwned, isFalse);
   });
 
-  testWidgets('enquanto a varredura não termina ninguém vai marcado', (tester) async {
+  testWidgets('while the scan is not finished nobody goes marked', (tester) async {
     await tester.pumpWidget(_host(
-      [_entrada('snes/chrono-trigger', 'Chrono Trigger')],
-      baixados: {'snes/chrono-trigger'},
-      varrendo: true,
+      [_entry('snes/crystal-vanguard', 'Crystal Vanguard')],
+      downloaded: {'snes/crystal-vanguard'},
+      scanning: true,
     ));
     await tester.pump();
 
-    // Seção 3.1: nada de borda enquanto o scan roda. Borda errada é pior que
-    // borda ausente, e neste instante a resposta ainda não existe.
+    // Section 3.1: no border while the scan runs. A wrong border is worse than a
+    // missing one, and at this instant the answer does not exist yet.
     expect(tester.widget<PackGridItem>(find.byType(PackGridItem)).isOwned, isFalse);
   });
 ```
 
-- [ ] **Step 7: Rode e veja falhar**
+- [ ] **Step 7: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_test.dart
 ```
 
-Esperado: `+8 -1`. Os sete da Task 12 continuam passando, e **um** dos dois novos falha, o da borda, porque `PackGrid` ainda não lê o provider: `Expected: true / Actual: <false>`.
+Expected: `+8 -1`. The seven from Task 12 keep passing, and **one** of the two new ones fails, the border one, because `PackGrid` does not read the provider yet: `Expected: true / Actual: <false>`.
 
-O outro, "enquanto a varredura não termina ninguém vai marcado", **passa antes da ligação existir**, e isso é esperado. Ele afirma `isOwned == false`, e `false` é justamente o padrão que a Task 12 deixou. Um teste que passa na fase vermelha não está provando nada hoje; ele está guardando o amanhã, para o caso de alguém trocar o `valueOrNull ?? {}` por um `.value` ou por um padrão otimista. Mantenha-o e não tente fazê-lo falhar de propósito: forçá-lo a falhar exigiria inverter a asserção, e aí ele passaria a afirmar o contrário da seção 3.1.
+The other, "while the scan is not finished nobody goes marked", **passes before the wiring exists**, and that is expected. It asserts `isOwned == false`, and `false` is exactly the default that Task 12 left. A test that passes in the red phase is not proving anything today; it is guarding tomorrow, in case someone swaps the `valueOrNull ?? {}` for a `.value` or an optimistic default. Keep it and do not try to make it fail on purpose: forcing it to fail would require inverting the assertion, and then it would assert the opposite of section 3.1.
 
-A primeira versão deste plano dizia `+7 -2` aqui. Estava errada, e quem pegou foi o implementador da Task 13 ao reportar a divergência em vez de engolir o número.
+The first version of this plan said `+7 -2` here. It was wrong, and the one who caught it was the Task 13 implementer by reporting the divergence instead of swallowing the number.
 
-- [ ] **Step 8: Ligue a grade ao provider**
+- [ ] **Step 8: Wire the grid to the provider**
 
-Em `lib/widgets/game_grid/pack_grid.dart`, acrescente o import:
+In `lib/widgets/game_grid/pack_grid.dart`, add the import:
 
 ```dart
 import 'package:roms_downloader/providers/owned_games_provider.dart';
 ```
 
-Dentro de `build`, logo depois da linha do `selected`, acrescente:
+Inside `build`, right after the `selected` line, add:
 
 ```dart
-    // A varredura da biblioteca (Task 13). `valueOrNull` é o que entrega a
-    // regra da seção 3.1 de graça: enquanto ela não resolve, o conjunto é
-    // vazio e nenhum tile ganha borda.
+    // The library scan (Task 13). `valueOrNull` is what delivers the rule of
+    // section 3.1 for free: while it does not resolve, the set is empty and no
+    // tile gets a border.
     final owned = ref.watch(ownedGameIdsProvider).valueOrNull ?? const <String>{};
 ```
 
-E no `PackGridItem` do `itemBuilder`, troque a linha de `hasSource` por este par:
+And in the `itemBuilder`'s `PackGridItem`, replace the `hasSource` line with this pair:
 
 ```dart
                         hasSource: entry.hasSource,
                         isOwned: owned.contains(entry.game.id),
 ```
 
-- [ ] **Step 9: Rode e veja passar**
+- [ ] **Step 9: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_test.dart
 ```
 
-Esperado: `+9`, zero falha.
+Expected: `+9`, zero failures.
 
-Agora a suíte inteira, porque esta Task fecha a grade. (Quem fecha o Grupo 3 é a Task 14; a grade em si está de pé aqui.)
+Now the whole suite, because this Task closes the grid. (The one that closes Group 3 is Task 14; the grid itself is standing here.)
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+260 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Expected: `+260 -1`, with the only failure being the usual one, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Any other failure is a regression of this Task.
 
-- [ ] **Step 10: Commit da ligação**
+- [ ] **Step 10: Commit the wiring**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_test.dart
 git commit -m "test(grade): grade marca o tile do jogo ja baixado e nada durante a varredura"
 
-# agente de producao
+# production agent
 git add lib/widgets/game_grid/pack_grid.dart
 git commit -m "feat(grade): grade marca o tile do jogo ja baixado e nada durante a varredura"
 ```
 
 ---
 
-### Task 14: `planFromEntries`, a regra da seção 6
+### Task 14: `planFromEntries`, the rule of section 6
 
 **Files:**
-- Modify: `lib/services/source_pick_service.dart` (a função nova convive com `planFromGames`)
-- Modify: `test/source_pick_service_test.dart` (os testes novos vão no fim de `main`)
+- Modify: `lib/services/source_pick_service.dart` (the new function coexists with `planFromGames`)
+- Modify: `test/source_pick_service_test.dart` (the new tests go at the end of `main`)
 
-A regra de escolha da seção 6 do spec de UI, na ordem exata dela: região preferida, maior revisão, maior confiança, prioridade do addon. É a mesma regra que vai escolher o destaque da tela de detalhe na Task 15. **Uma regra só, dois lugares**, e o lugar dela é este arquivo.
+The choice rule of section 6 of the UI spec, in its exact order: preferred region, highest revision, highest confidence, addon priority. It is the same rule that will choose the highlight of the detail screen in Task 15. **One rule, two places**, and its place is this file.
 
-**De onde saem região e revisão.** `MatchedSource` não carrega nenhuma das duas, e isso é de propósito: um addon devolve nome de arquivo e nada mais (decisão travada da fatia 4, "o addon é burro"). Quem extrai as duas do nome é `TitleMetadataParser.parseRomTitle`, que já existe, já é Dart puro e já é o parser que a listagem inteira usa. Conferido rodando, não por leitura:
+**Where region and revision come from.** `MatchedSource` carries neither of the two, and that is on purpose: an addon returns a file name and nothing more (locked decision of slice 4, "the addon is dumb"). The one that extracts the two from the name is `TitleMetadataParser.parseRomTitle`, which already exists, is already pure Dart and is already the parser the whole listing uses. Checked by running, not by reading:
 
-| Nome | `regions` | `revision` |
+| Name | `regions` | `revision` |
 | --- | --- | --- |
-| `Chrono Trigger (USA).zip` | `[USA]` | `''` |
-| `Chrono Trigger (Japan).zip` | `[Japan]` | `''` |
-| `Chrono Trigger (USA) (Rev A).zip` | `[USA]` | `'A'` |
-| `Super Metroid (Japan, USA) (En,Ja).zip` | `[Japan, USA]` | `''` |
-| `Chrono Trigger (World).zip` | `[World]` | `''` |
+| `Crystal Vanguard (USA).zip` | `[USA]` | `''` |
+| `Crystal Vanguard (Japan).zip` | `[Japan]` | `''` |
+| `Crystal Vanguard (USA) (Rev A).zip` | `[USA]` | `'A'` |
+| `Super Vectron (Japan, USA) (En,Ja).zip` | `[Japan, USA]` | `''` |
+| `Crystal Vanguard (World).zip` | `[World]` | `''` |
 
-**Duas heranças que você não vai consertar aqui.** A primeira: `World` não é tratado como coringa, então contra um filtro `{'USA'}` uma ROM `(World)` perde de uma `(USA)`. A segunda: revisão é comparada com `compareTo` de string, então `Rev A` ganha de `Rev 1` porque `'A' > '1'` na tabela de caracteres. As duas vêm de `filtering_service.dart:61-65` e `:151-157`, valem para a grade de hoje, e mudar qualquer uma delas aqui faria a grade e o lote discordarem sobre o mesmo arquivo. Essa discordância é pior que as duas heranças juntas. Se algum dia forem consertadas, é lá, e as duas ao mesmo tempo.
+**Two inheritances you will not fix here.** The first: `World` is not treated as a wildcard, so against a `{'USA'}` filter a `(World)` ROM loses to a `(USA)` one. The second: revision is compared with string `compareTo`, so `Rev A` beats `Rev 1` because `'A' > '1'` in the character table. Both come from `filtering_service.dart:61-65` and `:151-157`, hold for today's grid, and changing either of them here would make the grid and the batch disagree about the same file. That disagreement is worse than the two inheritances together. If they are ever fixed, it is there, and both at the same time.
 
-**Por que a função pede um resolvedor de `Game`.** `SourcePick.game` é o que efetivamente entra na fila, e `TaskQueueService.startDownloads` só sabe lidar com `Game`. Um `MatchedSource` não é um `Game`: nesta fatia ele veio de um, mas na fatia 4 vem de um addon. Em vez de sintetizar um `Game` aqui, e perder `details` e o `gameId` que a fila já usa, a função recebe `resolveGame` e quem chama decide como resolver. Na Task 20 é um mapa por nome de arquivo montado sobre o catálogo; na fatia 4 é o addon.
+**Why the function asks for a `Game` resolver.** `SourcePick.game` is what actually enters the queue, and `TaskQueueService.startDownloads` only knows how to deal with `Game`. A `MatchedSource` is not a `Game`: in this slice it came from one, but in slice 4 it comes from an addon. Instead of synthesizing a `Game` here, and losing `details` and the `gameId` that the queue already uses, the function receives `resolveGame` and the caller decides how to resolve. In Task 20 it is a map by file name built over the catalog; in slice 4 it is the addon.
 
-**Prioridade de addon nesta fatia é o eixo morto.** Só existe uma fonte, `kBuiltinSourceId`, então `sourcePriority` fica no padrão vazio e o eixo nunca decide nada. Ele está aqui porque a seção 6 o lista e porque implementá-lo depois significaria mexer no comparador de novo, com a regra já em produção em dois lugares.
+**Addon priority in this slice is the dead axis.** There is only one source, `kBuiltinAddonId`, so `sourcePriority` stays at the empty default and the axis never decides anything. It is here because section 6 lists it and because implementing it later would mean touching the comparator again, with the rule already in production in two places.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the tests that fail**
 
-Acrescente ao topo de `test/source_pick_service_test.dart` os imports que faltam:
+Add at the top of `test/source_pick_service_test.dart` the missing imports:
 
 ```dart
 import 'package:roms_downloader/models/game_match_model.dart';
@@ -3499,214 +3506,209 @@ import 'package:roms_downloader/models/grid_entry_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 ```
 
-Acrescente os helpers logo abaixo do `_game` que já está lá:
+Add the helpers just below the `_game` that is already there:
 
 ```dart
-MatchedSource _fonte(
+MatchedSource _source(
   String filename, {
-  MatchConfidence confianca = MatchConfidence.likely,
-  String sourceId = 'listagem',
+  MatchConfidence confidence = MatchConfidence.likely,
+  String sourceId = 'listing',
   int size = 1000,
 }) =>
-    MatchedSource(filename: filename, sourceId: sourceId, confidence: confianca, size: size);
+    MatchedSource(filename: filename, sourceId: sourceId, confidence: confidence, size: size);
 
-PackGridEntry _entrada(String title, List<MatchedSource> fontes) => PackGridEntry(
+PackGridEntry _entry(String title, List<MatchedSource> sources) => PackGridEntry(
       game: PackGame(id: 'snes/${title.toLowerCase()}', title: title, dumps: [PackDump(name: title)]),
-      sources: fontes,
+      sources: sources,
     );
 
-/// O resolvedor do teste: todo nome de arquivo resolve, e o `Game` que sai é
-/// reconhecível pelo nome. A Task 20 troca isto por um mapa sobre o catálogo.
+/// The test resolver: every file name resolves, and the `Game` that comes out
+/// is recognizable by name. Task 20 swaps this for a map over the catalog.
 Game? _resolve(MatchedSource source) => _game(source.filename, source.size);
 
-BatchPlan _plano(
-  List<PackGridEntry> entradas, {
-  Set<String> regioes = const {'USA'},
-  List<String> prioridade = const [],
+BatchPlan _plan(
+  List<PackGridEntry> entries, {
+  Set<String> regions = const {'USA'},
+  List<String> priority = const [],
   GameResolver? resolver,
 }) =>
     planFromEntries(
-      entradas,
-      preferredRegions: regioes,
+      entries,
+      preferredRegions: regions,
       resolveGame: resolver ?? _resolve,
-      sourcePriority: prioridade,
+      sourcePriority: priority,
     );
 ```
 
-E os testes no fim de `main`:
+And the tests at the end of `main`:
 
 ```dart
-  test('com uma fonte só, o motivo diz que não houve escolha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (Japan).zip')]),
+  test('with a single source, the reason says there was no choice', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (Japan).zip')]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (Japan).zip');
-    expect(plan.picks.single.reason, 'é a única fonte que tem este jogo');
-    // A região não é preferida e mesmo assim a fonte foi escolhida: a regra
-    // ordena candidatos, ela não descarta nenhum.
+    expect(plan.picks.single.filename, 'Crystal Vanguard (Japan).zip');
+    expect(plan.picks.single.reason, 'the only source that has this game');
+    // The region is not preferred and even so the source was chosen: the rule
+    // orders candidates, it does not discard any.
     expect(plan.failures, isEmpty);
   });
 
-  test('a região preferida ganha, e o motivo nomeia a região', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (Japan).zip'),
-        _fonte('Chrono Trigger (USA).zip'),
+  test('the preferred region wins, and the reason names the region', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (Japan).zip'),
+        _source('Crystal Vanguard (USA).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (USA).zip');
-    expect(plan.picks.single.reason, 'escolhido pela sua região preferida (USA)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip');
+    expect(plan.picks.single.reason, 'chosen by your preferred region (USA)');
   });
 
-  test('com o filtro de região vazio o eixo é neutro e a revisão decide', () {
-    final plan = _plano(
+  test('with an empty region filter the axis is neutral and the revision decides', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip'),
-          _fonte('Chrono Trigger (Japan) (Rev A).zip'),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip'),
+          _source('Crystal Vanguard (Japan) (Rev A).zip'),
         ]),
       ],
-      regioes: const {},
+      regions: const {},
     );
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (Japan) (Rev A).zip');
-    expect(plan.picks.single.reason, 'é a revisão mais nova (Rev A)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (Japan) (Rev A).zip');
+    expect(plan.picks.single.reason, 'the newest revision (Rev A)');
   });
 
-  test('o arquivo sem tag de região não perde do preferido', () {
-    // Espelha `filtering_service.dart:61-65`, onde metadados sem região
-    // passam pelo filtro em vez de serem descartados.
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger.zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+  test('the file with no region tag does not lose to the preferred one', () {
+    // Mirrors `filtering_service.dart:61-65`, where metadata with no region
+    // passes the filter instead of being discarded.
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard.zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger.zip');
+    expect(plan.picks.single.filename, 'Crystal Vanguard.zip');
   });
 
-  test('na mesma região, a revisão maior ganha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (USA) (Rev A).zip'),
+  test('within the same region, the higher revision wins', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (USA) (Rev A).zip'),
       ]),
     ]);
 
-    expect(plan.picks.single.filename, 'Chrono Trigger (USA) (Rev A).zip');
-    expect(plan.picks.single.reason, 'é a revisão mais nova (Rev A)');
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA) (Rev A).zip');
+    expect(plan.picks.single.reason, 'the newest revision (Rev A)');
   });
 
-  test('empatadas região e revisão, a confiança maior ganha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.guess),
-        _fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.confirmed),
+  test('with region and revision tied, the higher confidence wins', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.guess),
+        _source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.confirmed),
       ]),
     ]);
 
-    expect(plan.picks.single.reason, 'é o casamento mais confiável entre as 2 fontes');
+    expect(plan.picks.single.reason, 'the most confident match among the 2 sources');
     expect(plan.picks.single.uncertain, isFalse);
   });
 
-  test('empatado o resto, a prioridade do addon decide', () {
-    final plan = _plano(
+  test('everything else tied, addon priority decides', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento'),
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido'),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip', sourceId: 'slow'),
+          _source('Crystal Vanguard (USA).zip', sourceId: 'fast'),
         ]),
       ],
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     );
 
-    expect(plan.picks.single.reason, 'vem do addon de maior prioridade');
+    expect(plan.picks.single.reason, 'comes from the higher-priority addon');
   });
 
-  test('a prioridade do addon escolhe a fonte, não só escreve o motivo', () {
-    // O caso acima afirma só o `reason`, e o `reason` sai de `_reason`, que
-    // recalcula `_priorityRank` por conta própria. Com isso, neutralizar o
-    // eixo de addon dentro de `_compare` não deixa nenhum teste vermelho, e o
-    // estrago é pior que um ramo morto: o desempate cairia na ordem de
-    // chegada, o lote baixaria da fonte lenta, e o motivo continuaria dizendo
-    // que ela veio do addon de maior prioridade. Texto certo, arquivo errado.
-    //
-    // As duas fontes diferem no `size`, que não entra em `_compare`, então
-    // quem ganhou o `sort` fica observável. A lenta vem primeiro de propósito:
-    // é ela que venceria pela ordem de chegada.
-    final plan = _plano(
+  test('addon priority picks the source, not only writes the reason', () {
+    // The reason recomputes its own priority rank, so a mutant that neutralizes
+    // the addon axis in `_compare` would keep the reason text right while
+    // downloading the wrong file. The two sources differ in `size`, which is
+    // not in `_compare`, so the sort winner is observable; the slow one is
+    // first on purpose, since it would win by arrival order.
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'lento', size: 10),
-          _fonte('Chrono Trigger (USA).zip', sourceId: 'rapido', size: 20),
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA).zip', sourceId: 'slow', size: 10),
+          _source('Crystal Vanguard (USA).zip', sourceId: 'fast', size: 20),
         ]),
       ],
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     );
 
     expect(plan.picks.single.size, 20);
   });
 
-  test('empate em tudo fica com a primeira, e o motivo admite o empate', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [
-        _fonte('Chrono Trigger (USA).zip', size: 10),
-        _fonte('Chrono Trigger (USA).zip', size: 20),
+  test('tied on everything it keeps the first, and the reason admits the tie', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA).zip', size: 10),
+        _source('Crystal Vanguard (USA).zip', size: 20),
       ]),
     ]);
 
     expect(plan.picks.single.size, 10);
-    expect(plan.picks.single.reason, 'empate entre 2 fontes, ficou a primeira');
+    expect(plan.picks.single.reason, 'tie among 2 sources, kept the first');
   });
 
-  test('a escolha por palpite vai marcada como incerta', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip', confianca: MatchConfidence.guess)]),
+  test('a guess pick goes marked as uncertain', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.guess)]),
     ]);
 
-    // O lote não verifica CRC antes de enfileirar (seção 6). Ele marca.
+    // The batch does not verify CRC before enqueueing (section 6). It marks.
     expect(plan.picks.single.uncertain, isTrue);
   });
 
-  test('o jogo sem fonte vira falha, não escolha', () {
-    final plan = _plano([
-      _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip')]),
-      _entrada('EarthBound', const []),
+  test('a game with no source becomes a failure, not a pick', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip')]),
+      _entry('Emberfall', const []),
     ]);
 
-    expect(plan.picks.map((p) => p.title), ['Chrono Trigger']);
-    expect(plan.failures.single.title, 'EarthBound');
-    expect(plan.failures.single.gameId, 'pack:snes/earthbound');
-    expect(plan.failures.single.reason, 'nenhuma fonte instalada tem este jogo');
+    expect(plan.picks.map((p) => p.title), ['Crystal Vanguard']);
+    expect(plan.failures.single.title, 'Emberfall');
+    expect(plan.failures.single.gameId, 'pack:snes/emberfall');
+    expect(plan.failures.single.reason, 'no installed source has this game');
   });
 
-  test('o jogo cujas fontes não resolvem vira falha com outro motivo', () {
-    final plan = _plano(
+  test('the game whose sources do not resolve becomes a failure with another reason', () {
+    final plan = _plan(
       [
-        _entrada('Chrono Trigger', [_fonte('Chrono Trigger (USA).zip')]),
+        _entry('Crystal Vanguard', [_source('Crystal Vanguard (USA).zip')]),
       ],
       resolver: (_) => null,
     );
 
     expect(plan.picks, isEmpty);
-    expect(plan.failures.single.reason, 'a fonte saiu da listagem antes de a fila começar');
+    expect(plan.failures.single.reason, 'the source left the listing before the queue started');
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `The function 'planFromEntries' isn't defined` e `Undefined class 'GameResolver'`.
+Expected: `The function 'planFromEntries' isn't defined` and `Undefined class 'GameResolver'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Acrescente a `lib/services/source_pick_service.dart`. Os imports novos, no topo:
+Add to `lib/services/source_pick_service.dart`. The new imports, at the top:
 
 ```dart
 import 'package:roms_downloader/models/game_match_model.dart';
@@ -3718,21 +3720,21 @@ import 'package:roms_downloader/utils/title_metadata_parser.dart';
 E o corpo, abaixo de `planFromGames`:
 
 ```dart
-/// Como quem chama transforma uma fonte no `Game` que vai para a fila.
+/// How the caller turns a source into the `Game` that goes to the queue.
 ///
-/// Nesta fatia é uma busca no catálogo por nome de arquivo (Task 20). Na
-/// fatia 4 é o addon que responde. Devolve `null` quando a fonte não existe
-/// mais, e aí o jogo vira `PickFailure` em vez de escolha.
+/// In this slice it is a catalog lookup by file name (Task 20). In slice 4 it
+/// is the addon that answers. Returns `null` when the source no longer exists,
+/// and then the game becomes a `PickFailure` instead of a pick.
 typedef GameResolver = Game? Function(MatchedSource source);
 
 typedef _Candidate = ({MatchedSource source, GameMetadata meta, Game game, int order});
 
-/// A regra de escolha da seção 6 do spec de UI, na ordem dela: região
-/// preferida, maior revisão, maior confiança, prioridade do addon.
+/// The choice rule of section 6 of the UI spec, in its order: preferred region,
+/// highest revision, highest confidence, addon priority.
 ///
-/// É a mesma regra que escolhe o destaque da tela de detalhe. Uma regra só,
-/// dois lugares: se você precisar de uma variação, mude esta função, não
-/// escreva outra.
+/// It is the same rule that chooses the highlight of the detail screen. One
+/// rule, two places: if you need a variation, change this function, do not
+/// write another one.
 BatchPlan planFromEntries(
   List<PackGridEntry> entries, {
   required Set<String> preferredRegions,
@@ -3747,7 +3749,7 @@ BatchPlan planFromEntries(
       failures.add(PickFailure(
         gameId: entry.selectionKey,
         title: entry.game.title,
-        reason: 'nenhuma fonte instalada tem este jogo',
+        reason: 'no installed source has this game',
       ));
       continue;
     }
@@ -3769,7 +3771,7 @@ BatchPlan planFromEntries(
       failures.add(PickFailure(
         gameId: entry.selectionKey,
         title: entry.game.title,
-        reason: 'a fonte saiu da listagem antes de a fila começar',
+        reason: 'the source left the listing before the queue started',
       ));
       continue;
     }
@@ -3784,8 +3786,8 @@ BatchPlan planFromEntries(
       size: winner.source.size,
       sourceId: winner.source.sourceId,
       reason: _reason(winner, candidates, preferredRegions, sourcePriority),
-      // O lote não verifica CRC antes de enfileirar (seção 6): ele marca o
-      // palpite e deixa a rede de segurança para a verificação pós-download.
+      // The batch does not verify CRC before enqueueing (section 6): it marks
+      // the guess and leaves the safety net to the post-download verification.
       uncertain: winner.source.confidence == MatchConfidence.guess,
       game: winner.game,
     ));
@@ -3798,40 +3800,40 @@ int _compare(_Candidate a, _Candidate b, Set<String> preferred, List<String> pri
   final region = _regionRank(a, preferred).compareTo(_regionRank(b, preferred));
   if (region != 0) return region;
 
-  // Invertido de propósito: revisão maior vem primeiro.
+  // Inverted on purpose: the higher revision comes first.
   final revision = _compareRevision(b.meta.revision, a.meta.revision);
   if (revision != 0) return revision;
 
-  // `MatchConfidence` está declarado do mais confiável para o menos, então
-  // o índice menor é o melhor.
+  // `MatchConfidence` is declared from most confident to least, so the lower
+  // index is the best.
   final confidence = a.source.confidence.index.compareTo(b.source.confidence.index);
   if (confidence != 0) return confidence;
 
   final addon = _priorityRank(a, priority).compareTo(_priorityRank(b, priority));
   if (addon != 0) return addon;
 
-  // O desempate final é a ordem de chegada. Está aqui porque `List.sort` não
-  // promete estabilidade, e um lote que muda de resultado entre duas rodadas
-  // com a mesma entrada seria impossível de reportar como bug.
+  // The final tie-break is arrival order. It is here because `List.sort` does
+  // not promise stability, and a batch that changes its result between two runs
+  // with the same input would be impossible to report as a bug.
   return a.order.compareTo(b.order);
 }
 
-/// 0 é preferida, 1 não é.
+/// 0 is preferred, 1 is not.
 ///
-/// Sem região no nome o candidato **não** perde, o que espelha
-/// `filtering_service.dart:61-65`, onde metadados sem região passam pelo
-/// filtro em vez de serem descartados.
+/// With no region in the name the candidate does **not** lose, which mirrors
+/// `filtering_service.dart:61-65`, where metadata with no region passes the
+/// filter instead of being discarded.
 int _regionRank(_Candidate candidate, Set<String> preferred) {
   if (preferred.isEmpty) return 0;
   if (candidate.meta.regions.isEmpty) return 0;
   return candidate.meta.regions.any(preferred.contains) ? 0 : 1;
 }
 
-/// Positivo quando [a] é mais nova que [b].
+/// Positive when [a] is newer than [b].
 ///
-/// Comparação lexical, igual à de `filtering_service.dart:151-157`, com a
-/// mesma limitação conhecida: `Rev A` ganha de `Rev 1`, e `1.10` perde de
-/// `1.2`. Divergir daqui faria a grade e o lote discordarem.
+/// Lexical comparison, same as in `filtering_service.dart:151-157`, with the
+/// same known limitation: `Rev A` beats `Rev 1`, and `1.10` loses to `1.2`.
+/// Diverging from here would make the grid and the batch disagree.
 int _compareRevision(String a, String b) {
   if (a == b) return 0;
   if (a.isEmpty) return -1;
@@ -3844,203 +3846,203 @@ int _priorityRank(_Candidate candidate, List<String> priority) {
   return index < 0 ? priority.length : index;
 }
 
-/// O motivo por extenso, que é o eixo em que o vencedor bateu o segundo
-/// colocado. Obrigatório, não decorativo: é a única coisa que separa "o app
-/// escolheu por você" de "o app escolheu ao acaso" (seção 7).
+/// The spelled-out reason, which is the axis on which the winner beat the
+/// runner-up. Mandatory, not decorative: it is the only thing that separates
+/// "the app chose for you" from "the app chose at random" (section 7).
 String _reason(
   _Candidate winner,
   List<_Candidate> ordered,
   Set<String> preferred,
   List<String> priority,
 ) {
-  if (ordered.length == 1) return 'é a única fonte que tem este jogo';
+  if (ordered.length == 1) return 'the only source that has this game';
   final runnerUp = ordered[1];
 
   if (_regionRank(winner, preferred) != _regionRank(runnerUp, preferred)) {
     final region = winner.meta.regions.where(preferred.contains).firstOrNull;
     return region == null
-        ? 'escolhido pela sua região preferida'
-        : 'escolhido pela sua região preferida ($region)';
+        ? 'chosen by your preferred region'
+        : 'chosen by your preferred region ($region)';
   }
 
-  // Se as revisões diferem, a do vencedor é a maior, senão ele não seria o
-  // vencedor. Por isso dá para nomeá-la sem checar de novo.
+  // If the revisions differ, the winner's is the higher one, otherwise it would
+  // not be the winner. That is why it can be named without checking again.
   if (_compareRevision(winner.meta.revision, runnerUp.meta.revision) != 0) {
-    return 'é a revisão mais nova (Rev ${winner.meta.revision})';
+    return 'the newest revision (Rev ${winner.meta.revision})';
   }
 
   if (winner.source.confidence != runnerUp.source.confidence) {
-    return 'é o casamento mais confiável entre as ${ordered.length} fontes';
+    return 'the most confident match among the ${ordered.length} sources';
   }
 
   if (_priorityRank(winner, priority) != _priorityRank(runnerUp, priority)) {
-    return 'vem do addon de maior prioridade';
+    return 'comes from the highest-priority addon';
   }
 
-  return 'empate entre ${ordered.length} fontes, ficou a primeira';
+  return 'tie between ${ordered.length} sources, first one kept';
 }
 ```
 
-`firstOrNull` **não** precisa de import. Conferido rodando um arquivo Dart sem import nenhum: `<String>[].firstOrNull` compila e devolve `null`. É o mesmo uso de `game_model.dart:90`, que também não importa `package:collection`.
+`firstOrNull` does **not** need an import. Verified by running a Dart file with no imports at all: `<String>[].firstOrNull` compiles and returns `null`. It is the same usage as `game_model.dart:90`, which also does not import `package:collection`.
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `+16`, zero falha. São os 4 da Task 6 mais os 12 desta.
+Expected: `+16`, zero failures. These are the 4 from Task 6 plus the 12 from this one.
 
-Se o teste do empate total falhar escolhendo a segunda fonte, o culpado é o desempate por `order`: confira que ele é a **última** linha de `_compare` e que `order` é o índice do laço, não o índice depois do `sort`.
+If the total-tie test fails by choosing the second source, the culprit is the `order` tiebreaker: verify that it is the **last** line of `_compare` and that `order` is the loop index, not the index after the `sort`.
 
-Agora a suíte inteira, porque esta Task fecha o Grupo 3:
+Now the full suite, because this Task closes Group 3:
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+272 -1`, com a única falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Qualquer outra falha é regressão desta Task.
+Expected: `+272 -1`, with the only failure being the usual one, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Any other failure is a regression introduced by this Task.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_pick_service_test.dart
 git commit -m "test(lote): regra de escolha por regiao, revisao, confianca e prioridade"
 
-# agente de producao
+# production agent
 git add lib/services/source_pick_service.dart
 git commit -m "feat(lote): regra de escolha por regiao, revisao, confianca e prioridade"
 ```
 
 ---
 
-# Grupo 4: a tela de detalhe
+# Group 4: the detail screen
 
-Aqui a fatia deixa de ser grade e passa a ser a tela que justifica a grade. As três Tasks deste grupo são a seção 7 do spec de UI, e nenhuma delas toca em rede: a verificação por CRC da seção 8 é o Grupo 5.
+Here the slice moves beyond the grid and into the screen that justifies it. The three Tasks in this group cover section 7 of the UI spec, and none of them touch the network: the CRC verification of section 8 belongs to Group 5.
 
 ---
 
-### Task 15: a tela de detalhe, caso comum
+### Task 15: the detail screen, common case
 
 **Files:**
 - Create: `lib/screens/game_detail_screen.dart`
 - Create: `test/game_detail_screen_test.dart`
-- Modify: `lib/providers/pack_grid_provider.dart` (dois providers novos no fim)
-- Modify: `test/pack_grid_provider_test.dart` (dois testes novos no fim)
+- Modify: `lib/providers/pack_grid_provider.dart` (two new providers at the end)
+- Modify: `test/pack_grid_provider_test.dart` (two new tests at the end)
 
-A tela da seção 7: topo com capa, título, metadados, sinopse, coração e checkbox; corpo com o card de destaque, o motivo por extenso e o botão Baixar.
+The section 7 screen: a top area with cover, title, metadata, synopsis, favorite heart and checkbox; a body with the highlight card, the reason in full, and the Download button.
 
-**A tela não conhece a fila.** `onDownload` é um callback, pelo mesmo motivo que `PackGrid.onOpenGame` é um callback: `TaskQueueService.startDownloads` puxa o pipeline inteiro de download, e uma tela que o chama direto não se testa. Quem liga os dois é o `HomeScreen`, na Task 19.
+**The screen does not know about the queue.** `onDownload` is a callback, for the same reason that `PackGrid.onOpenGame` is a callback: `TaskQueueService.startDownloads` drives the entire download pipeline, and a screen that calls it directly cannot be tested. The `HomeScreen` wires the two together, in Task 19.
 
-**A tela não escolhe a versão sozinha.** Ela chama `planFromEntries` com uma entrada só. É literalmente a regra do lote, e é isso que a seção 6 quer dizer com "uma regra só, dois lugares". Se o destaque da tela e a escolha do lote divergirem algum dia, o bug é um só e o conserto é num arquivo só.
+**The screen does not choose the version on its own.** It calls `planFromEntries` with a single entry. That is literally the batch rule, and that is what section 6 means by "one rule, two places". If the screen's highlight and the batch's choice ever diverge, there is one bug and one file to fix.
 
-**A chave de favorito em MODO PACK é `entry.selectionKey`**, com o prefixo `pack:`. Favorito de MODO FONTE continua sendo `Game.gameId`. Os dois convivem no mesmo `Set` do `favorites_model.dart`, e é exatamente para isso que o prefixo existe (ver a "Quarta decisão travada").
+**The favorite key in PACK MODE is `entry.selectionKey`**, with the `pack:` prefix. The SOURCE MODE favorite key remains `Game.gameId`. Both coexist in the same `Set` in `favorites_model.dart`, and that is precisely why the prefix exists (see the "Fourth locked decision").
 
-**O que esta Task deliberadamente não desenha:** a faixa de "sem fonte" e a lista de "outras N fontes". As duas são a Task 16. Aqui, quando não há escolha, o card simplesmente não aparece, e um teste prova isso, para a Task 16 ter onde encaixar a faixa.
+**What this Task deliberately does not render:** the "no source" banner and the "N other sources" list. Both belong to Task 16. Here, when there is no pick, the card simply does not appear, and one test proves that, so Task 16 has a clear insertion point for the banner.
 
-- [ ] **Step 1: Escreva os dois testes de provider que falham**
+- [ ] **Step 1: Write the two failing provider tests**
 
-No fim de `main` em `test/pack_grid_provider_test.dart`:
+At the end of `main` in `test/pack_grid_provider_test.dart`:
 
 ```dart
-  test('o resolvedor acha o jogo do catálogo pelo nome do arquivo', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the resolver finds the catalog game by the file name', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     final resolver = container.read(gameResolverProvider);
-    final achado = resolver(const MatchedSource(
-      filename: 'Chrono Trigger (USA).zip',
-      sourceId: kBuiltinSourceId,
+    final found = resolver(const MatchedSource(
+      filename: 'Crystal Vanguard (USA).zip',
+      sourceId: kBuiltinAddonId,
       confidence: MatchConfidence.likely,
       size: 2048,
     ));
 
-    expect(achado?.filename, 'Chrono Trigger (USA).zip');
+    expect(found?.filename, 'Crystal Vanguard (USA).zip');
   });
 
-  test('o resolvedor devolve nulo para uma fonte que não está no catálogo', () async {
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')]);
-    await _pronto(container);
+  test('the resolver returns null for a source not in the catalog', () async {
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')]);
+    await _ready(container);
 
     final resolver = container.read(gameResolverProvider);
-    final achado = resolver(const MatchedSource(
-      filename: 'Um Jogo Que Saiu Da Listagem.zip',
-      sourceId: kBuiltinSourceId,
+    final found = resolver(const MatchedSource(
+      filename: 'A Game That Left The Listing.zip',
+      sourceId: kBuiltinAddonId,
       confidence: MatchConfidence.likely,
       size: 10,
     ));
 
-    // É o caminho que vira `PickFailure` na Task 14, e ele tem que existir de
-    // verdade, senão o lote quebraria com um `null check` no primeiro catálogo
-    // recarregado durante uma seleção.
-    expect(achado, isNull);
+    // It is the path that becomes a `PickFailure` in Task 14, and it has to
+    // exist for real, otherwise the batch would break with a `null check` on
+    // the first catalog reloaded during a selection.
+    expect(found, isNull);
   });
 ```
 
-Acrescente ao topo do arquivo os imports que faltam:
+Add at the top of the file the missing imports:
 
 ```dart
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/grid_entry_model.dart';
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `Undefined name 'gameResolverProvider'`.
+Expected: `Undefined name 'gameResolverProvider'`.
 
-- [ ] **Step 3: Implemente os dois providers**
+- [ ] **Step 3: Implement the two providers**
 
-No fim de `lib/providers/pack_grid_provider.dart`:
+At the end of `lib/providers/pack_grid_provider.dart`:
 
 ```dart
-/// A região preferida do usuário, lida do filtro que já existe.
+/// The user's preferred region, read from the filter that already exists.
 ///
-/// É seam de teste, como `catalogGamesProvider` e `gridSearchQueryProvider`:
-/// sobrescreva **este** provider nos testes, nunca o `catalogProvider`.
+/// It is a test seam, like `catalogGamesProvider` and `gridSearchQueryProvider`:
+/// override **this** provider in tests, never the `catalogProvider`.
 final preferredRegionsProvider = Provider<Set<String>>((ref) {
   return ref.watch(catalogProvider.select((state) => state.filter.regions));
 });
 
-/// Como uma fonte vira o `Game` que entra na fila.
+/// How a source becomes the `Game` that enters the queue.
 ///
-/// Nesta fatia toda fonte veio da listagem do console, então resolver é achar
-/// de volta o `Game` pelo nome do arquivo. Na fatia 4 quem responde é o addon,
-/// e este provider passa a consultá-lo. `planFromEntries` não precisa saber
-/// de nenhum dos dois.
+/// In this slice every source came from the console listing, so resolving is
+/// finding the `Game` back by the file name. In slice 4 the one that answers is
+/// the addon, and this provider starts consulting it. `planFromEntries` does not
+/// need to know about either of the two.
 final gameResolverProvider = Provider<GameResolver>((ref) {
   final byFilename = <String, Game>{};
   for (final game in ref.watch(catalogGamesProvider)) {
-    // `putIfAbsent`: se dois arquivos da listagem tiverem o mesmo nome, o
-    // primeiro do catálogo vence, que é a mesma ordem que `SourceIndex.build`
-    // já usa. Duas respostas diferentes para o mesmo nome seria pior.
+    // `putIfAbsent`: if two listing files have the same name, the first in the
+    // catalog wins, which is the same order that `SourceIndex.build` already
+    // uses. Two different answers for the same name would be worse.
     byFilename.putIfAbsent(game.filename, () => game);
   }
   return (source) => byFilename[source.filename];
 });
 ```
 
-O import novo, no topo do arquivo:
+The new import, at the top of the file:
 
 ```dart
 import 'package:roms_downloader/services/source_pick_service.dart';
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `+9`, zero falha. São os 7 da Task 10 mais os 2 desta.
+Expected: `+9`, zero failures. It is the 7 from Task 10 plus the 2 from this one.
 
-- [ ] **Step 5: Escreva o teste da tela, que falha**
+- [ ] **Step 5: Write the screen test, which fails**
 
-Crie `test/game_detail_screen_test.dart`:
+Create `test/game_detail_screen_test.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -4058,105 +4060,106 @@ import 'package:roms_downloader/screens/game_detail_screen.dart';
 
 import 'support/favorites_stub.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
 PackGame _pg() => const PackGame(
-      id: 'snes/chrono-trigger',
-      title: 'Chrono Trigger',
-      dumps: [PackDump(name: 'Chrono Trigger (USA)')],
-      synopsis: 'Um garoto, uma feira e uma máquina do tempo.',
+      id: 'snes/crystal-vanguard',
+      title: 'Crystal Vanguard',
+      dumps: [PackDump(name: 'Crystal Vanguard (USA)')],
+      synopsis: 'A boy, a fair and a time machine.',
       genre: 'RPG',
       publisher: 'Square',
       year: 1995,
     );
 
-// Sem `cover` de propósito em todo teste: com URL, o `CachedNetworkImage`
-// tentaria rede dentro do teste.
-PackGridEntry _entrada({List<MatchedSource> fontes = const []}) =>
-    PackGridEntry(game: _pg(), sources: fontes);
+// No `cover` on purpose in every test: with a URL, `CachedNetworkImage` would
+// attempt the network inside the test.
+PackGridEntry _entry({List<MatchedSource> sources = const []}) =>
+    PackGridEntry(game: _pg(), sources: sources);
 
-MatchedSource _fonte(String filename, {int size = 4 * 1024 * 1024}) => MatchedSource(
+MatchedSource _source(String filename, {int size = 4 * 1024 * 1024}) => MatchedSource(
       filename: filename,
-      sourceId: kBuiltinSourceId,
+      sourceId: kBuiltinAddonId,
       confidence: MatchConfidence.likely,
       size: size,
     );
 
 Game _game(String filename) => Game(
       title: filename,
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: 4 * 1024 * 1024,
       consoleId: 'snes',
     );
 
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packTargetProvider.overrideWithValue(_alvo),
+      withoutFavoritesDisk,
+      packTargetProvider.overrideWithValue(_target),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
       gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
     ],
     child: MaterialApp(
-      home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
+      home: GameDetailScreen(entry: entry, onDownload: onDownload ?? (_) {}),
     ),
   );
 }
 
 void main() {
-  testWidgets('mostra título, sistema, ano, publisher e gênero', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('shows title, system, year, publisher and genre', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
-    expect(find.text('Chrono Trigger'), findsWidgets);
+    expect(find.text('Crystal Vanguard'), findsWidgets);
     expect(find.text('Super Nintendo, 1995, Square, RPG'), findsOneWidget);
   });
 
-  testWidgets('mostra a sinopse', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('shows the synopsis', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
-    expect(find.text('Um garoto, uma feira e uma máquina do tempo.'), findsOneWidget);
+    expect(find.text('A boy, a fair and a time machine.'), findsOneWidget);
   });
 
-  testWidgets('o card de destaque traz arquivo, tamanho e motivo', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('the highlight card brings file, size and reason', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    expect(find.text('Chrono Trigger (USA).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem'), findsOneWidget);
-    // O motivo é obrigatório, não decorativo (seção 7).
-    expect(find.text('escolhido pela sua região preferida (USA)'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (USA).zip'), findsOneWidget);
+    expect(find.text('4.0 MB, listing'), findsOneWidget);
+    // The reason is mandatory, not decorative (section 7).
+    expect(find.text('chosen by your preferred region (USA)'), findsOneWidget);
   });
 
-  testWidgets('o botão Baixar devolve a escolha inteira', (tester) async {
-    final baixados = <String>[];
+  testWidgets('the Download button returns the whole pick', (tester) async {
+    final downloaded = <String>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      onDownload: (pick) => baixados.add(pick.game.filename),
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
+      onDownload: (pick) => downloaded.add(pick.game.filename),
     ));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Baixar'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Download'));
     await tester.pump();
 
-    // O `Game` que sai do callback é o que a fila entende, não um sintético.
-    expect(baixados, ['Chrono Trigger (USA).zip']);
+    // The `Game` that comes out of the callback is the one the queue understands,
+    // not a synthetic one.
+    expect(downloaded, ['Crystal Vanguard (USA).zip']);
   });
 
-  testWidgets('sem fonte a tela abre inteira e sem card de destaque', (tester) async {
-    await tester.pumpWidget(_host(_entrada()));
+  testWidgets('with no source the screen opens in full and with no highlight card', (tester) async {
+    await tester.pumpWidget(_host(_entry()));
 
-    // Os 3% da seção 3.1: o jogo continua existindo e continua favoritável.
-    expect(find.text('Um garoto, uma feira e uma máquina do tempo.'), findsOneWidget);
+    // The 3% of section 3.1: the game still exists and is still favoritable.
+    expect(find.text('A boy, a fair and a time machine.'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('o coração alterna o favorito', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('the heart toggles the favorite', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
     expect(find.byIcon(Icons.favorite_border), findsOneWidget);
     await tester.tap(find.byIcon(Icons.favorite_border));
@@ -4165,20 +4168,20 @@ void main() {
     expect(find.byIcon(Icons.favorite), findsOneWidget);
   });
 
-  testWidgets('o checkbox alterna a seleção pela chave de pack', (tester) async {
-    late WidgetRef capturado;
+  testWidgets('the checkbox toggles the selection by the pack key', (tester) async {
+    late WidgetRef captured;
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        semDiscoDeFavoritos,
-        packTargetProvider.overrideWithValue(_alvo),
+        withoutFavoritesDisk,
+        packTargetProvider.overrideWithValue(_target),
         preferredRegionsProvider.overrideWithValue(const {'USA'}),
         gameResolverProvider.overrideWithValue((source) => _game(source.filename)),
       ],
       child: MaterialApp(
         home: Consumer(builder: (context, ref, _) {
-          capturado = ref;
+          captured = ref;
           return GameDetailScreen(
-            entry: _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+            entry: _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
             onDownload: (_) {},
           );
         }),
@@ -4189,24 +4192,24 @@ void main() {
     await tester.pump();
 
     expect(
-      capturado.read(catalogProvider).selectedGames,
-      contains('pack:snes/chrono-trigger'),
+      captured.read(catalogProvider).selectedGames,
+      contains('pack:snes/crystal-vanguard'),
     );
   });
 }
 ```
 
-- [ ] **Step 6: Rode e veja falhar**
+- [ ] **Step 6: Run and watch it fail**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: '.../game_detail_screen.dart'`.
+Expected: `Target of URI doesn't exist: '.../game_detail_screen.dart'`.
 
-- [ ] **Step 7: Implemente a tela**
+- [ ] **Step 7: Implement the screen**
 
-Crie `lib/screens/game_detail_screen.dart`:
+Create `lib/screens/game_detail_screen.dart`:
 
 ```dart
 import 'package:cached_network_image/cached_network_image.dart';
@@ -4221,19 +4224,19 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 
-/// A tela da seção 7 do spec de UI: um jogo, as fontes dele e o motivo da
-/// escolha.
+/// The section 7 UI-spec screen: one game, its sources and the reason for the
+/// choice.
 ///
-/// Não é bottom sheet e não é expansão inline. É rota.
+/// Not a bottom sheet and not an inline expansion. It is a route.
 class GameDetailScreen extends ConsumerWidget {
   final PackGridEntry entry;
 
-  /// O que fazer quando o usuário aperta Baixar.
+  /// What to do when the user taps Download.
   ///
-  /// A tela não conhece a fila, pelo mesmo motivo que `PackGrid` não conhece
-  /// `Navigator`: `TaskQueueService.startDownloads` puxa o pipeline inteiro de
-  /// download, e uma tela que o chama direto não se testa. Quem liga os dois é
-  /// o `HomeScreen`.
+  /// The screen does not know about the queue, for the same reason that
+  /// `PackGrid` does not know about `Navigator`: `TaskQueueService.startDownloads`
+  /// drives the entire download pipeline, and a screen that calls it directly
+  /// cannot be tested. The `HomeScreen` wires the two together.
   final void Function(SourcePick pick) onDownload;
 
   const GameDetailScreen({super.key, required this.entry, required this.onDownload});
@@ -4241,12 +4244,12 @@ class GameDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final game = entry.game;
-    final chave = entry.selectionKey;
-    final favorito = ref.watch(favoritesProvider).isFavorite(chave);
-    final selecionado = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(chave);
+    final key = entry.selectionKey;
+    final favorite = ref.watch(favoritesProvider).isFavorite(key);
+    final isSelected = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(key);
 
-    // A mesma regra do lote, com uma entrada só. Seção 6: uma regra só, dois
-    // lugares. Não escreva uma escolha diferente aqui.
+    // The same batch rule, with a single entry. Section 6: one rule, two
+    // places. Do not write a different choice here.
     final plan = planFromEntries(
       [entry],
       preferredRegions: ref.watch(preferredRegionsProvider),
@@ -4259,16 +4262,16 @@ class GameDetailScreen extends ConsumerWidget {
         title: Text(game.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: favorito ? 'Tirar dos favoritos' : 'Favoritar',
+            tooltip: favorite ? 'Remove from favorites' : 'Add to favorites',
             icon: Icon(
-              favorito ? Icons.favorite : Icons.favorite_border,
-              color: favorito ? Colors.red : null,
+              favorite ? Icons.favorite : Icons.favorite_border,
+              color: favorite ? Colors.red : null,
             ),
-            onPressed: () => ref.read(favoritesProvider.notifier).toggleFavorite(chave),
+            onPressed: () => ref.read(favoritesProvider.notifier).toggleFavorite(key),
           ),
           Checkbox(
-            value: selecionado,
-            onChanged: (_) => ref.read(catalogProvider.notifier).toggleGameSelection(chave),
+            value: isSelected,
+            onChanged: (_) => ref.read(catalogProvider.notifier).toggleGameSelection(key),
           ),
           const SizedBox(width: 8),
         ],
@@ -4276,14 +4279,14 @@ class GameDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _Topo(game: game, sistema: ref.watch(packTargetProvider)?.consoleName ?? ''),
+          _Top(game: game, system: ref.watch(packTargetProvider)?.consoleName ?? ''),
           if ((game.synopsis ?? '').isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
           ],
           if (pick != null) ...[
             const SizedBox(height: 16),
-            _Destaque(pick: pick, onDownload: () => onDownload(pick)),
+            _Highlight(pick: pick, onDownload: () => onDownload(pick)),
           ],
         ],
       ),
@@ -4291,23 +4294,23 @@ class GameDetailScreen extends ConsumerWidget {
   }
 }
 
-class _Topo extends StatelessWidget {
+class _Top extends StatelessWidget {
   final PackGame game;
-  final String sistema;
+  final String system;
 
-  const _Topo({required this.game, required this.sistema});
+  const _Top({required this.game, required this.system});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Só o que existe entra na linha, senão sobra vírgula solta num jogo sem
-    // ano ou sem publisher, que é a maioria dos homebrews.
-    final ficha = [
-      sistema,
+    // Only what exists joins the line, else a game with no year or publisher
+    // (most homebrews) leaves a dangling comma.
+    final details = [
+      system,
       if (game.year != null) '${game.year}',
       if ((game.publisher ?? '').isNotEmpty) game.publisher!,
       if ((game.genre ?? '').isNotEmpty) game.genre!,
-    ].where((parte) => parte.isNotEmpty).join(', ');
+    ].where((part) => part.isNotEmpty).join(', ');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4318,7 +4321,7 @@ class _Topo extends StatelessWidget {
             aspectRatio: 0.75,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: _capa(context),
+              child: _cover(context),
             ),
           ),
         ),
@@ -4329,7 +4332,7 @@ class _Topo extends StatelessWidget {
             children: [
               Text(game.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              Text(ficha, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+              Text(details, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -4337,7 +4340,7 @@ class _Topo extends StatelessWidget {
     );
   }
 
-  Widget _capa(BuildContext context) {
+  Widget _cover(BuildContext context) {
     final url = game.cover;
     if (url == null) {
       return Container(
@@ -4354,12 +4357,12 @@ class _Topo extends StatelessWidget {
   }
 }
 
-/// O card da versão escolhida. O motivo é a linha que não pode faltar.
-class _Destaque extends StatelessWidget {
+/// The highlight card for the chosen version. The reason line is mandatory.
+class _Highlight extends StatelessWidget {
   final SourcePick pick;
   final VoidCallback onDownload;
 
-  const _Destaque({required this.pick, required this.onDownload});
+  const _Highlight({required this.pick, required this.onDownload});
 
   @override
   Widget build(BuildContext context) {
@@ -4384,7 +4387,7 @@ class _Destaque extends StatelessWidget {
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(onPressed: onDownload, child: const Text('Baixar')),
+            child: FilledButton(onPressed: onDownload, child: const Text('Download')),
           ),
         ],
       ),
@@ -4393,274 +4396,245 @@ class _Destaque extends StatelessWidget {
 }
 ```
 
-`pick.sourceId` é o campo que a Task 4 já criou em `SourcePick` e que a Task 14 já preenche com `winner.source.sourceId`. Ele é a origem da linha "4.0 MB, Myrient" da seção 7. Nesta fatia ele sai sempre como `listagem`, porque só existe uma fonte, e é justamente por isso que ele é campo e não texto fixo.
+`pick.sourceId` is the field that Task 4 already created in `SourcePick` and that Task 14 already fills with `winner.source.sourceId`. It is the origin of the "4.0 MB, Myrient" line of section 7. In this slice it always comes out as `listing`, because there is only one source, and that is precisely why it is a field and not a hardcoded string.
 
-- [ ] **Step 8: Rode e veja passar**
+- [ ] **Step 8: Run and watch it pass**
 
 ```bash
 flutter test test/game_detail_screen_test.dart test/source_pick_model_test.dart test/source_pick_service_test.dart test/pack_grid_provider_test.dart
 ```
 
-Esperado: `+38`, zero falha. São 7 desta tela, 6 do modelo, 16 do serviço e 9 dos providers.
+Expected: `+38`, zero failures. These are 7 from this screen, 6 from the model, 16 from the service, and 9 from the providers.
 
-Tropeço provável: se `find.text('Chrono Trigger')` achar mais de um widget no primeiro teste, é o título no `AppBar` mais o título no topo. Por isso o teste usa `findsWidgets` e não `findsOneWidget`.
+Likely pitfall: if `find.text('Crystal Vanguard')` finds more than one widget in the first test, it is the title in the `AppBar` plus the title at the top. That is why the test uses `findsWidgets` and not `findsOneWidget`.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/game_detail_screen_test.dart test/pack_grid_provider_test.dart
 git commit -m "test(detalhe): tela de detalhe com destaque, motivo, favorito e selecao"
 
-# agente de producao
+# production agent
 git add lib/screens/game_detail_screen.dart lib/providers/pack_grid_provider.dart
 git commit -m "feat(detalhe): tela de detalhe com destaque, motivo, favorito e selecao"
 ```
 
 ---
 
-### Task 16: a faixa de "sem fonte" e a lista de "outras N fontes"
+### Task 16: the "no source" banner and the "N other sources" list
 
 **Files:**
 - Modify: `lib/screens/game_detail_screen.dart`
 - Modify: `test/game_detail_screen_test.dart`
 
-Os dois pedaços que a Task 15 deixou de fora, e que fecham a seção 7 do spec de UI: a faixa que aparece no lugar do card quando nenhuma fonte tem o jogo, e a lista colapsada com as fontes que perderam o destaque.
+The two pieces that Task 15 left out, which close section 7 of the UI spec: the banner that appears in place of the card when no source has the game, and the collapsed list with the sources that lost the highlight.
 
-**A faixa não escreve texto próprio.** Ela mostra `plan.failures.first.reason`, que é a mesma string que a folha de lote mostra para o mesmo jogo. Se um dia a regra passar a distinguir mais casos, os dois lugares mudam juntos, de graça. É a "uma regra só, dois lugares" da seção 6 aplicada também ao fracasso.
+**The banner does not write its own text.** It shows `plan.failures.first.reason`, which is the same string the batch sheet shows for the same game. If the rule ever distinguishes more cases, both places change together for free. It is the "one rule, two places" of section 6 applied to failures as well.
 
-**A faixa ainda não tem o atalho para a tela de addons** que a seção 7 pede. A tela de addons é a fatia 4, e um botão que não navega para lugar nenhum é pior do que a ausência dele. Quando a fatia 4 criar a tela, o atalho entra aqui, dentro de `_SemFonte`.
+**The banner does not yet have the shortcut to the addon screen** that section 7 asks for. The addon screen is slice 4, and a button that navigates nowhere is worse than no button at all. When slice 4 creates the screen, the shortcut goes here, inside `_NoSource`.
 
-**As linhas da lista não têm botão Baixar.** A seção 8 pede botão por linha só no estado "verificação impossível", que é a Task 18. Aqui a lista é informativa: ela existe para o usuário conferir que o app viu as outras fontes e escolheu com critério.
+**The list rows have no Download button.** Section 8 asks for a per-row button only in the "cannot verify" state, which is Task 18. Here the list is informational: it exists so the user can confirm the app saw the other sources and chose deliberately.
 
-**O tipo de fonte é `HTTP` fixo nesta fatia.** Toda fonte vem da listagem do console, que é HTTP e nada mais. `SEED` e `RD` chegam quando o addon declarar o tipo, na fatia 4 e na 6. A constante existe para o dia em que o valor deixar de ser um só.
+**The source type is `HTTP` and is fixed in this slice.** Every source comes from the console listing, which is HTTP and nothing else. `SEED` and `RD` arrive when the addon declares its type, in slices 4 and 6. The constant exists for the day the value stops being a single one.
 
-**Cuidado com a palavra "confiança" nas linhas.** O rótulo da linha é a confiança do **casamento** (`MatchConfidence`, da fatia 2), não a verificação por CRC. Ver a "Segunda decisão travada" no topo: são dois eixos e eles não se misturam. A Task 18 acrescenta o estado de CRC como um quinto pedaço da mesma linha, sem tirar este.
+**Watch the word "confidence" in the rows.** The row label is the **match** confidence (`MatchConfidence`, from slice 2), not the CRC verification. See the "Second locked decision" at the top: they are two axes and they do not mix. Task 18 adds the CRC state as a fifth piece of the same row, without removing this one.
 
-- [ ] **Step 1: Ajuste os dois helpers do arquivo de teste**
+- [ ] **Step 1: Adjust the two test-file helpers**
 
-Em `test/game_detail_screen_test.dart`, `_fonte` precisa saber variar a confiança e `_host` precisa saber trocar o resolvedor. Substitua `_fonte` e `_host` inteiros por estes:
+In `test/game_detail_screen_test.dart`, `_source` needs to be able to vary the confidence and `_host` needs to be able to swap the resolver. Replace `_source` and `_host` in full with these:
 
 ```dart
-MatchedSource _fonte(
+MatchedSource _source(
   String filename, {
   int size = 4 * 1024 * 1024,
-  MatchConfidence confianca = MatchConfidence.likely,
+  MatchConfidence confidence = MatchConfidence.likely,
 }) =>
     MatchedSource(
       filename: filename,
-      sourceId: kBuiltinSourceId,
-      confidence: confianca,
+      sourceId: kBuiltinAddonId,
+      confidence: confidence,
       size: size,
     );
 
-// Função de topo, e não variável com lambda, por causa do lint
-// `prefer_function_declarations_over_variables`, que vem ligado no
+// Top-level function, not a lambda variable, because of the
+// `prefer_function_declarations_over_variables` lint that comes enabled in
 // `flutter_lints`.
-Game? _resolvePadrao(MatchedSource source) => _game(source.filename);
+Game? _resolveDefault(MatchedSource source) => _game(source.filename);
 
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   GameResolver? resolver,
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packTargetProvider.overrideWithValue(_alvo),
+      withoutFavoritesDisk,
+      packTargetProvider.overrideWithValue(_target),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
-      gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
+      gameResolverProvider.overrideWithValue(resolver ?? _resolveDefault),
     ],
     child: MaterialApp(
-      home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
+      home: GameDetailScreen(entry: entry, onDownload: onDownload ?? (_) {}),
     ),
   );
 }
 ```
 
-E acrescente o import que falta, no topo:
+And add the missing import at the top:
 
 ```dart
 import 'package:roms_downloader/services/source_pick_service.dart';
 ```
 
-Os sete testes da Task 15 continuam chamando `_fonte('x.zip')` e `_host(entrada)` sem parâmetro nomeado nenhum, então nenhum deles muda.
+The seven tests from Task 15 continue calling `_source('x.zip')` and `_host(entry)` with no named parameters, so none of them change.
 
-- [ ] **Step 2: Escreva os onze testes que faltam**
+- [ ] **Step 2: Write the eleven missing tests**
 
-No fim de `main`, no mesmo arquivo:
+At the end of `main`, in the same file:
 
 ```dart
-  testWidgets('sem fonte, a faixa diz por que não há de onde baixar', (tester) async {
-    await tester.pumpWidget(_host(_entrada()));
+  testWidgets('with no source, the band says why there is nothing to download', (tester) async {
+    await tester.pumpWidget(_host(_entry()));
 
-    // A mesma string que a folha de lote mostra para o mesmo jogo. Se você
-    // acabou de escrever um texto novo aqui, ele já existe em
-    // `source_pick_service.dart` e tem que sair de lá.
-    expect(find.text('nenhuma fonte instalada tem este jogo'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    // The same string the batch sheet shows for the same game. If you just
+    // wrote a new string here, it already exists in `source_pick_service.dart`
+    // and must come from there.
+    expect(find.text('no installed addon has this game'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('quando a fonte não resolve, a faixa usa o outro motivo', (tester) async {
+  testWidgets('when the source does not resolve, the band uses the other reason', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
       resolver: (_) => null,
     ));
 
-    expect(find.text('a fonte saiu da listagem antes de a fila começar'), findsOneWidget);
+    expect(find.text('the source left the listing before the queue started'), findsOneWidget);
   });
 
-  testWidgets('sem pick, a fonte que não resolveu ainda aparece na lista', (tester) async {
+  testWidgets('with no pick, the unresolved source still appears in the list', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
       resolver: (_) => null,
     ));
 
-    // Nada foi escolhido, então nenhuma fonte é "a outra". Mesmo assim a
-    // lista abre: esconder o que existe deixaria a faixa parecendo mentira.
-    expect(find.text('outra fonte'), findsOneWidget);
+    // Nothing was picked, so no source is "the other". The list still opens:
+    // hiding what exists would make the band look like a lie.
+    expect(find.text('1 other source'), findsOneWidget);
   });
 
-  testWidgets('com uma fonte só, não existe lista de outras fontes', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('with a single source there is no other-sources list', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
-    // Este teste passa antes e depois da implementação. Ele não é uma trava
-    // de implementação, é uma trava contra a lista aparecer vazia depois.
+    // This test passes before and after the implementation. It is not an
+    // implementation lock; it is a lock against the list appearing empty later.
     expect(find.byType(ExpansionTile), findsNothing);
   });
 
-  testWidgets('com três fontes, o contador diz outras 2 fontes', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
-      _fonte('Chrono Trigger (Europe).zip'),
+  testWidgets('with three sources, the counter says 2 other sources', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
+      _source('Crystal Vanguard (Europe).zip'),
     ])));
 
-    expect(find.text('outras 2 fontes'), findsOneWidget);
+    expect(find.text('2 other sources'), findsOneWidget);
   });
 
-  testWidgets('com duas fontes, o contador vai no singular', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('with two sources, the counter is singular', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    // "outras 1 fontes" seria o texto que sai de um contador escrito sem
-    // pensar, e o spec de UI escreve contadores em português.
-    expect(find.text('outra fonte'), findsOneWidget);
+    // "2 other sources" with count 1 would be the text produced by a counter
+    // written without thinking, and the UI spec writes counters correctly.
+    expect(find.text('1 other source'), findsOneWidget);
   });
 
-  testWidgets('a lista começa fechada', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('the list starts collapsed', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    expect(find.text('outra fonte'), findsOneWidget);
-    expect(find.text('Chrono Trigger (Japan).zip'), findsNothing);
+    expect(find.text('1 other source'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsNothing);
   });
 
-  testWidgets('expandida, cada linha traz arquivo, tamanho, addon, tipo e confiança', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (Japan).zip'),
-      _fonte('Chrono Trigger (USA).zip'),
+  testWidgets('expanded, each row carries file, size, addon, type and confidence', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (Japan).zip'),
+      _source('Crystal Vanguard (USA).zip'),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('1 other source'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, HTTP, casamento provável'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, HTTP, likely match'), findsOneWidget);
   });
 
-  testWidgets('a linha de palpite mostra o casamento no chute', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (USA).zip'),
-      _fonte('Chrono Trigger (Japan).zip', confianca: MatchConfidence.guess),
+  testWidgets('the guess row shows a guessed match', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (USA).zip'),
+      _source('Crystal Vanguard (Japan).zip', confidence: MatchConfidence.guess),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('1 other source'));
     await tester.pumpAndSettle();
 
-    // É a confiança do casamento, não o CRC. Ver a "Segunda decisão travada".
-    expect(find.text('4.0 MB, listagem, HTTP, casamento no chute'), findsOneWidget);
+    // Match confidence, not CRC. See the "Second locked decision".
+    expect(find.text('4.0 MB, listing, HTTP, guessed match'), findsOneWidget);
   });
 
-  testWidgets('duas fontes idênticas: a escolhida sai da lista uma vez só', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [
-      _fonte('Chrono Trigger (USA).zip', size: 10),
-      _fonte('Chrono Trigger (USA).zip', size: 20),
+  testWidgets('two identical sources: the pick leaves the list only once', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [
+      _source('Crystal Vanguard (USA).zip', size: 10),
+      _source('Crystal Vanguard (USA).zip', size: 20),
     ])));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('1 other source'));
     await tester.pumpAndSettle();
 
-    // A de 10 bytes venceu pelo desempate de ordem (Task 14). Se a lista
-    // tirasse todas as fontes de mesmo nome, a de 20 sumiria junto e o
-    // usuário perderia uma fonte real de vista.
-    expect(find.text('10.0 B, listagem'), findsOneWidget);
-    expect(find.text('20.0 B, listagem, HTTP, casamento provável'), findsOneWidget);
+    // The 10-byte one won by arrival order (Task 14). If the list removed all
+    // sources with the same name, the 20-byte one would vanish with it and the
+    // user would lose a real source from view.
+    expect(find.text('10.0 B, listing'), findsOneWidget);
+    expect(find.text('20.0 B, listing, HTTP, likely match'), findsOneWidget);
   });
 
-  testWidgets('o card de destaque marca o tipo da fonte', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('the highlight card marks the source type', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
-    // O `HTTP` do canto direito do mockup da seção 7. Com uma fonte só não há
-    // lista, então este é o único `HTTP` da tela.
+    // The `HTTP` in the top-right corner of the section 7 mockup. With a
+    // single source there is no list, so this is the only `HTTP` on screen.
     expect(find.text('HTTP'), findsOneWidget);
   });
 ```
 
-- [ ] **Step 3: Rode e veja falhar**
+- [ ] **Step 3: Run and watch it fail**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `+8 -10`. Passam os 7 da Task 15 mais o `com uma fonte só, não existe lista de outras fontes`, que é o teste que já passava antes de propósito. Os dez outros falham com `Expected: exactly one matching candidate` e `Actual: _TextFinder:<zero widgets with text ...>`, e os dois que dão `tap` falham antes disso, no próprio `tap`, porque não existe o que tocar.
+Expected: `+8 -10`. The 7 from Task 15 pass plus `with a single source there is no other-sources list`, which is the test that was already passing by design. The ten others fail with `Expected: exactly one matching candidate` and `Actual: _TextFinder:<zero widgets with text ...>`, and the two that `tap` fail earlier, on the `tap` itself, because there is nothing to tap.
 
-- [ ] **Step 4: Implemente**
+- [ ] **Step 4: Implement**
 
-Em `lib/screens/game_detail_screen.dart`, acrescente o import de `MatchConfidence`, no topo:
+In `lib/screens/game_detail_screen.dart`, add the `MatchConfidence` import at the top:
 
 ```dart
 import 'package:roms_downloader/models/game_match_model.dart';
 ```
 
-Dentro de `build`, logo abaixo da linha `final pick = plan.picks.firstOrNull;`:
+Inside `build`, right below the line `final pick = plan.picks.firstOrNull;`:
 
-```dart
-    // Uma entrada só entra em `planFromEntries`, e ela sai como exatamente uma
-    // escolha ou exatamente uma falha. O `else if` lá embaixo existe para não
-    // haver um `.first` numa lista que o compilador não garante.
-    final falha = plan.failures.firstOrNull;
-    final outras = _outrasFontes(entry, pick);
-```
+_(The intermediate code using `_outrasFontes` was inlined in the live file before this plan was finalised; read `lib/screens/game_detail_screen.dart` directly.)_
 
-E substitua a lista `children:` do `ListView` inteira por esta:
-
-```dart
-        children: [
-          _Topo(game: game, sistema: ref.watch(packTargetProvider)?.consoleName ?? ''),
-          if ((game.synopsis ?? '').isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
-          ],
-          if (pick != null) ...[
-            const SizedBox(height: 16),
-            _Destaque(pick: pick, onDownload: () => onDownload(pick)),
-          ] else if (falha != null) ...[
-            const SizedBox(height: 16),
-            _SemFonte(reason: falha.reason),
-          ],
-          if (outras.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            _OutrasFontes(sources: outras),
-          ],
-        ],
-```
-
-No `_Destaque`, substitua a primeira linha da `Column`, a que hoje é `Text(pick.filename, ...)`, por esta `Row`:
+In `_Highlight`, replace the first line of the `Column`, currently `Text(pick.filename, ...)`, with this `Row`:
 
 ```dart
           Row(
@@ -4674,7 +4648,7 @@ No `_Destaque`, substitua a primeira linha da `Column`, a que hoje é `Text(pick
               ),
               const SizedBox(width: 8),
               Text(
-                _kTipoFonte,
+                _kSourceKind,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -4685,66 +4659,36 @@ No `_Destaque`, substitua a primeira linha da `Column`, a que hoje é `Text(pick
           ),
 ```
 
-E acrescente, no fim do arquivo:
+And add, at the end of the file:
+
+_(The `_outrasFontes` helper was inlined in the live file before this plan was finalised; read `lib/screens/game_detail_screen.dart` directly.)_
 
 ```dart
-/// O tipo de fonte, que nesta fatia é um só.
+String _otherLabel(int count) => count == 1 ? '1 other source' : '$count other sources';
+
+/// The **match** confidence, which is not the CRC verification.
 ///
-/// Toda fonte vem da listagem HTTP do console. `SEED` e `RD` da seção 7 do
-/// spec de UI chegam quando o addon declarar o tipo (fatia 4 e fatia 6). É
-/// constante em vez de literal solto para o dia em que virar campo.
-const _kTipoFonte = 'HTTP';
-
-/// As fontes que não ganharam o destaque, na ordem em que a fonte as deu.
-///
-/// Tira **uma** cópia da vencedora, não todas as de mesmo nome: duas fontes
-/// podem servir arquivos homônimos de tamanhos diferentes, e sumir com as duas
-/// esconderia uma fonte real. Sem escolha nenhuma, devolve tudo, porque aí
-/// nenhuma delas é "a outra" e esconder o que existe deixaria a faixa de
-/// "sem fonte" parecendo mentira.
-List<MatchedSource> _outrasFontes(PackGridEntry entry, SourcePick? pick) {
-  if (pick == null) return entry.sources;
-
-  final outras = <MatchedSource>[];
-  var jaTirou = false;
-  for (final source in entry.sources) {
-    final ehAVencedora = !jaTirou &&
-        source.filename == pick.filename &&
-        source.size == pick.size &&
-        source.sourceId == pick.sourceId;
-    if (ehAVencedora) {
-      jaTirou = true;
-      continue;
-    }
-    outras.add(source);
-  }
-  return outras;
-}
-
-String _rotuloOutras(int quantas) => quantas == 1 ? 'outra fonte' : 'outras $quantas fontes';
-
-/// A confiança do **casamento**, que não é a verificação por CRC.
-///
-/// Ver a "Segunda decisão travada" do plano da fatia 3: são dois eixos e eles
-/// não se misturam. A Task 18 acrescenta o estado de CRC como mais um pedaço
-/// da mesma linha, sem tirar este.
-String _rotuloConfianca(MatchConfidence confidence) => switch (confidence) {
-      MatchConfidence.confirmed => 'casamento confirmado',
-      MatchConfidence.likely => 'casamento provável',
-      MatchConfidence.guess => 'casamento no chute',
+/// See the "Second locked decision" of the slice 3 plan: they are two axes and
+/// they do not mix. Task 18 adds the CRC state as one more piece of the same
+/// row, without removing this one.
+String _confidenceLabel(MatchConfidence confidence) => switch (confidence) {
+      MatchConfidence.confirmed => 'confirmed match',
+      MatchConfidence.likely => 'likely match',
+      MatchConfidence.guess => 'guessed match',
     };
 
-/// A faixa que substitui o card quando não há o que baixar.
+/// The banner that replaces the card when there is nothing to download.
 ///
-/// O texto vem de `PickFailure.reason`, ou seja da mesma regra que a folha de
-/// lote usa. A tela não inventa motivo próprio.
+/// The text comes from `PickFailure.reason`, meaning from the same rule the
+/// batch sheet uses. The screen does not invent its own reason.
 ///
-/// Falta aqui o atalho para a tela de addons que a seção 7 pede. A tela de
-/// addons é a fatia 4; quando ela existir, o botão entra neste widget.
-class _SemFonte extends StatelessWidget {
+/// The shortcut to the addon screen that section 7 asks for is not here yet.
+/// The addon screen is slice 4; when it exists, the button goes inside this
+/// widget.
+class _NoSource extends StatelessWidget {
   final String reason;
 
-  const _SemFonte({required this.reason});
+  const _NoSource({required this.reason});
 
   @override
   Widget build(BuildContext context) {
@@ -4769,39 +4713,39 @@ class _SemFonte extends StatelessWidget {
   }
 }
 
-/// A lista colapsada da seção 7. Informativa: o botão Baixar por linha é o
-/// estado "verificação impossível" da seção 8, que é a Task 18.
-class _OutrasFontes extends StatelessWidget {
+/// The collapsed list from section 7. Informational: the per-row Download
+/// button belongs to the "cannot verify" state of section 8, which is Task 18.
+class _OtherSources extends StatelessWidget {
   final List<MatchedSource> sources;
 
-  const _OutrasFontes({required this.sources});
+  const _OtherSources({required this.sources});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Theme(
-      // `ExpansionTile` desenha uma divisória em cima e outra embaixo assim
-      // que abre, e dentro de um `ListView` de cards isso vira duas linhas
-      // soltas no meio da tela.
+      // `ExpansionTile` draws a divider above and below as soon as it opens,
+      // and inside a `ListView` of cards that becomes two stray lines in the
+      // middle of the screen.
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         title: Text(
-          _rotuloOutras(sources.length),
+          _otherLabel(sources.length),
           style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
         ),
-        children: [for (final source in sources) _LinhaFonte(source: source)],
+        children: [for (final source in sources) _SourceRow(source: source)],
       ),
     );
   }
 }
 
-class _LinhaFonte extends StatelessWidget {
+class _SourceRow extends StatelessWidget {
   final MatchedSource source;
 
-  const _LinhaFonte({required this.source});
+  const _SourceRow({required this.source});
 
   @override
   Widget build(BuildContext context) {
@@ -4814,9 +4758,9 @@ class _LinhaFonte extends StatelessWidget {
           Text(source.filename, style: const TextStyle(fontSize: 13)),
           const SizedBox(height: 2),
           Text(
-            // Os cinco pedaços que a seção 7 pede, nesta ordem.
+            // The five pieces that section 7 asks for, in this order.
             '${formatBytes(source.size)}, ${source.sourceId}, '
-            '$_kTipoFonte, ${_rotuloConfianca(source.confidence)}',
+            '$_kSourceKind, ${_confidenceLabel(source.confidence)}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
         ],
@@ -4826,51 +4770,51 @@ class _LinhaFonte extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 5: Rode e veja passar**
+- [ ] **Step 5: Run and watch it pass**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `+18`, zero falha. São os 7 da Task 15 mais os 11 desta.
+Expected: `+18`, zero failures. These are the 7 from Task 15 plus the 11 from this one.
 
-Dois tropeços prováveis:
+Two likely pitfalls:
 
-Se `a lista começa fechada` falhar achando `Chrono Trigger (Japan).zip` com a lista fechada, você trocou `ExpansionTile` por um `Column` com `Visibility` ou pôs `maintainState: true`. O `ExpansionTile` fechado **não** constrói os filhos, e é disso que este teste depende.
+If `the list starts collapsed` fails finding `Crystal Vanguard (Japan).zip` with the list closed, you replaced `ExpansionTile` with a `Column` + `Visibility` or set `maintainState: true`. A closed `ExpansionTile` does **not** build its children, and that is what this test depends on.
 
-Se os dois testes de `tap` falharem com `Actual: _TextFinder:<zero widgets>` logo depois do `pumpAndSettle`, confira que você chamou `pumpAndSettle` e não `pump`: a abertura é animada, e um `pump` só deixa a lista no meio do caminho, ainda `Offstage`.
+If the two `tap` tests fail with `Actual: _TextFinder:<zero widgets>` right after `pumpAndSettle`, verify that you called `pumpAndSettle` and not `pump`: the opening is animated, and a single `pump` leaves the list halfway, still `Offstage`.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+292 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 4: 178 do baseline mais 114 das dezesseis Tasks.
+Expected: `+292 -1`, with the usual failure, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Closes Group 4: 178 from the baseline plus 114 from the sixteen Tasks.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/game_detail_screen_test.dart
 git commit -m "test(detalhe): faixa de sem fonte e lista de outras fontes"
 
-# agente de producao
+# production agent
 git add lib/screens/game_detail_screen.dart
 git commit -m "feat(detalhe): faixa de sem fonte e lista de outras fontes"
 ```
 
 ---
 
-# Grupo 5: a verificação por CRC
+# Group 5: CRC verification
 
-A seção 8 do spec de UI inteira. É o único grupo desta fatia que toca a rede, e toca de leve: duas requisições de 326 bytes por fonte suspeita, sem baixar nada.
+The full section 8 of the UI spec. It is the only group in this slice that touches the network, and only lightly: two requests of 326 bytes per suspect source, without downloading anything.
 
-Leia a "Segunda decisão travada" no topo antes de escrever a primeira linha. O erro caro deste grupo é achar que `MatchConfidence` ganha um valor novo. Não ganha.
+Read the "Second locked decision" at the top before writing the first line. The expensive mistake in this group is assuming `MatchConfidence` gains a new value. It does not.
 
 ---
 
-### Task 17: `SourceVerification`, o serviço e o provider
+### Task 17: `SourceVerification`, the service and the provider
 
 **Files:**
 - Create: `lib/models/source_verification_model.dart`
@@ -4879,17 +4823,17 @@ Leia a "Segunda decisão travada" no topo antes de escrever a primeira linha. O 
 - Test: `test/source_verification_service_test.dart`
 - Test: `test/source_verification_provider_test.dart`
 
-O encanamento da verificação, sem nenhuma tela. A Task 18 pluga.
+The verification plumbing, with no screen at all. Task 18 plugs it in.
 
-**Por que não é o `CrcConfirmService` da fatia 2.** Aquele serviço responde uma pergunta **aberta**: "de que jogo é este arquivo?", e a resposta dele é um `GameMatch` que pode corrigir o palpite de nome. Aqui a pergunta é **fechada**: "este arquivo é deste jogo?", e a resposta é um veredito de três valores que a tela pinta. A diferença não é de estilo: `confirm` devolve `byName` intocado tanto quando não conseguiu ler nada quanto quando leu e não decidiu, e para a seção 8 esses são dois estados diferentes, `impossible` e `crcDiscarded`. Espremer os dois num método só custaria um retorno com campos opcionais que só um dos dois chamadores lê.
+**Why it is not the `CrcConfirmService` from slice 2.** That service answers an **open** question: "which game is this file?", and its answer is a `GameMatch` that can correct the name guess. Here the question is **closed**: "does this file belong to this game?", and the answer is a three-value verdict that the screen paints. The difference is not style: `confirm` returns `byName` unchanged both when it could not read anything and when it read and could not decide, and for section 8 those are two different states, `impossible` and `crcDiscarded`. Squeezing both into one method would cost a return type with optional fields that only one of the two callers reads.
 
-**O que os dois compartilham de verdade** é `ZipCentralDirectory.read`, que é onde mora a parte difícil e que os dois chamam sem copiar uma linha.
+**What the two truly share** is `ZipCentralDirectory.read`, which is where the hard part lives and which both call without copying a single line.
 
-**O cache é a família viva do Riverpod.** O provider **não** é `autoDispose`, e isso é a implementação literal de "o resultado da verificação é cacheado por (fonte, arquivo), então a segunda abertura do mesmo jogo é instantânea". O que sobra na memória é um enum por arquivo visto, não os bytes.
+**The cache is the Riverpod family itself.** The provider is **not** `autoDispose`, and that is the literal implementation of "the verification result is cached per (source, file), so the second opening of the same game is instant". What stays in memory is one enum per file seen, not the bytes.
 
-- [ ] **Step 1: Escreva os testes do serviço, que falham**
+- [ ] **Step 1: Write the service tests, failing**
 
-Crie `test/source_verification_service_test.dart`:
+Create `test/source_verification_service_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -4900,210 +4844,211 @@ import 'package:roms_downloader/services/source_verification_service.dart';
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
 
-/// CRCs do pacote de teste, na forma numérica que o diretório central grava.
-const chronoUsa = 0x2D206BF7;
-const chronoJapan = 0xABCD1234;
-const smwEurope = 0xA31BEAD4;
-const forasteiro = 0xDEADBEEF;
+/// Test pack CRCs, in the numeric form the central directory stores.
+const crystalUsa = 0x2D206BF7;
+const crystalJapan = 0xABCD1234;
+const pixelEurope = 0xA31BEAD4;
+const outsider = 0xDEADBEEF;
 
-const chrono = 'snes/chrono-trigger';
+const crystalVanguard = 'snes/crystal-vanguard';
 
 void main() {
   late PackMatcher matcher;
-  final uri = Uri.parse('https://exemplo/arquivo.zip');
+  final uri = Uri.parse('https://example/file.zip');
 
   setUp(() => matcher = PackMatcher(buildPack()));
 
-  test('não vai à rede quando o arquivo não é zip', () async {
-    var chamadas = 0;
+  test('does not hit the network when the file is not a zip', () async {
+    var calls = 0;
     final service = SourceVerificationService(
       matcher: matcher,
       fetch: (u, r) async {
-        chamadas++;
-        throw StateError('não deveria ter ido à rede');
+        calls++;
+        throw StateError('should not have hit the network');
       },
     );
 
-    final out = await service.verify(uri, 'Chrono Trigger (USA).7z', chrono);
+    final out = await service.verify(uri, 'Crystal Vanguard (USA).7z', crystalVanguard);
 
-    // Não existe leitor de 7z ou rar por Range. Impossível não é "fonte
-    // ruim", é "não dá para saber".
+    // There is no Range reader for 7z or rar. Impossible is not "bad source",
+    // it is "cannot tell".
     expect(out, SourceVerification.impossible);
-    expect(chamadas, 0);
+    expect(calls, 0);
   });
 
-  test('o CRC de dentro é um dump deste jogo', () async {
+  test('an inner CRC that is a dump of this game', () async {
     final service = SourceVerificationService(
       matcher: matcher,
-      fetch: FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)])).fetch,
+      fetch: FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)])).fetch,
     );
 
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.crcOk,
     );
   });
 
-  test('qualquer dump do jogo serve, não precisa ser o do nome', () async {
-    // O arquivo se chama USA e contém o dump japonês. Continua sendo Chrono
-    // Trigger, e a pergunta desta classe é sobre o jogo, não sobre a versão.
+  test('any dump of the game matches, not only the named one', () async {
+    // The file is named USA but contains the Japanese dump. It is still Crystal
+    // Vanguard, and the question this class answers is about the game, not the
+    // version.
     final service = SourceVerificationService(
       matcher: matcher,
-      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', chronoJapan)])).fetch,
+      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', crystalJapan)])).fetch,
     );
 
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.crcOk,
     );
   });
 
-  test('o CRC de dentro é de outro jogo', () async {
+  test('an inner CRC that belongs to another game is discarded', () async {
     final service = SourceVerificationService(
       matcher: matcher,
-      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', smwEurope)])).fetch,
+      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', pixelEurope)])).fetch,
     );
 
-    // O nome mente e o CRC desmente. Esta é a fonte que a seção 8 manda
-    // descartar do destaque.
+    // The name says one thing and the CRC says another. This is the source
+    // section 8 says to remove from the highlight.
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.crcDiscarded,
     );
   });
 
-  test('o CRC de dentro não é de jogo nenhum do pacote', () async {
+  test('an inner CRC that belongs to no game in the pack is discarded', () async {
     final service = SourceVerificationService(
       matcher: matcher,
-      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', forasteiro)])).fetch,
+      fetch: FakeRangeServer(buildZip([cdEntry('rom.sfc', outsider)])).fetch,
     );
 
-    // Um hack, um bad dump, uma tradução. Não é este jogo, então desce.
+    // A hack, a bad dump, a translation. Not this game, so it goes down.
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.crcDiscarded,
     );
   });
 
-  test('zip sem ROM dentro não desmente nada', () async {
+  test('a zip with no ROM inside disproves nothing', () async {
     final service = SourceVerificationService(
       matcher: matcher,
       fetch: FakeRangeServer(buildZip([
-        cdEntry('leiame.txt', forasteiro),
-        cdEntry('bonus.zip', forasteiro),
+        cdEntry('readme.txt', outsider),
+        cdEntry('bonus.zip', outsider),
       ])).fetch,
     );
 
-    // Nenhuma das duas entradas tem CRC comparável com o pacote (seção 5.8,
-    // limite 1), então não há evidência nem a favor nem contra.
+    // Neither entry has a CRC comparable with the pack (section 5.8, limit 1),
+    // so there is no evidence either way.
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.impossible,
     );
   });
 
-  test('o servidor que não fala Range deixa a verificação impossível', () async {
+  test('a server without Range support leaves verification impossible', () async {
     final service = SourceVerificationService(
       matcher: matcher,
       fetch: FakeRangeServer(
-        buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]),
+        buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]),
         status: 200,
       ).fetch,
     );
 
     expect(
-      await service.verify(uri, 'Chrono Trigger (USA).zip', chrono),
+      await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard),
       SourceVerification.impossible,
     );
   });
 
-  test('são duas requisições curtas, e não o arquivo inteiro', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
+  test('two short requests, not the whole file', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
     final service = SourceVerificationService(matcher: matcher, fetch: server.fetch);
 
-    await service.verify(uri, 'Chrono Trigger (USA).zip', chrono);
+    await service.verify(uri, 'Crystal Vanguard (USA).zip', crystalVanguard);
 
-    // Os 326 bytes da seção 8: um sufixo para achar o EOCD e um intervalo
-    // exato para o diretório central.
+    // The 326 bytes from section 8: one suffix to find the EOCD and one exact
+    // range for the central directory.
     expect(server.asked.length, 2);
     expect(server.asked.first, 'bytes=-256');
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_verification_service_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: 'package:roms_downloader/models/source_verification_model.dart'`.
+Expected: `Target of URI doesn't exist: 'package:roms_downloader/models/source_verification_model.dart'`.
 
-- [ ] **Step 3: Implemente o modelo e o serviço**
+- [ ] **Step 3: Implement the model and the service**
 
-Crie `lib/models/source_verification_model.dart`:
+Create `lib/models/source_verification_model.dart`:
 
 ```dart
-/// O eixo **a posteriori** da confiança numa fonte: o que a verificação por
-/// CRC disse depois de ler o cabeçalho do arquivo remoto.
+/// The **a-posteriori** axis of confidence in a source: what the CRC
+/// verification said after reading the remote file's header.
 ///
-/// Não confunda com `MatchConfidence`, que é o eixo **a priori** e sai do tier
-/// de nome (fatia 2). São dois eixos e eles não se misturam: ver a "Segunda
-/// decisão travada" no plano da fatia 3. Se você se pegou querendo acrescentar
-/// um `crcOk` ao `MatchConfidence`, é este enum que você queria.
+/// Do not confuse with `MatchConfidence`, which is the **a-priori** axis and
+/// comes from the name tier (slice 2). They are two axes and they do not mix:
+/// see the "Second locked decision" in the slice 3 plan. If you find yourself
+/// wanting to add a `crcOk` to `MatchConfidence`, this is the enum you wanted.
 ///
-/// Dart puro, sem import nenhum, de propósito.
+/// Pure Dart, with no imports, by design.
 enum SourceVerification {
-  /// Ninguém perguntou. É o estado de toda fonte fora da tela de detalhe: a
-  /// grade não verifica e o lote não verifica (seção 6 do spec de UI), e um
-  /// console sem pacote não tem com o que verificar.
+  /// Nobody asked. It is the state of every source outside the detail screen:
+  /// the grid does not verify and the batch does not verify (UI spec section 6),
+  /// and a console without a pack has nothing to verify against.
   notVerified,
 
-  /// As duas requisições estão no ar.
+  /// Both requests are in flight.
   verifying,
 
-  /// Um dump deste jogo está lá dentro. Certeza, não palpite.
+  /// A dump of this game is inside. Certainty, not a guess.
   crcOk,
 
-  /// Leu o CRC e ele não é deste jogo. A fonte sai do destaque e desce para a
-  /// lista, marcada (seção 8).
+  /// Read the CRC and it does not belong to this game. The source leaves the
+  /// highlight and moves to the list, flagged (section 8).
   crcDiscarded,
 
-  /// Não deu para saber: servidor sem `Range`, arquivo que não é ZIP, ZIP sem
-  /// ROM dentro. **Não** é sinônimo de fonte ruim, e por isso não descarta.
+  /// Could not tell: no Range support, file is not a ZIP, ZIP has no ROM.
+  /// **Not** a synonym for a bad source, so it does not discard.
   impossible,
 }
 ```
 
-Crie `lib/services/source_verification_service.dart`:
+Create `lib/services/source_verification_service.dart`:
 
 ```dart
 import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// Responde uma pergunta fechada: **este** arquivo remoto contém um dump
-/// **deste** jogo?
+/// Answers a closed question: does **this** remote file contain a dump of
+/// **this** game?
 ///
-/// É prima de `CrcConfirmService` e não é a mesma coisa. Lá a pergunta é
-/// aberta, "de que jogo é este arquivo", e a resposta é um `GameMatch` que
-/// pode corrigir o palpite de nome. Aqui a resposta é um veredito que a tela
-/// pinta. O `confirm` devolve `byName` intocado tanto quando não leu nada
-/// quanto quando leu e não decidiu, e aqui esses dois casos são estados
-/// diferentes. O que as duas compartilham de verdade é
-/// `ZipCentralDirectory.read`, que é onde mora a parte difícil.
+/// It is a cousin of `CrcConfirmService`, not the same thing. There the
+/// question is open, "which game is this file", and the answer is a `GameMatch`
+/// that can correct the name guess. Here the answer is a verdict that the
+/// screen paints. `confirm` returns `byName` unchanged both when it could not
+/// read anything and when it read and could not decide, and here those two
+/// cases are different states. What the two truly share is
+/// `ZipCentralDirectory.read`, which is where the hard part lives.
 ///
-/// Dart puro de propósito. Não adicione import de `package:flutter`.
+/// Pure Dart by design. Do not add a `package:flutter` import.
 class SourceVerificationService {
   final PackMatcher matcher;
   final RangeFetch fetch;
 
   const SourceVerificationService({required this.matcher, required this.fetch});
 
-  /// Nunca levanta: toda falha vira [SourceVerification.impossible].
+  /// Never throws: every failure becomes [SourceVerification.impossible].
   Future<SourceVerification> verify(
       Uri uri, String sourceName, String gameId) async {
-    // Sem leitor de 7z ou rar por Range, então nem gaste a requisição.
+    // No Range reader for 7z or rar, so don't spend the request.
     if (!sourceName.toLowerCase().endsWith('.zip')) {
       return SourceVerification.impossible;
     }
@@ -5111,36 +5056,36 @@ class SourceVerificationService {
     final entries = await ZipCentralDirectory.read(uri, fetch);
     if (entries == null) return SourceVerification.impossible;
 
-    var viuRom = false;
+    var sawRom = false;
     for (final entry in entries) {
-      // `crcMatchesRom` exclui o compactado dentro do compactado, cujo CRC é
-      // do comprimido e não da ROM (seção 5.8, limite 1).
+      // `crcMatchesRom` excludes the compressed-inside-compressed case, whose
+      // CRC belongs to the compressed bytes, not the ROM (section 5.8, limit 1).
       if (!entry.crcMatchesRom) continue;
-      viuRom = true;
+      sawRom = true;
       final hit = matcher.matchCrc(entry.crc, sourceName: sourceName);
       if (hit != null && hit.game.id == gameId) return SourceVerification.crcOk;
     }
 
-    // Um zip só com leia-me e capa não desmente nada, então não descarta. Um
-    // zip com ROM que não é deste jogo desmente, e descarta.
-    return viuRom
+    // A zip with only a readme and cover disproves nothing, so do not discard.
+    // A zip with a ROM that is not this game does disprove, and discards.
+    return sawRom
         ? SourceVerification.crcDiscarded
         : SourceVerification.impossible;
   }
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_verification_service_test.dart
 ```
 
-Esperado: `+8`, zero falha.
+Expected: `+8`, zero failures.
 
-- [ ] **Step 5: Escreva os testes do provider, que falham**
+- [ ] **Step 5: Write the provider tests, failing**
 
-Crie `test/source_verification_provider_test.dart`:
+Create `test/source_verification_provider_test.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5156,136 +5101,135 @@ import 'package:roms_downloader/services/source_verification_service.dart';
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
-const chronoUsa = 0x2D206BF7;
+const _target = PackTarget('snes', 'Super Nintendo');
+const crystalUsa = 0x2D206BF7;
 
-SourceVerificationRequest _pedido({String? url = 'https://exemplo/ct.zip'}) => (
-      sourceId: 'listagem',
-      filename: 'Chrono Trigger (USA).zip',
+SourceVerificationRequest _request({String? url = 'https://example/ct.zip'}) => (
+      sourceId: 'listing',
+      filename: 'Crystal Vanguard (USA).zip',
       url: url,
-      gameId: 'snes/chrono-trigger',
+      gameId: 'snes/crystal-vanguard',
     );
 
-SourceVerificationService _servico(FakeRangeServer server) =>
+SourceVerificationService _service(FakeRangeServer server) =>
     SourceVerificationService(matcher: PackMatcher(buildPack()), fetch: server.fetch);
 
 ProviderContainer _container({
-  PackTarget? alvo = _alvo,
-  SourceVerificationService? servico,
+  PackTarget? target = _target,
+  SourceVerificationService? service,
 }) {
   final container = ProviderContainer(overrides: [
-    packTargetProvider.overrideWithValue(alvo),
-    if (servico != null)
-      sourceVerificationServiceProvider(_alvo).overrideWith((ref) => servico),
+    packTargetProvider.overrideWithValue(target),
+    if (service != null)
+      sourceVerificationServiceProvider(_target).overrideWith((ref) => service),
   ]);
   addTearDown(container.dispose);
   return container;
 }
 
 void main() {
-  test('sem console selecionado ninguém verifica nada', () async {
-    final container = _container(alvo: null);
+  test('no selected console verifies nothing', () async {
+    final container = _container(target: null);
 
-    // Nenhuma sobrescrita de serviço aqui: se o provider tentasse construir
-    // um, ele iria à rede de verdade dentro do teste.
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.notVerified,
     );
   });
 
-  test('console sem pacote fica em notVerified', () async {
+  test('console without a pack stays notVerified', () async {
     final container = ProviderContainer(overrides: [
-      packTargetProvider.overrideWithValue(_alvo),
-      packMatcherProvider(_alvo).overrideWith((ref) => null),
+      packTargetProvider.overrideWithValue(_target),
+      packMatcherProvider(_target).overrideWith((ref) => null),
     ]);
     addTearDown(container.dispose);
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.notVerified,
     );
   });
 
-  test('fonte sem url tem verificação impossível', () async {
+  test('a source without a url is impossible', () async {
     final container = _container();
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido(url: null)).future),
+      await container.read(sourceVerificationProvider(_request(url: null)).future),
       SourceVerification.impossible,
     );
   });
 
-  test('url que não parseia tem verificação impossível', () async {
+  test('a url that does not parse is impossible', () async {
     final container = _container();
 
-    // `Uri.tryParse` devolve null aqui por causa do colchete sem par.
+    // `Uri.tryParse` returns null here because of the unmatched bracket.
     expect(
-      await container.read(sourceVerificationProvider(_pedido(url: 'http://[')).future),
+      await container.read(sourceVerificationProvider(_request(url: 'http://[')).future),
       SourceVerification.impossible,
     );
   });
 
-  test('o veredito do serviço chega inteiro', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the service verdict passes through intact', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.crcOk,
     );
   });
 
-  test('enquanto a leitura roda o estado é verificando', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the state is verifying while the read runs', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
-    // `verifying` não sai do provider: ele é o `AsyncLoading` traduzido.
+    // `verifying` is not a value the provider returns: it is the translated
+    // `AsyncLoading`.
     expect(
-      verificationOf(container.read(sourceVerificationProvider(_pedido()))),
+      verificationOf(container.read(sourceVerificationProvider(_request()))),
       SourceVerification.verifying,
     );
 
-    await container.read(sourceVerificationProvider(_pedido()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
 
     expect(
-      verificationOf(container.read(sourceVerificationProvider(_pedido()))),
+      verificationOf(container.read(sourceVerificationProvider(_request()))),
       SourceVerification.crcOk,
     );
   });
 
-  test('o mesmo par fonte e arquivo é lido uma vez só', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the same source and file pair is read only once', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
-    await container.read(sourceVerificationProvider(_pedido()).future);
-    await container.read(sourceVerificationProvider(_pedido()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
 
-    // Duas requisições, não quatro. É o cache da seção 8, e ele é a família
-    // viva do Riverpod, não um `Map` escrito à mão.
+    // Two requests, not four. It is the cache from section 8, and it is the
+    // live Riverpod family, not a hand-written `Map`.
     expect(server.asked.length, 2);
   });
 
-  test('erro vira impossível, e não tela vermelha', () async {
+  test('an error becomes impossible, not a red screen', () async {
     expect(
-      verificationOf(AsyncError(Exception('pacote não carregou'), StackTrace.empty)),
+      verificationOf(AsyncError(Exception('pack did not load'), StackTrace.empty)),
       SourceVerification.impossible,
     );
   });
 }
 ```
 
-- [ ] **Step 6: Rode e veja falhar**
+- [ ] **Step 6: Run and watch it fail**
 
 ```bash
 flutter test test/source_verification_provider_test.dart
 ```
 
-Esperado: `Target of URI doesn't exist: '.../source_verification_provider.dart'`.
+Expected: `Target of URI doesn't exist: '.../source_verification_provider.dart'`.
 
-- [ ] **Step 7: Implemente o provider**
+- [ ] **Step 7: Implement the provider**
 
-Crie `lib/providers/source_verification_provider.dart`:
+Create `lib/providers/source_verification_provider.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5296,16 +5240,16 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/source_verification_service.dart';
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// O que identifica uma verificação.
+/// What identifies a verification request.
 ///
-/// É record, e não classe, porque record tem igualdade estrutural de graça, e
-/// é essa igualdade que faz a família do Riverpod cachear. Com uma classe sem
-/// `operator ==`, cada rebuild criaria uma chave nova e a verificação rodaria
-/// de novo a cada frame, com duas requisições por vez.
+/// It is a record, not a class, because records have structural equality for
+/// free, and that equality is what makes the Riverpod family cache. With a
+/// class without `operator ==`, every rebuild would create a new key and the
+/// verification would run again every frame, with two requests at a time.
 ///
-/// A chave efetiva é (fonte, arquivo), como pede a seção 8 do spec de UI. Os
-/// outros dois campos são função desses dois e estão aqui só para o provider
-/// não precisar receber a fonte inteira.
+/// The effective key is (source, file), as section 8 of the UI spec requires.
+/// The other two fields are derived from those two and are here only so the
+/// provider does not need to receive the full source.
 typedef SourceVerificationRequest = ({
   String sourceId,
   String filename,
@@ -5313,11 +5257,11 @@ typedef SourceVerificationRequest = ({
   String gameId,
 });
 
-/// O verificador do console atual. Null quando o console não tem pacote, que é
-/// o mesmo contrato de `packMatcherProvider`.
+/// The verifier for the current console. Null when the console has no pack,
+/// which is the same contract as `packMatcherProvider`.
 ///
-/// Fica separado do provider de veredito porque é ele que carrega o `fetch` de
-/// produção, e é ele que o teste sobrescreve para não ir à rede.
+/// Kept separate from the verdict provider because it is the one that carries
+/// the production `fetch`, and it is the one tests override to avoid the network.
 final sourceVerificationServiceProvider =
     FutureProvider.family<SourceVerificationService?, PackTarget>((ref, target) async {
   final matcher = await ref.watch(packMatcherProvider(target).future);
@@ -5328,14 +5272,14 @@ final sourceVerificationServiceProvider =
   );
 });
 
-/// O veredito de CRC de uma fonte.
+/// The CRC verdict for one source.
 ///
-/// **Não é `autoDispose`, de propósito.** A família viva é o cache que a seção
-/// 8 pede quando diz que a segunda abertura do mesmo jogo é instantânea. O que
-/// fica na memória é um enum por (fonte, arquivo) visto, não os bytes.
+/// **Not `autoDispose`, by design.** The live family is the cache that section
+/// 8 asks for when it says the second opening of the same game is instant. What
+/// stays in memory is one enum per (source, file) seen, not the bytes.
 ///
-/// Nunca devolve [SourceVerification.verifying]: enquanto a leitura roda, quem
-/// está em `verifying` é o próprio `AsyncValue`. Traduza com [verificationOf].
+/// Never returns [SourceVerification.verifying]: while the read runs, the
+/// `AsyncValue` itself is in `verifying`. Translate it with [verificationOf].
 final sourceVerificationProvider =
     FutureProvider.family<SourceVerification, SourceVerificationRequest>((ref, request) async {
   final target = ref.watch(packTargetProvider);
@@ -5352,95 +5296,85 @@ final sourceVerificationProvider =
   return service.verify(uri, request.filename, request.gameId);
 });
 
-/// O estado que a tela pinta, a partir do que o provider devolveu.
+/// The state the screen paints, derived from what the provider returned.
 ///
-/// Erro vira `impossible` e não tela vermelha: `verify` não levanta, então
-/// chegar aqui significa que o pacote do console não carregou, e nesse caso o
-/// que o usuário precisa saber é que não deu para verificar.
+/// An error becomes `impossible` and not a red screen: `verify` never throws,
+/// so reaching here means the console pack did not load, and in that case
+/// what the user needs to know is that verification was not possible.
 SourceVerification verificationOf(AsyncValue<SourceVerification> value) => value.when(
-      data: (veredito) => veredito,
+      data: (verdict) => verdict,
       loading: () => SourceVerification.verifying,
       error: (_, __) => SourceVerification.impossible,
     );
 ```
 
-- [ ] **Step 8: Rode e veja passar**
+- [ ] **Step 8: Run and watch it pass**
 
 ```bash
 flutter test test/source_verification_service_test.dart test/source_verification_provider_test.dart
 ```
 
-Esperado: `+16`, zero falha.
+Expected: `+16`, zero failures.
 
-Tropeço provável: se `console sem pacote fica em notVerified` estourar tentando rede, é porque `packMatcherProvider` não aceitou a sobrescrita e caiu no corpo real, que chama `metadataPackProvider`. A forma certa para um membro de família em Riverpod 2.6 é `packMatcherProvider(_alvo).overrideWith((ref) => null)`, com o argumento entre parênteses **antes** do `overrideWith`.
+Likely pitfall: if `console without a pack stays notVerified` blows up trying the network, it is because `packMatcherProvider` did not accept the override and fell through to the real body, which calls `metadataPackProvider`. The correct form for a family member in Riverpod 2.6 is `packMatcherProvider(_target).overrideWith((ref) => null)`, with the argument in parentheses **before** `overrideWith`.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_verification_service_test.dart test/source_verification_provider_test.dart
 git commit -m "test(crc): veredito de verificacao por CRC e o cache por fonte e arquivo"
 
-# agente de producao
+# production agent
 git add lib/models/source_verification_model.dart lib/services/source_verification_service.dart lib/providers/source_verification_provider.dart
 git commit -m "feat(crc): veredito de verificacao por CRC e o cache por fonte e arquivo"
 ```
 
 ---
 
-### Task 18: a verificação por CRC na tela de detalhe
+### Task 18: CRC verification on the detail screen
 
 **Files:**
-- Modify: `lib/services/source_pick_service.dart` (uma função nova no fim)
-- Modify: `lib/screens/game_detail_screen.dart` (o arquivo inteiro)
-- Modify: `test/source_pick_service_test.dart` (oito testes novos no fim)
-- Modify: `test/game_detail_screen_test.dart` (dez testes novos no fim, mais o `_host`)
+- Modify: `lib/services/source_pick_service.dart` (one new function at the end)
+- Modify: `lib/screens/game_detail_screen.dart` (the entire file)
+- Modify: `test/source_pick_service_test.dart` (eight new tests at the end)
+- Modify: `test/game_detail_screen_test.dart` (ten new tests at the end, plus `_host`)
 
-A seção 8 do spec de UI ligada na tela. É a Task mais longa da fatia, e a razão é que a regra de destaque passa a depender de um estado assíncrono por fonte.
+Section 8 of the UI spec wired into the screen. It is the longest Task in the slice, and the reason is that the highlight rule now depends on one asynchronous state per source.
 
-**A regra, travada, na ordem:**
+**The rule, locked, in order:**
 
-1. Fonte `crcDiscarded` **nunca** disputa o destaque. Ela desce para a lista, marcada.
-2. Se sobrou alguma `crcOk`, o destaque sai **só** entre as `crcOk`, e o motivo vira `confirmado pelo CRC, é exatamente este dump`. É aqui que o destaque troca de arquivo, que é o ponto inteiro da seção 8.
-3. Se não sobrou nenhuma `crcOk` e **todas** as que sobraram são `impossible`, entra o estado "não tenho certeza de nenhuma": nada em destaque, a lista abre expandida e cada linha ganha o seu Baixar.
-4. Fora disso, o destaque é o da Task 16, escolhido por nome.
-5. Se não sobrou fonte nenhuma porque todas foram descartadas, a faixa aparece com o motivo `nenhuma fonte passou na verificação por CRC`.
+1. A `crcDiscarded` source **never** competes for the highlight. It moves to the list, flagged.
+2. If any `crcOk` remains, the highlight comes **only** from the `crcOk` sources, and the reason becomes `confirmed by CRC, this is exactly the dump`. This is where the highlight switches files, which is the entire point of section 8.
+3. If no `crcOk` remains and **all** remaining sources are `impossible`, the "not sure about any" state kicks in: nothing in the highlight, the list opens expanded and each row gets its own Download.
+4. Outside those cases, the highlight is the Task 16 one, chosen by name.
+5. If no source remains because all were discarded, the banner appears with the reason `no source passed CRC verification`.
 
-**O botão diz "Baixar mesmo assim" quando `verificando && !confirmado`.** Se uma fonte já bateu o CRC, a certeza está dada e a leitura que ainda roda numa fonte perdedora não pode mais mudar o destaque. Fazer o botão hesitar nesse caso seria hesitar por nada.
+**The button says "Download anyway" when `verifying && !confirmed`.** If one source already beat the CRC, the certainty is given and the read still running on a losing source can no longer change the highlight. Making the button hesitate at that point would be hesitating for nothing.
 
-**A regra é função pura, e mora fora do widget.** `splitByVerification` vai para `source_pick_service.dart`, ao lado de `planFromEntries`, e recebe os estados já resolvidos em vez de um `WidgetRef`. Oito dos dezoito testes desta Task não sobem widget nenhum por causa disso.
+**The rule is a pure function, outside the widget.** `splitByVerification` goes into `source_pick_service.dart`, next to `planFromEntries`, and receives already-resolved states instead of a `WidgetRef`. Eight of the eighteen tests in this Task raise no widget at all because of that.
 
-**Não chame `ref.watch` de dentro de um widget filho.** A tela resolve o estado das fontes **uma vez**, no `build` do `ConsumerWidget`, e passa dados prontos para baixo. `_OutrasFontes` e `_LinhaFonte` continuam widgets burros, como todo o resto desta fatia.
+**Do not call `ref.watch` from inside a child widget.** The screen resolves the source states **once**, in the `ConsumerWidget`'s `build`, and passes ready data downward. `_OtherSources` and `_SourceRow` remain dumb widgets, like everything else in this slice.
 
-**A `faixa de "nenhuma fonte passou na verificação por CRC"` é a única string desta tela que não vem de `PickFailure`.** E tem que ser: o lote não verifica CRC, então a regra de lote não tem como conhecer esse estado. Está anotada no código para ninguém "consertar" isso movendo a string para o serviço.
+**The `"no source passed CRC verification"` banner string is the only one on this screen that does not come from `PickFailure`.** And it must be that way: the batch does not verify CRC, so the batch rule cannot know this state. It is annotated in the code so nobody "fixes" it by moving the string to the service.
 
-- [ ] **Step 1: Escreva os oito testes da função pura, que falham**
+- [ ] **Step 1: Write the eight failing pure-function tests**
 
-No fim de `main` em `test/source_pick_service_test.dart`:
+At the end of `main` in `test/source_pick_service_test.dart`:
 
 ```dart
-  VerifiedSource _v(String filename, SourceVerification state) => (
-        source: MatchedSource(
-          filename: filename,
-          sourceId: kBuiltinSourceId,
-          confidence: MatchConfidence.likely,
-          size: 100,
-        ),
-        state: state,
-      );
-
-  test('sem fonte nenhuma não há nada elegível e não há incerteza', () {
+  test('no sources means nothing eligible and no uncertainty', () {
     final split = splitByVerification(const []);
 
     expect(split.eligible, isEmpty);
     expect(split.discarded, isEmpty);
     expect(split.confirmed, isFalse);
     expect(split.verifying, isFalse);
-    // Zero fonte é a faixa de "sem fonte" da Task 16, não o estado novo.
+    // Zero sources is the "no source" banner of Task 16, not the new state.
     expect(split.noCertainty, isFalse);
   });
 
-  test('sem verificação, todas disputam', () {
+  test('without verification all sources compete', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.notVerified),
       _v('b.zip', SourceVerification.notVerified),
@@ -5451,18 +5385,18 @@ No fim de `main` em `test/source_pick_service_test.dart`:
     expect(split.noCertainty, isFalse);
   });
 
-  test('uma confirmada por CRC tira as não confirmadas da disputa', () {
+  test('one CRC-confirmed source removes the unconfirmed from the race', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.notVerified),
       _v('b.zip', SourceVerification.crcOk),
     ]);
 
-    // É aqui que o destaque troca de arquivo (seção 8).
+    // This is where the highlight switches files (section 8).
     expect(split.eligible.map((v) => v.source.filename), ['b.zip']);
     expect(split.confirmed, isTrue);
   });
 
-  test('a descartada nunca disputa e sai contada à parte', () {
+  test('a discarded source never competes and is counted apart', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.crcDiscarded),
       _v('b.zip', SourceVerification.notVerified),
@@ -5472,7 +5406,7 @@ No fim de `main` em `test/source_pick_service_test.dart`:
     expect(split.discarded.map((v) => v.source.filename), ['a.zip']);
   });
 
-  test('enquanto alguma verifica, ninguém é excluído', () {
+  test('while one is verifying, none is excluded', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.verifying),
       _v('b.zip', SourceVerification.notVerified),
@@ -5483,7 +5417,7 @@ No fim de `main` em `test/source_pick_service_test.dart`:
     expect(split.noCertainty, isFalse);
   });
 
-  test('todas impossíveis viram o estado de não tenho certeza de nenhuma', () {
+  test('all impossible becomes the not-sure-about-any state', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.impossible),
       _v('b.zip', SourceVerification.impossible),
@@ -5492,19 +5426,19 @@ No fim de `main` em `test/source_pick_service_test.dart`:
     expect(split.noCertainty, isTrue);
   });
 
-  test('uma impossível e uma sem verificar não é incerteza total', () {
+  test('one impossible and one unverified is not total uncertainty', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.impossible),
       _v('b.zip', SourceVerification.notVerified),
     ]);
 
-    // A segunda nunca foi perguntada, então ainda não se sabe. Abrir a lista
-    // e desistir do destaque aqui seria desistir cedo demais.
+    // The second was never asked, so it is still unknown. Opening the list
+    // and giving up on the highlight here would be giving up too early.
     expect(split.noCertainty, isFalse);
     expect(split.eligible.length, 2);
   });
 
-  test('tudo descartado deixa a disputa vazia sem virar incerteza', () {
+  test('all discarded leaves the race empty without becoming uncertainty', () {
     final split = splitByVerification([
       _v('a.zip', SourceVerification.crcDiscarded),
       _v('b.zip', SourceVerification.crcDiscarded),
@@ -5512,63 +5446,58 @@ No fim de `main` em `test/source_pick_service_test.dart`:
 
     expect(split.eligible, isEmpty);
     expect(split.discarded.length, 2);
-    // Não é incerteza: é certeza de que nenhuma serve. A tela mostra a faixa.
+    // Not uncertainty: it is certainty that none fits. The screen shows the banner.
     expect(split.noCertainty, isFalse);
   });
 ```
 
-Acrescente o import que falta, no topo do arquivo:
+Add the missing import at the top of the file:
 
 ```dart
 import 'package:roms_downloader/models/source_verification_model.dart';
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `Undefined name 'splitByVerification'` e `Undefined class 'VerifiedSource'`.
+Expected: `Undefined name 'splitByVerification'` and `Undefined class 'VerifiedSource'`.
 
-- [ ] **Step 3: Implemente a função pura**
+- [ ] **Step 3: Implement the pure function**
 
-No fim de `lib/services/source_pick_service.dart`, com o import novo no topo:
+At the end of `lib/services/source_pick_service.dart`, with the new import at the top:
 
 ```dart
 import 'package:roms_downloader/models/source_verification_model.dart';
 ```
 
 ```dart
-/// Uma fonte com o veredito de CRC dela já resolvido.
-///
-/// A tela resolve os vereditos uma vez, no `build` do `ConsumerWidget`, e
-/// passa isto para baixo. Assim esta função não conhece Riverpod e os testes
-/// dela não sobem widget.
+/// A source with its CRC verdict already resolved.
 typedef VerifiedSource = ({MatchedSource source, SourceVerification state});
 
-/// Como a verificação por CRC reorganiza as fontes de um jogo (seção 8).
+/// How CRC verification reorganizes a game's sources.
 typedef VerificationSplit = ({
-  /// Quem pode disputar o destaque: só as confirmadas quando existe alguma
-  /// confirmada, senão tudo que não foi descartado.
+  /// Who can contest the highlight: only the confirmed ones when any is
+  /// confirmed, otherwise everything not discarded.
   List<VerifiedSource> eligible,
 
-  /// Quem saiu da disputa porque o CRC desmentiu o nome.
+  /// Who left the contest because the CRC contradicted the name.
   List<VerifiedSource> discarded,
 
-  /// Alguma leitura ainda no ar.
+  /// Some read still in flight.
   bool verifying,
 
-  /// Alguma fonte confirmada por CRC.
+  /// Some source confirmed by CRC.
   bool confirmed,
 
-  /// Sobrou fonte, nenhuma confirmada, e **todas** as que sobraram são
-  /// impossíveis de verificar. É o "não tenho certeza de nenhuma" da seção 8.
+  /// Sources remain, none confirmed, and all that remain are impossible to
+  /// verify.
   bool noCertainty,
 });
 
-/// A regra da seção 8, na ordem dela. Pura, e é de propósito: a tela de
-/// detalhe fica só com o desenho.
+/// The verification rule, in order. Pure, so the detail screen only draws.
 VerificationSplit splitByVerification(List<VerifiedSource> sources) {
   final ok = <VerifiedSource>[];
   final discarded = <VerifiedSource>[];
@@ -5598,64 +5527,64 @@ VerificationSplit splitByVerification(List<VerifiedSource> sources) {
     discarded: discarded,
     verifying: verifying,
     confirmed: ok.isNotEmpty,
-    // `impossible == rest.length` e não `!verifying`: uma fonte que ninguém
-    // perguntou ainda não desistiu, e desistir por ela seria desistir cedo.
+    // `impossible == rest.length`, not `!verifying`: a source nobody asked
+    // about has not given up yet.
     noCertainty: ok.isEmpty && rest.isNotEmpty && impossible == rest.length,
   );
 }
 ```
 
-O `switch` sem `break` é Dart 3 e passa no analisador. Conferido rodando `dart analyze` num arquivo com exatamente esta forma.
+The `switch` without `break` is Dart 3 and passes the analyzer. Verified by running `dart analyze` on a file with exactly this form.
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/source_pick_service_test.dart
 ```
 
-Esperado: `+24`, zero falha. São os 16 das Tasks 6 e 14 mais os 8 desta.
+Expected: `+24`, zero failures. That is 16 from Tasks 6 and 14 plus 8 from this one.
 
-- [ ] **Step 5: Ajuste o `_host` do teste de tela**
+- [ ] **Step 5: Adjust the `_host` in the screen test**
 
-Em `test/game_detail_screen_test.dart`, `_host` precisa de um seam para a verificação. **Sem ele os testes vão à rede de verdade**, porque `sourceVerificationProvider` carrega o pacote do console para montar o matcher, e a tela ficaria presa em "verificando" para sempre, quebrando os dezoito testes das Tasks 15 e 16.
+In `test/game_detail_screen_test.dart`, `_host` needs a seam for verification. **Without it the tests hit the real network**, because `sourceVerificationProvider` loads the console pack to build the matcher, and the screen would be stuck on "verifying" forever, breaking the eighteen tests from Tasks 15 and 16.
 
-Substitua `_host` inteiro por este:
+Replace the entire `_host` with this one:
 
 ```dart
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   GameResolver? resolver,
-  SourceVerification Function(String filename)? verificacao,
+  SourceVerification Function(String filename)? verification,
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packTargetProvider.overrideWithValue(_alvo),
+      withoutFavoritesDisk,
+      packTargetProvider.overrideWithValue(_target),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
-      gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
-      // Sobrescrita da família inteira, que vale para qualquer argumento.
-      // Conferido que compila no Riverpod 2.6: `familia.overrideWith((ref,
-      // arg) => ...)`, sem parênteses de argumento antes do `overrideWith`.
-      sourceVerificationProvider.overrideWith((ref, pedido) {
-        final estado = verificacao?.call(pedido.filename) ?? SourceVerification.notVerified;
-        // `verifying` não é valor que o provider devolva: ele é o
-        // `AsyncLoading`. Um `Completer` que nunca completa segura a tela
-        // nesse estado sem deixar timer pendente no fim do teste.
-        if (estado == SourceVerification.verifying) {
+      gameResolverProvider.overrideWithValue(resolver ?? _resolveDefault),
+      // Required, not convenience: without it the real provider reads
+      // `addonProvider`, which opens `AddonStore` via `path_provider` and throws
+      // `MissingPluginException` in a widget test with no platform.
+      sourceVerificationProvider.overrideWith((ref, request) {
+        final state = verification?.call(request.filename) ?? SourceVerification.notVerified;
+        // `verifying` is not a value the provider returns; it is `AsyncLoading`.
+        // A never-completing `Completer` holds the screen there without leaving
+        // a pending timer at the end of the test.
+        if (state == SourceVerification.verifying) {
           return Completer<SourceVerification>().future;
         }
-        return estado;
+        return state;
       }),
     ],
     child: MaterialApp(
-      home: GameDetailScreen(entry: entrada, onDownload: onDownload ?? (_) {}),
+      home: GameDetailScreen(entry: entry, onDownload: onDownload ?? (_) {}),
     ),
   );
 }
 ```
 
-E os imports novos, no topo:
+And the new imports, at the top:
 
 ```dart
 import 'dart:async';
@@ -5664,187 +5593,187 @@ import 'package:roms_downloader/models/source_verification_model.dart';
 import 'package:roms_downloader/providers/source_verification_provider.dart';
 ```
 
-O teste do checkbox da Task 15 monta o próprio `ProviderScope` à mão e **também** precisa da sobrescrita, senão ele vai à rede. Acrescente a mesma linha na lista de `overrides` dele:
+The checkbox test from Task 15 builds its own `ProviderScope` by hand and **also** needs the override, otherwise it goes to the network. Add the same line to its `overrides` list:
 
 ```dart
-        sourceVerificationProvider.overrideWith((ref, pedido) => SourceVerification.notVerified),
+        sourceVerificationProvider.overrideWith((ref, request) => SourceVerification.notVerified),
 ```
 
-- [ ] **Step 6: Escreva os dez testes de tela, que falham**
+- [ ] **Step 6: Write the ten screen tests, which fail**
 
-No fim de `main`, no mesmo arquivo:
+At the end of `main`, in the same file:
 
 ```dart
-  testWidgets('enquanto verifica, o botão diz Baixar mesmo assim', (tester) async {
+  testWidgets('while verifying, the button says Download anyway', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      verificacao: (_) => SourceVerification.verifying,
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
+      verification: (_) => SourceVerification.verifying,
     ));
 
-    expect(find.widgetWithText(FilledButton, 'Baixar mesmo assim'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, verificando'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download anyway'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, verifying'), findsOneWidget);
   });
 
-  testWidgets('CRC ok troca o motivo pelo motivo do CRC', (tester) async {
+  testWidgets('CRC ok swaps the reason for the CRC reason', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      verificacao: (_) => SourceVerification.crcOk,
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
+      verification: (_) => SourceVerification.crcOk,
     ));
 
-    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
-    expect(find.text('4.0 MB, listagem, CRC ok'), findsOneWidget);
-    // Com certeza dada, o botão não hesita.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
+    expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
+    expect(find.text('4.0 MB, listing, CRC ok'), findsOneWidget);
+    // With certainty given, the button does not hesitate.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
 
-  testWidgets('a fonte descartada sai do destaque e a outra sobe', (tester) async {
+  testWidgets('the discarded source leaves the highlight and the other rises', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcDiscarded
           : SourceVerification.crcOk,
     ));
 
-    // Por nome, a USA ganharia pela região preferida. O CRC desmentiu, e o
-    // destaque trocou de arquivo. É o ponto inteiro da seção 8.
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    expect(find.text('outra fonte, 1 descartada'), findsOneWidget);
+    // By name, USA would win on preferred region. CRC overruled it and the
+    // highlight switched file.
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    expect(find.text('other source, 1 discarded'), findsOneWidget);
   });
 
-  testWidgets('a linha descartada aparece marcada', (tester) async {
+  testWidgets('the discarded row shows up flagged', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcDiscarded
           : SourceVerification.crcOk,
     ));
 
-    await tester.tap(find.text('outra fonte, 1 descartada'));
+    await tester.tap(find.text('other source, 1 discarded'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('4.0 MB, listagem, HTTP, casamento provável, descartada pelo CRC'),
+      find.text('4.0 MB, listing, HTTP, likely match, discarded by CRC'),
       findsOneWidget,
     );
   });
 
-  testWidgets('com uma confirmada, a que ainda verifica não faz o botão hesitar', (tester) async {
+  testWidgets('with one confirmed, a still-verifying source does not make the button hesitate', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.verifying
           : SourceVerification.crcOk,
     ));
 
-    // A leitura que ainda roda é de uma fonte que já perdeu, então ela não
-    // pode mais mudar o destaque.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsOneWidget);
-    expect(find.text('confirmado pelo CRC, é exatamente este dump'), findsOneWidget);
+    // The still-running read is of a source that already lost, so it can no
+    // longer change the highlight.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
+    expect(find.text('confirmed by CRC, this is exactly the dump'), findsOneWidget);
   });
 
-  testWidgets('nenhuma verificável: o card diz que não tem certeza de nenhuma', (tester) async {
+  testWidgets('none verifiable: the card says it is not sure about any', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.impossible,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    expect(find.text('não tenho certeza de nenhuma'), findsOneWidget);
-    // Nada em destaque significa nada de motivo de escolha por nome.
-    expect(find.text('escolhido pela sua região preferida (USA)'), findsNothing);
+    expect(find.text('not sure about any of them'), findsOneWidget);
+    // Nothing highlighted means no name-based pick reason.
+    expect(find.text('chosen by your preferred region (USA)'), findsNothing);
   });
 
-  testWidgets('nesse estado a lista já abre e cada linha tem o seu Baixar', (tester) async {
+  testWidgets('in that state the list opens and each row has its own Download', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.impossible,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    // Sem tap nenhum: a lista nasce aberta.
-    expect(find.text('Chrono Trigger (USA).zip'), findsOneWidget);
-    expect(find.text('Chrono Trigger (Japan).zip'), findsOneWidget);
-    // Dois botões, e nenhum terceiro: não há card de destaque.
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNWidgets(2));
+    // No tap: the list is born open.
+    expect(find.text('Crystal Vanguard (USA).zip'), findsOneWidget);
+    expect(find.text('Crystal Vanguard (Japan).zip'), findsOneWidget);
+    // Two buttons, no third: there is no highlight card.
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNWidgets(2));
   });
 
-  testWidgets('o Baixar da linha devolve aquela fonte, marcada como incerta', (tester) async {
-    final baixados = <SourcePick>[];
+  testWidgets('the row Download returns that source, flagged uncertain', (tester) async {
+    final downloaded = <SourcePick>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      onDownload: baixados.add,
-      verificacao: (_) => SourceVerification.impossible,
+      onDownload: downloaded.add,
+      verification: (_) => SourceVerification.impossible,
     ));
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Baixar').first);
+    await tester.tap(find.widgetWithText(FilledButton, 'Download').first);
     await tester.pump();
 
-    expect(baixados.single.filename, 'Chrono Trigger (USA).zip');
-    expect(baixados.single.uncertain, isTrue);
+    expect(downloaded.single.filename, 'Crystal Vanguard (USA).zip');
+    expect(downloaded.single.uncertain, isTrue);
   });
 
-  testWidgets('todas descartadas: a faixa diz que nenhuma passou', (tester) async {
+  testWidgets('all discarded: the band says none passed', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (_) => SourceVerification.crcDiscarded,
+      verification: (_) => SourceVerification.crcDiscarded,
     ));
 
-    expect(find.text('nenhuma fonte passou na verificação por CRC'), findsOneWidget);
-    expect(find.text('outras 2 fontes, 2 descartadas'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Baixar'), findsNothing);
+    expect(find.text('no source passed CRC verification'), findsOneWidget);
+    expect(find.text('2 other sources, 2 discarded'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
   });
 
-  testWidgets('a fonte impossível de verificar diz isso na linha', (tester) async {
+  testWidgets('the unverifiable source says so on its row', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip'),
-        _fonte('Chrono Trigger (Japan).zip'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip'),
+        _source('Crystal Vanguard (Japan).zip'),
       ]),
-      verificacao: (filename) => filename.contains('USA')
+      verification: (filename) => filename.contains('USA')
           ? SourceVerification.crcOk
           : SourceVerification.impossible,
     ));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
     expect(
-      find.text('4.0 MB, listagem, HTTP, casamento provável, sem como verificar'),
+      find.text('4.0 MB, listing, HTTP, likely match, cannot verify'),
       findsOneWidget,
     );
   });
 ```
 
-- [ ] **Step 7: Rode e veja falhar**
+- [ ] **Step 7: Run and watch it fail**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `+18 -10`. Os dezoito das Tasks 15 e 16 continuam passando, o que é metade do valor desta rodada: se algum deles falhar agora, o culpado é o `_host`, não a tela.
+Expected: `+18 -10`. The eighteen tests from Tasks 15 and 16 keep passing, and that is half the value of this round: if any of them fail now, the culprit is `_host`, not the screen.
 
-- [ ] **Step 8: Reescreva a tela**
+- [ ] **Step 8: Rewrite the screen**
 
-`lib/screens/game_detail_screen.dart` inteiro passa a ser este arquivo:
+`lib/screens/game_detail_screen.dart` becomes this file in full:
 
 ```dart
 import 'package:cached_network_image/cached_network_image.dart';
@@ -5862,26 +5791,18 @@ import 'package:roms_downloader/providers/source_verification_provider.dart';
 import 'package:roms_downloader/services/source_pick_service.dart';
 import 'package:roms_downloader/utils/formatters.dart';
 
-/// O tipo de fonte, que nesta fatia é um só.
-///
-/// Toda fonte vem da listagem HTTP do console. `SEED` e `RD` da seção 7 do
-/// spec de UI chegam quando o addon declarar o tipo (fatia 4 e fatia 6). É
-/// constante em vez de literal solto para o dia em que virar campo.
-const _kTipoFonte = 'HTTP';
+/// The source type, which in this slice is only one. A constant rather than a
+/// loose literal for the day it becomes a field.
+const _kSourceKind = 'HTTP';
 
-/// A tela das seções 7 e 8 do spec de UI: um jogo, as fontes dele, o motivo da
-/// escolha e o que a verificação por CRC disse sobre cada uma.
-///
-/// Não é bottom sheet e não é expansão inline. É rota.
+/// One game, its sources, the reason for the pick and what CRC verification said
+/// about each. A route, not a bottom sheet or an inline expansion.
 class GameDetailScreen extends ConsumerWidget {
   final PackGridEntry entry;
 
-  /// O que fazer quando o usuário aperta Baixar.
-  ///
-  /// A tela não conhece a fila, pelo mesmo motivo que `PackGrid` não conhece
-  /// `Navigator`: `TaskQueueService.startDownloads` puxa o pipeline inteiro de
-  /// download, e uma tela que o chama direto não se testa. Quem liga os dois é
-  /// o `HomeScreen`.
+  /// What to do when the user presses Download. The screen does not know the
+  /// queue, for the same reason `PackGrid` does not know `Navigator`:
+  /// `HomeScreen` wires the two together.
   final void Function(SourcePick pick) onDownload;
 
   const GameDetailScreen({super.key, required this.entry, required this.onDownload});
@@ -5889,54 +5810,53 @@ class GameDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final game = entry.game;
-    final chave = entry.selectionKey;
-    final favorito = ref.watch(favoritesProvider).isFavorite(chave);
-    final selecionado = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(chave);
+    final key = entry.selectionKey;
+    final favorite = ref.watch(favoritesProvider).isFavorite(key);
+    final isSelected = ref.watch(catalogProvider.select((s) => s.selectedGames)).contains(key);
     final resolver = ref.watch(gameResolverProvider);
 
-    // Os vereditos são resolvidos **aqui**, uma vez, e descem como dado. Os
-    // widgets filhos não veem `ref`: eles são burros como todo o resto desta
-    // fatia. O `watch` por fonte é barato porque a família do Riverpod cacheia
-    // por (fonte, arquivo).
-    final verificadas = <VerifiedSource>[
-      for (final source in entry.sources) (source: source, state: _estadoDe(ref, game.id, source)),
+    // The verdicts are resolved here, once, and passed down as data. The child
+    // widgets never see `ref`. The per-source `watch` is cheap because the
+    // Riverpod family caches by (source, file).
+    final verified = <VerifiedSource>[
+      for (final source in entry.sources) (source: source, state: _stateOf(ref, game.id, source)),
     ];
-    final split = splitByVerification(verificadas);
+    final split = splitByVerification(verified);
 
-    // A mesma regra do lote, com uma entrada só, sobre quem sobrou da
-    // verificação. Seção 6: uma regra só, dois lugares.
+    // The same batch rule, with a single entry, over what survived
+    // verification. One rule, two places.
     final plan = planFromEntries(
       [PackGridEntry(game: game, sources: [for (final v in split.eligible) v.source])],
       preferredRegions: ref.watch(preferredRegionsProvider),
       resolveGame: resolver,
     );
 
-    final escolha = split.noCertainty ? null : plan.picks.firstOrNull;
-    final vencedora = _vencedora(split.eligible, escolha);
-    final outras = [
-      for (final v in verificadas)
-        if (!identical(v.source, vencedora?.source)) v,
+    final choice = split.noCertainty ? null : plan.picks.firstOrNull;
+    final winner = _winner(split.eligible, choice);
+    final others = [
+      for (final v in verified)
+        if (!identical(v.source, winner?.source)) v,
     ];
 
-    // A única string desta tela que não sai de `PickFailure`, e tem que ser: o
-    // lote não verifica CRC, então a regra de lote não conhece este estado.
-    // Não "conserte" isso movendo a string para o serviço.
-    final faixa = split.eligible.isEmpty && split.discarded.isNotEmpty
-        ? 'nenhuma fonte passou na verificação por CRC'
+    // The only string on this screen that does not come from `PickFailure`, and
+    // it has to be: the batch does not verify CRC, so the batch rule does not
+    // know this state. Do not "fix" it by moving the string to the service.
+    final reason = split.eligible.isEmpty && split.discarded.isNotEmpty
+        ? 'no source passed CRC verification'
         : (split.noCertainty ? null : plan.failures.firstOrNull?.reason);
 
-    void baixarFonte(VerifiedSource item) {
-      final jogo = resolver(item.source);
-      if (jogo == null) return;
+    void downloadSource(VerifiedSource item) {
+      final game_ = resolver(item.source);
+      if (game_ == null) return;
       onDownload(SourcePick(
-        gameId: chave,
+        gameId: key,
         title: game.title,
         filename: item.source.filename,
         size: item.source.size,
         sourceId: item.source.sourceId,
-        reason: 'escolhida por você, sem verificação possível',
+        reason: 'chosen by you, no verification possible',
         uncertain: true,
-        game: jogo,
+        game: game_,
       ));
     }
 
@@ -5945,16 +5865,16 @@ class GameDetailScreen extends ConsumerWidget {
         title: Text(game.title, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
-            tooltip: favorito ? 'Tirar dos favoritos' : 'Favoritar',
+            tooltip: favorite ? 'Remove from favorites' : 'Add to favorites',
             icon: Icon(
-              favorito ? Icons.favorite : Icons.favorite_border,
-              color: favorito ? Colors.red : null,
+              favorite ? Icons.favorite : Icons.favorite_border,
+              color: favorite ? Colors.red : null,
             ),
-            onPressed: () => ref.read(favoritesProvider.notifier).toggleFavorite(chave),
+            onPressed: () => ref.read(favoritesProvider.notifier).toggleFavorite(key),
           ),
           Checkbox(
-            value: selecionado,
-            onChanged: (_) => ref.read(catalogProvider.notifier).toggleGameSelection(chave),
+            value: isSelected,
+            onChanged: (_) => ref.read(catalogProvider.notifier).toggleGameSelection(key),
           ),
           const SizedBox(width: 8),
         ],
@@ -5962,35 +5882,35 @@ class GameDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _Topo(game: game, sistema: ref.watch(packTargetProvider)?.consoleName ?? ''),
+          _Top(game: game, system: ref.watch(packTargetProvider)?.consoleName ?? ''),
           if ((game.synopsis ?? '').isNotEmpty) ...[
             const SizedBox(height: 16),
             Text(game.synopsis!, style: const TextStyle(fontSize: 13, height: 1.4)),
           ],
-          if (escolha != null && vencedora != null) ...[
+          if (choice != null && winner != null) ...[
             const SizedBox(height: 16),
-            _Destaque(
-              pick: escolha,
-              verification: vencedora.state,
-              confirmadoPorCrc: split.confirmed,
-              // Hesita só enquanto a hesitação pode mudar alguma coisa.
-              hesita: split.verifying && !split.confirmed,
-              onDownload: () => onDownload(escolha),
+            _Highlight(
+              pick: choice,
+              verification: winner.state,
+              crcConfirmed: split.confirmed,
+              // Only hesitate while hesitating can still change something.
+              hesitating: split.verifying && !split.confirmed,
+              onDownload: () => onDownload(choice),
             ),
           ] else if (split.noCertainty) ...[
             const SizedBox(height: 16),
-            const _SemCerteza(),
-          ] else if (faixa != null) ...[
+            const _NoCertainty(),
+          ] else if (reason != null) ...[
             const SizedBox(height: 16),
-            _SemFonte(reason: faixa),
+            _NoSource(reason: reason),
           ],
-          if (outras.isNotEmpty) ...[
+          if (others.isNotEmpty) ...[
             const SizedBox(height: 8),
-            _OutrasFontes(
-              sources: outras,
-              descartadas: split.discarded.length,
-              comecaAberta: split.noCertainty,
-              onDownload: split.noCertainty ? baixarFonte : null,
+            _OtherSources(
+              sources: others,
+              discarded: split.discarded.length,
+              startsOpen: split.noCertainty,
+              onDownload: split.noCertainty ? downloadSource : null,
             ),
           ],
         ],
@@ -5999,13 +5919,9 @@ class GameDetailScreen extends ConsumerWidget {
   }
 }
 
-/// O veredito de uma fonte.
-///
-/// Um match de tier `checksum` já nasceu de um CRC batido contra o pacote, e
-/// por isso ele não passa por `verifying`: perguntar de novo seria gastar duas
-/// requisições para reconfirmar o que já se sabe. Ver a "Segunda decisão
-/// travada" do plano da fatia 3.
-SourceVerification _estadoDe(WidgetRef ref, String gameId, MatchedSource source) {
+/// The verdict for a source. A `checksum`-tier match was already born from a CRC
+/// checked against the pack, so it never passes through `verifying`.
+SourceVerification _stateOf(WidgetRef ref, String gameId, MatchedSource source) {
   if (source.confidence == MatchConfidence.confirmed) return SourceVerification.crcOk;
   return verificationOf(ref.watch(sourceVerificationProvider((
     sourceId: source.sourceId,
@@ -6015,12 +5931,10 @@ SourceVerification _estadoDe(WidgetRef ref, String gameId, MatchedSource source)
   ))));
 }
 
-/// Qual objeto da lista de elegíveis virou a escolha.
-///
-/// Compara os três campos e devolve a **instância**, porque quem chama tira a
-/// vencedora da lista por identidade. Duas fontes podem servir arquivos de
-/// mesmo nome, e tirar as duas esconderia uma fonte real.
-VerifiedSource? _vencedora(List<VerifiedSource> eligible, SourcePick? pick) {
+/// Which object in the eligible list became the pick. Compares the three fields
+/// and returns the instance, because the caller removes the winner from the
+/// list by identity, and two sources can serve files of the same name.
+VerifiedSource? _winner(List<VerifiedSource> eligible, SourcePick? pick) {
   if (pick == null) return null;
   for (final item in eligible) {
     if (item.source.filename == pick.filename &&
@@ -6032,40 +5946,40 @@ VerifiedSource? _vencedora(List<VerifiedSource> eligible, SourcePick? pick) {
   return null;
 }
 
-/// Null quando não há o que dizer, e aí a linha fica igual à da Task 16.
-String? _rotuloVerificacao(SourceVerification state) => switch (state) {
+/// Null when there is nothing to say, and then the line matches the plain one.
+String? _verificationLabel(SourceVerification state) => switch (state) {
       SourceVerification.notVerified => null,
-      SourceVerification.verifying => 'verificando',
+      SourceVerification.verifying => 'verifying',
       SourceVerification.crcOk => 'CRC ok',
-      SourceVerification.crcDiscarded => 'descartada pelo CRC',
-      SourceVerification.impossible => 'sem como verificar',
+      SourceVerification.crcDiscarded => 'discarded by CRC',
+      SourceVerification.impossible => 'cannot verify',
     };
 
-String _rotuloOutras(int quantas, int descartadas) {
-  final base = quantas == 1 ? 'outra fonte' : 'outras $quantas fontes';
-  if (descartadas == 0) return base;
-  // As descartadas estão **dentro** de [quantas]: elas desceram para a lista,
-  // não sumiram (seção 8).
-  return descartadas == 1 ? '$base, 1 descartada' : '$base, $descartadas descartadas';
+String _otherLabel(int count, int discarded) {
+  final base = count == 1 ? 'other source' : '$count other sources';
+  if (discarded == 0) return base;
+  // The discarded ones are inside [count]: they moved down into the list,
+  // they did not vanish.
+  return discarded == 1 ? '$base, 1 discarded' : '$base, $discarded discarded';
 }
 
-class _Topo extends StatelessWidget {
+class _Top extends StatelessWidget {
   final PackGame game;
-  final String sistema;
+  final String system;
 
-  const _Topo({required this.game, required this.sistema});
+  const _Top({required this.game, required this.system});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // Só o que existe entra na linha, senão sobra vírgula solta num jogo sem
-    // ano ou sem publisher, que é a maioria dos homebrews.
-    final ficha = [
-      sistema,
+    // Only what exists joins the line, else a game with no year or publisher
+    // (most homebrews) leaves a dangling comma.
+    final details = [
+      system,
       if (game.year != null) '${game.year}',
       if ((game.publisher ?? '').isNotEmpty) game.publisher!,
       if ((game.genre ?? '').isNotEmpty) game.genre!,
-    ].where((parte) => parte.isNotEmpty).join(', ');
+    ].where((part) => part.isNotEmpty).join(', ');
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -6076,7 +5990,7 @@ class _Topo extends StatelessWidget {
             aspectRatio: 0.75,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: _capa(context),
+              child: _cover(context),
             ),
           ),
         ),
@@ -6087,7 +6001,7 @@ class _Topo extends StatelessWidget {
             children: [
               Text(game.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              Text(ficha, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+              Text(details, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -6095,7 +6009,7 @@ class _Topo extends StatelessWidget {
     );
   }
 
-  Widget _capa(BuildContext context) {
+  Widget _cover(BuildContext context) {
     final url = game.cover;
     if (url == null) {
       return Container(
@@ -6112,28 +6026,28 @@ class _Topo extends StatelessWidget {
   }
 }
 
-/// O card da versão escolhida. O motivo é a linha que não pode faltar.
-class _Destaque extends StatelessWidget {
+/// The highlight card for the chosen version. The reason line is mandatory.
+class _Highlight extends StatelessWidget {
   final SourcePick pick;
   final SourceVerification verification;
-  final bool confirmadoPorCrc;
-  final bool hesita;
+  final bool crcConfirmed;
+  final bool hesitating;
   final VoidCallback onDownload;
 
-  const _Destaque({
+  const _Highlight({
     required this.pick,
     required this.verification,
-    required this.confirmadoPorCrc,
-    required this.hesita,
+    required this.crcConfirmed,
+    required this.hesitating,
     required this.onDownload,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final selo = _rotuloVerificacao(verification);
-    final motivo = confirmadoPorCrc
-        ? 'confirmado pelo CRC, é exatamente este dump'
+    final badge = _verificationLabel(verification);
+    final reason = crcConfirmed
+        ? 'confirmed by CRC, this is exactly the dump'
         : pick.reason;
 
     return Container(
@@ -6156,7 +6070,7 @@ class _Destaque extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                _kTipoFonte,
+                _kSourceKind,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -6167,17 +6081,17 @@ class _Destaque extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${formatBytes(pick.size)}, ${pick.sourceId}${selo == null ? '' : ', $selo'}',
+            '${formatBytes(pick.size)}, ${pick.sourceId}${badge == null ? '' : ', $badge'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 2),
-          Text(motivo, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          Text(reason, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               onPressed: onDownload,
-              child: Text(hesita ? 'Baixar mesmo assim' : 'Baixar'),
+              child: Text(hesitating ? 'Download anyway' : 'Download'),
             ),
           ),
         ],
@@ -6186,18 +6100,13 @@ class _Destaque extends StatelessWidget {
   }
 }
 
-/// A faixa que substitui o card quando não há o que baixar.
-///
-/// O texto vem de `PickFailure.reason` na maioria dos casos, ou seja da mesma
-/// regra que a folha de lote usa. A tela não inventa motivo próprio, com a
-/// única exceção anotada no `build` da tela.
-///
-/// Falta aqui o atalho para a tela de addons que a seção 7 pede. A tela de
-/// addons é a fatia 4; quando ela existir, o botão entra neste widget.
-class _SemFonte extends StatelessWidget {
+/// The banner that replaces the card when there is nothing to download. The
+/// text comes from `PickFailure.reason` in most cases, i.e. the same rule the
+/// batch sheet uses, with the single exception noted in the screen's `build`.
+class _NoSource extends StatelessWidget {
   final String reason;
 
-  const _SemFonte({required this.reason});
+  const _NoSource({required this.reason});
 
   @override
   Widget build(BuildContext context) {
@@ -6222,9 +6131,9 @@ class _SemFonte extends StatelessWidget {
   }
 }
 
-/// O card do estado "verificação impossível" da seção 8. Nunca finge certeza.
-class _SemCerteza extends StatelessWidget {
-  const _SemCerteza();
+/// The card for the "verification impossible" state. It never fakes certainty.
+class _NoCertainty extends StatelessWidget {
+  const _NoCertainty();
 
   @override
   Widget build(BuildContext context) {
@@ -6240,12 +6149,12 @@ class _SemCerteza extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'não tenho certeza de nenhuma',
+            'not sure about any of them',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: scheme.onSurface),
           ),
           const SizedBox(height: 4),
           Text(
-            'Nenhuma das fontes deixou ler o CRC. Escolha uma abaixo.',
+            'None of the sources let the CRC be read. Pick one below.',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
         ],
@@ -6254,20 +6163,20 @@ class _SemCerteza extends StatelessWidget {
   }
 }
 
-/// A lista da seção 7, com o contador da seção 8.
-class _OutrasFontes extends StatelessWidget {
+/// The list of other sources, with the discarded counter.
+class _OtherSources extends StatelessWidget {
   final List<VerifiedSource> sources;
-  final int descartadas;
-  final bool comecaAberta;
+  final int discarded;
+  final bool startsOpen;
 
-  /// Null na maioria das vezes: o botão por linha é só o estado "verificação
-  /// impossível" da seção 8.
+  /// Null most of the time: the per-row button is only for the "verification
+  /// impossible" state.
   final void Function(VerifiedSource item)? onDownload;
 
-  const _OutrasFontes({
+  const _OtherSources({
     required this.sources,
-    required this.descartadas,
-    required this.comecaAberta,
+    required this.discarded,
+    required this.startsOpen,
     required this.onDownload,
   });
 
@@ -6275,22 +6184,21 @@ class _OutrasFontes extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Theme(
-      // `ExpansionTile` desenha uma divisória em cima e outra embaixo assim
-      // que abre, e dentro de um `ListView` de cards isso vira duas linhas
-      // soltas no meio da tela.
+      // `ExpansionTile` draws a divider above and below once it opens, which
+      // inside a `ListView` of cards becomes two stray lines mid-screen.
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
-        initiallyExpanded: comecaAberta,
+        initiallyExpanded: startsOpen,
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         title: Text(
-          _rotuloOutras(sources.length, descartadas),
+          _otherLabel(sources.length, discarded),
           style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
         ),
         children: [
           for (final item in sources)
-            _LinhaFonte(
+            _SourceRow(
               item: item,
               onDownload: onDownload == null ? null : () => onDownload!(item),
             ),
@@ -6300,17 +6208,17 @@ class _OutrasFontes extends StatelessWidget {
   }
 }
 
-class _LinhaFonte extends StatelessWidget {
+class _SourceRow extends StatelessWidget {
   final VerifiedSource item;
   final VoidCallback? onDownload;
 
-  const _LinhaFonte({required this.item, required this.onDownload});
+  const _SourceRow({required this.item, required this.onDownload});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final selo = _rotuloVerificacao(item.state);
-    final baixar = onDownload;
+    final badge = _verificationLabel(item.state);
+    final download = onDownload;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -6320,18 +6228,17 @@ class _LinhaFonte extends StatelessWidget {
           Text(item.source.filename, style: const TextStyle(fontSize: 13)),
           const SizedBox(height: 2),
           Text(
-            // Os cinco pedaços que a seção 7 pede, mais o veredito da seção 8
-            // quando existe um.
+            // The five pieces, plus the verification verdict when there is one.
             '${formatBytes(item.source.size)}, ${item.source.sourceId}, '
-            '$_kTipoFonte, ${_rotuloConfianca(item.source.confidence)}'
-            '${selo == null ? '' : ', $selo'}',
+            '$_kSourceKind, ${_confidenceLabel(item.source.confidence)}'
+            '${badge == null ? '' : ', $badge'}',
             style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
           ),
-          if (baixar != null) ...[
+          if (download != null) ...[
             const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(onPressed: baixar, child: const Text('Baixar')),
+              child: FilledButton(onPressed: download, child: const Text('Download')),
             ),
           ],
         ],
@@ -6340,88 +6247,85 @@ class _LinhaFonte extends StatelessWidget {
   }
 }
 
-/// A confiança do **casamento**, que não é a verificação por CRC.
-///
-/// Ver a "Segunda decisão travada" do plano da fatia 3: são dois eixos e eles
-/// não se misturam. O veredito de CRC entra na mesma linha, depois deste, como
-/// um pedaço à parte.
-String _rotuloConfianca(MatchConfidence confidence) => switch (confidence) {
-      MatchConfidence.confirmed => 'casamento confirmado',
-      MatchConfidence.likely => 'casamento provável',
-      MatchConfidence.guess => 'casamento no chute',
+/// The match confidence, which is not the CRC verification. Two axes that never
+/// mix; the CRC verdict joins the same line, after this, as a separate piece.
+String _confidenceLabel(MatchConfidence confidence) => switch (confidence) {
+      MatchConfidence.confirmed => 'confirmed match',
+      MatchConfidence.likely => 'likely match',
+      MatchConfidence.guess => 'guessed match',
     };
 ```
 
-Sumiu o `_outrasFontes` da Task 16: quem tira a vencedora da lista agora é o filtro por identidade lá no `build`, sobre a lista já verificada. O comportamento é o mesmo, inclusive o de tirar uma cópia só quando duas fontes têm o mesmo nome, e o teste da Task 16 que prova isso continua valendo sem mudança.
+The `_outrasFontes` helper from Task 16 is gone: the identity filter in `build`, over the already-verified list, is now the one that removes the winner. The behavior is the same, including removing only one copy when two sources share the same name. The Task 16 test that proves this keeps working without change.
 
-- [ ] **Step 9: Rode e veja passar**
+- [ ] **Step 9: Run and watch it pass**
 
 ```bash
 flutter test test/game_detail_screen_test.dart test/source_pick_service_test.dart
 ```
 
-Esperado: `+52`, zero falha. São 28 da tela e 24 do serviço.
+Expected: `+52`, zero failures. That is 28 from the screen and 24 from the service.
 
-Três tropeços prováveis:
+Three likely stumbles:
 
-Se os dezoito testes das Tasks 15 e 16 começarem a falhar com timeout ou com "pending timer", o `_host` não está sobrescrevendo `sourceVerificationProvider` e a tela está tentando carregar o pacote de verdade.
+If the eighteen tests from Tasks 15 and 16 start failing with timeout or "pending timer", `_host` is not overriding `sourceVerificationProvider` and the screen is trying to load the real pack.
 
-Se `a fonte descartada sai do destaque` continuar mostrando a USA, confira que `planFromEntries` está recebendo `split.eligible` e não `entry.sources`.
+If `the discarded source leaves the highlight and the other rises` keeps showing USA, check that `planFromEntries` is receiving `split.eligible` and not `entry.sources`.
 
-Se `o Baixar da linha devolve aquela fonte` pegar o botão errado, confira a ordem: `outras` preserva a ordem de `entry.sources`, então `.first` é a USA.
+If `the row Download returns that source, flagged uncertain` picks the wrong button, check the order: `others` preserves the order of `entry.sources`, so `.first` is USA.
 
-- [ ] **Step 10: Rode a suíte inteira**
+- [ ] **Step 10: Run the full suite**
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado: `+326 -1`, com a falha sendo a de sempre, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Fecha o Grupo 5.
+Expected: `+326 -1`, with the usual failure, `test/rar_decompress_screen_test.dart: renders with extract disabled until a file and folder are picked`. Closes Group 5.
 
 - [ ] **Step 11: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/source_pick_service_test.dart test/game_detail_screen_test.dart
 git commit -m "test(crc): destaque, descarte e incerteza total na tela de detalhe"
 
-# agente de producao
+# production agent
 git add lib/services/source_pick_service.dart lib/screens/game_detail_screen.dart
 git commit -m "feat(crc): destaque, descarte e incerteza total na tela de detalhe"
 ```
 
 ---
 
-# Grupo 6: o app inteiro
+# Group 6: the full app
 
-Até aqui a fatia é uma pilha de peças testadas que ninguém liga. A grade de pack existe e nunca é desenhada, a tela de detalhe existe e nada empurra a rota dela, e a folha de lote só sabe somar arquivos de MODO FONTE. Este grupo liga os cabos e depois prova que ligar os cabos não estragou o app de hoje.
+Up to here the slice is a stack of tested pieces that nobody wires together. The pack grid exists and is never drawn, the detail screen exists and nothing pushes its route, and the batch sheet only knows how to sum SOURCE MODE files. This group wires the cables and then proves that wiring the cables did not break the app as it is today.
 
-Três Tasks de código e uma de varredura. As três de código tocam `home_screen.dart`, que é o único arquivo desta fatia que não se testa em widget test (a nota de teste da Task 3 explica por quê), então as três empurram o máximo de lógica possível para fora dele, para dentro de função pura testável. É por isso que a Task 19 nasce com um teste de duas linhas em vez de nenhum, é por isso que a Task 20 começa quebrando um provider em dois, e é por isso que a Task 21 testa a barra de seleção da tela de detalhe em vez do callback que a `home_screen.dart` passa para ela. A Task 22 fecha a fatia com a varredura de regressão.
+Three code tasks and one sweep. The three code tasks touch `home_screen.dart`, which is the only file in this slice that has no widget test (the test note in Task 3 explains why), so all three push as much logic as possible out of it and into testable pure functions. That is why Task 19 is born with a two-assertion test instead of none, why Task 20 starts by splitting one provider into two, and why Task 21 tests the selection bar in the detail screen instead of the callback that `home_screen.dart` passes to it. Task 22 closes the slice with the regression sweep.
 
 ---
 
-### Task 19: o roteamento de modo e o rótulo do funil
+### Task 19: mode routing and the funnel label
 
 **Files:**
 - Create: `test/header_filter_label_test.dart`
 - Modify: `lib/widgets/header/header.dart`
 - Modify: `lib/screens/home_screen.dart:90-94`
 
-Duas fiações e uma limpeza:
+Two wirings and one cleanup:
 
-1. O `HomeScreen` passa a escolher entre `PackGrid` e a grade de hoje pelo `gridModeProvider`.
-2. `PackGrid.onOpenGame` passa a empurrar a rota da `GameDetailScreen`, e `GameDetailScreen.onDownload` passa a chamar `TaskQueueService.startDownloads`. Os dois callbacks existem desde a Task 12 e a Task 15 justamente para se encontrarem **aqui**, e em nenhum outro lugar.
-3. O botão de funil do header ganha rótulo por modo, que é a "Quinta decisão travada".
+1. `HomeScreen` now chooses between `PackGrid` and today's grid based on `gridModeProvider`.
+2. `PackGrid.onOpenGame` now pushes the `GameDetailScreen` route, and `GameDetailScreen.onDownload` now calls `TaskQueueService.startDownloads`. Both callbacks have existed since Task 12 and Task 15 exactly so they could meet **here**, and nowhere else.
+3. The funnel button in the header gains a per-mode label, which is the "Fifth locked decision".
 
-**O que esta Task deliberadamente não faz: mexer no `FilterModal`.** A tabela de "Estrutura de arquivos" lista **três** arquivos de produção existentes modificados nesta fatia, e `lib/widgets/header/filter_modal.dart` não é um deles. Em MODO PACK os chips de revisão e de qualidade de dump continuam aparecendo na folha de filtro e continuam sem efeito nenhum sobre a grade, porque a grade de pack não tem versão para filtrar. Isso é buraco conhecido e aceito, e o rótulo novo do botão existe para não mentir sobre ele: em vez de prometer "Filters", ele promete só o que sobrevive.
+**What this Task deliberately does not do: touch `FilterModal`.** The "File structure" table lists **three** existing production files modified in this slice, and `lib/widgets/header/filter_modal.dart` is not one of them. In PACK MODE the revision and dump-quality chips keep appearing in the filter sheet and keep having no effect on the grid, because the pack grid has no version to filter. This is a known and accepted gap, and the new button label exists to not lie about it: instead of promising "Filters", it promises only what survives.
 
-**Por que o rótulo de MODO FONTE não muda nem uma letra.** `'Filters'` é a string de hoje. A Task 22 exige que o MODO FONTE seja o app de hoje, e "o texto do tooltip mudou" é regressão igual a qualquer outra. O rótulo novo só aparece quando há pacote.
+**Why the SOURCE MODE label does not change by a single character.** `'Filters'` is today's string. Task 22 requires that SOURCE MODE be the app as it is today, and "the tooltip text changed" is a regression like any other. The new label only appears when there is a pack.
 
-**Nota de teste.** `HomeScreen` e `Header` não se montam em teste de widget, pelo motivo escrito na nota de teste da Task 3: os dois puxam providers que fazem IO de disco e de rede no construtor. O que dá para testar sem montar nada é a decisão de rótulo, porque ela vira uma função de topo em `header.dart`. É pouco e é honesto: são duas asserções que travam a "Quinta decisão travada" contra alguém que resolva "simplificar" sumindo com o botão. O roteamento em si é provado por `flutter analyze` limpo, pela suíte inteira verde e pela conferência à mão do Step 6.
+**Test note.** `HomeScreen` and `Header` cannot be mounted in widget tests, for the reason written in the test note for Task 3: both pull providers that do disk and network IO in their constructors. What can be tested without mounting anything is the label decision, because it becomes a top-level function in `header.dart`. That is little and it is honest: two assertions that lock the "Fifth locked decision" against someone who decides to "simplify" by removing the button. The routing itself is proven by a clean `flutter analyze`, a green full suite, and the manual walkthrough in Step 6.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/header_filter_label_test.dart`:
+Create `test/header_filter_label_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -6429,70 +6333,70 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/widgets/header/header.dart';
 
 void main() {
-  test('em MODO FONTE o rótulo é o de hoje, sem uma letra mudada', () {
-    // MODO FONTE é o app de hoje. Mudar este texto é regressão, e a Task 22
-    // trata regressão de MODO FONTE como falha da fatia.
+  test('in source mode the label is today\'s, without changing a character', () {
+    // SOURCE MODE is the app as it is today. Changing this text is a
+    // regression, and Task 22 treats SOURCE MODE regression as a slice failure.
     expect(filterButtonLabel(GridMode.source), 'Filters');
   });
 
-  test('em MODO PACK o rótulo diz só o que o funil ainda faz', () {
-    // Em MODO PACK a grade não passa pelo FilteringService, então revisão e
-    // qualidade de dump não filtram nada. Região sobrevive porque alimenta a
-    // escolha de versão em `planFromEntries`. Ver "Quinta decisão travada".
-    expect(filterButtonLabel(GridMode.pack), 'Preferência de região');
+  test('in pack mode the label says only what the funnel still does', () {
+    // In PACK MODE the grid does not go through FilteringService, so revision
+    // and dump quality filter nothing. Region survives because it feeds the
+    // version choice in `planFromEntries`. See "Fifth locked decision".
+    expect(filterButtonLabel(GridMode.pack), 'Region preference');
   });
 }
 ```
 
-Isto é `test`, e não `testWidgets`, de propósito: nada aqui monta widget, então não há binding para inicializar. Importar `header.dart` num teste puro é seguro porque `final` de topo em Dart é preguiçoso, ou seja nenhum provider é construído só por causa do import.
+This is `test`, not `testWidgets`, on purpose: nothing here mounts a widget, so there is no binding to initialize. Importing `header.dart` in a pure test is safe because top-level `final` in Dart is lazy, meaning no provider is constructed just because of the import.
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/header_filter_label_test.dart
 ```
 
-Esperado: `Undefined name 'filterButtonLabel'`.
+Expected: `Undefined name 'filterButtonLabel'`.
 
-- [ ] **Step 3: Escreva a função e ligue no botão**
+- [ ] **Step 3: Write the function and wire it to the button**
 
-Em `lib/widgets/header/header.dart`, acrescente o import:
+In `lib/widgets/header/header.dart`, add the import:
 
 ```dart
 import 'package:roms_downloader/providers/pack_grid_provider.dart';
 ```
 
-E escreva a função **fora da classe**, logo depois dos imports e antes de `class Header`:
+And write the function **outside the class**, right after the imports and before `class Header`:
 
 ```dart
-/// O rótulo do botão de funil, que depende do modo de grade.
+/// The funnel button label, which depends on the grid mode.
 ///
-/// "Quinta decisão travada" do plano da fatia 3: em MODO PACK os chips de
-/// região, revisão e qualidade de dump não filtram a grade, porque a grade de
-/// pack não tem versão para filtrar. O que sobrevive daquela folha é a
-/// região, que passa a alimentar a escolha de versão em `planFromEntries`
-/// (Task 14). O rótulo diz isso em vez de prometer um filtro que não
-/// acontece.
+/// "Fifth locked decision": in PACK MODE the revision and dump-quality chips
+/// do not filter the grid, because the pack grid has no version to filter.
+/// What survives from that sheet is the region, which feeds the version
+/// choice in `planFromEntries`. The label says that instead of promising a
+/// filter that does not happen.
 ///
-/// O botão **não some** em MODO PACK. Sumir com ele tiraria o único caminho
-/// para a preferência de região, que é justamente o que ainda tem efeito.
+/// The button does **not** disappear in PACK MODE. Removing it would take
+/// away the only path to the region preference, which is exactly what still
+/// has an effect.
 String filterButtonLabel(GridMode mode) =>
-    mode == GridMode.pack ? 'Preferência de região' : 'Filters';
+    mode == GridMode.pack ? 'Region preference' : 'Filters';
 ```
 
-Agora ligue. Em `_HeaderState.build`, junto das outras leituras do topo do método (hoje linhas 36 a 40):
+Now wire it. In `_HeaderState.build`, alongside the other reads at the top of the method (currently lines 36 to 40):
 
 ```dart
     final gridMode = ref.watch(gridModeProvider);
 ```
 
-`_buildActionWidgets` é chamado em **dois** lugares, o ramo `isMobile` (hoje linha 109) e o ramo `Row` (hoje linha 152). Nos dois, troque o argumento `canDownload: canDownload,` por:
+`_buildActionWidgets` is called in **two** places, the `isMobile` branch (currently line 109) and the `Row` branch (currently line 152). In both, replace the argument `canDownload: canDownload,` with:
 
 ```dart
                           gridMode: gridMode,
 ```
 
-E na assinatura de `_buildActionWidgets`, troque `required bool canDownload,` por `required GridMode gridMode,`. Dentro dela, o primeiro item da lista passa a ser:
+And in the signature of `_buildActionWidgets`, replace `required bool canDownload,` with `required GridMode gridMode,`. Inside it, the first item in the list becomes:
 
 ```dart
       _buildActionButton(
@@ -6504,58 +6408,59 @@ E na assinatura de `_buildActionWidgets`, troque `required bool canDownload,` po
       ),
 ```
 
-- [ ] **Step 4: Limpe o que a Task 3 deixou para trás**
+- [ ] **Step 4: Clean up what Task 3 left behind**
 
-A Task 3 apagou o botão "Download Selected", mas `canDownload` sobreviveu, porque parâmetro de método sem uso **não** é apontado pelo `flutter analyze` com as regras deste repositório. O Step 3 acabou de tirar o último uso dele. Apague agora, nesta ordem:
+Task 3 removed the "Download Selected" button, but `canDownload` survived, because an unused method parameter is **not** flagged by `flutter analyze` under this repository's rules. Step 3 just removed its last use. Delete now, in this order:
 
-1. Em `build`, a linha `final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();` (hoje a 46).
-2. Em `build`, a linha `final downloadNotifier = ref.read(downloadProvider.notifier);` (hoje a 36), **trocada pela linha abaixo, não apagada**. Leia o parágrafo "A linha 36 não é lixo" antes de mexer nela.
-3. O import `package:roms_downloader/providers/download_provider.dart` (hoje a linha 7): **fica**, porque a linha nova ainda o usa.
+1. In `build`, the line `final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();` (currently line 46).
+2. In `build`, the line `final downloadNotifier = ref.read(downloadProvider.notifier);` (currently line 36), **replaced by the line below, not deleted**. Read the "Line 36 is not dead code" paragraph before touching it.
+3. The import `package:roms_downloader/providers/download_provider.dart` (currently line 7): **keep it**, because the new line still uses it.
 
-> **Confira o conteúdo da linha antes de apagar, não o número.** Esses três números foram medidos depois que a Task 3 fechou (commit `b31f052`), que encurtou `header.dart` em 14 linhas. A primeira versão deste plano dizia 47 e 37, medidos antes da Task 3, e estava errada em duas das três. Se o arquivo mudar de novo antes de você chegar aqui, o `grep -n "canDownload\|downloadNotifier\|download_provider" lib/widgets/header/header.dart` é a fonte da verdade, e este parágrafo é só uma pista.
+> **Check the line content before deleting, not the number.** These three numbers were measured after Task 3 closed (commit `b31f052`), which shortened `header.dart` by 14 lines. The first version of this plan said 47 and 37, measured before Task 3, and was wrong on two of the three. If the file changes again before you get here, `grep -n "canDownload\|downloadNotifier\|download_provider" lib/widgets/header/header.dart` is the source of truth, and this paragraph is just a hint.
 
-**A linha 36 não é lixo, é a partida do app.**
+**Line 36 is not dead code, it is the app startup.**
 
-Ela parece leitura morta depois que o item 1 sai, e a primeira versão deste plano mandava apagá-la. Estava errado, e uma revisão de QA pegou. `ref.read(downloadProvider.notifier)` é a **única construção adiantada de `downloadProvider` no app inteiro**, e o construtor de `DownloadNotifier` faz trabalho de partida: assina o stream de `updates` do `background_downloader`, chama `resumeFromBackground()`, `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()` (`download_provider.dart:37-58`).
+It looks like a dead read after item 1 is gone, and the first version of this plan said to delete it. That was wrong, and a QA review caught it. `ref.read(downloadProvider.notifier)` is the **only eager construction of `downloadProvider` in the entire app**, and the `DownloadNotifier` constructor does startup work: it subscribes to the `background_downloader` `updates` stream, calls `resumeFromBackground()`, `_syncWithBackgroundTasks()`, and `_cleanupInterruptedNsz()` (`download_provider.dart:37-58`).
 
-Conferido com `grep -rn "downloadProvider" lib/`, que dá seis ocorrências além da declaração. Cinco são `ref.read` dentro de método, em `task_queue_service.dart:69,83,88,118`, e um `ref.watch` em `sport_patcher_wizard_screen.dart:743`. Nenhuma delas roda na abertura: as cinco primeiras só rodam depois de o usuário mandar baixar alguma coisa, e a sexta só se ele abrir o wizard do sport patcher. Tarde demais para retomar o download que ficou pela metade no processo anterior, e tarde demais para a assinatura do stream existir quando a primeira tarefa é enfileirada.
+Verified with `grep -rn "downloadProvider" lib/`, which gives six occurrences besides the declaration. Five are `ref.read` inside methods, in `task_queue_service.dart:69,83,88,118`, and one `ref.watch` in `sport_patcher_wizard_screen.dart:743`. None of them run at startup: the first five only run after the user has queued a download, and the sixth only if they open the sport patcher wizard. Too late to resume a download left half-done in the previous process, and too late for the stream subscription to exist when the first task is enqueued.
 
-Então o item 2 é uma **troca**, não uma exclusão. Ponha no lugar:
+So item 2 is a **replacement**, not a deletion. Put in its place:
 
 ```dart
-    // Não é leitura morta: é a única construção adiantada de `downloadProvider`
-    // no app. O construtor de `DownloadNotifier` assina o stream de updates do
-    // `background_downloader`, chama `resumeFromBackground()`,
-    // `_syncWithBackgroundTasks()` e `_cleanupInterruptedNsz()`
-    // (`download_provider.dart:37-58`). Os outros seis leitores são `read`
-    // dentro de método ou de uma tela secundária, e nenhum roda na abertura.
-    // O jeito certo de arrumar isto é mover a partida para fora do header, mas
-    // isso é `download_provider.dart`, que a fatia 3 não toca (ver a tabela de
-    // intocados que a Task 22 confere). Fica aqui, agora com o motivo escrito.
+    // Not dead code: it is the only eager construction of `downloadProvider`
+    // in the app. The `DownloadNotifier` constructor subscribes to the
+    // `background_downloader` updates stream, calls `resumeFromBackground()`,
+    // `_syncWithBackgroundTasks()`, and `_cleanupInterruptedNsz()`
+    // (`download_provider.dart:37-58`). The other six readers are `read`
+    // inside a method or a secondary screen, and none run at startup.
+    // The right fix is to move startup out of the header, but that touches
+    // `download_provider.dart`, which slice 3 does not touch (see the
+    // untouched-files table that Task 22 checks). Stays here, now with the
+    // reason written down.
     ref.read(downloadProvider.notifier);
 ```
 
-É `read` e não `watch` de propósito: `watch` reconstruiria o header a cada evento de progresso, que chega várias vezes por segundo durante um download. `downloadProvider` não é `autoDispose`, então uma leitura só, na primeira construção, basta para ele viver o resto da sessão.
+It is `read` and not `watch` on purpose: `watch` would rebuild the header on every progress event, which arrives many times per second during a download. `downloadProvider` is not `autoDispose`, so a single read on first construction is enough for it to live for the rest of the session.
 
-Depois rode:
+Then run:
 
 ```bash
 flutter analyze lib/widgets/header/header.dart
 ```
 
-Esperado: `No issues found`. Se aparecer `unused_import` de mais alguma coisa, apague o que ele apontar e nada além disso. Se aparecer `undefined_identifier` para `downloadNotifier` ou `canDownload`, é porque algum outro botão ainda os usava: desfaça a exclusão daquele item e siga. **Rode antes de decidir; não adivinhe.**
+Expected: `No issues found`. If `unused_import` appears for something else, delete only what it points to and nothing more. If `undefined_identifier` appears for `downloadNotifier` or `canDownload`, some other button was still using them: undo the deletion of that item and continue. **Run first; do not guess.**
 
-- [ ] **Step 5: Rode o teste e veja passar**
+- [ ] **Step 5: Run the test and watch it pass**
 
 ```bash
 flutter test test/header_filter_label_test.dart
 ```
 
-Esperado: `+2`, zero falha.
+Expected: `+2`, zero failures.
 
-- [ ] **Step 6: Ligue o roteamento no `HomeScreen`**
+- [ ] **Step 6: Wire the routing in `HomeScreen`**
 
-Em `lib/screens/home_screen.dart`, acrescente os imports que faltam:
+In `lib/screens/home_screen.dart`, add the missing imports:
 
 ```dart
 import 'package:roms_downloader/models/grid_entry_model.dart';
@@ -6564,29 +6469,28 @@ import 'package:roms_downloader/screens/game_detail_screen.dart';
 import 'package:roms_downloader/widgets/game_grid/pack_grid.dart';
 ```
 
-Dentro de `_HomeScreenState`, junto do `_confirmarLote` que a Task 6 escreveu, acrescente os dois métodos:
+Inside `_HomeScreenState`, alongside the `_confirmBatch` that Task 6 wrote, add the two methods:
 
 ```dart
-  /// Empurra a tela de detalhe.
+  /// Pushes the detail screen.
   ///
-  /// A grade não navega (Task 12) e a tela não conhece a fila (Task 15). Os
-  /// dois cabos soltos se encontram aqui, e é o único lugar em que se
-  /// encontram.
-  void _abrirDetalhe(PackGridEntry entry) {
+  /// The grid does not navigate (Task 12) and the screen does not know the
+  /// queue (Task 15). The two loose cables meet here, and only here.
+  void _openDetail(PackGridEntry entry) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => GameDetailScreen(entry: entry, onDownload: _baixarUm)),
+      MaterialPageRoute(builder: (_) => GameDetailScreen(entry: entry, onDownload: _downloadOne)),
     );
   }
 
-  /// Uma escolha só, vinda da tela de detalhe, vai direto para a fila.
+  /// A single pick from the detail screen goes straight to the queue.
   ///
-  /// Sem folha de confirmação, e isso é decisão, não esquecimento: a tela de
-  /// detalhe **é** a confirmação. Ela já mostra o arquivo escolhido, o
-  /// tamanho, o motivo por extenso e o veredito do CRC. Abrir por cima disso
-  /// uma folha de lote de um item só seria perguntar duas vezes a mesma
-  /// coisa. A folha existe para o lote, onde o usuário não viu escolha
-  /// nenhuma antes de apertar Baixar.
-  Future<void> _baixarUm(SourcePick pick) async {
+  /// No confirmation sheet, and that is a decision, not an oversight: the
+  /// detail screen **is** the confirmation. It already shows the chosen file,
+  /// the size, the full reason, and the CRC verdict. Opening a single-item
+  /// batch sheet on top of that would be asking the same question twice. The
+  /// sheet exists for the batch, where the user saw no pick before pressing
+  /// Download.
+  Future<void> _downloadOne(SourcePick pick) async {
     await TaskQueueService.startDownloads(
       ref,
       context,
@@ -6596,13 +6500,13 @@ Dentro de `_HomeScreenState`, junto do `_confirmarLote` que a Task 6 escreveu, a
   }
 ```
 
-`SourcePick` e `TaskQueueService` já estão importados desde a Task 6.
+`SourcePick` and `TaskQueueService` are already imported since Task 6.
 
-Agora troque o `switch (appState.viewMode)` do corpo, hoje as linhas 90 a 94, por um `switch` de fora e o de hoje aninhado dentro:
+Now replace the `switch (appState.viewMode)` in the body, currently lines 90 to 94, with an outer `switch` that has today's switch nested inside:
 
 ```dart
                     : switch (ref.watch(gridModeProvider)) {
-                        GridMode.pack => PackGrid(onOpenGame: _abrirDetalhe),
+                        GridMode.pack => PackGrid(onOpenGame: _openDetail),
                         GridMode.source => switch (appState.viewMode) {
                             ViewMode.grid => GameGrid(),
                             ViewMode.coverflow => const GameCoverFlow(),
@@ -6611,53 +6515,53 @@ Agora troque o `switch (appState.viewMode)` do corpo, hoje as linhas 90 a 94, po
                       },
 ```
 
-Três coisas sobre esse trecho:
+Three things about this block:
 
-1. **O `switch` de dentro fica intacto, palavra por palavra.** Ele é o app de hoje e continua sendo o app de hoje. Não aproveite a passagem para "melhorar" a grade, a lista ou o coverflow.
-2. **O modo de visualização não vale em MODO PACK.** `PackGrid` é a única forma da grade de pack nesta fatia: lista e coverflow são de MODO FONTE e a seção 12 do spec de UI os deixa explicitamente fora de escopo. O botão de trocar visualização continua no header e continua funcionando; em MODO PACK ele muda um estado que ninguém lê, e vira visível de novo assim que o console volta a ser um sem pacote. É feio e é barato; esconder o botão custaria mais um rótulo por modo e mais um teste, para um ganho que ninguém pediu.
-3. **`ref.watch(gridModeProvider)` fica no `build`, não em `initState`.** O modo muda quando o usuário troca de console, e é um `Provider` síncrono derivado do `metadataPackProvider`, então ele reavalia sozinho quando o pacote chega da rede. Guardar isso em campo de `State` congelaria a grade em MODO FONTE no primeiro carregamento.
+1. **The inner `switch` stays intact, word for word.** It is the app as it is today and it stays that way. Do not use this visit to "improve" the grid, the list, or the coverflow.
+2. **The view mode does not apply in PACK MODE.** `PackGrid` is the only form of the pack grid in this slice: list and coverflow are SOURCE MODE things and UI spec section 12 explicitly puts them out of scope. The view-mode button stays in the header and keeps working; in PACK MODE it changes a state that nobody reads, and it becomes visible again as soon as the console reverts to one without a pack. It is ugly and it is cheap; hiding the button would cost one more per-mode label and one more test, for a gain nobody asked for.
+3. **`ref.watch(gridModeProvider)` stays in `build`, not in `initState`.** The mode changes when the user switches console, and it is a synchronous `Provider` derived from `metadataPackProvider`, so it re-evaluates on its own when the pack arrives from the network. Storing it in a `State` field would freeze the grid in SOURCE MODE on the first load.
 
-- [ ] **Step 7: Confira à mão, porque nenhum teste cobre isto**
+- [ ] **Step 7: Check manually, because no test covers this**
 
-Este é o primeiro momento em que a fatia inteira aparece na tela, então vale mais que o de costume:
+This is the first moment the full slice appears on screen, so it is worth more than usual:
 
 ```bash
 flutter run -d linux
 ```
 
-1. Escolha um console **com** pacote (SNES). A grade tem que virar a de pack: um tile por jogo, capa do pacote, e o número de tiles bate com o número de jogos do pacote, não com o número de arquivos da listagem.
-2. Toque um tile. A tela de detalhe abre como rota, com botão de voltar.
-3. Aperte Baixar na tela de detalhe. O download tem que aparecer no rodapé, com o nome do arquivo destacado, e a tela continua aberta.
-4. Volte e abra a folha de filtro. O tooltip do funil é "Preferência de região" e a folha abre normalmente.
-5. Troque para um console **sem** pacote (qualquer um que não tenha DAT). A grade tem que voltar a ser exatamente a de hoje, e o tooltip do funil volta a ser "Filters".
-6. Nesse console sem pacote, troque a visualização para lista e para coverflow. As duas continuam funcionando.
+1. Pick a console **with** a pack (SNES). The grid must switch to the pack grid: one tile per game, pack cover art, and the tile count matches the number of games in the pack, not the number of files in the listing.
+2. Tap a tile. The detail screen opens as a route, with a back button.
+3. Press Download on the detail screen. The download must appear in the footer with the selected file name, and the screen stays open.
+4. Go back and open the filter sheet. The funnel tooltip is "Region preference" and the sheet opens normally.
+5. Switch to a console **without** a pack (any that has no DAT). The grid must go back to exactly today's grid, and the funnel tooltip goes back to "Filters".
+6. On that console without a pack, switch the view to list and to coverflow. Both keep working.
 
-Se o passo 1 mostrar a grade de hoje num console com pacote, o culpado quase sempre é o `metadataPackProvider` ainda em `loading` no primeiro frame; espere o pacote terminar de carregar antes de concluir que quebrou.
+If step 1 shows today's grid on a console that has a pack, the culprit is almost always `metadataPackProvider` still `loading` in the first frame; wait for the pack to finish loading before concluding it broke.
 
-- [ ] **Step 8: Prove que não quebrou nada**
+- [ ] **Step 8: Prove nothing broke**
 
 ```bash
 flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+328 -1` na suíte, sendo os 326 da Task 18 mais os 2 desta.
+Expected: 22 findings and zero errors in analyze; `+328 -1` in the suite, being the 326 from Task 18 plus the 2 from this one.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/header_filter_label_test.dart
 git commit -m "test(grade): rotulo do funil por modo de grade"
 
-# agente de producao
+# production agent
 git add lib/widgets/header/header.dart lib/screens/home_screen.dart
 git commit -m "feat(grade): roteamento de modo, rota de detalhe e rotulo do funil por modo"
 ```
 
 ---
 
-### Task 20: o MODO PACK alimenta a folha de lote
+### Task 20: PACK MODE feeds the batch sheet
 
 **Files:**
 - Modify: `lib/models/grid_entry_model.dart`
@@ -6667,199 +6571,177 @@ git commit -m "feat(grade): roteamento de modo, rota de detalhe e rotulo do funi
 - Modify: `test/pack_grid_provider_test.dart`
 - Modify: `lib/screens/home_screen.dart`
 
-A Task 6 fez a barra roxa abrir a folha de confirmação com `planFromGames`, que só sabe somar arquivos de MODO FONTE. A Task 14 escreveu `planFromEntries`, a regra de verdade, e até agora só a tela de detalhe a usa, com uma entrada só. Esta Task faz o lote de MODO PACK passar por ela, e é o último pedaço de código da fatia.
+Task 6 made the purple bar open the confirmation sheet with `planFromGames`, which only knows how to sum SOURCE MODE files. Task 14 wrote `planFromEntries`, the real rule, and until now only the detail screen uses it, with a single entry. This Task routes the PACK MODE batch through it, and it is the last piece of code in the slice.
 
-São três problemas de verdade escondidos numa fiação que parece de duas linhas. Leia os três antes de escrever qualquer coisa.
+Three real problems are hidden in a wiring that looks like two lines. Read all three before writing anything.
 
-**Problema 1: a busca não pode encolher o lote.** Hoje `packGridEntriesProvider` já sai filtrado pelo texto da caixa de busca. Se o lote ler de lá, então marcar três jogos, digitar qualquer coisa no header e apertar Baixar enfileira só os que sobraram na tela. A seleção não é a tela. O conserto é quebrar o provider em dois: um com tudo, que o lote lê, e um filtrado, que a grade desenha.
+**Problem 1: the search cannot shrink the batch.** Today `packGridEntriesProvider` already comes out filtered by the search box text. If the batch reads from there, then checking three games, typing anything in the header, and pressing Download enqueues only the ones still visible on screen. The selection is not the screen. The fix is to split the provider in two: one with everything, which the batch reads, and one filtered, which the grid draws.
 
-**Problema 2: as chaves dos dois modos convivem no mesmo `Set`.** A "Quarta decisão travada" garante que elas não colidem, e não colidem mesmo, mas conviver elas convivem, e existe uma janela real em que isso acontece com o mesmo console: o catálogo carrega do disco em milissegundos e o pacote chega da rede segundos depois. Nesse intervalo a grade é MODO FONTE, o usuário marca três arquivos, o pacote chega e a grade vira MODO PACK com aquelas três chaves ainda na seleção. Sem tratamento, a barra roxa diz "3 selecionados", o usuário aperta Baixar e **nada acontece, em silêncio**, porque nenhuma delas casa com uma entrada de pack. O conserto é a barra contar só o que o modo corrente sabe enfileirar.
+**Problem 2: the keys from both modes share the same `Set`.** The "Fourth locked decision" guarantees they do not collide, and they truly do not, but they do share the set, and there is a real window where this happens on the same console: the catalog loads from disk in milliseconds and the pack arrives from the network seconds later. In that interval the grid is SOURCE MODE, the user checks three files, the pack arrives and the grid becomes PACK MODE with those three keys still in the selection. Without handling, the purple bar says "3 selected", the user presses Download, and **nothing happens, silently**, because none of the keys match a pack entry. The fix is for the bar to count only what the current mode knows how to enqueue.
 
-Trocar de console não tem esse problema: `CatalogNotifier.loadCatalog` já zera `selectedGames` (`catalog_provider.dart:53`, e de novo em `:379`).
+Switching console does not have this problem: `CatalogNotifier.loadCatalog` already resets `selectedGames` (`catalog_provider.dart:53`, and again at `:379`).
 
-**Problema 3: uma seleção, dois caminhos, uma folha só.** O que muda entre os modos é só como o `BatchPlan` nasce. A folha, o `showModalBottomSheet`, o `withoutPick`, o enfileiramento e a limpeza da seleção são os mesmos, e têm que continuar sendo os mesmos: é isso que a Task 6 comprou ao escrever `planFromGames` em vez de um `map` inline.
+**Problem 3: one selection, two paths, one sheet.** What changes between modes is only how the `BatchPlan` is born. The sheet, the `showModalBottomSheet`, the `withoutPick`, the enqueuing, and the selection clearing are the same and must stay the same: that is what Task 6 bought by writing `planFromGames` instead of an inline `map`.
 
-- [ ] **Step 1: Escreva os testes de função pura que falham**
+- [ ] **Step 1: Write the failing pure-function tests**
 
-No fim de `main` em `test/pack_grid_filter_test.dart`, seis testes novos:
+At the end of `main` in `test/pack_grid_filter_test.dart`, six new tests:
 
 ```dart
-  test('a seleção devolve as entradas na ordem da lista, não na ordem em que foram marcadas', () {
-    final entradas = [_e('Chrono Trigger'), _e('EarthBound'), _e('Super Metroid')];
+  test('selection returns entries in list order, not in the order they were checked', () {
+    final entries = [_e('Crystal Vanguard'), _e('Emberfall'), _e('Super Vectron')];
 
-    final saida = entriesForSelection(entradas, {entradas[2].selectionKey, entradas[0].selectionKey});
+    final out = entriesForSelection(entries, {entries[2].selectionKey, entries[0].selectionKey});
 
-    expect(saida.map((e) => e.game.title), ['Chrono Trigger', 'Super Metroid']);
+    expect(out.map((e) => e.game.title), ['Crystal Vanguard', 'Super Vectron']);
   });
 
-  test('chave que não existe mais no pacote é ignorada, sem explodir', () {
-    // Acontece quando o pacote é republicado com um slug diferente enquanto a
-    // seleção do usuário ainda aponta para o antigo.
-    expect(entriesForSelection([_e('Chrono Trigger')], {'pack:snes/jogo-que-sumiu'}), isEmpty);
+  test('a key no longer in the pack is ignored, without throwing', () {
+    // Happens when the pack is republished with a different slug while the
+    // user's selection still points to the old one.
+    expect(entriesForSelection([_e('Crystal Vanguard')], {'pack:snes/game-that-vanished'}), isEmpty);
   });
 
-  test('chave de MODO FONTE não traz entrada de pack nenhuma', () {
-    expect(entriesForSelection([_e('Chrono Trigger')], {'snes/Chrono Trigger (USA).zip'}), isEmpty);
+  test('a source-mode key brings back no pack entry', () {
+    expect(entriesForSelection([_e('Crystal Vanguard')], {'snes/Crystal Vanguard (USA).zip'}), isEmpty);
   });
 
-  test('em MODO PACK só as chaves com prefixo pack: contam', () {
-    final saida = selectionKeysFor(
-      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+  test('in pack mode only pack-prefixed keys count', () {
+    final out = selectionKeysFor(
+      {'pack:snes/crystal-vanguard', 'snes/Crystal Vanguard (USA).zip'},
       pack: true,
     );
 
-    expect(saida, {'pack:snes/chrono-trigger'});
+    expect(out, {'pack:snes/crystal-vanguard'});
   });
 
-  test('em MODO FONTE só as chaves sem prefixo contam', () {
-    final saida = selectionKeysFor(
-      {'pack:snes/chrono-trigger', 'snes/Chrono Trigger (USA).zip'},
+  test('in source mode only unprefixed keys count', () {
+    final out = selectionKeysFor(
+      {'pack:snes/crystal-vanguard', 'snes/Crystal Vanguard (USA).zip'},
       pack: false,
     );
 
-    expect(saida, {'snes/Chrono Trigger (USA).zip'});
+    expect(out, {'snes/Crystal Vanguard (USA).zip'});
   });
 
-  test('seleção vazia devolve conjunto vazio nos dois modos', () {
+  test('an empty selection returns an empty set in both modes', () {
     expect(selectionKeysFor(const {}, pack: true), isEmpty);
     expect(selectionKeysFor(const {}, pack: false), isEmpty);
   });
 ```
 
-O helper `_e` da Task 9 serve sem mudança: ele monta o `PackGame` com id `'snes/${title.toLowerCase()}'`, e por isso os testes acima pegam a chave de `entradas[i].selectionKey` em vez de escrevê-la à mão. Escrever `'pack:snes/chrono trigger'` no teste funcionaria e seria pior: passaria a testar o formato do helper.
+The `_e` helper from Task 9 works unchanged: it builds the `PackGame` with id `'snes/${title.toLowerCase()}'`, which is why the tests above get the key from `entries[i].selectionKey` instead of writing it by hand. Writing `'pack:snes/crystal vanguard'` in the test would work and would be worse: it would end up testing the helper's format.
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_filter_test.dart
 ```
 
-Esperado: `Undefined name 'entriesForSelection'` e `Undefined name 'selectionKeysFor'`.
+Expected: `Undefined name 'entriesForSelection'` and `Undefined name 'selectionKeysFor'`.
 
-- [ ] **Step 3: Escreva as duas funções**
+- [ ] **Step 3: Write the two functions**
 
-Primeiro, em `lib/models/grid_entry_model.dart`, o prefixo vira constante, porque a partir de agora ele é lido em dois arquivos e um literal duplicado em dois arquivos é um bug esperando data. Acrescente antes da classe:
+First, in `lib/models/grid_entry_model.dart`, the prefix becomes a constant, because from now on it is read in two files and a literal duplicated across two files is a bug waiting to happen. Add before the class:
 
 ```dart
-/// O prefixo da chave de seleção de MODO PACK.
+/// The PACK MODE selection key prefix.
 ///
-/// Ver "Quarta decisão travada" no plano da fatia 3: o `:` não pode sair de
-/// `CatalogService._nameToId`, então uma chave com este prefixo nunca colide
-/// com um `Game.gameId`.
+/// See "Fourth locked decision": the `:` cannot come out of
+/// `CatalogService._nameToId`, so a key with this prefix never collides
+/// with a `Game.gameId`.
 const kPackSelectionPrefix = 'pack:';
 ```
 
-E troque o getter para usá-la:
+And update the getter to use it:
 
 ```dart
   String get selectionKey => '$kPackSelectionPrefix${game.id}';
 ```
 
-O teste da Task 7 (`expect(entry.selectionKey, 'pack:snes/chrono-trigger')`) continua passando, e é bom que continue: ele agora prova que a constante vale o que valia o literal.
+The Task 7 test (`expect(entry.selectionKey, 'pack:snes/crystal-vanguard')`) keeps passing, and it is good that it does: it now proves that the constant is worth what the literal was worth.
 
-Agora, no fim de `lib/services/pack_grid_filter.dart`:
+Now, at the end of `lib/services/pack_grid_filter.dart`:
 
 ```dart
-/// As entradas que o usuário marcou, na ordem em que [entries] veio.
-///
-/// A ordem é a da grade, e não a ordem em que o usuário tocou os tiles,
-/// porque é a lista da grade que ele acabou de ver.
-///
-/// Ignora chave desconhecida em silêncio. É o comportamento certo aqui: as
-/// duas causas reais, um pacote republicado com slug novo e uma chave do
-/// outro modo, não são erro do usuário e não têm o que ser dito sobre elas.
+/// The entries the user selected, in the order [entries] arrived. Unknown keys
+/// are ignored silently.
 List<PackGridEntry> entriesForSelection(List<PackGridEntry> entries, Set<String> keys) =>
     [for (final entry in entries) if (keys.contains(entry.selectionKey)) entry];
 
-/// As chaves de seleção que pertencem ao modo corrente.
+/// The selection keys that belong to the current mode.
 ///
-/// A seleção é um `Set<String>` único para os dois modos (ver "Quarta decisão
-/// travada"), e existe uma janela real em que os dois convivem no mesmo
-/// console: o catálogo carrega do disco em milissegundos e o pacote chega da
-/// rede segundos depois. Quem marcou arquivos nesse intervalo vê a grade
-/// virar MODO PACK com as chaves de MODO FONTE ainda lá dentro. Sem esta
-/// função a barra roxa diria "3 selecionados" e o botão Baixar não faria
-/// nada, em silêncio.
-///
-/// **Não** limpa a seleção do outro modo, de propósito: o console é o mesmo,
-/// e se o pacote falhar e o modo cair de volta para FONTE a marcação do
-/// usuário ainda está lá. Quem limpa de verdade é a troca de console, em
-/// `CatalogNotifier.loadCatalog` (`catalog_provider.dart:53`).
+/// The selection is one `Set<String>` shared by both modes, and both can
+/// briefly coexist in the same console. Does not clear the other mode's
+/// selection: if the pack fails and the mode falls back to SOURCE, the user's
+/// marks are still there.
 Set<String> selectionKeysFor(Set<String> keys, {required bool pack}) =>
     {for (final key in keys) if (key.startsWith(kPackSelectionPrefix) == pack) key};
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_filter_test.dart
 ```
 
-Esperado: `+13`, zero falha. São os 7 da Task 9 mais os 6 desta.
+Expected: `+13`, zero failures. That is 7 from Task 9 plus 6 from this one.
 
-- [ ] **Step 5: Escreva os testes de provider que falham**
+- [ ] **Step 5: Write the failing provider tests**
 
-No fim de `main` em `test/pack_grid_provider_test.dart`:
+At the end of `main` in `test/pack_grid_provider_test.dart`:
 
 ```dart
-  test('a busca do header não encolhe a lista que o lote lê', () async {
-    // O bug que este teste tranca: marcar três jogos, digitar no header e
-    // apertar Baixar enfileirando só os que sobraram na tela.
-    final container = _container(jogos: [_game('Chrono Trigger (USA).zip')], busca: 'metroid');
-    await _pronto(container);
+  test('the header search does not shrink the list the batch reads', () async {
+    // The bug this test locks: selecting three games, typing in the header,
+    // and pressing Download enqueuing only the ones still on screen.
+    final container = _container(games: [_game('Crystal Vanguard (USA).zip')], search: 'vectron');
+    await _ready(container);
 
-    expect(container.read(packGridEntriesProvider).map((e) => e.game.id), ['snes/super-metroid']);
+    expect(container.read(packGridEntriesProvider).map((e) => e.game.id), ['snes/super-vectron']);
     expect(
       container.read(allPackEntriesProvider).map((e) => e.game.id),
-      ['snes/chrono-trigger', 'snes/super-metroid'],
+      ['snes/crystal-vanguard', 'snes/super-vectron'],
     );
   });
 
-  test('a lista do lote sai ordenada por título, não na ordem do pacote', () async {
+  test('the batch list comes out sorted by title, not in pack order', () async {
     final container = _container(
-      pacote: Future.value(MetadataPack(
+      pack: Future.value(MetadataPack(
         pack: 'snes',
         system: 'Super Nintendo',
         built: '2026-01-01',
         games: [
-          _pg('snes/super-metroid', 'Super Metroid (USA)'),
-          _pg('snes/chrono-trigger', 'Chrono Trigger (USA)'),
+          _pg('snes/super-vectron', 'Super Vectron (USA)'),
+          _pg('snes/crystal-vanguard', 'Crystal Vanguard (USA)'),
         ],
       )),
     );
-    await _pronto(container);
+    await _ready(container);
 
     expect(
       container.read(allPackEntriesProvider).map((e) => e.game.id),
-      ['snes/chrono-trigger', 'snes/super-metroid'],
+      ['snes/crystal-vanguard', 'snes/super-vectron'],
     );
   });
 ```
 
-- [ ] **Step 6: Rode e veja falhar**
+- [ ] **Step 6: Run and watch it fail**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `Undefined name 'allPackEntriesProvider'`.
+Expected: `Undefined name 'allPackEntriesProvider'`.
 
-- [ ] **Step 7: Quebre o provider em dois**
+- [ ] **Step 7: Split the provider in two**
 
-Em `lib/providers/pack_grid_provider.dart`, troque `packGridEntriesProvider` inteiro pelos dois abaixo:
+In `lib/providers/pack_grid_provider.dart`, replace the entire `packGridEntriesProvider` with the two below:
 
 ```dart
-/// Todos os jogos do pacote com as fontes casadas, ordenados, **sem** a busca
-/// aplicada.
-///
-/// É daqui que o lote lê. A grade lê do filtrado logo abaixo. A separação não
-/// é enfeite: a seleção não é a tela, e um lote que lesse da lista filtrada
-/// perderia os jogos que o usuário marcou antes de digitar na busca.
-///
-/// Como não depende de `gridSearchQueryProvider`, este provider é construído
-/// uma vez por carga de catálogo e não a cada tecla digitada. O filtro por
-/// tecla passa a rodar sobre uma lista já ordenada, o que é mais barato que
-/// a versão anterior, que remontava as entradas do zero a cada letra.
+/// Every pack game with matched sources, sorted, without the search applied.
+/// The batch reads from here; the grid reads from the filtered provider below.
+/// A batch reading the filtered list would lose games selected before typing.
 final allPackEntriesProvider = Provider<List<PackGridEntry>>((ref) {
   final target = ref.watch(packTargetProvider);
   if (target == null) return const [];
@@ -6867,18 +6749,15 @@ final allPackEntriesProvider = Provider<List<PackGridEntry>>((ref) {
   if (pack == null) return const [];
 
   final index = ref.watch(sourceIndexProvider);
-  // Busca vazia: `filterPackEntries` não filtra nada e serve só para ordenar.
-  // A ordenação mora lá porque a grade e o lote têm que concordar sobre ela.
+  // Empty query: `filterPackEntries` filters nothing and only sorts, where the
+  // grid and the batch must agree on the order.
   return filterPackEntries([
     for (final game in pack.games)
       PackGridEntry(game: game, sources: index?.sourcesFor(game.id) ?? const []),
   ], '');
 });
 
-/// O que a grade de MODO PACK desenha: o de cima, com a busca do header.
-///
-/// Em MODO FONTE ninguém lê este provider, e ele devolve lista vazia sem
-/// custo, porque `metadataPackProvider` já resolveu para null.
+/// What the pack-mode grid draws: the above, with the header search applied.
 final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
   return filterPackEntries(
     ref.watch(allPackEntriesProvider),
@@ -6887,168 +6766,168 @@ final packGridEntriesProvider = Provider<List<PackGridEntry>>((ref) {
 });
 ```
 
-- [ ] **Step 8: Rode e veja passar**
+- [ ] **Step 8: Run and watch it pass**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart
 ```
 
-Esperado: `+11`, zero falha. São os 7 da Task 10, os 2 da Task 15 e os 2 desta. Os sete antigos passam sem uma linha mudada, e isso é o ponto: `packGridEntriesProvider` mantém nome e semântica, só mudou de onde ele lê.
+Expected: `+11`, zero failures. That is 7 from Task 10, 2 from Task 15, and 2 from this one. The seven old ones pass without a single changed line, and that is the point: `packGridEntriesProvider` keeps its name and semantics; it only changed what it reads from.
 
-- [ ] **Step 9: Ligue o lote de MODO PACK no `HomeScreen`**
+- [ ] **Step 9: Wire the PACK MODE batch in `HomeScreen`**
 
-Em `lib/screens/home_screen.dart`, acrescente o import:
+In `lib/screens/home_screen.dart`, add the import:
 
 ```dart
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 ```
 
-No `build`, logo depois de `final errorMessage = ...`, hoiste o modo e filtre a seleção:
+In `build`, right after `final errorMessage = ...`, hoist the mode and filter the selection:
 
 ```dart
     final gridMode = ref.watch(gridModeProvider);
-    final selecionadas = selectionKeysFor(
+    final selected = selectionKeysFor(
       ref.watch(catalogProvider.select((s) => s.selectedGames)),
       pack: gridMode == GridMode.pack,
     );
 ```
 
-O `select` agora entrega o `Set` em vez do `length` que a Task 3 escreveu. O gatilho continua estreito: `CatalogNotifier` monta um `Set` novo a cada mexida (`catalog_provider.dart:229-237`) e devolve o mesmo objeto quando não mexe, e o `select` do Riverpod compara com `==`, que para `Set` é identidade.
+The `select` now delivers the `Set` instead of the `length` that Task 3 wrote. The trigger remains narrow: `CatalogNotifier` builds a new `Set` on every change (`catalog_provider.dart:229-237`) and returns the same object when nothing changes, and Riverpod's `select` compares with `==`, which for `Set` is identity.
 
-Repare que o gatilho ficou **mais largo** que o da Task 3, e de propósito: `length` não distinguia trocar um jogo por outro, e a barra agora precisa saber quais são, não quantos. Como antes, quem reconstrói é o `HomeScreen` inteiro, porque é lá que o `watch` mora. Não escreva "só a barra reconstrói" aqui; a frase é falsa e já foi corrigida uma vez na Task 3.
+Note that the trigger became **wider** than Task 3's, and on purpose: `length` did not distinguish swapping one game for another, and the bar now needs to know which ones, not how many. As before, the entire `HomeScreen` rebuilds, because that is where the `watch` lives. Do not write "only the bar rebuilds" here; the sentence is false and was corrected once already in Task 3.
 
-A `SelectionBar` passa a contar a seleção filtrada e a mandar ela para o lote:
+`SelectionBar` now counts the filtered selection and passes it to the batch:
 
 ```dart
           SelectionBar(
-            count: selecionadas.length,
+            count: selected.length,
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: () => _confirmarLote(selecionadas),
+            onDownload: () => _confirmBatch(selected),
           ),
 ```
 
-E o `switch` do corpo passa a usar a variável hoisted, em vez de ler o provider uma segunda vez:
+And the body `switch` now uses the hoisted variable instead of reading the provider a second time:
 
 ```dart
                     : switch (gridMode) {
 ```
 
-- [ ] **Step 10: Faça o plano nascer pelo modo**
+- [ ] **Step 10: Make the plan born from the mode**
 
-Ainda em `lib/screens/home_screen.dart`, troque o começo do `_confirmarLote` que a Task 6 escreveu, e acrescente o método que decide:
+Still in `lib/screens/home_screen.dart`, replace the beginning of the `_confirmBatch` that Task 6 wrote, and add the deciding method:
 
 ```dart
-  /// Abre a folha da seção 6, e só enfileira o que voltar dela.
-  Future<void> _confirmarLote(Set<String> selecionadas) async {
-    var plano = _planoDaSelecao(selecionadas);
-    // Um plano só de falhas **não** é vazio: a folha abre para dizer por que
-    // nada vai ser baixado. Ver `BatchPlan.isEmpty`, na Task 4.
-    if (plano.isEmpty) return;
+  /// Opens the section-6 sheet and only enqueues what comes back from it.
+  Future<void> _confirmBatch(Set<String> selected) async {
+    var plan = _selectionPlan(selected);
+    // A plan of only failures is **not** empty: the sheet opens to say why
+    // nothing will be downloaded. See `BatchPlan.isEmpty` in Task 4.
+    if (plan.isEmpty) return;
 
-    final confirmado = await showModalBottomSheet<BatchPlan>(
+    final confirmed = await showModalBottomSheet<BatchPlan>(
 ```
 
-O resto do método, do `showModalBottomSheet` até o `clearSelection()`, fica **exatamente** como a Task 6 deixou. A única linha que sai é a antiga `if (selecionados.isEmpty) return;`, junto com o `final selecionados = ...` que a alimentava, porque quem calcula a seleção agora é o `build`.
+The rest of the method, from `showModalBottomSheet` to `clearSelection()`, stays **exactly** as Task 6 left it. The only line removed is the old `if (games.isEmpty) return;`, together with the `final games = ...` that fed it, because `build` now computes the selection.
 
-E o método novo, logo acima dele:
+And the new method, just above it:
 
 ```dart
-  /// O plano do lote, pelo modo corrente.
+  /// The batch plan, by current mode.
   ///
-  /// Os dois ramos devolvem o mesmo tipo e caem na mesma folha, no mesmo
-  /// enfileiramento e na mesma limpeza de seleção. Se você se pegar
-  /// escrevendo um segundo `showModalBottomSheet` aqui, parou no lugar
-  /// errado: o que varia entre os modos é só como o `BatchPlan` nasce.
-  BatchPlan _planoDaSelecao(Set<String> selecionadas) {
+  /// Both branches return the same type and flow into the same sheet, the
+  /// same enqueuing, and the same selection clearing. If you find yourself
+  /// writing a second `showModalBottomSheet` here, you stopped in the wrong
+  /// place: what varies between modes is only how the `BatchPlan` is born.
+  BatchPlan _selectionPlan(Set<String> selected) {
     if (ref.read(gridModeProvider) == GridMode.pack) {
-      // A regra da seção 6, a mesma que escolhe o destaque da tela de
-      // detalhe. `allPackEntriesProvider` e não `packGridEntriesProvider`:
-      // ver o Problema 1 no topo desta Task.
+      // The section-6 rule, the same one that picks the detail screen's
+      // highlight. `allPackEntriesProvider` not `packGridEntriesProvider`:
+      // see Problem 1 at the top of this Task.
       return planFromEntries(
-        entriesForSelection(ref.read(allPackEntriesProvider), selecionadas),
+        entriesForSelection(ref.read(allPackEntriesProvider), selected),
         preferredRegions: ref.read(preferredRegionsProvider),
         resolveGame: ref.read(gameResolverProvider),
       );
     }
-    // MODO FONTE: cada chave já é um arquivo, nada a escolher.
+    // SOURCE MODE: each key is already a file, nothing to choose.
     final games = ref.read(catalogProvider).games;
-    return planFromGames(games.where((game) => selecionadas.contains(game.gameId)).toList());
+    return planFromGames(games.where((game) => selected.contains(game.gameId)).toList());
   }
 ```
 
-Uma nota sobre o `clearSelection()` do fim de `_confirmarLote`: ele limpa a seleção **inteira**, inclusive as chaves do outro modo, que esta Task acabou de ensinar o app a ignorar. É o certo. O usuário acabou de mandar um lote para a fila; deixar acesa a marcação que ele fez antes de o pacote chegar seria guardar uma intenção que ele já não tem.
+A note on the `clearSelection()` at the end of `_confirmBatch`: it clears the **entire** selection, including the keys from the other mode, which this Task just taught the app to ignore. That is correct. The user just sent a batch to the queue; leaving on the marks they made before the pack arrived would be holding on to an intention they no longer have.
 
-- [ ] **Step 11: Confira à mão, porque nenhum teste cobre a fiação**
+- [ ] **Step 11: Check manually, because no test covers the wiring**
 
 ```bash
 flutter run -d linux
 ```
 
-1. Num console com pacote, segure um tile para marcar, marque mais dois. A barra roxa diz "3 selecionados".
-2. Digite no campo de busca até sobrar um tile na tela. A barra continua dizendo "3 selecionados".
-3. Aperte Baixar. A folha abre com os **três**, cada um com nome de arquivo e motivo.
-4. Tire um da folha e confirme. Dois entram na fila e a barra apaga.
-5. Marque um jogo que a grade mostra sem fonte. A folha tem que abrir com ele embaixo de "Não vão para a fila", com o motivo, e com o botão Baixar desligado.
-6. Num console **sem** pacote, repita os passos 1, 3 e 4. Tem que funcionar igualzinho a antes desta fatia.
-7. Marque um jogo que **já está baixando** e aperte Baixar. Ele vai entrar na fila uma segunda vez. **Isso é esperado nesta fatia, não é regressão sua, e não conserte aqui.** Veja a limitação conhecida abaixo.
+1. On a console with a pack, long-press a tile to select it, then select two more. The purple bar says "3 selected".
+2. Type in the search field until only one tile remains on screen. The bar still says "3 selected".
+3. Press Download. The sheet opens with all **three**, each with its filename and reason.
+4. Remove one from the sheet and confirm. Two enter the queue and the bar disappears.
+5. Select a game that the grid shows without a source. The sheet must open with it under "Not going to the queue", with the reason, and with the Download button disabled.
+6. On a console **without** a pack, repeat steps 1, 3, and 4. It must work exactly as before this slice.
+7. Select a game that **is already downloading** and press Download. It will enter the queue a second time. **This is expected in this slice, it is not a regression you introduced, and do not fix it here.** See the known limitation below.
 
-**Limitação conhecida, herdada e deliberadamente não consertada aqui: o lote enfileira duplicata.** `TaskQueueService.startDownloads` (`task_queue_service.dart:51`) enfileira sem filtrar por estado da tarefa, e `TaskQueueNotifier.enqueue` (`task_queue_provider.dart:21`) anexa sem procurar duplicata. Quem filtra é o outro `startDownloads`, o do notifier (`download_provider.dart:260`), e o caminho do lote nunca passou por ele.
+**Known limitation, inherited and deliberately not fixed here: the batch enqueues duplicates.** `TaskQueueService.startDownloads` (`task_queue_service.dart:51`) enqueues without filtering by task state, and `TaskQueueNotifier.enqueue` (`task_queue_provider.dart:21`) appends without searching for a duplicate. The one that filters is the other `startDownloads`, the notifier's one (`download_provider.dart:260`), and the batch path never went through it.
 
-Isto é **anterior à fatia 3**, conferido e não deduzido: em `f9da109` o `header.dart:191` já chamava o mesmo método estático sem filtro, e o portão do botão era `hasDownloadableSelectedGames()`, que é `selectedGames.any(isTaskDownloadable)` (`download_provider.dart:337-340` naquele commit). **`any`, não `every`**: bastava um jogo novo na seleção para o botão ligar e os já-baixando irem junto. O que a fatia 3 muda é só o caso degenerado em que *nenhum* selecionado é baixável, que antes deixava o botão apagado e agora abre a folha.
+This is **pre-slice-3**, verified not inferred: in `f9da109` `header.dart:191` was already calling the same static method without a filter, and the button gate was `hasDownloadableSelectedGames()`, which is `selectedGames.any(isTaskDownloadable)` (`download_provider.dart:337-340` in that commit). **`any`, not `every`**: one new game in the selection was enough to enable the button and send the already-downloading ones along. What slice 3 changes is only the degenerate case where *none* of the selected items are downloadable, which previously kept the button dark and now opens the sheet.
 
-Não se conserta nesta fatia por dois motivos. O filtro certo mora em `download_provider.dart` e `task_queue_service.dart`, os dois na tabela de intocados que a Task 22 confere. E a alternativa de fazer o `gameResolverProvider` da Task 15 devolver `null` para o já-enfileirado daria ao usuário o motivo errado, "a fonte saiu da listagem antes de a fila começar", que é mentira. O conserto honesto é a fatia 4, que reescreve a camada de download e de contas de qualquer jeito: ou `enqueue` passa a ser idempotente por `taskId`, ou `planFromEntries` ganha um conjunto de já-enfileirados e emite `PickFailure` com motivo próprio.
+It is not fixed in this slice for two reasons. The right filter lives in `download_provider.dart` and `task_queue_service.dart`, both in the untouched-files table that Task 22 checks. And the alternative of making the `gameResolverProvider` from Task 15 return `null` for the already-enqueued game would give the user the wrong reason, "the source left the listing before the queue started", which is a lie. The honest fix is slice 4, which rewrites the download and accounts layer anyway: either `enqueue` becomes idempotent by `taskId`, or `planFromEntries` gains a set of already-enqueued items and emits a `PickFailure` with its own reason.
 
-- [ ] **Step 12: Prove que não quebrou nada**
+- [ ] **Step 12: Prove nothing broke**
 
 ```bash
 flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro no analyze; `+336 -1` na suíte, sendo os 328 da Task 19 mais os 8 desta.
+Expected: 22 findings and zero errors in analyze; `+336 -1` in the suite, being the 328 from Task 19 plus the 8 from this one.
 
 - [ ] **Step 13: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/pack_grid_filter_test.dart test/pack_grid_provider_test.dart
 git commit -m "test(lote): selecao de MODO PACK sobrevive a busca e alimenta a folha"
 
-# agente de producao
+# production agent
 git add lib/models/grid_entry_model.dart lib/services/pack_grid_filter.dart lib/providers/pack_grid_provider.dart lib/screens/home_screen.dart
 git commit -m "feat(lote): selecao de MODO PACK sobrevive a busca e alimenta a folha"
 ```
 
 ---
 
-### Task 21: a barra de seleção na tela de detalhe
+### Task 21: the selection bar on the detail screen
 
 **Files:**
 - Modify: `lib/screens/game_detail_screen.dart`
-- Modify: `test/game_detail_screen_test.dart` (três testes novos no fim, mais o `_host`)
+- Modify: `test/game_detail_screen_test.dart` (three new tests at the end, plus `_host`)
 - Modify: `lib/screens/home_screen.dart`
 
-A seção 5 do spec de UI termina com uma frase de sete palavras que é fácil de ler sem enxergar: *"A barra existe nas duas telas, grade e detalhe, na mesma posição."*
+UI spec section 5 ends with a seven-word sentence that is easy to read without seeing: *"The bar exists on both screens, grid and detail, in the same position."*
 
-Ela não é enfeite, e dá para ver por quê olhando o que a Task 15 já construiu. A tela de detalhe tem um checkbox ao lado do coração, e a seção 4 explica que ele existe para quem abriu um jogo poder marcá-lo sem voltar para a grade. Sem a barra, esse checkbox é meia funcionalidade: o usuário marca, **nada acontece na tela**, não há contador e não há botão, e ele tem que voltar para a grade para descobrir que a marcação valeu. Checkbox sem barra é um interruptor sem lâmpada.
+It is not decoration, and you can see why by looking at what Task 15 already built. The detail screen has a checkbox next to the heart, and section 4 explains it exists so a user who opened a game can select it without going back to the grid. Without the bar, that checkbox is half a feature: the user checks it, **nothing happens on screen**, there is no counter and no button, and they must go back to the grid to find out the selection worked. A checkbox without a bar is a switch without a light.
 
-**A barra da tela de detalhe não é uma barra nova.** É a mesma `SelectionBar` da Task 2, no mesmo lugar visual, com a mesma contagem e o mesmo destino. O que muda é só quem paga o `Scaffold`.
+**The detail screen's bar is not a new bar.** It is the same `SelectionBar` from Task 2, in the same visual position, with the same count and the same destination. The only change is who pays for the `Scaffold`.
 
-**Ela não abre a folha sozinha**, pelo mesmo motivo que `onDownload` não enfileira sozinho: a tela de detalhe não conhece a fila nem a folha. Ela recebe mais um callback, `onBatchDownload`, e o `HomeScreen` liga esse callback no mesmo `_confirmarLote` da Task 20. Uma folha, um enfileiramento, dois botões que chegam nele.
+**It does not open the sheet on its own**, for the same reason `onDownload` does not enqueue on its own: the detail screen does not know the queue or the sheet. It receives one more callback, `onBatchDownload`, and `HomeScreen` wires that callback to the same `_confirmBatch` from Task 20. One sheet, one enqueuing, two buttons that reach it.
 
-**O `HomeScreen` não desempilha a rota antes de abrir a folha.** A folha sobe por cima da tela de detalhe, e é isso mesmo: `showModalBottomSheet` usa o `Navigator` mais próximo do contexto do `HomeScreen`, que é o mesmo que está mostrando o detalhe. Desempilhar primeiro faria a tela de detalhe piscar para fora no mesmo quadro em que a folha sobe, e ainda deixaria o usuário longe do jogo que ele estava olhando. Depois de confirmar, a seleção zera, a barra some das duas telas e o detalhe continua onde estava.
+**`HomeScreen` does not pop the route before opening the sheet.** The sheet rises over the detail screen, and that is correct: `showModalBottomSheet` uses the `Navigator` nearest to the `HomeScreen` context, which is the same one showing the detail. Popping first would make the detail screen flicker out in the same frame the sheet rises, and would also leave the user away from the game they were looking at. After confirming, the selection resets, the bar disappears from both screens, and the detail stays where it was.
 
-- [ ] **Step 1: Escreva os três testes que falham**
+- [ ] **Step 1: Write the three failing tests**
 
-Primeiro, o `_host` da Task 18 precisa do callback novo. Em `test/game_detail_screen_test.dart`, na assinatura de `_host`, acrescente um parâmetro:
+First, the `_host` from Task 18 needs the new callback. In `test/game_detail_screen_test.dart`, in the `_host` signature, add one parameter:
 
 ```dart
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   VoidCallback? onBatchDownload,
   GameResolver? resolver,
-  SourceVerification Function(String filename)? verificacao,
+  SourceVerification Function(String filename)? verification,
 }) {
 ```
 
@@ -7057,50 +6936,49 @@ E no `MaterialApp` do fim dele:
 ```dart
     child: MaterialApp(
       home: GameDetailScreen(
-        entry: entrada,
+        entry: entry,
         onDownload: onDownload ?? (_) {},
         onBatchDownload: onBatchDownload ?? () {},
       ),
     ),
 ```
 
-O import de `SelectionBar` no topo do arquivo de teste:
+The `SelectionBar` import at the top of the test file:
 
 ```dart
 import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 ```
 
-Agora os três testes, no fim de `main`:
+Now the three tests, at the end of `main`:
 
 ```dart
-  testWidgets('sem seleção a tela de detalhe não mostra barra', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('with no selection the detail screen shows no bar', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
-    // A `SelectionBar` está sempre montada e se encolhe até zero quando a
-    // seleção está vazia (Task 2). Por isso o teste mede a altura em vez de
-    // procurar o widget.
+    // The `SelectionBar` is always mounted and shrinks to zero when the
+    // selection is empty, so the test measures height instead of finding it.
     expect(tester.getSize(find.byType(SelectionBar)).height, 0);
   });
 
-  testWidgets('marcar pelo checkbox faz a barra aparecer com a contagem', (tester) async {
-    await tester.pumpWidget(_host(_entrada(fontes: [_fonte('Chrono Trigger (USA).zip')])));
+  testWidgets('checking the checkbox makes the bar appear with the count', (tester) async {
+    await tester.pumpWidget(_host(_entry(sources: [_source('Crystal Vanguard (USA).zip')])));
 
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    expect(find.text('1 selecionado'), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
     expect(tester.getSize(find.byType(SelectionBar)).height, greaterThan(0));
   });
 
-  testWidgets('o Baixar da barra é o do lote, não o do destaque', (tester) async {
-    // Os dois botões dizem "Baixar" e fazem coisas diferentes: o do card
-    // enfileira este jogo, o da barra abre a folha do lote. Trocar um pelo
-    // outro é o erro que este teste tranca.
-    final chamados = <String>[];
+  testWidgets('the bar Download is the batch one, not the highlight one', (tester) async {
+    // Both buttons say "Download" and do different things: the card one queues
+    // this game, the bar one opens the batch sheet. Swapping them is the bug
+    // this test locks.
+    final called = <String>[];
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip')]),
-      onDownload: (_) => chamados.add('destaque'),
-      onBatchDownload: () => chamados.add('lote'),
+      _entry(sources: [_source('Crystal Vanguard (USA).zip')]),
+      onDownload: (_) => called.add('highlight'),
+      onBatchDownload: () => called.add('batch'),
     ));
 
     await tester.tap(find.byType(Checkbox));
@@ -7108,43 +6986,42 @@ Agora os três testes, no fim de `main`:
 
     await tester.tap(find.descendant(
       of: find.byType(SelectionBar),
-      matching: find.text('Baixar'),
+      matching: find.text('Download'),
     ));
     await tester.pump();
 
-    expect(chamados, ['lote']);
+    expect(called, ['batch']);
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `No named parameter with the name 'onBatchDownload'`.
+Expected: `No named parameter with the name 'onBatchDownload'`.
 
-- [ ] **Step 3: Ponha a barra na tela**
+- [ ] **Step 3: Put the bar on the screen**
 
-Em `lib/screens/game_detail_screen.dart`, acrescente os imports:
+In `lib/screens/game_detail_screen.dart`, add the imports:
 
 ```dart
 import 'package:roms_downloader/services/pack_grid_filter.dart';
 import 'package:roms_downloader/widgets/footer/selection_bar.dart';
 ```
 
-Acrescente o campo, logo abaixo de `onDownload`:
+Add the field, right below `onDownload`:
 
 ```dart
-  /// O que fazer quando o usuário aperta Baixar **na barra do rodapé**, que é
-  /// o lote e não este jogo.
-  ///
-  /// Callback pelo mesmo motivo de [onDownload]: esta tela não conhece a fila
-  /// nem a folha de confirmação. Quem liga é o `HomeScreen`.
+  /// What to do when the user presses Download **on the footer bar**, which is
+  /// the batch and not this game. A callback for the same reason as [onDownload]:
+  /// this screen does not know the queue or the confirmation sheet. `HomeScreen`
+  /// wires the two together.
   final VoidCallback onBatchDownload;
 ```
 
-E no construtor:
+And in the constructor:
 
 ```dart
   const GameDetailScreen({
@@ -7155,124 +7032,123 @@ E no construtor:
   });
 ```
 
-No `build`, a linha que hoje calcula `selecionado` passa a guardar o conjunto inteiro, porque a barra precisa da contagem e o checkbox precisa da pertinência:
+In `build`, the line that currently computes `isSelected` now stores the full set, because the bar needs the count and the checkbox needs membership:
 
 ```dart
-    final selecionadas = ref.watch(catalogProvider.select((s) => s.selectedGames));
-    final selecionado = selecionadas.contains(chave);
+    final selected = ref.watch(catalogProvider.select((s) => s.selectedGames));
+    final isSelected = selected.contains(key);
 ```
 
-E o `Scaffold` da tela ganha a barra:
+And the screen's `Scaffold` gains the bar:
 
 ```dart
       bottomNavigationBar: SelectionBar(
-        // `pack: true` literal, e não lido do `gridModeProvider`: esta tela
-        // só existe em MODO PACK, porque só `PackGrid` a empurra. Ler o modo
-        // aqui daria a impressão falsa de que ela abre em MODO FONTE.
-        count: selectionKeysFor(selecionadas, pack: true).length,
+        // `pack: true` literal, not read from `gridModeProvider`: this screen
+        // only exists in PACK MODE, because only `PackGrid` pushes it.
+        count: selectionKeysFor(selected, pack: true).length,
         onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
         onDownload: onBatchDownload,
       ),
 ```
 
-`bottomNavigationBar` e não um `Column` no corpo, de propósito: é ele que garante que a barra fique colada embaixo sem competir com o scroll do conteúdo, e que o teclado não a empurre para fora.
+`bottomNavigationBar` and not a `Column` in the body, on purpose: it is what keeps the bar pinned to the bottom without competing with the body scroll, and prevents the keyboard from pushing it off screen.
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: `+31`, zero falha. São os 28 que as Tasks 15, 16 e 18 deixaram neste arquivo, mais os 3 desta.
+Expected: `+31`, zero failures. That is the 28 that Tasks 15, 16, and 18 left in this file, plus the 3 from this one.
 
-- [ ] **Step 5: Ligue o callback no `HomeScreen`**
+- [ ] **Step 5: Wire the callback in `HomeScreen`**
 
-Em `lib/screens/home_screen.dart`, `_abrirDetalhe` ganha o terceiro argumento:
+In `lib/screens/home_screen.dart`, `_openDetail` gains the third argument:
 
 ```dart
-  void _abrirDetalhe(PackGridEntry entry) {
+  void _openDetail(PackGridEntry entry) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => GameDetailScreen(
         entry: entry,
-        onDownload: _baixarUm,
-        onBatchDownload: () => _confirmarLote(_selecaoDoModo),
+        onDownload: _downloadOne,
+        onBatchDownload: () => _confirmBatch(_modeSelection),
       ),
     ));
   }
 ```
 
-E acrescente o getter que a linha acima usa, junto dos outros métodos privados:
+And add the getter the line above uses, alongside the other private methods:
 
 ```dart
-  /// A seleção do modo corrente, lida na hora do toque.
+  /// The current-mode selection, read at the moment of the tap.
   ///
-  /// O `build` calcula a mesma coisa para a contagem da barra, mas o lote lê
-  /// aqui, e não daquele valor, porque a folha pode ser aberta pela tela de
-  /// detalhe, que fica **em cima** desta. Ler no momento do toque tira a
-  /// pergunta "aquele valor ainda é o de agora" do caminho.
-  Set<String> get _selecaoDoModo => selectionKeysFor(
+  /// `build` computes the same thing for the bar count, but the batch reads
+  /// here, not from that value, because the sheet can be opened from the detail
+  /// screen, which is **on top of** this one. Reading at tap time removes the
+  /// question "is that value still current" from the path.
+  Set<String> get _modeSelection => selectionKeysFor(
         ref.read(catalogProvider).selectedGames,
         pack: ref.read(gridModeProvider) == GridMode.pack,
       );
 ```
 
-E a `SelectionBar` do próprio `HomeScreen` passa a usar o mesmo getter, para não haver dois caminhos até o lote:
+And `HomeScreen`'s own `SelectionBar` now uses the same getter, so there is not a second path to the batch:
 
 ```dart
           SelectionBar(
-            count: selecionadas.length,
+            count: selected.length,
             onClear: () => ref.read(catalogProvider.notifier).clearSelection(),
-            onDownload: () => _confirmarLote(_selecaoDoModo),
+            onDownload: () => _confirmBatch(_modeSelection),
           ),
 ```
 
-A variável `selecionadas` do `build`, que a Task 20 criou, continua existindo e continua servindo **só** para a contagem.
+The `selected` variable from `build`, created in Task 20, keeps existing and keeps serving **only** for the count.
 
-- [ ] **Step 6: Confira à mão**
+- [ ] **Step 6: Check manually**
 
 ```bash
 flutter run -d linux
 ```
 
-1. Num console com pacote, abra um jogo pelo toque no tile. Não há barra roxa.
-2. Marque o checkbox ao lado do coração. A barra roxa sobe no rodapé da tela de detalhe, dizendo "1 selecionado".
-3. Volte para a grade. A barra continua lá, com a mesma contagem e na mesma posição.
-4. Abra outro jogo, marque, e aperte Baixar **na barra**. A folha do lote sobe por cima da tela de detalhe, com os dois jogos.
-5. Confirme. Os dois entram na fila, a barra some e a tela de detalhe continua aberta.
-6. Aperte o Baixar **do card de destaque**. Só aquele jogo entra na fila, sem folha nenhuma.
+1. On a console with a pack, open a game by tapping the tile. No purple bar.
+2. Check the checkbox next to the heart. The purple bar rises in the footer of the detail screen, saying "1 selected".
+3. Go back to the grid. The bar is still there, with the same count and in the same position.
+4. Open another game, select it, and press Download **on the bar**. The batch sheet rises over the detail screen, with both games.
+5. Confirm. Both enter the queue, the bar disappears, and the detail screen stays open.
+6. Press Download **on the highlight card**. Only that game enters the queue, with no sheet.
 
-- [ ] **Step 7: Prove que não quebrou nada**
+- [ ] **Step 7: Prove nothing broke**
 
 ```bash
 flutter analyze
 flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: 22 findings e zero erro; `+339 -1` na suíte, sendo os 336 da Task 20 mais os 3 desta.
+Expected: 22 findings and zero errors; `+339 -1` in the suite, being the 336 from Task 20 plus the 3 from this one.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-# agente de teste
+# test agent
 git add test/game_detail_screen_test.dart
 git commit -m "test(selecao): barra de selecao na tela de detalhe abre a folha do lote"
 
-# agente de producao
+# production agent
 git add lib/screens/game_detail_screen.dart lib/screens/home_screen.dart
 git commit -m "feat(selecao): barra de selecao na tela de detalhe abre a folha do lote"
 ```
 
 ---
 
-### Task 22: varredura de regressão e critério de aceitação
+### Task 22: regression sweep and acceptance criterion
 
-**Files:** nenhum, se tudo estiver certo. Esta Task não escreve código: ela confere. Se algum passo falhar, o conserto é feito aqui e vira commit; se nada falhar, ela fecha a fatia sem commit nenhum.
+**Files:** none, if everything is right. This Task does not write code: it checks. If any step fails, the fix is done here and becomes a commit; if nothing fails, it closes the slice with no commit at all.
 
-**A promessa desta fatia é dupla.** A metade fácil de provar é "a grade de pack funciona", e os 155 testes novos cuidam dela. A metade difícil é **"o MODO FONTE continua sendo o app de hoje"**, que nenhum teste novo prova, porque um teste que passa hoje e passaria igual com a grade quebrada não prova coisa alguma. Essa metade se prova por diff e a olho, e é isso que esta Task é.
+**This slice makes a double promise.** The easy half to prove is "the pack grid works", and the 155 new tests handle that. The hard half is **"SOURCE MODE continues to be the app as it is today"**, which no new test proves, because a test that passes today and would pass equally with the grid broken proves nothing. That half is proven by diff and by eye, and that is what this Task is.
 
-**O commit de linha de base é `f9da109`** (`fix(rede): teto de tempo no httpFetch do MetadataPackService`), o `HEAD` do repositório no momento em que este plano foi escrito, antes do primeiro commit da fatia 3. Se você precisar confirmar por conta própria: é o último commit cuja árvore não contém `lib/widgets/footer/selection_bar.dart`.
+**The baseline commit is `f9da109`** (`fix(rede): teto de tempo no httpFetch do MetadataPackService`), the repository `HEAD` at the moment this plan was written, before the first slice-3 commit. If you need to confirm it yourself: it is the last commit whose tree does not contain `lib/widgets/footer/selection_bar.dart`.
 
-- [ ] **Step 1: Prove que o intocado ficou intocado**
+- [ ] **Step 1: Prove that the untouched stayed untouched**
 
 ```bash
 git diff --stat f9da109 -- \
@@ -7285,26 +7161,26 @@ git diff --stat f9da109 -- \
   lib/widgets/game_list/
 ```
 
-Esperado: **saída completamente vazia**, sem uma linha. Não "poucas linhas", não "só um import": zero.
+Expected: **completely empty output**, not a single line. Not "a few lines", not "just one import": zero.
 
-Os três primeiros e o `filtering_service` são a "Terceira decisão travada", e o motivo está lá: `Game` sintético envenena `gameStateProvider` e os filtros. Os dois do meio estão na tabela de "Modificados" com a coluna dizendo "nenhuma", de propósito, porque em algum momento alguém vai querer um `startDownloadsFromPicks` de uma linha ou vai querer enfiar a barra de seleção dentro do `Footer`. `game_list/` é o que a seção 12 do spec de UI deixa fora de escopo.
+The first three and `filtering_service` are the "Third locked decision", and the reason is there: a synthetic `Game` poisons `gameStateProvider` and the filters. The two in the middle are in the "Modified" table with the column saying "none", deliberately, because at some point someone will want a one-line `startDownloadsFromPicks` or will want to shove the selection bar inside `Footer`. `game_list/` is what UI spec section 12 leaves out of scope.
 
-Se aparecer qualquer coisa aqui, **o conserto é reverter aquele arquivo**, não justificar a mudança:
+If anything shows up here, **the fix is to revert that file**, not to justify the change:
 
 ```bash
-git checkout f9da109 -- <o arquivo>
+git checkout f9da109 -- <the file>
 flutter analyze && flutter test 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Se depois de reverter alguma coisa quebrar, então a fatia criou uma dependência que não devia existir, e isso é achado de QA, não detalhe de implementação. Escreva o que quebrou antes de mexer em mais alguma coisa.
+If reverting something causes a break, the slice created a dependency that should not exist, and that is a QA finding, not an implementation detail. Write what broke before touching anything else.
 
-- [ ] **Step 2: Prove que nada mais de produção antigo foi tocado**
+- [ ] **Step 2: Prove that no other existing production file was touched**
 
 ```bash
 git diff --name-only f9da109 -- lib/ | sort
 ```
 
-A saída tem que ser exatamente estas dezoito linhas, nem uma a mais:
+The output must be exactly these eighteen lines, not one more:
 
 ```
 lib/models/grid_entry_model.dart
@@ -7327,17 +7203,17 @@ lib/widgets/game_grid/pack_grid_item.dart
 lib/widgets/header/header.dart
 ```
 
-São os quinze arquivos novos da tabela de "Estrutura de arquivos" mais os três antigos modificados: `catalog_provider.dart` (Task 1), `header.dart` (Tasks 3 e 19) e `home_screen.dart` (Tasks 3, 6, 19 e 20).
+That is the fifteen new files from the "File structure" table plus the three old files modified: `catalog_provider.dart` (Task 1), `header.dart` (Tasks 3 and 19), and `home_screen.dart` (Tasks 3, 6, 19, and 20).
 
-Qualquer linha extra é um arquivo de produção que a fatia tocou sem estar no plano. Não é automaticamente errado, mas é automaticamente **não planejado**, e tem que ser explicado por escrito no relatório do QA, com o motivo e o commit em que entrou.
+Any extra line is a production file the slice touched without it being in the plan. It is not automatically wrong, but it is automatically **unplanned**, and it must be explained in writing in the QA report, with the reason and the commit it came in.
 
-- [ ] **Step 3: Prove que os testes novos são os previstos**
+- [ ] **Step 3: Prove that the new tests are the expected ones**
 
 ```bash
 git diff --name-only f9da109 -- test/ | sort
 ```
 
-Esperado, dezessete linhas:
+Expected, seventeen lines:
 
 ```
 test/batch_confirm_sheet_test.dart
@@ -7359,50 +7235,50 @@ test/source_verification_service_test.dart
 test/support/favorites_stub.dart
 ```
 
-`test/support/favorites_stub.dart` não é um caso de teste, é o apoio da "Sexta decisão travada", criado na Task 1 e usado pelas Tasks 1, 12, 15, 16, 18 e 21. Ele não soma nenhum `+` na contagem da suíte.
+`test/support/favorites_stub.dart` is not a test case; it is the support for the "Sixth locked decision", created in Task 1 and used by Tasks 1, 12, 15, 16, 18, and 21. It adds no `+` to the suite count.
 
-Nenhum arquivo de teste **antigo** pode aparecer nessa lista. Se aparecer, alguém consertou um teste velho para acomodar a fatia, e isso é exatamente a regressão que o Step 1 procura, só que disfarçada de teste verde.
+No **old** test file may appear in this list. If one does, someone fixed an old test to accommodate the slice, and that is exactly the regression Step 1 looks for, just disguised as a green test.
 
-> **Exceção registrada depois da varredura, em `5d21b14`.** Hoje a lista tem **dezoito** linhas, e a décima oitava é `test/rar_decompress_screen_test.dart`, que é antigo. Não é a regressão que este Step procura: o conserto veio depois de a fatia 3 já ter passado nos Steps 1 a 5 e 7, não mudou nenhum arquivo de `lib/`, e não tem relação com a fatia. O teste nunca passou uma vez desde `b011601`, o commit que o criou, porque `FilledButton.icon` devolve `_FilledButtonWithIcon` e `find.byType` casa por tipo exato. Ele morria em `Bad state: No element` antes de afirmar coisa alguma. Quem repetir este Step, confira que a décima oitava linha é essa e só essa.
+> **Exception registered after the sweep, in `5d21b14`.** Today the list has **eighteen** lines, and the eighteenth is `test/rar_decompress_screen_test.dart`, which is old. It is not the regression this Step looks for: the fix came after slice 3 had already passed Steps 1 through 5 and 7, did not change any `lib/` file, and has no relation to the slice. The test never passed once since `b011601`, the commit that created it, because `FilledButton.icon` returns `_FilledButtonWithIcon` and `find.byType` matches by exact type. It died with `Bad state: No element` before asserting anything. Whoever repeats this Step, verify that the eighteenth line is that one and only that one.
 
-- [ ] **Step 4: Analise**
+- [ ] **Step 4: Analyze**
 
 ```bash
 flutter analyze 2>&1 | tail -30
 ```
 
-Esperado: `22 issues found.` e zero `error`. Confira a quebra contra a tabela de "Antes de começar": 11 `avoid_print` em `tool/verify_matcher.dart`, 1 em `tool/probe_zip_cd.dart`, 6 `deprecated_member_use` em `network_address_setting.dart`, 2 `use_build_context_synchronously` em `fbi_server_screen.dart`, 1 `unnecessary_non_null_assertion` em `webdav_server_test.dart`, 1 `dangling_library_doc_comments` em `rom_search.dart`.
+Expected: `22 issues found.` and zero `error`. Verify the breakdown against the "Before starting" table: 11 `avoid_print` in `tool/verify_matcher.dart`, 1 in `tool/probe_zip_cd.dart`, 6 `deprecated_member_use` in `network_address_setting.dart`, 2 `use_build_context_synchronously` in `fbi_server_screen.dart`, 1 `unnecessary_non_null_assertion` in `webdav_server_test.dart`, 1 `dangling_library_doc_comments` in `rom_search.dart`.
 
-O critério é **22, e nenhum finding em arquivo tocado por esta fatia**. Para conferir a segunda metade sem ler as 22 linhas uma a uma:
+The criterion is **22, and no finding in any file touched by this slice**. To check the second half without reading all 22 lines one by one:
 
 ```bash
 flutter analyze 2>&1 | grep -E 'grid_entry|source_pick|source_index|pack_grid|source_verification|selection_bar|batch_confirm|game_detail|home_screen|header\.dart|catalog_provider|owned_games'
 ```
 
-Esperado: **saída vazia**. Se sair alguma coisa, conserte, mesmo que o total continue 22, porque "trocamos um finding antigo por um novo" não é o critério.
+Expected: **empty output**. If anything comes out, fix it, even if the total stays at 22, because "we swapped an old finding for a new one" is not the criterion.
 
-O suspeito mais provável é `use_build_context_synchronously` em `home_screen.dart`, vindo de um `await` sem `if (!mounted) return;` depois. A Task 6 explica onde eles vão e por que `mounted` e não `context.mounted` num `State`.
+The most likely suspect is `use_build_context_synchronously` in `home_screen.dart`, coming from an `await` without `if (!mounted) return;` after it. Task 6 explains where they go and why `mounted` and not `context.mounted` in a `State`.
 
-- [ ] **Step 5: Rode a suíte inteira**
+- [ ] **Step 5: Run the full suite**
 
 ```bash
 flutter test 2>&1 | tr '\r' '\n' | tail -5
 ```
 
-Esperado, na varredura original: `+339 -1`. A única falha é `test/rar_decompress_screen_test.dart`, no caso `renders with extract disabled until a file and folder are picked`, a mesma de antes da fatia 1. **Se houver duas falhas, a fatia não está pronta**, mesmo que a segunda pareça sem relação.
+Expected, in the original sweep: `+339 -1`. The only failure is `test/rar_decompress_screen_test.dart`, the case `renders with extract disabled until a file and folder are picked`, the same one as before slice 1. **If there are two failures, the slice is not ready**, even if the second one seems unrelated.
 
-> **Depois de `5d21b14`, o esperado é `+340`, sem nenhuma falha.** Aquele `-1` era um teste que nunca passou desde que nasceu, consertado fora da fatia. O caso continua sendo um só, ele agora conta como `+`. Se você rodar hoje e ver `+339 -1`, seu HEAD é anterior a `5d21b14`; **qualquer falha é regressão**, não existe mais "a falha de sempre".
+> **After `5d21b14`, the expected is `+340`, with no failures.** That `-1` was a test that never passed since it was born, fixed outside the slice. The case is still a single one; it now counts as `+`. If you run today and see `+339 -1`, your HEAD is before `5d21b14`; **any failure is a regression**, "the usual failure" no longer exists.
 
-A conta dos 339 da fatia, para o caso de o número não bater e você precisar saber onde procurar (o 340 é esse 339 mais o conserto do `rar`, que é de fora):
+The slice's count of 339, in case the number does not match and you need to know where to look (the 340 is this 339 plus the `rar` fix, which is external):
 
-| Task | Novos | Acumulado |
+| Task | New | Running total |
 | --- | --- | --- |
-| linha de base | — | 178 |
+| baseline | n/a | 178 |
 | 1, `clearSelection` | 2 | 180 |
 | 2, `SelectionBar` | 5 | 185 |
-| 3, fiação | 0 | 185 |
+| 3, wiring | 0 | 185 |
 | 4, `BatchPlan` | 6 | 191 |
-| 5, folha de lote | 11 | 202 |
+| 5, batch sheet | 11 | 202 |
 | 6, `planFromGames` | 4 | 206 |
 | 7, `PackGridEntry` | 4 | 210 |
 | 8, `SourceIndex` | 7 | 217 |
@@ -7410,59 +7286,59 @@ A conta dos 339 da fatia, para o caso de o número não bater e você precisar s
 | 10, providers | 7 | 232 |
 | 11, `PackGridItem` | 11 | 243 |
 | 12, `PackGrid` | 7 | 250 |
-| 13, jogos no disco | 10 | 260 |
+| 13, games on disk | 10 | 260 |
 | 14, `planFromEntries` | 12 | 272 |
-| 15, tela de detalhe | 9 | 281 |
-| 16, sem fonte e outras fontes | 11 | 292 |
-| 17, verificação por CRC | 16 | 308 |
-| 18, CRC na tela de detalhe | 18 | 326 |
-| 19, roteamento de modo | 2 | 328 |
-| 20, lote de MODO PACK | 8 | 336 |
-| 21, barra na tela de detalhe | 3 | 339 |
+| 15, detail screen | 9 | 281 |
+| 16, no source and other sources | 11 | 292 |
+| 17, CRC verification | 16 | 308 |
+| 18, CRC on detail screen | 18 | 326 |
+| 19, mode routing | 2 | 328 |
+| 20, PACK MODE batch | 8 | 336 |
+| 21, bar on detail screen | 3 | 339 |
 
-- [ ] **Step 6: Regressão de MODO FONTE, à mão**
+- [ ] **Step 6: SOURCE MODE regression, manual**
 
 ```bash
 flutter run -d linux
 ```
 
-Escolha um console **sem** metadata pack e faça o roteiro do app de hoje. Nada aqui pode estar diferente de antes da fatia 1, com a **única** exceção anotada:
+Pick a console **without** a metadata pack and run through today's app workflow. Nothing here can differ from before slice 1, with the **single** noted exception:
 
-1. A grade desenha os arquivos da listagem, com capa, tags e barra de progresso como sempre.
-2. O botão de trocar visualização alterna grade, lista e coverflow, e os três desenham.
-3. A caixa de busca filtra.
-4. A folha de filtro abre pelo funil, os chips de região, revisão e qualidade de dump filtram a grade, e o funil fica aceso quando há filtro ativo. O tooltip dele é `Filters`.
-5. Marcar um jogo e baixar funciona, o download aparece no rodapé, a barra de progresso anda, o arquivo chega ao disco.
-6. **A exceção:** o botão de download do header não existe mais, e no lugar dele há a barra roxa no rodapé, que abre uma folha de confirmação antes de enfileirar. É a Task 3 mais a Task 6, é a seção 5 do spec de UI, e é a única mudança visível de MODO FONTE nesta fatia inteira.
+1. The grid draws the listing files, with cover art, tags, and progress bar as always.
+2. The view-toggle button switches between grid, list, and coverflow, and all three render.
+3. The search box filters.
+4. The filter sheet opens from the funnel, the region, revision, and dump-quality chips filter the grid, and the funnel lights up when there is an active filter. Its tooltip is `Filters`.
+5. Selecting a game and downloading works, the download appears in the footer, the progress bar advances, and the file arrives on disk.
+6. **The exception:** the download button from the header no longer exists; in its place is the purple bar in the footer, which opens a confirmation sheet before enqueuing. That is Task 3 plus Task 6, it is UI spec section 5, and it is the only visible change to SOURCE MODE in this entire slice.
 
-- [ ] **Step 7: Cobertura do spec, seção a seção**
+- [ ] **Step 7: Spec coverage, section by section**
 
-Abra `docs/stremio-de-jogos-ui.md` e confira que cada seção do escopo desta fatia tem onde apontar:
+Open `docs/stremio-de-jogos-ui.md` and verify that each section in this slice's scope has somewhere to point:
 
-| Seção do spec de UI | Onde foi feita |
+| UI spec section | Where it was done |
 | --- | --- |
-| 3.1, o tile marca só a exceção | Task 11, e a "Armadilha de leitura" no topo deste plano |
-| 3.2, faixa de estado vazio | Task 12 |
-| 4, borda de "já baixado" | Task 13 |
-| 4, seleção: gestos e checkbox | Tasks 11 e 12 na grade, Task 15 na tela de detalhe. O hover do desktop é divergência anotada na Task 11 |
-| 5, barra de seleção | Tasks 1, 2, 3 e 21 |
-| 6, folha de confirmação de lote | Tasks 4, 5, 6, 14, 20 e 21 |
-| 7, tela de detalhe | Tasks 15 e 16 |
-| 8, verificação por CRC | Tasks 17 e 18 |
-| 11, tabela de arquivos | "Estrutura de arquivos" no topo, com as três divergências deliberadas anotadas lá |
-| 12, fora de escopo | Steps 1, 2 e 3 desta Task |
+| 3.1, the tile only marks the exception | Task 11, and the "Read trap" at the top of this plan |
+| 3.2, empty-state banner | Task 12 |
+| 4, "already downloaded" border | Task 13 |
+| 4, selection: gestures and checkbox | Tasks 11 and 12 on the grid, Task 15 on the detail screen. Desktop hover is a divergence noted in Task 11 |
+| 5, selection bar | Tasks 1, 2, 3, and 21 |
+| 6, batch confirmation sheet | Tasks 4, 5, 6, 14, 20, and 21 |
+| 7, detail screen | Tasks 15 and 16 |
+| 8, CRC verification | Tasks 17 and 18 |
+| 11, file structure table | "File structure" at the top, with the three deliberate divergences noted there |
+| 12, out of scope | Steps 1, 2, and 3 of this Task |
 
-As seções 9 e 10 são das fatias 4 e 6. Se você chegou aqui e alguma linha da tabela acima não tem para onde apontar, o buraco é da fatia, não do relatório.
+Sections 9 and 10 are for slices 4 and 6. If you get here and any row in the table above has nowhere to point, the gap is in the slice, not in the report.
 
-- [ ] **Step 8: Feche**
+- [ ] **Step 8: Close**
 
-Se os sete passos acima passaram, não há o que commitar: a fatia já está toda em commits das Tasks 1 a 21. Escreva o relatório com a saída **inteira** de cada comando dos Steps 1 a 5, colada, não resumida.
+If the seven steps above passed, there is nothing to commit: the slice is fully in commits from Tasks 1 through 21. Write the report with the **full** output of every command from Steps 1 through 5, pasted, not summarized.
 
-Se algum passo exigiu conserto, o commit é um só e leva o escopo do que foi consertado:
+If any step required a fix, it is a single commit scoped to what was fixed:
 
 ```bash
-git add <só os arquivos consertados>
-git commit -m "fix(<escopo>): <o que a varredura de regressão pegou>"
+git add <only the fixed files>
+git commit -m "fix(<scope>): <what the regression sweep caught>"
 ```
 
-E rode os Steps 4 e 5 de novo depois do conserto. Um conserto que não foi reanalisado e retestado não conta.
+And run Steps 4 and 5 again after the fix. A fix that was not re-analyzed and re-tested does not count.

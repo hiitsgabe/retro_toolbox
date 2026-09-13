@@ -8,14 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
-/// Onde a lista de addons e os catálogos de cada um moram.
-///
-/// A raiz de disco entra por construtor porque `getApplicationSupportDirectory`
-/// é `path_provider`, que num teste sem plataforma lança
-/// `MissingPluginException`. Com ela injetada, o teste usa
-/// `Directory.systemTemp.createTemp()` e exercita IO de verdade.
+/// Where the addon list and each addon's catalog live.
 class AddonStore {
-  /// A chave do `shared_preferences` onde a lista ordenada é serializada.
+  /// The `shared_preferences` key holding the serialized ordered list.
   static const String prefsKey = 'addons';
 
   final SharedPreferences _prefs;
@@ -28,64 +23,48 @@ class AddonStore {
         await getApplicationSupportDirectory(),
       );
 
-  /// A lista instalada, na ordem de prioridade.
+  /// The installed list, in priority order.
   ///
-  /// Quando a chave não existe, devolve a lista de migração (o embutido
-  /// sozinho) **sem gravar nada**. Gravar aqui faria uma leitura ter efeito
-  /// colateral, e o teste "ler NÃO grava" existe para prender isso: quem
-  /// persiste é a primeira instalação, remoção ou arrasto.
-  ///
-  /// Lista vazia salva é estado legítimo, e diferente de chave ausente: o
-  /// usuário que removeu todos os addons não pode ver o embutido voltar
-  /// sozinho no próximo boot.
+  /// A missing key returns the migration list (the built-in alone) without
+  /// writing: reading must not have a side effect. A saved empty list is a
+  /// legitimate state, distinct from a missing key.
   List<Addon> load() {
-    final cru = _prefs.getString(prefsKey);
-    if (cru == null) return [_builtinMigrado()];
+    final raw = _prefs.getString(prefsKey);
+    if (raw == null) return [_migratedBuiltin()];
     try {
-      final decoded = jsonDecode(cru);
-      if (decoded is! List) return [_builtinMigrado()];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [_migratedBuiltin()];
       return [
         for (final item in decoded)
           if (item is Map<String, dynamic> && item['id'] is String) Addon.fromJson(item),
       ];
     } catch (e) {
-      debugPrint('Lista de addons ilegível, caindo na migração: $e');
-      return [_builtinMigrado()];
+      debugPrint('Unreadable addon list, falling back to migration: $e');
+      return [_migratedBuiltin()];
     }
   }
 
-  Future<void> save(List<Addon> lista) async {
-    await _prefs.setString(prefsKey, jsonEncode([for (final addon in lista) addon.toJson()]));
+  Future<void> save(List<Addon> list) async {
+    await _prefs.setString(prefsKey, jsonEncode([for (final addon in list) addon.toJson()]));
   }
 
-  /// O addon que representa o `consoles.json` de antes da fatia 4.
-  ///
-  /// A url sai do `catalogSourceUrl` que o usuário já tinha salvo, quando ele
-  /// instalou o catálogo por endereço. É só nome de tela: `app_settings`
-  /// ilegível ou campo ausente dão um addon sem url, e o app funciona igual.
-  Addon _builtinMigrado() {
+  /// The addon representing the pre-slice-4 `consoles.json`.
+  Addon _migratedBuiltin() {
     String? url;
     try {
-      final cru = _prefs.getString(SettingsService.settingsKey);
-      if (cru != null) {
-        final decoded = jsonDecode(cru);
-        final valor = decoded is Map ? decoded['catalogSourceUrl'] : null;
-        if (valor is String && valor.isNotEmpty) url = valor;
+      final raw = _prefs.getString(SettingsService.settingsKey);
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        final value = decoded is Map ? decoded['catalogSourceUrl'] : null;
+        if (value is String && value.isNotEmpty) url = value;
       }
     } catch (e) {
-      debugPrint('catalogSourceUrl ilegível na migração de addons: $e');
+      debugPrint('Unreadable catalogSourceUrl during addon migration: $e');
     }
-    return Addon(id: kBuiltinAddonId, name: 'Catálogo embutido', url: url);
+    return Addon(id: kBuiltinAddonId, name: 'Built-in catalog', url: url);
   }
 
-  /// Onde mora o catálogo de cada addon.
-  ///
-  /// O embutido continua em `config/consoles.json`, que é exatamente onde
-  /// `CatalogService.setCatalogFromJson`, `addConsole` e `resetCatalog` já
-  /// escrevem (`catalog_service.dart:104-107`). É por isso que a migração não
-  /// move byte nenhum de disco: ela só escreve uma lista no
-  /// `shared_preferences`, e migração que não mexe em arquivo não tem como
-  /// perder o catálogo do usuário.
+  /// Where each addon's catalog lives.
   File catalogFile(String addonId) => addonId == kBuiltinAddonId
       ? File(path.join(_root.path, 'config', 'consoles.json'))
       : File(path.join(_root.path, 'config', 'addons', '$addonId.json'));

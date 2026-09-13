@@ -156,10 +156,9 @@ class SettingsContent extends StatelessWidget {
               context,
               icon: Icons.lock_outline,
               title: 'Authentication',
-              // O painel de settings de um console é a porta do catálogo
-              // embutido. A conta de um addon de terceiro se edita em Accounts
-              // (Task 25) ou no detalhe do addon (Task 22), e as duas gravam na
-              // mesma chave de cofre.
+              // A console settings panel is the door to the built-in catalog. A
+              // third-party addon account is edited under Accounts or in the
+              // addon detail, and both write to the same vault key.
               child: ConsoleAuthSetting(console: selectedConsole!, addonId: kBuiltinAddonId),
             ),
           ],

@@ -352,5 +352,5 @@ docs/superpowers/
 # superpowers brainstorm session files
 .superpowers/
 
-# Python bytecode do tool/
+# Python bytecode from tool/
 tool/__pycache__/

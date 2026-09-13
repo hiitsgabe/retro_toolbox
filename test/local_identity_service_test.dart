@@ -10,12 +10,12 @@ import 'support/pack_fixture.dart';
 void main() {
   late Directory tmp;
   late PackMatcher matcher;
-  late List<String> lidos;
+  late List<String> reads;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('local_identity_test');
     matcher = PackMatcher(buildPack());
-    lidos = [];
+    reads = [];
   });
 
   tearDown(() async {
@@ -23,78 +23,78 @@ void main() {
   });
 
   File write(String name) =>
-      File('${tmp.path}/$name')..writeAsStringSync('conteudo');
+      File('${tmp.path}/$name')..writeAsStringSync('content');
 
-  /// Serviço com um CRC falso, para o teste controlar o que o disco "tem" e
-  /// contar quantas vezes o arquivo foi lido.
+  /// Service with a fake CRC, so the test controls what the disk "has" and
+  /// counts how many times a file was read.
   LocalIdentityService serviceReturning(String crc) => LocalIdentityService(
         matcher: matcher,
         crcOfFile: (file) async {
-          lidos.add(file.path);
+          reads.add(file.path);
           return crc;
         },
       );
 
-  test('aceita o nome exato e nem toca no arquivo', () async {
+  test('accepts the exact name without touching the file', () async {
     final service = serviceReturning('B19ED489');
-    final m = await service.identify(write('Chrono Trigger (USA).sfc'));
+    final m = await service.identify(write('Crystal Vanguard (USA).sfc'));
     expect(m!.tier, MatchTier.exactName);
-    expect(m.game.id, 'snes/chrono-trigger');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/crystal-vanguard');
+    expect(reads, isEmpty);
   });
 
-  test('aceita o nome canônico e nem toca no arquivo', () async {
+  test('accepts the canonical name without touching the file', () async {
     final service = serviceReturning('B19ED489');
-    final m = await service.identify(write('The Blue Crystalrod.sfc'));
+    final m = await service.identify(write('The Zxia Gztqfevzem.sfc'));
     expect(m!.tier, MatchTier.canonicalName);
-    expect(m.game.id, 'snes/the-blue-crystalrod');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/the-zxia-gztqfevzem');
+    expect(reads, isEmpty);
   });
 
-  test('no palpite fuzzy calcula o CRC e corrige o jogo', () async {
-    // O nome parece HammerLock Wrestling, mas os bytes são do Pro Action
-    // Replay MK3. O CRC ganha.
+  test('a fuzzy guess computes the CRC and corrects the game', () async {
+    // The name looks like CopperBolt Grappling, but the bytes are Duo Vector
+    // Recoil MK3; the CRC wins.
     final service = serviceReturning('11112222');
-    final file = write('Hammer Lock Wrestling (USA).sfc');
-    expect(matcher.match('Hammer Lock Wrestling (USA).sfc')!.tier,
+    final file = write('Copper Bolt Grappling (USA).sfc');
+    expect(matcher.match('Copper Bolt Grappling (USA).sfc')!.tier,
         MatchTier.fuzzyName);
     final m = await service.identify(file);
     expect(m!.tier, MatchTier.checksum);
-    expect(m.game.id, 'snes/pro-action-replay-mk3');
-    expect(lidos, [file.path]);
+    expect(m.game.id, 'snes/duo-vector-recoil-mk3');
+    expect(reads, [file.path]);
   });
 
-  test('sem palpite de nome nenhum, o CRC resolve sozinho', () async {
+  test('with no name guess at all, the CRC resolves on its own', () async {
     final service = serviceReturning('A31BEAD4');
-    final file = write('rom desconhecida 0042.sfc');
-    expect(matcher.match('rom desconhecida 0042.sfc'), isNull);
+    final file = write('unknown rom 0042.sfc');
+    expect(matcher.match('unknown rom 0042.sfc'), isNull);
     final m = await service.identify(file);
     expect(m!.tier, MatchTier.checksum);
-    expect(m.game.id, 'snes/super-mario-world');
+    expect(m.game.id, 'snes/super-pixel-world');
   });
 
-  test('CRC que não está no pacote devolve o palpite de nome intocado',
+  test('a CRC not in the pack leaves the name guess untouched',
       () async {
     final service = serviceReturning('DEADBEEF');
-    final m = await service.identify(write('Hammer Lock Wrestling (USA).sfc'));
+    final m = await service.identify(write('Copper Bolt Grappling (USA).sfc'));
     expect(m!.tier, MatchTier.fuzzyName);
-    expect(m.game.id, 'snes/hammerlock-wrestling');
+    expect(m.game.id, 'snes/copperbolt-grappling');
   });
 
-  test('não calcula CRC de contêiner, porque não seria comparável', () async {
+  test('does not compute the CRC of a container, since it would not be comparable', () async {
     final service = serviceReturning('11112222');
-    final m = await service.identify(write('Hammer Lock Wrestling (USA).zip'));
+    final m = await service.identify(write('Copper Bolt Grappling (USA).zip'));
     expect(m!.tier, MatchTier.fuzzyName);
-    expect(m.game.id, 'snes/hammerlock-wrestling');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/copperbolt-grappling');
+    expect(reads, isEmpty);
   });
 
-  test('o cache evita a segunda leitura do mesmo arquivo', () async {
+  test('the cache avoids a second read of the same file', () async {
     final service = serviceReturning('11112222');
-    final file = write('Hammer Lock Wrestling (USA).sfc');
+    final file = write('Copper Bolt Grappling (USA).sfc');
     await service.identify(file);
     await service.identify(file);
-    expect(lidos, hasLength(1));
+    expect(reads, hasLength(1));
     expect(service.cache.values, ['11112222']);
   });
 }

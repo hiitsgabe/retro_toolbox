@@ -38,10 +38,6 @@ Map<String, String> buildConsoleAuthHeaders(Map<String, dynamic>? auth, {String?
   if (auth == null) return {};
   if (auth['type'] == 'ia_s3') return {};
 
-  // Só de quem chama, que leu do cofre. Antes havia `?? auth['token']`, isto
-  // é, o catálogo, que é o arquivo que o usuário compartilha com outra pessoa
-  // (seção 6.3 do spec). O campo pode continuar existindo no JSON de terceiro:
-  // ele simplesmente não autentica mais ninguém.
   final token = tokenOverride;
   if (token == null || token.isEmpty) return {};
 

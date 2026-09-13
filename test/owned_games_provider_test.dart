@@ -11,36 +11,34 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/local_identity_service.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
+const _target = PackTarget('snes', 'Super Nintendo');
 
-final _pacote = MetadataPack(
+final _pack = MetadataPack(
   pack: 'snes',
   system: 'Super Nintendo',
   built: '2026-01-01',
   games: [
     PackGame(
-      id: 'snes/chrono-trigger',
-      title: 'Chrono Trigger',
-      dumps: [PackDump(name: 'Chrono Trigger (USA)', crc: 'AABBCCDD')],
+      id: 'snes/crystal-vanguard',
+      title: 'Crystal Vanguard',
+      dumps: [PackDump(name: 'Crystal Vanguard (USA)', crc: 'AABBCCDD')],
     ),
     PackGame(
-      id: 'snes/super-metroid',
-      title: 'Super Metroid',
-      dumps: [PackDump(name: 'Super Metroid (Japan, USA)')],
+      id: 'snes/super-vectron',
+      title: 'Super Vectron',
+      dumps: [PackDump(name: 'Super Vectron (Japan, USA)')],
     ),
   ],
 );
 
-/// CRC fixo de propósito: nenhum teste aqui é sobre checksum, e ler o disco
-/// para calcular um deixaria o teste lento e dependente do conteúdo do
-/// arquivo. `FFFFFFFF` não está no pacote, então o eixo de CRC nunca casa e
-/// cada teste mede exatamente o eixo de nome que ele diz medir.
-LocalIdentityService _servico() => LocalIdentityService(
-      matcher: PackMatcher(_pacote),
+/// Fixed CRC on purpose: `FFFFFFFF` is not in the pack, so the CRC axis never
+/// matches and each test measures exactly the name axis it claims to.
+LocalIdentityService _service() => LocalIdentityService(
+      matcher: PackMatcher(_pack),
       crcOfFile: (_) async => 'FFFFFFFF',
     );
 
-Future<Directory> _pasta() async {
+Future<Directory> _dir() async {
   final dir = await Directory.systemTemp.createTemp('owned_games_test');
   addTearDown(() async {
     if (await dir.exists()) await dir.delete(recursive: true);
@@ -48,8 +46,8 @@ Future<Directory> _pasta() async {
   return dir;
 }
 
-Future<File> _arquivo(Directory dir, String nome) async {
-  final file = File(p.join(dir.path, nome));
+Future<File> _file(Directory dir, String name) async {
+  final file = File(p.join(dir.path, name));
   await file.parent.create(recursive: true);
   await file.writeAsString('rom');
   return file;
@@ -57,17 +55,17 @@ Future<File> _arquivo(Directory dir, String nome) async {
 
 ProviderContainer _container({
   required String? libraryDir,
-  PackTarget? alvo = _alvo,
-  LocalIdentityService? servico,
-  bool comServico = true,
+  PackTarget? target = _target,
+  LocalIdentityService? service,
+  bool withService = true,
 }) {
   final container = ProviderContainer(
     overrides: [
-      packTargetProvider.overrideWithValue(alvo),
+      packTargetProvider.overrideWithValue(target),
       libraryDirProvider.overrideWithValue(libraryDir),
-      if (alvo != null)
-        localIdentityServiceProvider(alvo).overrideWith(
-          (ref) => comServico ? (servico ?? _servico()) : null,
+      if (target != null)
+        localIdentityServiceProvider(target).overrideWith(
+          (ref) => withService ? (service ?? _service()) : null,
         ),
     ],
   );
@@ -76,67 +74,64 @@ ProviderContainer _container({
 }
 
 void main() {
-  test('sem console selecionado o conjunto é vazio', () async {
-    final container = _container(libraryDir: null, alvo: null);
+  test('no selected console yields an empty set', () async {
+    final container = _container(libraryDir: null, target: null);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('sem pacote não há identidade, e o conjunto é vazio', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).sfc');
-    final container = _container(libraryDir: dir.path, comServico: false);
+  test('no pack means no identity, and the set is empty', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).sfc');
+    final container = _container(libraryDir: dir.path, withService: false);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('pasta que não existe não derruba a varredura', () async {
-    final container = _container(libraryDir: p.join(Directory.systemTemp.path, 'nao_existe_mesmo'));
+  test('a missing directory does not crash the scan', () async {
+    final container = _container(libraryDir: p.join(Directory.systemTemp.path, 'does_not_exist_at_all'));
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('a ROM que casa pelo nome entra no conjunto', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).sfc');
+  test('a ROM matched by name enters the set', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
-    expect(await container.read(ownedGameIdsProvider.future), {'snes/chrono-trigger'});
+    expect(await container.read(ownedGameIdsProvider.future), {'snes/crystal-vanguard'});
   });
 
-  test('o que não é ROM é ignorado', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Chrono Trigger (USA).txt');
-    await _arquivo(dir, 'Super Metroid (Japan, USA).nfo');
-    final container = _container(libraryDir: dir.path);
-
-    expect(await container.read(ownedGameIdsProvider.future), isEmpty);
-  });
-
-  test('a ROM que não casa com nada não entra', () async {
-    final dir = await _pasta();
-    await _arquivo(dir, 'Um Jogo Que Nao Existe (USA).sfc');
+  test('non-ROM files are ignored', () async {
+    final dir = await _dir();
+    await _file(dir, 'Crystal Vanguard (USA).txt');
+    await _file(dir, 'Super Vectron (Japan, USA).nfo');
     final container = _container(libraryDir: dir.path);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('a ROM extraída dentro de uma subpasta também conta', () async {
-    final dir = await _pasta();
-    // É a forma que `extractToFolder` deixa no disco, e é a profundidade que
-    // `_scanLibraryDirIsolate` já varre hoje.
-    await _arquivo(dir, p.join('Super Metroid (Japan, USA)', 'Super Metroid (Japan, USA).sfc'));
+  test('a ROM that matches nothing stays out', () async {
+    final dir = await _dir();
+    await _file(dir, 'A Game That Does Not Exist (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
-    expect(await container.read(ownedGameIdsProvider.future), {'snes/super-metroid'});
+    expect(await container.read(ownedGameIdsProvider.future), isEmpty);
   });
 
-  test('casamento só por semelhança não conta como baixado', () async {
-    final dir = await _pasta();
-    // Tier 3: `ratio('chrono triggr', 'chrono trigger')` passa de 90, então
-    // o matcher devolve um `fuzzyName`. Bom o bastante para sugerir, não o
-    // bastante para pintar borda.
-    await _arquivo(dir, 'Chrono Triggr (USA).sfc');
+  test('a ROM extracted into a subfolder counts too', () async {
+    final dir = await _dir();
+    await _file(dir, p.join('Super Vectron (Japan, USA)', 'Super Vectron (Japan, USA).sfc'));
+    final container = _container(libraryDir: dir.path);
+
+    expect(await container.read(ownedGameIdsProvider.future), {'snes/super-vectron'});
+  });
+
+  test('a similarity-only match does not count as downloaded', () async {
+    final dir = await _dir();
+    // Tier 3: ratio passes 90 so the matcher returns a fuzzyName, good enough
+    // to suggest but not to mark as owned.
+    await _file(dir, 'Crystal Vanguar (USA).sfc');
     final container = _container(libraryDir: dir.path);
 
     expect(await container.read(ownedGameIdsProvider.future), isEmpty);

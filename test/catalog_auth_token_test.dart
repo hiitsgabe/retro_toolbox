@@ -7,51 +7,50 @@ import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
 void main() {
-  test('o token sai do catálogo salvo', () async {
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('token is removed from the saved catalog', () async {
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'url': 'https://ultranx.exemplo/',
-          'auth': {'token': 'tok-secreto', 'cookies': true},
+          'url': 'https://ultranx.example/',
+          'auth': {'token': 'tok-secret', 'cookies': true},
         },
       ]),
       vault: MemoryVault(),
       addonId: 'ultranx',
     );
 
-    expect(limpo, isNot(contains('tok-secreto')));
+    expect(cleaned, isNot(contains('tok-secret')));
   });
 
-  test('o token colhido vai para o cofre, chaveado por addon e console', () async {
+  test('harvested token is stored in the vault keyed by addon and console', () async {
     final vault = MemoryVault();
 
     await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-secreto');
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-secret');
   });
 
-  test('o resto do auth sobrevive', () async {
-    // Limpar demais aqui quebra o login: `cookies`, `cookie_name`, `signin` e
-    // `message` são configuração do catálogo, não segredo.
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('non-token auth fields survive the harvest', () async {
+    // `cookies`, `cookie_name`, `signin` and `message` are catalog config, not secrets.
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
           'auth': {
-            'token': 'tok-secreto',
+            'token': 'tok-secret',
             'cookies': true,
             'cookie_name': 'ultranx_session',
-            'message': 'Entre para baixar',
+            'message': 'Sign in to download',
           },
         },
       ]),
@@ -59,76 +58,70 @@ void main() {
       addonId: 'ultranx',
     );
 
-    final auth = (jsonDecode(limpo) as List).first['auth'] as Map;
+    final auth = (jsonDecode(cleaned) as List).first['auth'] as Map;
     expect(auth['cookies'], isTrue);
     expect(auth['cookie_name'], 'ultranx_session');
-    expect(auth['message'], 'Entre para baixar');
+    expect(auth['message'], 'Sign in to download');
     expect(auth.containsKey('token'), isFalse);
     expect(auth['requires_token'], isTrue);
   });
 
-  test('o console limpo continua declarando que pede token', () async {
-    // O caso que faz esta Task ser uma correção e não uma regressão. Sem a
-    // marca, um console cujo bloco de auth era só o token fica com `auth`
-    // vazio, `hasTokenAuth` vira falso, e o usuário perde de uma vez a tela
-    // onde digitaria o token e o aviso de que falta token. Ele veria uma fonte
-    // privada falhando calada.
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('scrubbed console still declares it requires a token', () async {
+    // Without the mark, `auth` ends up empty, `hasTokenAuth` goes false, and a
+    // private source fails silently: no login screen, no missing-token warning.
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       ]),
       vault: MemoryVault(),
       addonId: 'ultranx',
     );
 
-    final auth = (jsonDecode(limpo) as List).first['auth'] as Map<String, dynamic>;
+    final auth = (jsonDecode(cleaned) as List).first['auth'] as Map<String, dynamic>;
     final console = Console(id: 'ultranx', name: 'UltraNX', urls: const [], auth: auth);
 
     expect(console.hasTokenAuth, isTrue);
   });
 
-  test('console sem auth passa intacto', () async {
+  test('console with no auth passes through unchanged', () async {
     final original = jsonEncode([
-      {'name': 'Nintendo 64', 'url': 'https://exemplo/n64/'},
+      {'name': 'Nintendo 64', 'url': 'https://example/n64/'},
     ]);
 
-    final limpo = await CatalogService.harvestAuthTokens(original, vault: MemoryVault(), addonId: 'x');
+    final cleaned = await CatalogService.harvestAuthTokens(original, vault: MemoryVault(), addonId: 'x');
 
-    expect(jsonDecode(limpo), jsonDecode(original));
+    expect(jsonDecode(cleaned), jsonDecode(original));
   });
 
-  test('o formato de mapa legado também é limpo', () async {
-    // O app aceita as duas formas (`catalog_service.dart:79-100`). Limpar só a
-    // de array deixaria o buraco aberto para quem usa a antiga, que é
-    // exatamente quem tem catálogo mais velho.
+  test('legacy map format is also scrubbed', () async {
+    // The app accepts both formats. Scrubbing only the array form would leave
+    // the hole open for older catalogs that use the map format.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode({
         'ultranx': {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       }),
       vault: vault,
       addonId: 'meu_addon',
     );
 
-    expect(limpo, isNot(contains('tok-secreto')));
-    expect(await vault.read(SecretRef.addonToken('meu_addon', 'ultranx')), 'tok-secreto');
+    expect(cleaned, isNot(contains('tok-secret')));
+    expect(await vault.read(SecretRef.addonToken('meu_addon', 'ultranx')), 'tok-secret');
   });
 
-  test('token vazio não cria chave no cofre, mas deixa a marca', () async {
-    // `{'token': ''}` é como um catálogo compartilhado declara "este console
-    // pede token, e eu não estou te dando o meu". Não há segredo para guardar,
-    // e a marca tem que ficar do mesmo jeito: é ela que mantém a tela de login
-    // de pé para o usuário digitar o token dele.
+  test('empty token does not create a vault key but leaves the requires_token mark', () async {
+    // `{'token': ''}` means "needs a token, mine is not included": nothing to
+    // store, but the mark must stay or the login screen never appears.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
@@ -140,58 +133,57 @@ void main() {
     );
 
     expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), isNull);
-    expect((jsonDecode(limpo) as List).first['auth']['requires_token'], isTrue);
+    expect((jsonDecode(cleaned) as List).first['auth']['requires_token'], isTrue);
   });
 
-  test('a entrada de descoberta também perde o token', () async {
-    // `list_systems: true` não vira console (`catalog_service.dart:87`), então
-    // é tentador pular. Não pule: o arquivo compartilhado é o mesmo, e o token
-    // lá dentro vaza igual. Ele vai para o cofre pelo id do nome, para não ser
-    // perdido se um dia o app passar a usar essas entradas.
+  test('discovery entry also loses its token', () async {
+    // `list_systems: true` entries do not become consoles, but the shared file
+    // is the same object and the token leaks just the same. It is stored under
+    // the name-derived id so it is not lost if the app ever uses these entries.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
-          'name': 'Descoberta',
+          'name': 'Discovery',
           'list_systems': true,
-          'auth': {'token': 'tok-descoberta'},
+          'auth': {'token': 'tok-discovery'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(limpo, isNot(contains('tok-descoberta')));
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'descoberta')), 'tok-descoberta');
+    expect(cleaned, isNot(contains('tok-discovery')));
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'discovery')), 'tok-discovery');
   });
 
-  test('o cofre já preenchido ganha do arquivo', () async {
-    // Mesma regra da migração: reinstalar um catálogo velho não pode devolver
-    // ao usuário um token que ele já trocou.
+  test('vault already filled beats the file', () async {
+    // Same rule as migration: reinstalling an old catalog must not replace a
+    // token the user already updated.
     final vault = MemoryVault();
-    await vault.write(SecretRef.addonToken('ultranx', 'ultranx'), 'tok-novo');
+    await vault.write(SecretRef.addonToken('ultranx', 'ultranx'), 'tok-new');
 
     await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-velho'},
+          'auth': {'token': 'tok-old'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-novo');
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-new');
   });
 
-  test('JSON de formato desconhecido volta como veio', () async {
-    // Quem valida formato é `setCatalogFromJson`, com mensagem de erro própria.
-    // A colheita não pode levantar antes e trocar essa mensagem por um stack
-    // trace.
-    const cru = '"isto não é um catálogo"';
+  test('unknown JSON format is returned as-is', () async {
+    // Format validation belongs to `setCatalogFromJson`, with its own error
+    // message. The harvest must not throw first and replace that message with a
+    // stack trace.
+    const raw = '"this is not a catalog"';
 
-    expect(await CatalogService.harvestAuthTokens(cru, vault: MemoryVault(), addonId: 'x'), cru);
+    expect(await CatalogService.harvestAuthTokens(raw, vault: MemoryVault(), addonId: 'x'), raw);
   });
 }

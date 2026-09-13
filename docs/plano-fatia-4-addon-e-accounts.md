@@ -1,126 +1,126 @@
-# Fatia 4, Addon e Accounts: plano de implementação
+# Slice 4, Addon and Accounts: implementation plan
 
-> **Para quem executa:** SUB-SKILL OBRIGATÓRIA: use `superpowers:subagent-driven-development` (recomendado) ou `superpowers:executing-plans` para executar tarefa a tarefa. Os passos usam checkbox (`- [ ]`) para acompanhamento.
+> **For whoever executes this:** MANDATORY SUB-SKILL: use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to execute task by task. The steps use checkboxes (`- [ ]`) for tracking.
 
-**Goal:** tirar todo segredo de dentro do arquivo que o usuário compartilha, e trocar a fonte de catálogo única de hoje por uma lista ordenada de addons, cuja ordem é o desempate que a fatia 3 já sabe consumir.
+**Goal:** take every secret out of the file the user shares, and replace today's single catalog source with an ordered list of addons, whose order is the tiebreaker that slice 3 already knows how to consume.
 
-**Architecture:** duas metades que se encontram no fim. A primeira é o cofre: uma interface `SecretVault` de duas implementações, a de sistema e a de reserva, com uma migração que roda uma vez e esvazia os segredos do `shared_preferences`. A segunda é o addon: um `Addon` com id próprio, uma lista ordenada que substitui o `catalogSourceUrl` único, e um `CatalogService` que funde N addons num `Map<String, Console>` somando URLs por console em vez de brigar por id. As duas se encontram porque a credencial é chaveada por `addon:<id>/<console>`, e é isso que faz dois addons servindo o mesmo console não dividirem o mesmo token.
+**Architecture:** two halves that meet at the end. The first is the vault: a `SecretVault` interface with two implementations, the system one and the fallback one, with a migration that runs once and empties the secrets out of `shared_preferences`. The second is the addon: an `Addon` with its own id, an ordered list that replaces the single `catalogSourceUrl`, and a `CatalogService` that merges N addons into a `Map<String, Console>` summing URLs per console instead of fighting over id. The two meet because the credential is keyed by `addon:<id>/<console>`, and that is what makes two addons serving the same console not share the same token.
 
-**Tech Stack:** Flutter, Riverpod (`flutter_riverpod: ^2.6.1`), `flutter_test` sem mockito, injeção por construtor. **Uma dependência nova:** `flutter_secure_storage`. É a única de toda a fatia.
+**Tech Stack:** Flutter, Riverpod (`flutter_riverpod: ^2.6.1`), `flutter_test` without mockito, constructor injection. **One new dependency:** `flutter_secure_storage`. It is the only one in the whole slice.
 
-**Commit de base:** `ef5ee57`. A Task final mede a fatia inteira contra esse hash, então ele é imutável enquanto a fatia estiver aberta: nada de rebase, amend ou filter-branch que o alcance.
+**Base commit:** `ef5ee57`. The final Task measures the whole slice against that hash, so it is immutable while the slice is open: no rebase, amend or filter-branch that reaches it.
 
-**Baseline medido em `ef5ee57`:** `flutter test` dá `+340`, zero falha. `flutter analyze` dá `22 issues found`, sendo 21 `info` e **um `warning`** (`unnecessary_non_null_assertion`, `test/webdav_server_test.dart:69:100`), zero erro. Os 22 são todos pré-existentes. **Não existe mais "a falha de sempre":** o `-1` que as fatias 1, 2 e 3 carregaram foi consertado em `5d21b14`. Qualquer falha, em qualquer Task, é regressão sua.
+**Baseline measured at `ef5ee57`:** `flutter test` gives `+340`, zero failures. `flutter analyze` gives `22 issues found`, being 21 `info` and **one `warning`** (`unnecessary_non_null_assertion`, `test/webdav_server_test.dart:69:100`), zero errors. All 22 are pre-existing. **There is no longer "the usual failure":** the `-1` that slices 1, 2 and 3 carried was fixed in `5d21b14`. Any failure, in any Task, is your regression.
 
 ---
 
-## Duas decisões travadas pelo usuário
+## Two decisions locked by the user
 
-Estas duas não são minhas nem suas. Foram decididas em 2026-09-11 e valem para a fatia inteira.
+These two are neither mine nor yours. They were decided on 2026-09-11 and hold for the whole slice.
 
-### Primeira: o escopo é segurança **mais** multi-addon
+### First: the scope is security **plus** multi-addon
 
-O item 4 da decomposição (`docs/stremio-de-jogos-design.md:600`) lista só "tela de contas, migração de token para secure storage, correção da seção 6.3, e manter o RTS emitindo o formato estendido". A seção 9 do spec de UI descreve muito mais: lista de addons, detalhe por addon, cobertura, Accounts consolidado, e prioridade arrastável. O escopo travado é **o conjunto dos dois**. Se você achar que uma Task está fora do item 4 da decomposição, ela provavelmente está, e ainda assim é sua.
+Item 4 of the decomposition (`docs/stremio-de-jogos-design.md:600`) lists only "accounts screen, token migration to secure storage, fix of section 6.3, and keeping the RTS emitting the extended format". Section 9 of the UI spec describes a lot more: addon list, per-addon detail, coverage, consolidated Accounts, and draggable priority. The locked scope is **the union of the two**. If you think a Task is outside item 4 of the decomposition, it probably is, and it is still yours.
 
-Dois parágrafos da seção 9 **não** entram, e é melhor dizer agora do que descobrir na revisão:
+Two paragraphs of section 9 do **not** enter, and it is better to say so now than to discover it in review:
 
-| O que a seção 9 diz | Onde fica |
+| What section 9 says | Where it lands |
 | --- | --- |
-| "**Real-Debrid não é addon, é conta.** Ele aparece em Accounts e nunca na lista de addons" | fatia 6. O que esta fatia deixa pronto é a chave `SecretRef.debrid(provedor)`, com teste, e nada mais. Não existe addon de torrent para o debrid resolver, então uma linha de Real-Debrid em Accounts hoje seria um formulário que não alimenta ninguém. |
-| "**Cobertura**: quais consoles ele atende **e quantos itens em cada**" | fica de fora sem data. A contagem custa uma requisição de listagem por console, e o motivo está escrito na abertura do Grupo 5 e na Task 22. |
+| "**Real-Debrid is not an addon, it is an account.** It shows up in Accounts and never in the addon list" | slice 6. What this slice leaves ready is the `SecretRef.debrid(provider)` key, with a test, and nothing more. There is no torrent addon for the debrid to resolve, so a Real-Debrid line in Accounts today would be a form that feeds nobody. |
+| "**Coverage**: which consoles it serves **and how many items in each**" | left out with no date. The count costs one listing request per console, and the reason is written in the opening of Group 5 and in Task 22. |
 
-Todo o resto da seção 9 é desta fatia.
+Everything else in section 9 belongs to this slice.
 
-### Segunda: sem chaveiro, o cofre cai para texto puro, avisando
+### Second: with no keyring, the vault falls back to plaintext, warning
 
-`flutter_secure_storage` no Linux exige `gnome-keyring` ou KWallet vivo no D-Bus. Num Linux de servidor isso não existe, e a leitura levanta. A decisão é **manter o comportamento de hoje nesse caso**, com aviso na tela, em vez de desabilitar o campo ou cifrar em arquivo.
+`flutter_secure_storage` on Linux requires `gnome-keyring` or KWallet alive on the D-Bus. On a server Linux that does not exist, and the read raises. The decision is to **keep today's behavior in that case**, with a warning on the screen, instead of disabling the field or encrypting to a file.
 
-**A consequência dessa decisão tem que estar visível no código e nos testes, senão a fatia vira maquiagem.** A seção 6.3 do spec tem dois objetivos, e só um sobrevive incondicionalmente:
+**The consequence of that decision has to be visible in the code and in the tests, otherwise the slice becomes makeup.** Section 6.3 of the spec has two objectives, and only one survives unconditionally:
 
-| Objetivo da 6.3 | Vale sempre? | Por quê |
+| Objective of 6.3 | Always holds? | Why |
 | --- | --- | --- |
-| Tirar o segredo do **JSON compartilhável** (`auth.token`) | **Sim, em toda plataforma** | é o arquivo que o usuário manda para outra pessoa, e nada o cifra |
-| Cifrar o segredo **em repouso** | Não, é melhor esforço | sem chaveiro, o cofre de reserva grava em texto puro |
+| Take the secret out of the **shareable JSON** (`auth.token`) | **Yes, on every platform** | it is the file the user sends to someone else, and nothing encrypts it |
+| Encrypt the secret **at rest** | No, it is best effort | with no keyring, the fallback vault writes in plaintext |
 
-Nunca escreva, em commit, relatório ou comentário, que "a 6.3 está corrigida" sem separar essas duas metades. A primeira é a que fecha o vazamento de verdade; a segunda é defesa em profundidade que às vezes não está lá.
+Never write, in a commit, report or comment, that "6.3 is fixed" without separating those two halves. The first is the one that truly closes the leak; the second is defense in depth that sometimes is not there.
 
 ---
 
-## Antes de começar: o que já existe, medido
+## Before starting: what already exists, measured
 
-Tudo nesta seção foi conferido rodando `grep` e lendo o arquivo em `ef5ee57`, não deduzido. Os números de linha são pista, não verdade: se um não bater, o arquivo andou, e quem manda é o conteúdo.
+Everything in this section was checked by running `grep` and reading the file at `ef5ee57`, not deduced. The line numbers are hints, not truth: if one does not match, the file moved, and the content is what rules.
 
-### O inventário de segredos de hoje
+### Today's inventory of secrets
 
-Todo segredo do app mora numa **única chave** do `shared_preferences`, `app_settings`, como JSON em texto puro (`lib/services/settings_service.dart:8` e `:33`).
+Every secret of the app lives in a **single key** of `shared_preferences`, `app_settings`, as plaintext JSON (`lib/services/settings_service.dart:8` and `:33`).
 
-| Segredo | Campo | Serializado em | Digitado em |
+| Secret | Field | Serialized in | Typed in |
 | --- | --- | --- | --- |
-| Token por console | `BaseSettings.authToken` | `settings_model.dart:158` | `console_auth_setting.dart` |
-| Chave de acesso S3 do IA | `AppSettings.iaAccessKey` | `settings_model.dart:86` | `ia_credentials_setting.dart` |
-| Chave secreta S3 do IA | `AppSettings.iaSecretKey` | `settings_model.dart:87` | `ia_credentials_setting.dart` |
-| Cookies do IA | `AppSettings.iaCookies` | `settings_model.dart:88` | `ia_credentials_setting.dart` |
+| Per-console token | `BaseSettings.authToken` | `settings_model.dart:158` | `console_auth_setting.dart` |
+| IA S3 access key | `AppSettings.iaAccessKey` | `settings_model.dart:86` | `ia_credentials_setting.dart` |
+| IA S3 secret key | `AppSettings.iaSecretKey` | `settings_model.dart:87` | `ia_credentials_setting.dart` |
+| IA cookies | `AppSettings.iaCookies` | `settings_model.dart:88` | `ia_credentials_setting.dart` |
 
-São **quatro**, não dois. O `iaCookies` é fácil de esquecer porque o spec não o cita: ele é o par "logged-in-user / logged-in-sig" que destrava download restrito, e é credencial tanto quanto as outras.
+There are **four**, not two. The `iaCookies` is easy to forget because the spec does not cite it: it is the "logged-in-user / logged-in-sig" pair that unlocks restricted download, and it is a credential just as much as the others.
 
-### Os quatro sítios que leem o token de dentro do arquivo
+### The four sites that read the token from inside the file
 
-A seção 6.3 do spec diz que "duas mudanças fecham o buraco". São quatro:
+Section 6.3 of the spec says that "two changes close the hole". There are four:
 
-| # | Arquivo | O que faz |
+| # | File | What it does |
 | --- | --- | --- |
 | 1 | `lib/utils/network.dart:41` | `final token = tokenOverride ?? auth['token'] as String?;` |
-| 2 | `lib/services/task_queue_service.dart:20` | a cadeia inteira, literal como o spec cita |
-| 3 | `lib/screens/tinfoil_server_screen.dart:91` | decide se o console "tem auth" |
-| 4 | `lib/screens/setup_wizard_screen.dart:392` | idem, mesma expressão |
+| 2 | `lib/services/task_queue_service.dart:20` | the whole chain, literal as the spec cites it |
+| 3 | `lib/screens/tinfoil_server_screen.dart:91` | decides whether the console "has auth" |
+| 4 | `lib/screens/setup_wizard_screen.dart:392` | same, same expression |
 
-Os dois últimos **não montam header**: eles só decidem se a UI mostra o console como autenticado. Passam despercebidos num `grep` por `buildConsoleAuthHeaders`, que acha só quatro chamadores e nenhum deles. O `grep` que acha os quatro é:
+The last two do **not** build a header: they only decide whether the UI shows the console as authenticated. They go unnoticed by a `grep` for `buildConsoleAuthHeaders`, which finds only four callers and none of them. The `grep` that finds the four is:
 
 ```bash
 grep -rnE "auth\??\['token'\]" lib/
 ```
 
-O `-E` é obrigatório. Sem ele o `grep` é BRE, o `\?` vira quantificador e o segundo `?` vira literal, e aí o padrão passa a exigir uma `?` depois de `auth`: acha os três que escrevem `auth?[` e deixa passar justamente o `network.dart:41`, que escreve `auth['token']` sem `?` e é o sítio que a 6.3 lista. Medido com os quatro ainda no lugar: BRE achou três, `-E` achou quatro.
+The `-E` is mandatory. Without it the `grep` is BRE, the `\?` becomes a quantifier and the second `?` becomes a literal, and then the pattern starts to require a `?` after `auth`: it finds the three that write `auth?[` and lets through precisely `network.dart:41`, which writes `auth['token']` without `?` and is the site that 6.3 lists. Measured with the four still in place: BRE found three, `-E` found four.
 
-Se você consertar só os dois primeiros, o app continua dizendo "este console tem auth configurada" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface, e é pior de achar depois.
+If you fix only the first two, the app keeps saying "this console has auth configured" based on a field that nobody else reads to authenticate. It is not a leak, it is an interface lie, and it is worse to find later.
 
-**E a terceira frase da 6.3 é vazia hoje, medido.** O spec diz "Na instalação, se o JSON vier com `auth.token` preenchido, o app move para o `flutter_secure_storage` e zera no arquivo salvo. **Na exportação, remove**". A metade da instalação é a Task 8. A da exportação não tem onde morar: **o app não exporta catálogo**. O único `FilePicker.platform.saveFile` de `lib/` grava `webdav.json` do servidor JDKV (`jdkv_server_screen.dart:181`), que é outro arquivo e outra tela. Não escreva Task para isso, e não reporte a exportação como feita nem como pendente: reporte que não existe caminho de exportação de catálogo em `ef5ee57`, e que quem criar um depois herda a obrigação.
+**And the third sentence of 6.3 is empty today, measured.** The spec says "On install, if the JSON comes with `auth.token` filled, the app moves it to `flutter_secure_storage` and zeroes it in the saved file. **On export, remove it**". The install half is Task 8. The export half has nowhere to live: **the app does not export a catalog**. The only `FilePicker.platform.saveFile` in `lib/` writes the JDKV server's `webdav.json` (`jdkv_server_screen.dart:181`), which is another file and another screen. Do not write a Task for that, and do not report the export as done nor as pending: report that there is no catalog export path at `ef5ee57`, and that whoever creates one later inherits the obligation.
 
-### A fonte de catálogo de hoje é **uma só**
+### Today's catalog source is **a single one**
 
-Isso é o fato que dá o tamanho da fatia.
+This is the fact that gives the slice its size.
 
-- `CatalogService.setCatalogFromJson` (`catalog_service.dart:109-118`) **sobrescreve** `config/consoles.json`. Instalar um catálogo apaga o anterior.
-- `AppSettings.catalogSourceUrl` (`settings_model.dart:24`) é um `String?`, uma URL, não uma lista.
-- `getConsoles` (`catalog_service.dart:20-48`) lê exatamente um arquivo, com precedência config do usuário, depois asset embutido, depois nada.
+- `CatalogService.setCatalogFromJson` (`catalog_service.dart:109-118`) **overwrites** `config/consoles.json`. Installing a catalog erases the previous one.
+- `AppSettings.catalogSourceUrl` (`settings_model.dart:24`) is a `String?`, a URL, not a list.
+- `getConsoles` (`catalog_service.dart:20-48`) reads exactly one file, with precedence user config, then embedded asset, then nothing.
 
-Não existe hoje **nenhuma** noção de lista ordenada de fontes, prioridade ou arrasto, em lugar nenhum de `lib/`.
+There is today **no** notion of an ordered list of sources, priority or drag, anywhere in `lib/`.
 
-### O id do console vem do nome, e por isso colide
+### The console id comes from the name, and that is why it collides
 
-`_nameToId` (`catalog_service.dart:61-63`) deriva o id do **nome** do console. Com um addon só isso nunca importou. Com N, dois addons que sirvam "Nintendo 64" produzem o mesmo id `nintendo_64` e um sobrescreve o outro no `Map<String, Console>`.
+`_nameToId` (`catalog_service.dart:61-63`) derives the id from the console's **name**. With a single addon this never mattered. With N, two addons that serve "Nintendo 64" produce the same id `nintendo_64` and one overwrites the other in the `Map<String, Console>`.
 
-**A saída não é inventar namespace de id.** O spec já decidiu, em `design.md:420-422`: "Alguém instala a URL do seu RTS como addon e, se tiver o pack daquele console, sua pasta local aparece como fonte na grade dele". "Na grade **dele**" quer dizer: o console continua sendo um só, e os addons são fontes daquele console. É o mesmo "um jogo, várias fontes" da fatia 3, um nível acima.
+**The way out is not to invent an id namespace.** The spec already decided, in `design.md:420-422`: "Someone installs your RTS's URL as an addon and, if it has that console's pack, your local folder shows up as a source in its grid". "In **its** grid" means: the console stays a single one, and the addons are sources of that console. It is the same "one game, many sources" from slice 3, one level up.
 
-Isso cai bem porque `Console.urls` **já é** `List<String>` (`console_model.dart:4`), e `Console.url` é só o primeiro (`console_model.dart:51`). Fundir dois consoles de mesmo id é concatenar `urls`, não inventar tipo.
+This works out well because `Console.urls` **already is** `List<String>` (`console_model.dart:4`), and `Console.url` is just the first (`console_model.dart:51`). Merging two consoles of the same id is concatenating `urls`, not inventing a type.
 
-O que **não** pode ser fundido é a credencial, e é por isso que a chave do cofre é `addon:<id>/<console>` e não `console:<id>`: dois addons servindo Nintendo 64, cada um com login próprio, continuam com tokens separados. A seção 6.2 do spec já escreve a chave nesse formato.
+What **cannot** be merged is the credential, and that is why the vault key is `addon:<id>/<console>` and not `console:<id>`: two addons serving Nintendo 64, each with its own login, keep separate tokens. Section 6.2 of the spec already writes the key in that format.
 
-### O soquete que a fatia 3 deixou pronto
+### The socket that slice 3 left ready
 
-Não reimplemente isto, **ligue**:
+Do not reimplement this, **wire it up**:
 
-- `planFromEntries` (`lib/services/source_pick_service.dart:50-55`) já recebe `List<String> sourcePriority = const []`, e `_priorityRank` (`:156-159`) já usa. **Ninguém passa nada hoje**, então o eixo existe e está sempre vazio.
-- `MatchedSource.sourceId` e `SourcePick.sourceId` já são campos, não enums (`source_pick_model.dart:35-38`).
-- Hoje o valor é sempre `kBuiltinSourceId`, a constante `'listagem'` (`source_pick_model.dart:17`), preenchido num lugar só: `pack_grid_provider.dart:75`.
+- `planFromEntries` (`lib/services/source_pick_service.dart:50-55`) already takes `List<String> sourcePriority = const []`, and `_priorityRank` (`:156-159`) already uses it. **Nobody passes anything today**, so the axis exists and is always empty.
+- `MatchedSource.sourceId` and `SourcePick.sourceId` are already fields, not enums (`source_pick_model.dart:35-38`).
+- Today the value is always `kBuiltinSourceId`, the constant `'listagem'` (`source_pick_model.dart:17`), filled in a single place: `pack_grid_provider.dart:75`.
 
-A prioridade arrastável da seção 9 é exatamente o que preenche `sourcePriority`. O comentário em `source_pick_model.dart:35` já diz "nesta fatia é sempre `kBuiltinSourceId` e na fatia 4...". Essa fatia é esta.
+The draggable priority of section 9 is exactly what fills `sourcePriority`. The comment in `source_pick_model.dart:35` already says "in this slice it is always `kBuiltinSourceId` and in slice 4...". That slice is this one.
 
-### O RTS é o produtor do mesmo formato
+### The RTS is the producer of the same format
 
-`RtsServerService.consoleJson` (`lib/services/rts_server_service.dart:13-20`) monta o objeto de console que o `Console.fromJson` do mesmo binário consome. Produtor e consumidor são o mesmo app, então divergir é um bug com nome (`design.md:416-419`). Ele **não** emite `auth`, e está certo: servidor local não pede credencial. A Task de contrato existe para que isso continue verdade, não para mudar.
+`RtsServerService.consoleJson` (`lib/services/rts_server_service.dart:13-20`) builds the console object that the same binary's `Console.fromJson` consumes. Producer and consumer are the same app, so diverging is a bug with a name (`design.md:416-419`). It does **not** emit `auth`, and that is correct: a local server does not ask for a credential. The contract Task exists so that this stays true, not to change it.
 
-### Comandos deste repositório
+### Commands for this repository
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
@@ -128,245 +128,246 @@ flutter test 2>&1 | tr '\r' '\n' | tail -5
 flutter analyze
 ```
 
-O `tr '\r' '\n'` não é enfeite: a saída do `flutter test` usa retorno de carro e some no pipe sem ele.
+The `tr '\r' '\n'` is not decoration: the `flutter test` output uses carriage returns and vanishes in the pipe without it.
 
-**Nunca rode `dart format`.** O repositório não é limpo sob o formatador tall-style atual: 106 de 217 arquivos mudariam. Rodar cria ruído de diff que enterra a sua mudança.
+**Never run `dart format`.** The repository is not clean under the current tall-style formatter: 106 of 217 files would change. Running it creates diff noise that buries your change.
 
-**Não existe um único `export` em `lib/`.** Confira: `grep -rln "^export " lib/` volta vazio. Import transitivo nunca resolve, então todo arquivo novo importa explicitamente tudo que usa. Esse é o defeito mais repetido das três fatias anteriores.
+**There is not a single `export` in `lib/`.** Check: `grep -rln "^export " lib/` comes back empty. A transitive import never resolves, so every new file imports explicitly everything it uses. This is the most repeated defect of the three previous slices.
 
-### Regras de commit
+### Commit rules
 
-- `git add` sempre por caminho explícito. **Nunca `git add -A`, nunca `git add .`, nunca `git commit -a`**: o `pubspec.lock` fica permanentemente sujo porque o Flutter 3.35.7 local resolve versões transitivas mais velhas.
-- Cada Task traz **duas** mensagens, `test(<escopo>):` e `feat(<escopo>):`, com o mesmo texto descritivo. Nunca uma só.
-- Um commit toca **ou** só `lib/` **ou** só `test/`. Nunca os dois.
-- Sem emoji, sem travessão, sem co-autoria.
+- `git add` always by explicit path. **Never `git add -A`, never `git add .`, never `git commit -a`**: the `pubspec.lock` stays permanently dirty because the local Flutter 3.35.7 resolves older transitive versions.
+- Each Task brings **two** messages, `test(<scope>):` and `feat(<scope>):`, with the same descriptive text. Never a single one.
+- A commit touches **either** only `lib/` **or** only `test/`. Never both.
+- No emoji, no dash, no co-authorship.
 
 ---
 
-## Estrutura de arquivos
+## File structure
 
-Arquivos **novos**:
+**New** files:
 
-| Arquivo | Responsabilidade | Dart puro? |
+| File | Responsibility | Pure Dart? |
 | --- | --- | --- |
-| `lib/models/secret_ref.dart` | as chaves do cofre, num lugar só | sim |
-| `lib/services/secret_vault.dart` | a interface do cofre, mais a implementação em memória | sim |
-| `lib/services/prefs_vault.dart` | o cofre de reserva, em `shared_preferences` | não, usa plugin |
-| `lib/services/secure_storage_vault.dart` | o cofre de sistema, mais a sonda de disponibilidade | não, usa plugin |
-| `lib/services/secret_migration.dart` | a mudança única do `app_settings` para o cofre | sim |
-| `lib/providers/vault_provider.dart` | qual cofre o app usa, e o aviso quando é o de reserva | não |
-| `lib/models/addon_model.dart` | `Addon` e a lista ordenada | sim |
-| `lib/services/addon_store.dart` | persistir, instalar, remover e reordenar addons | não |
-| `lib/services/console_merge.dart` | fundir N catálogos num `Map<String, Console>` | sim |
-| `lib/providers/addon_provider.dart` | os addons, a prioridade derivada, o fundido, as contas e o fetcher | não |
-| `lib/services/addon_install.dart` | baixar uma url, colher os tokens e instalar o addon | não, usa `dart:io` |
-| `lib/utils/console_auth.dart` | as perguntas de auth que as telas fazem, fora delas | sim |
-| `lib/screens/addons_screen.dart` | a lista de addons, com arrasto | não |
-| `lib/screens/addon_detail_screen.dart` | um addon: conta, cobertura, prioridade, remover | não |
-| `lib/widgets/settings/vault_warning.dart` | o aviso de que este aparelho não cifra | não |
+| `lib/models/secret_ref.dart` | the vault keys, in a single place | yes |
+| `lib/services/secret_vault.dart` | the vault interface, plus the in-memory implementation | yes |
+| `lib/services/prefs_vault.dart` | the fallback vault, in `shared_preferences` | no, uses plugin |
+| `lib/services/secure_storage_vault.dart` | the system vault, plus the availability probe | no, uses plugin |
+| `lib/services/secret_migration.dart` | the one-time move from `app_settings` to the vault | yes |
+| `lib/providers/vault_provider.dart` | which vault the app uses, and the warning when it is the fallback | no |
+| `lib/models/addon_model.dart` | `Addon` and the ordered list | yes |
+| `lib/services/addon_store.dart` | persist, install, remove and reorder addons | no |
+| `lib/services/console_merge.dart` | merge N catalogs into a `Map<String, Console>` | yes |
+| `lib/providers/addon_provider.dart` | the addons, the derived priority, the merged one, the accounts and the fetcher | no |
+| `lib/services/addon_install.dart` | download a url, harvest the tokens and install the addon | no, uses `dart:io` |
+| `lib/utils/console_auth.dart` | the auth questions the screens ask, outside them | yes |
+| `lib/screens/addons_screen.dart` | the addon list, with drag | no |
+| `lib/screens/addon_detail_screen.dart` | one addon: account, coverage, priority, remove | no |
+| `lib/widgets/settings/vault_warning.dart` | the warning that this device does not encrypt | no |
 
-Quinze arquivos novos em `lib/`.
+Fifteen new files in `lib/`.
 
-Arquivos **modificados** em `lib/`, vinte e quatro:
+**Modified** files in `lib/`, twenty-four:
 
-| Arquivo | O que muda |
+| File | What changes |
 | --- | --- |
-| `lib/utils/network.dart` | `buildConsoleAuthHeaders` perde o termo do arquivo |
-| `lib/services/task_queue_service.dart` | a cadeia perde o termo do meio |
-| `lib/screens/tinfoil_server_screen.dart` | o predicado de "tem auth" para de ler o arquivo |
-| `lib/screens/setup_wizard_screen.dart` | idem |
-| `lib/services/catalog_service.dart` | instala limpando `auth.token`, lê N addons, e `_parseConsoles` vira público |
-| `lib/services/settings_service.dart` | a chave vira pública, e o token do console vira token do par |
-| `lib/models/settings_model.dart` | os quatro segredos saem do `toJson` |
-| `lib/models/console_model.dart` | `hasTokenAuth` passa a enxergar `requires_token`, e ganha `withUrls` |
-| `lib/models/game_model.dart` | o jogo passa a saber de qual addon veio |
-| `lib/models/source_pick_model.dart` | perde o `kBuiltinSourceId`, que era a fonte única |
-| `lib/services/source_pick_service.dart` | a prioridade passa a vir da ordem dos addons |
-| `lib/providers/settings_provider.dart` | escrita e leitura de segredo passam pelo cofre |
-| `lib/providers/pack_grid_provider.dart` | a fonte deixa de ser sempre `kBuiltinSourceId` |
-| `lib/providers/catalog_provider.dart` | busca por fonte, cada uma com a auth dela |
-| `lib/providers/download_provider.dart` | o header sai da auth do par (addon, console) |
-| `lib/providers/tinfoil_server_provider.dart` | perde o parâmetro de token que virou consulta ao cofre |
-| `lib/providers/fbi_server_provider.dart` | idem |
-| `lib/screens/home_screen.dart` | passa a prioridade do usuário para a escolha de fonte |
-| `lib/screens/game_detail_screen.dart` | idem, e mostra o nome do addon em vez do id |
-| `lib/screens/menu_screen.dart` | as tiles de Tools viram função de topo e ganham "Addons" |
-| `lib/widgets/settings/accounts_setting.dart` | vira a visão consolidada, com uma linha por par (addon, console) e o aviso do cofre |
-| `lib/widgets/settings/catalog_source_setting.dart` | vira a porta para a tela de addons |
-| `lib/widgets/settings/console_auth_setting.dart` | o formulário passa a ser do par (addon, console), e avisa quando grava |
-| `lib/widgets/settings/settings_content.dart` | passa o addon ao formulário |
+| `lib/utils/network.dart` | `buildConsoleAuthHeaders` loses the file term |
+| `lib/services/task_queue_service.dart` | the chain loses the middle term |
+| `lib/screens/tinfoil_server_screen.dart` | the "has auth" predicate stops reading the file |
+| `lib/screens/setup_wizard_screen.dart` | same |
+| `lib/services/catalog_service.dart` | installs clearing `auth.token`, reads N addons, and `_parseConsoles` becomes public |
+| `lib/services/settings_service.dart` | the key becomes public, and the console token becomes the pair's token |
+| `lib/models/settings_model.dart` | the four secrets leave the `toJson` |
+| `lib/models/console_model.dart` | `hasTokenAuth` starts to see `requires_token`, and gains `withUrls` |
+| `lib/models/game_model.dart` | the game starts to know which addon it came from |
+| `lib/models/source_pick_model.dart` | loses the `kBuiltinSourceId`, which was the single source |
+| `lib/services/source_pick_service.dart` | the priority starts coming from the addon order |
+| `lib/providers/settings_provider.dart` | secret write and read go through the vault |
+| `lib/providers/pack_grid_provider.dart` | the source stops being always `kBuiltinSourceId` |
+| `lib/providers/catalog_provider.dart` | fetch per source, each with its own auth |
+| `lib/providers/download_provider.dart` | the header comes from the (addon, console) pair auth |
+| `lib/providers/tinfoil_server_provider.dart` | loses the token parameter that became a vault query |
+| `lib/providers/fbi_server_provider.dart` | same |
+| `lib/screens/home_screen.dart` | passes the user's priority to the source pick |
+| `lib/screens/game_detail_screen.dart` | same, and shows the addon name instead of the id |
+| `lib/screens/menu_screen.dart` | the Tools tiles become a top-level function and gain "Addons" |
+| `lib/widgets/settings/accounts_setting.dart` | becomes the consolidated view, with one line per (addon, console) pair and the vault warning |
+| `lib/widgets/settings/catalog_source_setting.dart` | becomes the door to the addons screen |
+| `lib/widgets/settings/console_auth_setting.dart` | the form becomes the (addon, console) pair's, and warns when it writes |
+| `lib/widgets/settings/settings_content.dart` | passes the addon to the form |
 
-Fora de `lib/`: `pubspec.yaml` ganha `flutter_secure_storage`, e `pubspec.lock` muda junto.
+Outside `lib/`: `pubspec.yaml` gains `flutter_secure_storage`, and `pubspec.lock` changes along with it.
 
-Em `test/`, trinta e dois arquivos, dos quais **cinco são antigos e só são modificados**: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart` e `test/source_pick_service_test.dart`. Dois dos novos não terminam em `_test.dart` de propósito, porque são ajuda compartilhada sem `main`: `test/vault_contract.dart` e `test/support/fake_addon_store.dart`.
+In `test/`, thirty-two files, of which **five are old and only modified**: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart` and `test/source_pick_service_test.dart`. Two of the new ones do not end in `_test.dart` on purpose, because they are shared help with no `main`: `test/vault_contract.dart` and `test/support/fake_addon_store.dart`.
 
-O `lib/services/rts_server_service.dart` **não muda**. Ele ganha teste de contrato, não alteração.
+`lib/services/rts_server_service.dart` does **not** change. It gains a contract test, not an alteration.
 
 ---
 
-## Grupo 1: o cofre
+## Group 1: the vault
 
-Cinco Tasks. A ordem existe para que o plugin novo chegue o mais tarde possível: as Tasks 1, 2 e 5 são Dart puro e testáveis sem plataforma nenhuma, a Task 3 usa só o `shared_preferences` que já está no projeto, e só a Task 4 encosta em `flutter_secure_storage`.
+Five Tasks. The order exists so that the new plugin arrives as late as possible: Tasks 1, 2 and 5 are pure Dart and testable with no platform at all, Task 3 uses only the `shared_preferences` already in the project, and only Task 4 touches `flutter_secure_storage`.
 
-O cofre entra por uma interface de quatro métodos, com três implementações: memória (testes), `shared_preferences` (a reserva em texto puro da decisão travada) e chaveiro do sistema. As três passam pelo **mesmo arquivo de contrato**, `test/vault_contract.dart`, porque o ponto da decisão travada é que a reserva se comporta igual ao cofre de verdade em tudo, menos em estar cifrada.
+The vault enters through a four-method interface, with three implementations: memory (tests), `shared_preferences` (the plaintext fallback of the locked decision) and the system keyring. The three pass through the **same contract file**, `test/vault_contract.dart`, because the point of the locked decision is that the fallback behaves the same as the real vault in everything except being encrypted.
 
-### Task 1: `SecretRef`, as chaves do cofre
+### Task 1: `SecretRef`, the vault keys
 
 **Files:**
 - Create: `lib/models/secret_ref.dart`
 - Test: `test/secret_ref_test.dart`
 
-Parece pequeno demais para uma Task própria, e é de propósito. A chave é a única coisa da fatia que **não pode mudar depois**: ela vai parar no chaveiro do sistema operacional do usuário, fora do controle do app. Um erro de formato aqui vira credencial órfã na máquina de quem atualizar, e não tem migração que conserte sem adivinhar.
+It looks too small for its own Task, and that is on purpose. The key is the only thing in the slice that **cannot change later**: it ends up in the user's operating system keyring, outside the app's control. A format mistake here becomes an orphan credential on the machine of whoever updates, and there is no migration that fixes it without guessing.
 
-O formato vem da seção 6.2 do spec de arquitetura, que já o escreve: `addon:<id>/ultranx`, `ia/cookies`, `debrid/realdebrid`.
+The format comes from section 6.2 of the architecture spec, which already writes it: `addon:<id>/ultranx`, `ia/cookies`, `debrid/realdebrid`.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/secret_ref_test.dart`:
+Create `test/secret_ref_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/secret_ref.dart';
 
 void main() {
-  test('a chave de token carrega o addon e o console, nessa ordem', () {
+  test('token key carries the addon and the console, in that order', () {
     expect(SecretRef.addonToken('ultranx', 'nintendo_64'), 'addon:ultranx/nintendo_64');
   });
 
-  test('dois addons servindo o mesmo console não dividem a chave', () {
-    // Este é o caso que justifica a chave inteira. O id do console vem do
-    // NOME dele (`catalog_service.dart:_nameToId`), então dois addons que
-    // sirvam "Nintendo 64" produzem `nintendo_64` os dois. Se a chave fosse
-    // só do console, o login do segundo apagaria o do primeiro em silêncio.
+  test('two addons serving the same console do not share the key', () {
+    // This is the case that justifies the whole key. The console id comes from
+    // its NAME (`catalog_service.dart:_nameToId`), so two addons that serve
+    // "Nintendo 64" both produce `nintendo_64`. If the key were console-only,
+    // the second's login would silently erase the first's.
     expect(
       SecretRef.addonToken('ultranx', 'nintendo_64'),
       isNot(SecretRef.addonToken('meu_rts', 'nintendo_64')),
     );
   });
 
-  test('as chaves do Internet Archive são as três da seção 6.2', () {
+  test('the Internet Archive keys are the three from section 6.2', () {
     expect(SecretRef.iaAccessKey, 'ia/accessKey');
     expect(SecretRef.iaSecretKey, 'ia/secretKey');
     expect(SecretRef.iaCookies, 'ia/cookies');
   });
 
-  test('debrid é chaveado por provedor, porque vai ter mais de um', () {
+  test('debrid is keyed by provider, because there will be more than one', () {
     expect(SecretRef.debrid('realdebrid'), 'debrid/realdebrid');
   });
 
-  test('o prefixo de um addon casa com as chaves dele e com mais nenhuma', () {
-    final prefixo = SecretRef.addonPrefix('ultranx');
+  test('addon prefix matches only that addon keys', () {
+    final prefix = SecretRef.addonPrefix('ultranx');
 
-    expect(SecretRef.addonToken('ultranx', 'nintendo_64').startsWith(prefixo), isTrue);
-    expect(SecretRef.addonToken('ultranx', 'snes').startsWith(prefixo), isTrue);
-    expect(SecretRef.addonToken('ultranx_2', 'snes').startsWith(prefixo), isFalse);
-    expect(SecretRef.iaAccessKey.startsWith(prefixo), isFalse);
+    expect(SecretRef.addonToken('ultranx', 'nintendo_64').startsWith(prefix), isTrue);
+    expect(SecretRef.addonToken('ultranx', 'snes').startsWith(prefix), isTrue);
+    expect(SecretRef.addonToken('ultranx_2', 'snes').startsWith(prefix), isFalse);
+    expect(SecretRef.iaAccessKey.startsWith(prefix), isFalse);
   });
 
-  test('um id com barra ou dois-pontos não consegue forjar a chave de outro', () {
-    // Sem sanear, o addon de id `a/b` mais o console `c` daria
-    // `addon:a/b/c`, que é a mesma coisa que o addon `a` mais o console
-    // `b/c`. Os ids de hoje são slugs e isso não acontece, mas a chave é
-    // permanente e o gerador de id não é: o saneamento mora aqui, no lado
-    // que não pode mudar depois.
+  test('an id with slash or colon cannot forge another key', () {
+    // Without sanitizing, addon id `a/b` plus console `c` would give
+    // `addon:a/b/c`, which is the same thing as addon `a` plus console
+    // `b/c`. Today's ids are slugs and this does not happen, but the key is
+    // permanent and the id generator is not: sanitizing lives here, on the
+    // side that cannot change later.
     expect(
       SecretRef.addonToken('a/b', 'c'),
       isNot(SecretRef.addonToken('a', 'b/c')),
     );
   });
 
-  test('sanear não colapsa ids que só diferem em pontuação', () {
+  test('sanitizing does not collapse ids that differ only in punctuation', () {
     expect(SecretRef.addonToken('meu-rts', 'snes'), isNot(SecretRef.addonToken('meu_rts', 'snes')));
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/secret_ref_test.dart
 ```
 
-Esperado: `Error: Couldn't resolve the package 'roms_downloader' ... secret_ref.dart` ou `Undefined name 'SecretRef'`. Se passar, você criou o arquivo antes do teste.
+Expected: `Error: Couldn't resolve the package 'roms_downloader' ... secret_ref.dart` or `Undefined name 'SecretRef'`. If it passes, you created the file before the test.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/models/secret_ref.dart`:
+Create `lib/models/secret_ref.dart`:
 
 ```dart
-/// As chaves do cofre, num lugar só.
+/// The vault keys, in a single place.
 ///
-/// São `String` e não enum porque duas delas dependem de dado de execução: o
-/// id do addon e o do console. O formato é o da seção 6.2 do spec de
-/// arquitetura.
+/// They are `String` and not an enum because two of them depend on runtime
+/// data: the addon id and the console id. The format is that of section 6.2 of
+/// the architecture spec.
 ///
-/// **Este arquivo é o mais difícil de mudar da fatia.** A chave vai parar no
-/// chaveiro do sistema operacional do usuário, fora do alcance do app. Mudar
-/// o formato depois deixa credencial órfã na máquina de quem atualizar, sem
-/// como achar de volta. Por isso o saneamento mora aqui e não em quem gera id.
+/// **This file is the hardest to change in the slice.** The key ends up in the
+/// user's operating system keyring, out of the app's reach. Changing the
+/// format later leaves an orphan credential on the machine of whoever updates,
+/// with no way to find it back. That is why sanitizing lives here and not in
+/// whoever generates the id.
 class SecretRef {
-  /// O token de um console servido por um addon.
+  /// The token of a console served by an addon.
   ///
-  /// Carrega o **addon**, e não só o console, porque o id do console vem do
-  /// nome dele: dois addons que sirvam "Nintendo 64" produzem `nintendo_64`
-  /// os dois, e têm logins diferentes.
+  /// Carries the **addon**, and not just the console, because the console id
+  /// comes from its name: two addons that serve "Nintendo 64" both produce
+  /// `nintendo_64`, and have different logins.
   static String addonToken(String addonId, String consoleId) =>
       '${addonPrefix(addonId)}${_sane(consoleId)}';
 
-  /// Tudo que pertence a um addon. Usado para apagar as credenciais dele
-  /// quando o usuário o remove.
+  /// Everything that belongs to an addon. Used to delete its credentials
+  /// when the user removes it.
   ///
-  /// Termina em `/` de propósito: sem isso, o prefixo de `ultranx` casaria
-  /// com as chaves de `ultranx_2`.
+  /// Ends in `/` on purpose: without it, the `ultranx` prefix would match
+  /// the keys of `ultranx_2`.
   static String addonPrefix(String addonId) => 'addon:${_sane(addonId)}/';
 
   static const iaAccessKey = 'ia/accessKey';
   static const iaSecretKey = 'ia/secretKey';
   static const iaCookies = 'ia/cookies';
 
-  /// Por provedor, porque Real-Debrid não vai ser o único.
+  /// Per provider, because Real-Debrid will not be the only one.
   static String debrid(String provider) => 'debrid/${_sane(provider)}';
 
-  /// Troca o que estrutura a chave por `_`, para que nenhum id consiga forjar
-  /// a chave de outro. Só `:` e `/` são estruturais, então trocar os dois basta.
+  /// Replaces what structures the key with `_`, so that no id can forge
+  /// another's key. Only `:` and `/` are structural, so replacing the two is enough.
   ///
-  /// A troca **não** é injetiva: `a:b`, `a/b` e `a_b` saem todos como `a_b`.
-  /// Não se perde nada com isso, porque `_nameToId`
-  /// (`catalog_service.dart:61`) já colapsa todo não alfanumérico em `_`, e
-  /// então os ids reais nunca distinguem esses três. Trocar mais, tipo
-  /// `[^a-z0-9]`, aí sim perderia: `meu-rts` e `meu_rts` são dois addons e
-  /// virariam a mesma chave.
+  /// The replacement is **not** injective: `a:b`, `a/b` and `a_b` all come out
+  /// as `a_b`. Nothing is lost by that, because `_nameToId`
+  /// (`catalog_service.dart:61`) already collapses every non-alphanumeric into
+  /// `_`, and so the real ids never distinguish those three. Replacing more,
+  /// like `[^a-z0-9]`, would then lose: `meu-rts` and `meu_rts` are two addons
+  /// and would become the same key.
   ///
-  /// Parte vazia sai sem guarda, de propósito. `_nameToId` devolve `''` para
-  /// um nome só de pontuação, e aí `addonToken('x', '')` é igual a
-  /// `addonPrefix('x')`. É inofensivo: o prefixo só serve para apagar em lote
-  /// e nunca é chave de nada, e dois consoles de id vazio já são **um**
-  /// console, porque `_parseConsoles` (`catalog_service.dart:91`) grava os
-  /// dois na mesma entrada do mapa. Levantar aqui derrubaria a migração da
-  /// Task 5, que itera chaves já gravadas, para defender contra uma colisão
-  /// que o catálogo colapsou antes.
+  /// An empty part comes out unguarded, on purpose. `_nameToId` returns `''`
+  /// for a name that is only punctuation, and then `addonToken('x', '')` equals
+  /// `addonPrefix('x')`. It is harmless: the prefix only serves to delete in
+  /// bulk and is never a key of anything, and two consoles with empty id are
+  /// already **one** console, because `_parseConsoles`
+  /// (`catalog_service.dart:91`) writes both into the same map entry. Raising
+  /// here would take down the Task 5 migration, which iterates keys already
+  /// written, to defend against a collision the catalog collapsed earlier.
   static String _sane(String part) => part.replaceAll(RegExp(r'[:/]'), '_');
 }
 ```
 
-- [ ] **Step 4: Rode para ver passar**
+- [ ] **Step 4: Run to see it pass**
 
 ```bash
 flutter test test/secret_ref_test.dart
 ```
 
-Esperado: `+7`, zero falha.
+Expected: `+7`, zero failures.
 
-**Tropeço provável:** o último teste, "sanear não colapsa ids que só diferem em pontuação", falha se você trocar a expressão por algo mais largo, tipo `[^a-z0-9]`. Aí `meu-rts` e `meu_rts` viram a mesma chave e dois addons diferentes dividem credencial, que é exatamente o que a chave existe para impedir. Saneie **só** o que estrutura a chave.
+**Likely pitfall:** the last test, "sanitizing does not collapse ids that differ only in punctuation", fails if you swap the expression for something wider, like `[^a-z0-9]`. Then `meu-rts` and `meu_rts` become the same key and two different addons share a credential, which is exactly what the key exists to prevent. Sanitize **only** what structures the key.
 
-- [ ] **Step 5: Analise**
+- [ ] **Step 5: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, os mesmos de sempre, nenhum nos arquivos novos.
+Expected: `22 issues found`, the usual ones, none in the new files.
 
 - [ ] **Step 6: Commit**
 
@@ -379,58 +380,53 @@ git commit -m "feat(cofre): chaves do cofre por addon, console e provedor"
 
 ---
 
-### Task 2: `SecretVault`, a interface, e o contrato que toda implementação cumpre
+### Task 2: `SecretVault`, the interface, and the contract every implementation fulfills
 
 **Files:**
 - Create: `lib/services/secret_vault.dart`
 - Create: `test/vault_contract.dart`
 - Test: `test/secret_vault_test.dart`
 
-Esta Task entrega duas coisas que valem mais juntas do que separadas: a interface com a implementação em memória, e o **arquivo de contrato** que as outras duas implementações vão reusar sem copiar teste.
+This Task delivers two things that are worth more together than apart: the interface with the in-memory implementation, and the **contract file** that the other two implementations will reuse without copying tests.
 
-O contrato tem uma decisão dentro dele que merece ser lida antes de escrever o código: **escrever string vazia apaga a chave**. A alternativa seria guardar `''`, e aí `read` devolveria `''` em vez de `null`, e todo chamador precisaria lembrar de tratar os dois como "não tem". Hoje o app já faz isso certo num lugar (`settings_provider.dart:125`, `token.isEmpty ? clearAuthToken : ...`) e o cofre não pode desfazer essa decisão. Um cofre que devolve `''` num lugar e `null` no outro vira `if (t != null && t.isNotEmpty)` espalhado por quatro telas.
+The contract has a decision inside it that deserves to be read before writing the code: **writing an empty string deletes the key**. The alternative would be to store `''`, and then `read` would return `''` instead of `null`, and every caller would need to remember to treat both as "not set". Today the app already does this right in one place (`settings_provider.dart:125`, `token.isEmpty ? clearAuthToken : ...`) and the vault cannot undo that decision. A vault that returns `''` in one place and `null` in another becomes `if (t != null && t.isNotEmpty)` scattered across four screens.
 
-- [ ] **Step 1: Escreva o contrato**
+- [ ] **Step 1: Write the contract**
 
-Crie `test/vault_contract.dart`. Repare no nome: **não** termina em `_test.dart`, de propósito, porque ele não roda sozinho, ele é chamado por três arquivos de teste diferentes.
+Create `test/vault_contract.dart`. Note the name: it does **not** end in `_test.dart`, on purpose, because it does not run alone, it is called by three different test files.
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// O contrato que TODA implementação de [SecretVault] cumpre.
+/// The contract every [SecretVault] implementation must satisfy.
 ///
-/// Existe como função e não como arquivo de teste porque três implementações
-/// precisam passar exatamente por ele: memória (Task 2), `shared_preferences`
-/// (Task 3) e chaveiro do sistema (Task 4). Copiar os casos daria três cópias
-/// que divergem na primeira correção.
-///
-/// [build] devolve um cofre **vazio** a cada chamada. É `Future` porque a
-/// implementação de `shared_preferences` precisa de `await` para nascer.
-void runVaultContract(String nome, Future<SecretVault> Function() build) {
-  group('contrato de cofre: $nome', () {
-    test('lê de volta o que escreveu', () async {
+/// [build] returns an empty vault on each call; a `Future` because the
+/// `shared_preferences` implementation needs `await` to be born.
+void runVaultContract(String name, Future<SecretVault> Function() build) {
+  group('vault contract: $name', () {
+    test('reads back what it wrote', () async {
       final vault = await build();
       await vault.write('ia/accessKey', 'ABCDEF');
 
       expect(await vault.read('ia/accessKey'), 'ABCDEF');
     });
 
-    test('chave que nunca foi escrita devolve null', () async {
+    test('a never-written key reads null', () async {
       final vault = await build();
 
       expect(await vault.read('ia/accessKey'), isNull);
     });
 
-    test('escrever por cima substitui', () async {
+    test('writing over replaces', () async {
       final vault = await build();
-      await vault.write('ia/accessKey', 'velho');
-      await vault.write('ia/accessKey', 'novo');
+      await vault.write('ia/accessKey', 'old');
+      await vault.write('ia/accessKey', 'new');
 
-      expect(await vault.read('ia/accessKey'), 'novo');
+      expect(await vault.read('ia/accessKey'), 'new');
     });
 
-    test('apagar apaga', () async {
+    test('delete deletes', () async {
       final vault = await build();
       await vault.write('ia/accessKey', 'ABCDEF');
       await vault.delete('ia/accessKey');
@@ -438,10 +434,9 @@ void runVaultContract(String nome, Future<SecretVault> Function() build) {
       expect(await vault.read('ia/accessKey'), isNull);
     });
 
-    test('escrever vazio apaga, em vez de guardar vazio', () async {
-      // Sem isto, `read` devolve `''` num cofre e `null` no outro, e todo
-      // chamador vira `if (t != null && t.isNotEmpty)`. A ausência tem uma
-      // representação só, e é `null`.
+    test('writing empty deletes rather than storing empty', () async {
+      // Absence has one representation, `null`, so callers do not have to
+      // handle both `''` and `null`.
       final vault = await build();
       await vault.write('ia/accessKey', 'ABCDEF');
       await vault.write('ia/accessKey', '');
@@ -449,7 +444,7 @@ void runVaultContract(String nome, Future<SecretVault> Function() build) {
       expect(await vault.read('ia/accessKey'), isNull);
     });
 
-    test('apagar por prefixo leva só quem casa', () async {
+    test('deleteWithPrefix takes only matching keys', () async {
       final vault = await build();
       await vault.write('addon:ultranx/snes', 'a');
       await vault.write('addon:ultranx/n64', 'b');
@@ -464,23 +459,21 @@ void runVaultContract(String nome, Future<SecretVault> Function() build) {
       expect(await vault.read('ia/accessKey'), 'd');
     });
 
-    test('apagar o que não existe não explode', () async {
-      // Chamado na remoção de addon, que roda mesmo para addon que nunca
-      // pediu login. Se lançar, remover addon vira erro de tela.
+    test('deleting a missing key does not throw', () async {
       final vault = await build();
 
-      await vault.delete('addon:nunca/existiu');
-      await vault.deleteWithPrefix('addon:nunca/');
+      await vault.delete('addon:never/existed');
+      await vault.deleteWithPrefix('addon:never/');
 
-      expect(await vault.read('addon:nunca/existiu'), isNull);
+      expect(await vault.read('addon:never/existed'), isNull);
     });
   });
 }
 ```
 
-- [ ] **Step 2: Escreva o teste do cofre em memória**
+- [ ] **Step 2: Write the in-memory vault test**
 
-Crie `test/secret_vault_test.dart`:
+Create `test/secret_vault_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -491,10 +484,10 @@ import 'vault_contract.dart';
 void main() {
   runVaultContract('MemoryVault', () async => MemoryVault());
 
-  test('dois cofres em memória não dividem estado', () {
-    // Este é o motivo de o `MemoryVault` existir: cada teste que usa cofre
-    // precisa do seu. Um `static` compartilhado aqui faria um teste enxergar
-    // o segredo escrito por outro, e a suíte passaria a depender de ordem.
+  test('two in-memory vaults do not share state', () {
+    // This is the reason `MemoryVault` exists: each test that uses a vault
+    // needs its own. A shared `static` here would make one test see the secret
+    // written by another, and the suite would start depending on order.
     final a = MemoryVault();
     final b = MemoryVault();
 
@@ -506,49 +499,50 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Rode para ver falhar**
+- [ ] **Step 3: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/secret_vault_test.dart
 ```
 
-Esperado: erro de compilação, `Couldn't resolve the package` ou `Undefined name 'MemoryVault'`.
+Expected: a compilation error, `Couldn't resolve the package` or `Undefined name 'MemoryVault'`.
 
-- [ ] **Step 4: Implemente**
+- [ ] **Step 4: Implement**
 
-Crie `lib/services/secret_vault.dart`:
+Create `lib/services/secret_vault.dart`:
 
 ```dart
-/// Onde moram os segredos do app: tokens de addon, credenciais do Internet
-/// Archive e, na fatia 6, chaves de debrid.
+/// Where the app's secrets live: addon tokens, Internet Archive credentials
+/// and, in slice 6, debrid keys.
 ///
-/// É interface e não classe concreta porque a implementação depende da
-/// plataforma, e numa delas ela **falha**: no Linux, o chaveiro do sistema
-/// exige um Secret Service vivo no D-Bus, e num Linux de servidor não existe.
-/// A escolha do usuário foi cair para texto puro avisando, em vez de
-/// desabilitar o campo, então o app precisa conseguir trocar de cofre em
-/// tempo de execução.
+/// It is an interface and not a concrete class because the implementation
+/// depends on the platform, and in one of them it **fails**: on Linux, the
+/// system keyring requires a Secret Service alive on the D-Bus, and on a server
+/// Linux that does not exist. The user's choice was to fall back to plaintext
+/// warning, instead of disabling the field, so the app needs to be able to swap
+/// vaults at runtime.
 ///
-/// **A ausência de um segredo tem uma representação só, `null`.** Escrever
-/// string vazia apaga a chave. Sem essa regra, cada chamador precisaria tratar
-/// `''` e `null` como a mesma coisa, e uma hora um esqueceria.
+/// **The absence of a secret has a single representation, `null`.** Writing an
+/// empty string deletes the key. Without that rule, every caller would need to
+/// treat `''` and `null` as the same thing, and one of them would eventually
+/// forget.
 abstract class SecretVault {
-  /// O segredo, ou `null` se nunca foi escrito ou já foi apagado.
+  /// The secret, or `null` if it was never written or has already been deleted.
   Future<String?> read(String key);
 
-  /// Grava. Valor vazio **apaga**, e não grava vazio.
+  /// Writes. An empty value **deletes**, and does not store empty.
   Future<void> write(String key, String value);
 
   Future<void> delete(String key);
 
-  /// Apaga tudo que começa com [prefix]. Usado quando o usuário remove um
-  /// addon: as credenciais dele vão junto, e o app não sabe de antemão quais
-  /// consoles daquele addon chegaram a ter login.
+  /// Deletes everything that starts with [prefix]. Used when the user removes
+  /// an addon: its credentials go along, and the app does not know in advance
+  /// which consoles of that addon ever got a login.
   Future<void> deleteWithPrefix(String prefix);
 }
 
-/// Cofre de mentira, para teste. Não persiste nada e não sai desta instância.
+/// A fake vault, for testing. Persists nothing and does not leave this instance.
 class MemoryVault implements SecretVault {
   final Map<String, String> _values = {};
 
@@ -576,31 +570,31 @@ class MemoryVault implements SecretVault {
 }
 ```
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/secret_vault_test.dart
 ```
 
-Esperado: `+8`, zero falha. São os sete do contrato mais o caso de isolamento.
+Expected: `+8`, zero failures. It is the seven from the contract plus the isolation case.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+355`, zero falha. São 340 da linha de base, mais 7 da Task 1, mais 8 desta.
+Expected: `+355`, zero failures. It is 340 from the baseline, plus 7 from Task 1, plus 8 from this one.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, nenhum nos arquivos novos.
+Expected: `22 issues found`, none in the new files.
 
-**Tropeço provável:** `flutter analyze` reclamando de `test/vault_contract.dart` por não ter `main()`. Não reclama, porque ele é uma biblioteca Dart comum; o que **não** pode acontecer é o arquivo se chamar `vault_contract_test.dart`, aí o `flutter test` tentaria rodá-lo sozinho e falharia com `Could not find a file named "main"`.
+**Likely pitfall:** `flutter analyze` complaining about `test/vault_contract.dart` for not having `main()`. It does not complain, because it is an ordinary Dart library; what **cannot** happen is the file being named `vault_contract_test.dart`, then `flutter test` would try to run it alone and fail with `Could not find a file named "main"`.
 
 - [ ] **Step 8: Commit**
 
@@ -613,19 +607,19 @@ git commit -m "feat(cofre): contrato de cofre reusavel e o cofre em memoria"
 
 ---
 
-### Task 3: `PrefsVault`, a reserva em texto puro
+### Task 3: `PrefsVault`, the plaintext fallback
 
 **Files:**
 - Create: `lib/services/prefs_vault.dart`
 - Test: `test/prefs_vault_test.dart`
 
-Esta é a metade desconfortável da decisão travada: num Linux sem chaveiro, o segredo continua em texto puro. O que esta Task **ganha** mesmo assim, e não é pouco, é que o segredo sai de dentro do `app_settings`, que é o JSON que o app serializa inteiro e **cujo erro de leitura imprime o próprio JSON de volta**. Medido, não deduzido: a `FormatException` do `jsonDecode` embute o trecho da fonte na mensagem, e o `debugPrint('Error loading settings: $e')` do caminho de erro (`settings_service.dart:21`) manda isso para o log com o segredo dentro. Um `app_settings` corrompido por qualquer motivo vaza `iaSecretKey` no log. Chave separada é chave que não vaza de carona.
+This is the uncomfortable half of the locked decision: on a Linux with no keyring, the secret stays in plaintext. What this Task **gains** anyway, and it is not little, is that the secret leaves the `app_settings`, which is the JSON the app serializes whole and **whose read error prints the JSON itself back**. Measured, not deduced: the `jsonDecode` `FormatException` embeds the source excerpt in the message, and the `debugPrint('Error loading settings: $e')` of the error path (`settings_service.dart:21`) sends that to the log with the secret inside. An `app_settings` corrupted for any reason leaks `iaSecretKey` in the log. A separate key is a key that does not leak as a passenger.
 
-O prefixo `secret:` existe para que a Task 5 possa afirmar que a migração não deixou nada para trás, e para que um `getKeys()` futuro consiga listar só segredo.
+The `secret:` prefix exists so that Task 5 can assert that the migration left nothing behind, and so that a future `getKeys()` can list secret only.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/prefs_vault_test.dart`:
+Create `test/prefs_vault_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -635,7 +629,7 @@ import 'package:roms_downloader/services/prefs_vault.dart';
 
 import 'vault_contract.dart';
 
-Future<SharedPreferences> _prefsVazio() async {
+Future<SharedPreferences> _emptyPrefs() async {
   SharedPreferences.setMockInitialValues({});
   SharedPreferences.resetStatic();
   return SharedPreferences.getInstance();
@@ -644,14 +638,14 @@ Future<SharedPreferences> _prefsVazio() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  runVaultContract('PrefsVault', () async => PrefsVault(await _prefsVazio()));
+  runVaultContract('PrefsVault', () async => PrefsVault(await _emptyPrefs()));
 
-  test('o segredo não encosta na chave que guarda as settings', () async {
-    // O ganho real desta implementação não é cifrar, porque ela não cifra. É
-    // tirar o segredo de dentro do `app_settings`, cujo erro de leitura
-    // imprime o próprio JSON de volta: a `FormatException` do `jsonDecode`
-    // embute o trecho da fonte, e o `debugPrint` do caminho de erro
-    // (`settings_service.dart:21`) manda isso para o log com o segredo dentro.
+  test('the secret does not touch the key that holds the settings', () async {
+    // The real gain of this implementation is not encrypting, because it does
+    // not encrypt. It is taking the secret out of `app_settings`, whose read
+    // error prints the JSON itself back: the `jsonDecode` `FormatException`
+    // embeds the source excerpt, and the `debugPrint` of the error path
+    // (`settings_service.dart:21`) sends that to the log with the secret inside.
     SharedPreferences.setMockInitialValues({'app_settings': '{"nszDecompressEnabled":true}'});
     SharedPreferences.resetStatic();
     final prefs = await SharedPreferences.getInstance();
@@ -663,21 +657,21 @@ void main() {
     expect(prefs.getString('secret:ia/accessKey'), 'ABCDEF');
   });
 
-  test('o segredo sobrevive a uma instância nova sobre o mesmo prefs', () async {
-    // `MemoryVault` passaria o contrato inteiro e perderia tudo no
-    // fechamento do app. O contrato não distingue os dois, este caso sim.
-    final prefs = await _prefsVazio();
+  test('the secret survives a new instance over the same prefs', () async {
+    // `MemoryVault` would pass the whole contract and lose everything on app
+    // close. The contract does not distinguish the two, this case does.
+    final prefs = await _emptyPrefs();
     await PrefsVault(prefs).write('ia/accessKey', 'ABCDEF');
 
     expect(await PrefsVault(prefs).read('ia/accessKey'), 'ABCDEF');
   });
 
-  test('apagar um addon inteiro não encosta em quem não é segredo', () async {
-    // A única propriedade que **só** esta implementação tem. O contrato
-    // compartilhado exercita a fronteira entre dois addons, mas roda igual
-    // para `MemoryVault`, que não divide store com ninguém. Este cofre divide:
-    // ele varre o mesmo `shared_preferences` onde mora o `app_settings`.
-    SharedPreferences.setMockInitialValues({'app_settings': '{"downloadDir":"/casa/roms"}'});
+  test('deleting a whole addon does not touch what is not a secret', () async {
+    // The only property that **only** this implementation has. The shared
+    // contract exercises the boundary between two addons, but runs the same
+    // for `MemoryVault`, which shares a store with nobody. This vault does
+    // share: it sweeps the same `shared_preferences` where `app_settings` lives.
+    SharedPreferences.setMockInitialValues({'app_settings': '{"downloadDir":"/home/roms"}'});
     SharedPreferences.resetStatic();
     final prefs = await SharedPreferences.getInstance();
     final vault = PrefsVault(prefs);
@@ -686,15 +680,15 @@ void main() {
 
     await vault.deleteWithPrefix(SecretRef.addonPrefix('ultranx'));
 
-    expect(prefs.getString('app_settings'), '{"downloadDir":"/casa/roms"}');
+    expect(prefs.getString('app_settings'), '{"downloadDir":"/home/roms"}');
     expect(await vault.read(SecretRef.addonToken('ultranx_2', 'snes')), 'BBB');
     expect(await vault.read(SecretRef.addonToken('ultranx', 'snes')), isNull);
   });
 
-  test('`open()` abre sobre o prefs de verdade, que é o caminho da produção', () async {
-    // Os outros casos constroem pelo construtor, e `vault_provider.dart:39`
-    // liga `PrefsVault.open` como reserva. Sem este caso, o único caminho que
-    // a produção percorre é o único sem teste.
+  test('`open()` opens over the real prefs, which is the production path', () async {
+    // The other cases build via the constructor, and `vault_provider.dart:39`
+    // wires `PrefsVault.open` as the fallback. Without this case, the only path
+    // production walks is the only one with no test.
     SharedPreferences.setMockInitialValues({});
     SharedPreferences.resetStatic();
 
@@ -706,41 +700,42 @@ void main() {
 }
 ```
 
-Os dois últimos casos são a razão de este arquivo existir além do contrato compartilhado, e valem o parágrafo:
+The last two cases are the reason this file exists beyond the shared contract, and they are worth the paragraph:
 
-O de apagar prova a única propriedade que **só** esta implementação tem. O contrato já exercita a fronteira entre `addon:ultranx/` e `addon:ultranx_2/`, mas ele roda igual para o `MemoryVault`, que tem store próprio. Este cofre não tem: ele varre o mesmo `shared_preferences` onde mora o `app_settings`. O caso monta as chaves com `SecretRef`, e não com string na mão, de propósito, porque é a barra final de `addonPrefix` que separa `ultranx` de `ultranx_2`, e um chamador que montasse `'addon:ultranx'` sem ela derrubaria o login do addon vizinho.
+The delete one proves the only property that **only** this implementation has. The contract already exercises the boundary between `addon:ultranx/` and `addon:ultranx_2/`, but it runs the same for `MemoryVault`, which has its own store. This vault does not: it sweeps the same `shared_preferences` where `app_settings` lives. The case builds the keys with `SecretRef`, and not with a hand-written string, on purpose, because it is the trailing slash of `addonPrefix` that separates `ultranx` from `ultranx_2`, and a caller that built `'addon:ultranx'` without it would take down the neighboring addon's login.
 
-O de `open()` cobre o único caminho que a produção percorre: `vault_provider.dart` liga `PrefsVault.open` como reserva, e todos os outros casos constroem pelo construtor. Custa quatro linhas porque `setMockInitialValues({})` já basta, sem override de provider e sem falso.
+The `open()` one covers the only path production walks: `vault_provider.dart` wires `PrefsVault.open` as the fallback, and all the other cases build via the constructor. It costs four lines because `setMockInitialValues({})` is already enough, with no provider override and no fake.
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/prefs_vault_test.dart
 ```
 
-Esperado: `Undefined name 'PrefsVault'`.
+Expected: `Undefined name 'PrefsVault'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/services/prefs_vault.dart`:
+Create `lib/services/prefs_vault.dart`:
 
 ```dart
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// O cofre de reserva, em `shared_preferences`, **em texto puro**.
+/// The fallback vault, in `shared_preferences`, **in plaintext**.
 ///
-/// Usado quando o chaveiro do sistema não está disponível, que na prática é o
-/// Linux sem `gnome-keyring` nem KWallet no D-Bus. A escolha do usuário foi
-/// esta em vez de desabilitar o campo de login, e quem usa este cofre aparece
-/// com aviso na tela (Grupo 5).
+/// Used when the system keyring is not available, which in practice is Linux
+/// with no `gnome-keyring` nor KWallet on the D-Bus. The user's choice was this
+/// instead of disabling the login field, and whoever uses this vault shows up
+/// with a warning on the screen (Group 5).
 ///
-/// Não cifra, e não finge cifrar. O que ele entrega em relação ao que existia
-/// antes é separação: o segredo deixa de morar dentro do JSON do
-/// `app_settings`, que é serializado inteiro e impresso no caminho de erro.
+/// It does not encrypt, and does not pretend to encrypt. What it delivers
+/// relative to what existed before is separation: the secret stops living
+/// inside the `app_settings` JSON, which is serialized whole and printed on the
+/// error path.
 class PrefsVault implements SecretVault {
-  /// Prefixo de todas as chaves deste cofre. Serve para não colidir com
-  /// `app_settings` e para conseguir varrer só segredo.
+  /// Prefix of all the keys of this vault. Serves to avoid colliding with
+  /// `app_settings` and to be able to sweep secret only.
   static const String keyPrefix = 'secret:';
 
   final SharedPreferences _prefs;
@@ -768,49 +763,43 @@ class PrefsVault implements SecretVault {
 
   @override
   Future<void> deleteWithPrefix(String prefix) async {
-    final alvo = '$keyPrefix$prefix';
-    // `toList()` é defesa barata, não necessidade: nesta versão do plugin,
-    // `getKeys()` já devolve cópia (`Set<String>.from(_preferenceCache.keys)`,
-    // `shared_preferences_legacy.dart:111`), então remover enquanto itera
-    // **não** lança `ConcurrentModificationError`. Medido, tirando o `toList()`
-    // e rodando. Fica porque a versão do plugin pode mudar, e porque `where`
-    // é preguiçoso: sem materializar, a iteração e as remoções se intercalam,
-    // e é essa intercalação que dependeria da cópia continuar existindo.
-    final chaves = _prefs.getKeys().where((chave) => chave.startsWith(alvo)).toList();
-    for (final chave in chaves) {
-      await _prefs.remove(chave);
+    final target = '$keyPrefix$prefix';
+    // `toList()` before removing: `where` is lazy, so it would interleave.
+    final keys = _prefs.getKeys().where((key) => key.startsWith(target)).toList();
+    for (final key in keys) {
+      await _prefs.remove(key);
     }
   }
 }
 ```
 
-- [ ] **Step 4: Rode para ver passar**
+- [ ] **Step 4: Run to see it pass**
 
 ```bash
 flutter test test/prefs_vault_test.dart
 ```
 
-Esperado: `+11`, zero falha. São os sete do contrato mais os quatro deste arquivo.
+Expected: `+11`, zero failures. It is the seven from the contract plus the four from this file.
 
-**Tropeço provável:** o contrato falhar em "chave que nunca foi escrita devolve null" a partir do segundo caso, porque `SharedPreferences.getInstance()` guarda um singleton interno e cada `build()` do contrato pede uma instância nova.
+**Likely pitfall:** the contract failing on "a key never written returns null" from the second case on, because `SharedPreferences.getInstance()` keeps an internal singleton and each `build()` of the contract asks for a new instance.
 
-Quem zera o singleton, medido no `shared_preferences-2.5.3`, é o **`setMockInitialValues`**: ele mesmo faz `_completer = null` (`lib/src/shared_preferences_legacy.dart:290`, comentário "If the singleton instance has been initialized already, it is nullified"). O `resetStatic()` logo depois é redundante nesta versão: tirá-lo de `_prefsVazio` deixa os casos do contrato passando igual, conferido. Mantenha os dois assim mesmo, porque é defesa barata contra `setPrefix` e contra troca de versão do plugin, mas **não escreva em lugar nenhum que é o `resetStatic()` que limpa o singleton**: se a Task 4 acreditar nisso ao decidir entre os dois cofres, vai defender a fronteira errada.
+What zeroes the singleton, measured in `shared_preferences-2.5.3`, is **`setMockInitialValues`**: it itself does `_completer = null` (`lib/src/shared_preferences_legacy.dart:290`, comment "If the singleton instance has been initialized already, it is nullified"). The `resetStatic()` right after is redundant in this version: removing it from `_emptyPrefs` leaves the contract cases passing the same, confirmed. Keep both anyway, because it is cheap defense against `setPrefix` and against a plugin version change, but **do not write anywhere that it is `resetStatic()` that clears the singleton**: if Task 4 believes that when deciding between the two vaults, it will defend the wrong boundary.
 
-- [ ] **Step 5: Rode a suíte inteira**
+- [ ] **Step 5: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+366`, zero falha.
+Expected: `+366`, zero failures.
 
-- [ ] **Step 6: Analise**
+- [ ] **Step 6: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 7: Commit**
 
@@ -823,7 +812,7 @@ git commit -m "feat(cofre): cofre de reserva em shared_preferences, com chave se
 
 ---
 
-### Task 4: `SecureStorageVault`, a sonda, e a escolha do cofre
+### Task 4: `SecureStorageVault`, the probe, and the vault choice
 
 **Files:**
 - Modify: `pubspec.yaml`
@@ -832,44 +821,44 @@ git commit -m "feat(cofre): cofre de reserva em shared_preferences, com chave se
 - Test: `test/secure_storage_vault_test.dart`
 - Test: `test/vault_provider_test.dart`
 
-Esta é a única Task da fatia que traz dependência nova, e a única que precisa decidir o que fazer quando a plataforma não colabora.
+This is the only Task in the slice that brings a new dependency, and the only one that has to decide what to do when the platform does not cooperate.
 
-Três coisas que valem saber antes:
+Three things worth knowing beforehand:
 
-1. **`flutter_secure_storage` não é testável direto.** Ele fala com o plugin por canal de plataforma, que num `flutter test` não existe. Por isso entra uma interface fina, `SecureStorageBackend`, com os quatro métodos que este app usa. O `SecureStorageVault` conversa com a interface, os testes injetam um falso, e a implementação real é três linhas de delegação que nenhum teste cobre e nem precisa.
-2. **A sonda escreve, lê de volta e apaga.** "A escrita não lançou" **não** é prova de que o chaveiro funciona: existe backend que aceita a escrita e não guarda. Só a leitura de volta prova.
-3. **A versão é a 10.x, e isso não é conservadorismo, é a única que resolve.** A 11.x não entra neste `pubspec`, e a tentativa custou uma Task travada: `flutter_secure_storage >=11.0.0-beta.1` puxa `flutter_secure_storage_windows ^4.2.2`, que exige `win32 ^6.0.1`, enquanto o `package_info_plus: ^9.0.0` já pinado aqui (`pubspec.yaml:29`) exige `win32 ^5.5.3`. As duas restrições se excluem e o solver recusa. Saída literal:
+1. **`flutter_secure_storage` is not directly testable.** It talks to the plugin through a platform channel, which does not exist in a `flutter test`. That is why a thin interface enters, `SecureStorageBackend`, with the four methods this app uses. The `SecureStorageVault` talks to the interface, the tests inject a fake, and the real implementation is three lines of delegation that no test covers and does not need to.
+2. **The probe writes, reads back and deletes.** "The write did not raise" is **not** proof that the keyring works: there is a backend that accepts the write and does not store it. Only the read-back proves it.
+3. **The version is 10.x, and this is not conservatism, it is the only one that resolves.** The 11.x does not enter this `pubspec`, and the attempt cost a stuck Task: `flutter_secure_storage >=11.0.0-beta.1` pulls `flutter_secure_storage_windows ^4.2.2`, which requires `win32 ^6.0.1`, while the `package_info_plus: ^9.0.0` already pinned here (`pubspec.yaml:29`) requires `win32 ^5.5.3`. The two constraints exclude each other and the solver refuses. Literal output:
 
    ```
    Because package_info_plus >=8.0.3 <10.0.0 depends on win32 ^5.5.3 and flutter_secure_storage_windows >=4.2.0 depends on win32 ^6.0.1, package_info_plus >=8.0.3 <10.0.0 is incompatible with flutter_secure_storage_windows >=4.2.0.
    So, because roms_downloader depends on both package_info_plus ^9.0.0 and flutter_secure_storage ^11.1.0, version solving failed.
    ```
 
-   A saída seria subir o `package_info_plus` para `^10`, e **não é para fazer isso**: ele é usado em dois arquivos de produção (`about_screen.dart` e `zerox0_service.dart`), o `win32` saltaria de 5 para 6 numa dependência que esta fatia não tem motivo nenhum para tocar, e o risco cairia na tela Sobre e no user agent. Fatia de segurança não arrasta dependência alheia junto. Se alguém "atualizar" isto para a 11.x depois, o `pub get` quebra de novo, e o motivo está escrito aqui.
+   The way out would be to bump `package_info_plus` to `^10`, and that **is not to be done**: it is used in two production files (`about_screen.dart` and `zerox0_service.dart`), `win32` would jump from 5 to 6 in a dependency this slice has no reason at all to touch, and the risk would land on the About screen and on the user agent. A security slice does not drag someone else's dependency along. If someone "upgrades" this to 11.x later, `pub get` breaks again, and the reason is written here.
 
-   Medido na 10.3.3, e o código desta Task não muda uma vírgula por causa disso: `read(key:)`, `write(key:, value:)`, `delete(key:)`, `readAll()` e o construtor `const FlutterSecureStorage()` existem iguais (`flutter_secure_storage-10.3.3/lib/flutter_secure_storage.dart:35`, `:134`, `:185`, `:249`, `:293`).
-4. **O plugin exige minSdk 23 no Android** (`flutter_secure_storage-10.3.3/android/build.gradle:46`). Este projeto usa `minSdk = flutter.minSdkVersion` (`android/app/build.gradle.kts:43`), que no Flutter 3.35 é 24. Sobra folga, e nada precisa mudar. No Linux, ele exige `libsecret-1-dev` em tempo de compilação, que já está instalado nesta VM (`pkg-config --modversion libsecret-1` dá `0.21.4`).
+   Measured on 10.3.3, and the code of this Task does not change one comma because of it: `read(key:)`, `write(key:, value:)`, `delete(key:)`, `readAll()` and the constructor `const FlutterSecureStorage()` exist the same (`flutter_secure_storage-10.3.3/lib/flutter_secure_storage.dart:35`, `:134`, `:185`, `:249`, `:293`).
+4. **The plugin requires minSdk 23 on Android** (`flutter_secure_storage-10.3.3/android/build.gradle:46`). This project uses `minSdk = flutter.minSdkVersion` (`android/app/build.gradle.kts:43`), which on Flutter 3.35 is 24. There is slack, and nothing needs to change. On Linux, it requires `libsecret-1-dev` at compile time, which is already installed on this VM (`pkg-config --modversion libsecret-1` gives `0.21.4`).
 
-- [ ] **Step 1: Some a dependência**
+- [ ] **Step 1: Add the dependency**
 
-Em `pubspec.yaml`, na última linha da lista `dependencies:`, depois de `ftp_server: ^2.3.2`:
+In `pubspec.yaml`, on the last line of the `dependencies:` list, after `ftp_server: ^2.3.2`:
 
 ```yaml
   flutter_secure_storage: ^10.3.3
 ```
 
-Depois:
+Then:
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter pub get
 ```
 
-Esperado: `Changed 6 dependencies!`, medido. Se vier `version solving failed` falando de `win32`, você escreveu `^11` em vez de `^10.3.3`: leia o item 3 acima. O `pubspec.lock` vai mudar. **Não o adicione ao commit**: ele já vive sujo neste repositório porque o Flutter local resolve versões transitivas mais velhas, e commitá-lo mistura ruído com a mudança.
+Expected: `Changed 6 dependencies!`, measured. If you get `version solving failed` talking about `win32`, you wrote `^11` instead of `^10.3.3`: read item 3 above. The `pubspec.lock` will change. **Do not add it to the commit**: it already lives dirty in this repository because the local Flutter resolves older transitive versions, and committing it mixes noise with the change.
 
-- [ ] **Step 2: Escreva o teste do cofre de sistema**
+- [ ] **Step 2: Write the system vault test**
 
-Crie `test/secure_storage_vault_test.dart`:
+Create `test/secure_storage_vault_test.dart`:
 
 ```dart
 import 'package:flutter/services.dart';
@@ -878,78 +867,69 @@ import 'package:roms_downloader/services/secure_storage_vault.dart';
 
 import 'vault_contract.dart';
 
-/// O plugin de verdade não existe dentro de `flutter test`: ele fala por canal
-/// de plataforma. Este falso é o que torna o cofre de sistema testável.
-class _BackendFalso implements SecureStorageBackend {
-  _BackendFalso({this.lancaAoEscrever = false, this.engoleEscrita = false});
+/// The real plugin does not exist inside `flutter test`: it talks through a
+/// platform channel. This fake is what makes the system vault testable.
+class _FakeBackend implements SecureStorageBackend {
+  _FakeBackend({this.throwsOnWrite = false, this.swallowsWrite = false});
 
-  /// Um Linux sem Secret Service: a escrita levanta `PlatformException`.
-  final bool lancaAoEscrever;
+  /// A Linux without Secret Service: the write throws `PlatformException`.
+  final bool throwsOnWrite;
 
-  /// Pior que levantar: aceita a escrita e não guarda. É por isso que a sonda
-  /// lê de volta em vez de só olhar se a escrita lançou.
-  final bool engoleEscrita;
+  /// Worse than throwing: accepts the write and stores nothing, which is why
+  /// the probe reads back instead of only checking that the write threw.
+  final bool swallowsWrite;
 
-  final Map<String, String> valores = {};
+  final Map<String, String> values = {};
 
   @override
-  Future<String?> read(String key) async => valores[key];
+  Future<String?> read(String key) async => values[key];
 
   @override
   Future<void> write(String key, String value) async {
-    if (lancaAoEscrever) throw PlatformException(code: 'Libsecret error');
-    if (engoleEscrita) return;
-    valores[key] = value;
+    if (throwsOnWrite) throw PlatformException(code: 'Libsecret error');
+    if (swallowsWrite) return;
+    values[key] = value;
   }
 
   @override
   Future<void> delete(String key) async {
-    valores.remove(key);
+    values.remove(key);
   }
 
   @override
-  Future<Map<String, String>> readAll() async => Map.of(valores);
+  Future<Map<String, String>> readAll() async => Map.of(values);
 }
 
 void main() {
-  runVaultContract('SecureStorageVault', () async => SecureStorageVault(_BackendFalso()));
+  runVaultContract('SecureStorageVault', () async => SecureStorageVault(_FakeBackend()));
 
-  group('sonda de disponibilidade', () {
-    test('aprova o chaveiro que devolve o que escreveu', () async {
-      expect(await probeSecureStorage(_BackendFalso()), isTrue);
+  group('availability probe', () {
+    test('passes a keyring that reads back what it wrote', () async {
+      expect(await probeSecureStorage(_FakeBackend()), isTrue);
     });
 
-    test('reprova o chaveiro que levanta', () async {
-      // Este é o Linux de servidor da decisão travada: sem `gnome-keyring` nem
-      // KWallet no D-Bus, o plugin levanta `PlatformException`. Se a sonda
-      // deixasse a exceção subir, o app quebraria no boot em vez de cair para
-      // a reserva.
-      expect(await probeSecureStorage(_BackendFalso(lancaAoEscrever: true)), isFalse);
+    test('fails a keyring that throws', () async {
+      expect(await probeSecureStorage(_FakeBackend(throwsOnWrite: true)), isFalse);
     });
 
-    test('reprova o chaveiro que engole a escrita em silêncio', () async {
-      // O caso que justifica ler de volta. Se a sonda parasse em "escreveu sem
-      // lançar", este backend passaria, o app anunciaria "cifrado em repouso"
-      // e o token do usuário sumiria a cada reinício, sem erro nenhum.
-      expect(await probeSecureStorage(_BackendFalso(engoleEscrita: true)), isFalse);
+    test('fails a keyring that silently swallows the write', () async {
+      expect(await probeSecureStorage(_FakeBackend(swallowsWrite: true)), isFalse);
     });
 
-    test('não deixa o canário para trás', () async {
-      // A sonda roda no boot. Uma chave por boot acumulando no chaveiro do
-      // sistema do usuário é lixo que o app não tem como limpar depois.
-      final backend = _BackendFalso();
+    test('leaves no canary behind', () async {
+      final backend = _FakeBackend();
 
       await probeSecureStorage(backend);
 
-      expect(backend.valores, isEmpty);
+      expect(backend.values, isEmpty);
     });
   });
 }
 ```
 
-- [ ] **Step 3: Escreva o teste da escolha**
+- [ ] **Step 3: Write the choice test**
 
-Crie `test/vault_provider_test.dart`:
+Create `test/vault_provider_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -957,99 +937,99 @@ import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/secure_storage_vault.dart';
 
-class _BackendBom implements SecureStorageBackend {
-  final Map<String, String> valores = {};
+class _GoodBackend implements SecureStorageBackend {
+  final Map<String, String> values = {};
 
   @override
-  Future<String?> read(String key) async => valores[key];
+  Future<String?> read(String key) async => values[key];
 
   @override
   Future<void> write(String key, String value) async {
-    valores[key] = value;
+    values[key] = value;
   }
 
   @override
   Future<void> delete(String key) async {
-    valores.remove(key);
+    values.remove(key);
   }
 
   @override
-  Future<Map<String, String>> readAll() async => Map.of(valores);
+  Future<Map<String, String>> readAll() async => Map.of(values);
 }
 
-class _BackendMorto implements SecureStorageBackend {
+class _DeadBackend implements SecureStorageBackend {
   @override
-  Future<String?> read(String key) async => throw StateError('sem chaveiro');
+  Future<String?> read(String key) async => throw StateError('no keyring');
 
   @override
-  Future<void> write(String key, String value) async => throw StateError('sem chaveiro');
+  Future<void> write(String key, String value) async => throw StateError('no keyring');
 
   @override
-  Future<void> delete(String key) async => throw StateError('sem chaveiro');
+  Future<void> delete(String key) async => throw StateError('no keyring');
 
   @override
-  Future<Map<String, String>> readAll() async => throw StateError('sem chaveiro');
+  Future<Map<String, String>> readAll() async => throw StateError('no keyring');
 }
 
 void main() {
-  test('com chaveiro vivo, usa o de sistema e diz que está cifrado', () async {
-    final escolha = await chooseVault(backend: _BackendBom(), buildFallback: () async => MemoryVault());
+  test('with a live keyring, uses the system one and says it is encrypted', () async {
+    final choice = await chooseVault(backend: _GoodBackend(), buildFallback: () async => MemoryVault());
 
-    expect(escolha.vault, isA<SecureStorageVault>());
-    expect(escolha.encryptedAtRest, isTrue);
+    expect(choice.vault, isA<SecureStorageVault>());
+    expect(choice.encryptedAtRest, isTrue);
   });
 
-  test('sem chaveiro, cai para a reserva e diz que NÃO está cifrado', () async {
-    // As duas afirmações são a decisão travada inteira. Cair para a reserva
-    // sem carregar o `false` junto é o que transforma a fatia em maquiagem: a
-    // tela anunciaria "guardado com segurança" sobre texto puro.
-    final escolha = await chooseVault(backend: _BackendMorto(), buildFallback: () async => MemoryVault());
+  test('with no keyring, falls back and says it is NOT encrypted', () async {
+    // The two assertions are the whole locked decision. Falling back without
+    // carrying the `false` along is what turns the slice into makeup: the
+    // screen would announce "stored securely" over plaintext.
+    final choice = await chooseVault(backend: _DeadBackend(), buildFallback: () async => MemoryVault());
 
-    expect(escolha.vault, isA<MemoryVault>());
-    expect(escolha.encryptedAtRest, isFalse);
+    expect(choice.vault, isA<MemoryVault>());
+    expect(choice.encryptedAtRest, isFalse);
   });
 
-  test('com chaveiro vivo, a reserva nem chega a ser construída', () async {
-    // `PrefsVault.open()` abre o `shared_preferences`. Construir a reserva
-    // sempre, para descartá-la em seguida, é trabalho de boot desperdiçado em
-    // todo aparelho que tem chaveiro, que é a maioria.
-    var construcoes = 0;
+  test('with a live keyring, the fallback is never even built', () async {
+    // `PrefsVault.open()` opens the `shared_preferences`. Building the fallback
+    // always, only to discard it right after, is wasted boot work on every
+    // device that has a keyring, which is the majority.
+    var builds = 0;
 
     await chooseVault(
-      backend: _BackendBom(),
+      backend: _GoodBackend(),
       buildFallback: () async {
-        construcoes++;
+        builds++;
         return MemoryVault();
       },
     );
 
-    expect(construcoes, 0);
+    expect(builds, 0);
   });
 }
 ```
 
-- [ ] **Step 4: Rode para ver falhar**
+- [ ] **Step 4: Run to see it fail**
 
 ```bash
 flutter test test/secure_storage_vault_test.dart test/vault_provider_test.dart
 ```
 
-Esperado: erro de compilação, `Undefined name 'SecureStorageVault'`.
+Expected: a compilation error, `Undefined name 'SecureStorageVault'`.
 
-- [ ] **Step 5: Implemente o cofre de sistema**
+- [ ] **Step 5: Implement the system vault**
 
-Crie `lib/services/secure_storage_vault.dart`:
+Create `lib/services/secure_storage_vault.dart`:
 
 ```dart
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// O pedaço de `flutter_secure_storage` que este app usa.
+/// The piece of `flutter_secure_storage` that this app uses.
 ///
-/// Existe porque o plugin fala por canal de plataforma, que não existe dentro
-/// de `flutter test`. Sem esta interface, o cofre de sistema seria a única
-/// implementação de [SecretVault] sem teste nenhum, justo a que guarda os
-/// segredos de verdade.
+/// It exists because the plugin talks through a platform channel, which does
+/// not exist inside `flutter test`. Without this interface, the system vault
+/// would be the only [SecretVault] implementation with no test at all, exactly
+/// the one that holds the real secrets.
 abstract class SecureStorageBackend {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
@@ -1057,8 +1037,9 @@ abstract class SecureStorageBackend {
   Future<Map<String, String>> readAll();
 }
 
-/// A implementação de verdade. Três linhas de delegação por método e nenhuma
-/// decisão: tudo que é decisão mora no [SecureStorageVault], que é testado.
+/// The real implementation. Three lines of delegation per method and no
+/// decision: everything that is a decision lives in [SecureStorageVault], which
+/// is tested.
 class PluginSecureStorage implements SecureStorageBackend {
   final FlutterSecureStorage _storage;
 
@@ -1077,8 +1058,8 @@ class PluginSecureStorage implements SecureStorageBackend {
   Future<Map<String, String>> readAll() => _storage.readAll();
 }
 
-/// O cofre cifrado pelo sistema operacional: Keychain no Apple, Keystore no
-/// Android, DPAPI no Windows, libsecret no Linux.
+/// The vault encrypted by the operating system: Keychain on Apple, Keystore on
+/// Android, DPAPI on Windows, libsecret on Linux.
 class SecureStorageVault implements SecretVault {
   final SecureStorageBackend _backend;
 
@@ -1101,43 +1082,42 @@ class SecureStorageVault implements SecretVault {
 
   @override
   Future<void> deleteWithPrefix(String prefix) async {
-    final todas = await _backend.readAll();
-    // `toList()` antes de apagar: `keys` é a visão viva do mapa devolvido, e
-    // uma implementação que devolva o mapa interno em vez de cópia lançaria
-    // `ConcurrentModificationError` no meio da remoção de um addon.
-    for (final chave in todas.keys.where((chave) => chave.startsWith(prefix)).toList()) {
-      await _backend.delete(chave);
+    final all = await _backend.readAll();
+    // `toList()` before deleting: a backend that returns its live map would
+    // throw `ConcurrentModificationError` mid-removal.
+    for (final key in all.keys.where((key) => key.startsWith(prefix)).toList()) {
+      await _backend.delete(key);
     }
   }
 }
 
-/// Escreve, lê de volta e apaga uma chave-canário.
+/// Writes, reads back and deletes a canary key.
 ///
-/// **Ler de volta é o ponto.** No Linux sem Secret Service o plugin levanta, e
-/// isso o `try` pega; mas existe também backend que aceita a escrita e não
-/// guarda nada, e esse só aparece na leitura. Um app que anuncia "cifrado em
-/// repouso" por cima de um desses perde o token do usuário a cada reinício sem
-/// emitir um erro sequer.
+/// **Reading back is the point.** On a Linux with no Secret Service the plugin
+/// raises, and the `try` catches that; but there is also a backend that accepts
+/// the write and stores nothing, and that one only shows up on the read. An app
+/// that announces "encrypted at rest" over one of those loses the user's token
+/// at every restart without emitting a single error.
 Future<bool> probeSecureStorage(SecureStorageBackend backend) async {
-  const chave = 'probe/canary';
-  const valor = 'ok';
+  const key = 'probe/canary';
+  const value = 'ok';
   try {
-    await backend.write(chave, valor);
-    final volta = await backend.read(chave);
-    await backend.delete(chave);
-    return volta == valor;
+    await backend.write(key, value);
+    final readBack = await backend.read(key);
+    await backend.delete(key);
+    return readBack == value;
   } catch (_) {
-    // Engolir é o comportamento certo aqui, e só aqui: a sonda existe
-    // justamente para transformar "levantou" em `false`. Quem chama decide o
-    // que fazer, e o que ele faz é cair para a reserva.
+    // Swallowing is the right behavior here, and only here: the probe exists
+    // precisely to turn "raised" into `false`. The caller decides what to do,
+    // and what it does is fall back to the fallback.
     return false;
   }
 }
 ```
 
-- [ ] **Step 6: Implemente a escolha**
+- [ ] **Step 6: Implement the choice**
 
-Crie `lib/providers/vault_provider.dart`:
+Create `lib/providers/vault_provider.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1145,26 +1125,27 @@ import 'package:roms_downloader/services/prefs_vault.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/secure_storage_vault.dart';
 
-/// Qual cofre o app conseguiu abrir, e se ele cifra.
+/// Which vault the app managed to open, and whether it encrypts.
 ///
-/// Os dois campos andam juntos de propósito. A tela de contas precisa avisar
-/// quando o segredo está em texto puro (decisão travada), e um `SecretVault`
-/// sozinho não conta essa história: `PrefsVault` e `SecureStorageVault`
-/// cumprem exatamente o mesmo contrato.
+/// The two fields travel together on purpose. The accounts screen needs to warn
+/// when the secret is in plaintext (locked decision), and a `SecretVault` alone
+/// does not tell that story: `PrefsVault` and `SecureStorageVault` fulfill
+/// exactly the same contract.
 class VaultChoice {
   final SecretVault vault;
 
-  /// `false` quer dizer texto puro. Na prática, Linux sem `gnome-keyring` nem
-  /// KWallet no D-Bus.
+  /// `false` means plaintext. In practice, Linux with no `gnome-keyring` nor
+  /// KWallet on the D-Bus.
   final bool encryptedAtRest;
 
   const VaultChoice(this.vault, {required this.encryptedAtRest});
 }
 
-/// Tenta o chaveiro do sistema; se ele não responder, cai para [buildFallback].
+/// Tries the system keyring; if it does not respond, falls back to [buildFallback].
 ///
-/// [buildFallback] é função e não valor para não abrir o `shared_preferences`
-/// em todo boot de aparelho que tem chaveiro, que é a maioria.
+/// [buildFallback] is a function and not a value so as not to open the
+/// `shared_preferences` on every boot of a device that has a keyring, which is
+/// the majority.
 Future<VaultChoice> chooseVault({
   required SecureStorageBackend backend,
   required Future<SecretVault> Function() buildFallback,
@@ -1183,34 +1164,34 @@ final vaultProvider = FutureProvider<VaultChoice>((ref) {
 });
 ```
 
-- [ ] **Step 7: Rode para ver passar**
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/secure_storage_vault_test.dart test/vault_provider_test.dart
 ```
 
-Esperado: `+14`, zero falha. São sete do contrato, quatro da sonda e três da escolha.
+Expected: `+14`, zero failures. It is seven from the contract, four from the probe and three from the choice.
 
-**Tropeço provável:** `PrefsVault.open` no `buildFallback` do provider dá erro de tipo se você tiver declarado `open()` devolvendo `Future<PrefsVault>` e o parâmetro pedir `Future<SecretVault> Function()`. Em Dart isso **compila**, porque `Future<PrefsVault>` é subtipo de `Future<SecretVault>` e funções são covariantes no retorno. Se der erro, o que está errado é outra coisa, provavelmente `open()` sem `static`.
+**Likely pitfall:** `PrefsVault.open` in the provider's `buildFallback` gives a type error if you declared `open()` returning `Future<PrefsVault>` and the parameter asks for `Future<SecretVault> Function()`. In Dart this **compiles**, because `Future<PrefsVault>` is a subtype of `Future<SecretVault>` and functions are covariant in their return. If you get an error, what is wrong is something else, probably `open()` without `static`.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+380`, zero falha.
+Expected: `+380`, zero failures.
 
-- [ ] **Step 9: Analise e compile**
+- [ ] **Step 9: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found` e `Built build/linux/x64/debug/bundle/roms_downloader`.
+Expected: `22 issues found` and `Built build/linux/x64/debug/bundle/roms_downloader`.
 
-O `build` não é decoração nesta Task: é a única prova disponível nesta VM de que a dependência nova **liga** de verdade. Um plugin com nativo faltando passa em `flutter test` inteiro e quebra só na compilação. Se falhar com `libsecret-1.pc not found`, o pacote de desenvolvimento sumiu; conserte com `sudo apt-get update -qq && sudo apt-get install -y libsecret-1-dev`.
+The `build` is not decoration in this Task: it is the only proof available on this VM that the new dependency actually **links**. A plugin with a missing native piece passes the whole `flutter test` and breaks only at compile. If it fails with `libsecret-1.pc not found`, the development package is gone; fix it with `sudo apt-get update -qq && sudo apt-get install -y libsecret-1-dev`.
 
 - [ ] **Step 10: Commit**
 
@@ -1225,30 +1206,30 @@ git add linux/flutter/generated_plugin_registrant.cc linux/flutter/generated_plu
 git commit -m "chore(cofre): registra o plugin do cofre nos tres alvos de desktop"
 ```
 
-O terceiro commit é o único da fatia inteira, porque é a única Task que traz dependência com código nativo. Esses cinco arquivos são gerados, mas são **versionados** neste repositório (`git log -- linux/flutter/generated_plugin_registrant.cc` mostra que todo bump de plugin os carrega junto), e o `pub get` do Step 1 os reescreveu para registrar o `flutter_secure_storage`. Deixá-los de fora não quebra build nenhum, porque qualquer `pub get` os regenera, mas deixa cinco arquivos sujos no `git status` de todas as 23 Tasks seguintes, e aí um deslize de verdade passa despercebido no meio do ruído. O `pubspec.lock` continua fora, e ele sim fica sujo até o fim: a sujeira dele é anterior a esta fatia.
+The third commit is the only one in the whole slice, because it is the only Task that brings a dependency with native code. Those five files are generated, but they are **versioned** in this repository (`git log -- linux/flutter/generated_plugin_registrant.cc` shows that every plugin bump carries them along), and the `pub get` of Step 1 rewrote them to register `flutter_secure_storage`. Leaving them out breaks no build, because any `pub get` regenerates them, but it leaves five dirty files in the `git status` of all 23 following Tasks, and then a real slip goes unnoticed in the middle of the noise. The `pubspec.lock` stays out, and it does stay dirty to the end: its dirt predates this slice.
 
 ---
 
-### Task 5: a migração que esvazia o `app_settings`
+### Task 5: the migration that empties the `app_settings`
 
 **Files:**
 - Create: `lib/services/secret_migration.dart`
 - Test: `test/secret_migration_test.dart`
 
-Cofre novo não serve de nada enquanto o segredo velho continuar no lugar velho. Esta Task escreve a mudança única que tira os quatro segredos de dentro do JSON do `app_settings` e os põe no cofre.
+A new vault is worth nothing while the old secret stays in the old place. This Task writes the one-time change that takes the four secrets out of the `app_settings` JSON and puts them in the vault.
 
-Ela opera sobre o **mapa cru**, não sobre `AppSettings`, e devolve o mapa limpo em vez de salvar. Duas razões:
+It operates on the **raw map**, not on `AppSettings`, and returns the clean map instead of saving. Two reasons:
 
-1. `AppSettings.fromJson` já **descarta** campo desconhecido em silêncio. Se a migração rodasse depois da desserialização, ela dependeria do modelo continuar carregando os campos que a Grupo 2 vai justamente tirar dele, e a ordem das duas Tasks viraria armadilha.
-2. Devolver em vez de salvar mantém esta Task Dart puro, sem `shared_preferences` e sem `await` de plataforma. Quem salva é a Grupo 2.
+1. `AppSettings.fromJson` already **discards** an unknown field silently. If the migration ran after deserialization, it would depend on the model still carrying the fields that Group 2 will precisely take out of it, and the order of the two Tasks would become a trap.
+2. Returning instead of saving keeps this Task pure Dart, with no `shared_preferences` and no platform `await`. Whoever saves is Group 2.
 
-**Não existe flag de "já migrei".** Depois da primeira passada o campo não está mais no mapa, então a segunda passada é naturalmente inócua. Se o salvamento falhar no meio, a próxima abertura tenta de novo, e é para esse caso que existe a regra "o cofre já preenchido ganha do arquivo": a cópia do arquivo é a velha, por definição.
+**There is no "already migrated" flag.** After the first pass the field is no longer in the map, so the second pass is naturally harmless. If the save fails midway, the next opening tries again, and it is for that case that the rule "the already-filled vault wins over the file" exists: the file's copy is the old one, by definition.
 
-O `builtinAddonId` entra por parâmetro porque a constante canônica (`kBuiltinAddonId`) só nasce na Grupo 3, e esta Task não pode depender dela. Quem preenche o parâmetro é a Task 6, com o `SettingsService.builtinAddonId` provisório; quem substitui o provisório pelo canônico é a Task 9.
+The `builtinAddonId` enters via a parameter because the canonical constant (`kBuiltinAddonId`) is only born in Group 3, and this Task cannot depend on it. Whoever fills the parameter is Task 6, with the provisional `SettingsService.builtinAddonId`; whoever replaces the provisional with the canonical one is Task 9.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/secret_migration_test.dart`:
+Create `test/secret_migration_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -1256,13 +1237,13 @@ import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/services/secret_migration.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// Conta escritas, para provar que um mapa sem segredo não encosta no cofre.
-class _VaultEspiao extends MemoryVault {
-  int escritas = 0;
+/// Counts writes, to prove a secret-free map never touches the vault.
+class _VaultSpy extends MemoryVault {
+  int writes = 0;
 
   @override
   Future<void> write(String key, String value) {
-    escritas++;
+    writes++;
     return super.write(key, value);
   }
 }
@@ -1275,7 +1256,7 @@ Map<String, dynamic> _settings({
 }) {
   return {
     'consoleSettings': consoleSettings ?? <String, dynamic>{},
-    'generalSettings': {'downloadDir': '/home/joao/roms', 'autoExtract': true},
+    'generalSettings': {'downloadDir': '/home/user/roms', 'autoExtract': true},
     if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
     if (iaSecretKey != null) 'iaSecretKey': iaSecretKey,
     if (iaCookies != null) 'iaCookies': iaCookies,
@@ -1284,22 +1265,22 @@ Map<String, dynamic> _settings({
 }
 
 void main() {
-  test('as três credenciais do Internet Archive vão para o cofre', () async {
+  test('all three Internet Archive credentials go to the vault', () async {
     final vault = MemoryVault();
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    await migracao.drain(_settings(iaAccessKey: 'AK', iaSecretKey: 'SK', iaCookies: 'logged-in-sig=xyz'));
+    await migration.drain(_settings(iaAccessKey: 'AK', iaSecretKey: 'SK', iaCookies: 'logged-in-sig=xyz'));
 
     expect(await vault.read(SecretRef.iaAccessKey), 'AK');
     expect(await vault.read(SecretRef.iaSecretKey), 'SK');
     expect(await vault.read(SecretRef.iaCookies), 'logged-in-sig=xyz');
   });
 
-  test('o token de cada console vai chaveado pelo addon, não só pelo console', () async {
+  test('each console token is keyed by addon, not just by console', () async {
     final vault = MemoryVault();
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    await migracao.drain(_settings(consoleSettings: {
+    await migration.drain(_settings(consoleSettings: {
       'nintendo_64': {'downloadDir': '/roms/n64', 'authToken': 'tok-n64'},
       'snes': {'authToken': 'tok-snes'},
     }));
@@ -1308,10 +1289,10 @@ void main() {
     expect(await vault.read(SecretRef.addonToken('builtin', 'snes')), 'tok-snes');
   });
 
-  test('o mapa devolvido não tem mais nenhum dos quatro segredos', () async {
-    final migracao = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
+  test('the returned map keeps none of the four secrets', () async {
+    final migration = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
 
-    final limpo = await migracao.drain(_settings(
+    final cleaned = await migration.drain(_settings(
       iaAccessKey: 'AK',
       iaSecretKey: 'SK',
       iaCookies: 'logged-in-sig=xyz',
@@ -1320,79 +1301,67 @@ void main() {
       },
     ));
 
-    expect(limpo.containsKey('iaAccessKey'), isFalse);
-    expect(limpo.containsKey('iaSecretKey'), isFalse);
-    expect(limpo.containsKey('iaCookies'), isFalse);
-    expect((limpo['consoleSettings'] as Map)['snes'], isNot(contains('authToken')));
+    expect(cleaned.containsKey('iaAccessKey'), isFalse);
+    expect(cleaned.containsKey('iaSecretKey'), isFalse);
+    expect(cleaned.containsKey('iaCookies'), isFalse);
+    expect((cleaned['consoleSettings'] as Map)['snes'], isNot(contains('authToken')));
   });
 
-  test('o que não é segredo continua onde estava', () async {
-    // Uma migração que limpa demais apaga a pasta de download do usuário.
-    final migracao = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
+  test('non-secret values stay where they were', () async {
+    final migration = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
 
-    final limpo = await migracao.drain(_settings(
+    final cleaned = await migration.drain(_settings(
       iaAccessKey: 'AK',
       consoleSettings: {
         'snes': {'downloadDir': '/roms/snes', 'authToken': 'tok-snes'},
       },
     ));
 
-    expect(limpo['nszDecompressEnabled'], isTrue);
-    expect((limpo['generalSettings'] as Map)['downloadDir'], '/home/joao/roms');
-    expect((limpo['consoleSettings'] as Map)['snes'], containsPair('downloadDir', '/roms/snes'));
+    expect(cleaned['nszDecompressEnabled'], isTrue);
+    expect((cleaned['generalSettings'] as Map)['downloadDir'], '/home/user/roms');
+    expect((cleaned['consoleSettings'] as Map)['snes'], containsPair('downloadDir', '/roms/snes'));
   });
 
-  test('o cofre já preenchido ganha do arquivo, mas o texto puro sai mesmo assim', () async {
-    // Acontece quando a primeira passada gravou no cofre e o salvamento do
-    // arquivo limpo não chegou a acontecer. A cópia do arquivo é, por
-    // definição, a velha: sobrescrever com ela devolveria ao usuário um token
-    // que ele já trocou. Mas o texto puro tem que sair de qualquer jeito,
-    // senão a migração nunca termina e o segredo mora nos dois lugares.
+  test('an already-populated vault wins over the file, but plaintext still leaves', () async {
     final vault = MemoryVault();
-    await vault.write(SecretRef.iaAccessKey, 'novo');
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+    await vault.write(SecretRef.iaAccessKey, 'new');
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    final limpo = await migracao.drain(_settings(iaAccessKey: 'velho'));
+    final cleaned = await migration.drain(_settings(iaAccessKey: 'old'));
 
-    expect(await vault.read(SecretRef.iaAccessKey), 'novo');
-    expect(limpo.containsKey('iaAccessKey'), isFalse);
+    expect(await vault.read(SecretRef.iaAccessKey), 'new');
+    expect(cleaned.containsKey('iaAccessKey'), isFalse);
   });
 
-  test('valor vazio não vira chave no cofre', () async {
+  test('an empty value does not become a vault key', () async {
     final vault = MemoryVault();
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    await migracao.drain(_settings(iaAccessKey: ''));
+    await migration.drain(_settings(iaAccessKey: ''));
 
     expect(await vault.read(SecretRef.iaAccessKey), isNull);
   });
 
-  test('um consoleSettings malformado não derruba a migração', () async {
-    // O arquivo vem do disco de um usuário que pode ter editado à mão, e a
-    // migração roda na abertura do app. Um `as Map` otimista aqui vira app que
-    // não abre, e o usuário não tem como consertar sem achar o arquivo.
+  test('a malformed consoleSettings does not break the migration', () async {
     final vault = MemoryVault();
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    final limpo = await migracao.drain({
+    final cleaned = await migration.drain({
       'consoleSettings': {
-        'snes': 'isto deveria ser um mapa',
+        'snes': 'this should be a map',
         'n64': {'authToken': 'tok-n64'},
       },
       'nszDecompressEnabled': true,
     });
 
     expect(await vault.read(SecretRef.addonToken('builtin', 'n64')), 'tok-n64');
-    expect((limpo['consoleSettings'] as Map)['snes'], 'isto deveria ser um mapa');
+    expect((cleaned['consoleSettings'] as Map)['snes'], 'this should be a map');
   });
 
-  test('não muta o mapa que recebeu', () async {
-    // O chamador da Grupo 2 tem o mapa que acabou de desserializar em mãos. Se
-    // a migração mexer nele por dentro, o `consoleSettings` aninhado é o mesmo
-    // objeto, e o token some do mapa do chamador antes de qualquer coisa ter
-    // sido salva. Um `Map.from` raso não basta, e é esse o erro que este caso
-    // pega.
-    final migracao = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
+  test('does not mutate the map it received', () async {
+    // A shallow `Map.from` is not enough: the nested `consoleSettings` is the
+    // same object, so the token would vanish from the caller's map.
+    final migration = SecretMigration(vault: MemoryVault(), builtinAddonId: 'builtin');
     final original = _settings(
       iaAccessKey: 'AK',
       consoleSettings: {
@@ -1400,138 +1369,133 @@ void main() {
       },
     );
 
-    await migracao.drain(original);
+    await migration.drain(original);
 
     expect(original['iaAccessKey'], 'AK');
     expect((original['consoleSettings'] as Map)['snes'], containsPair('authToken', 'tok-snes'));
   });
 
-  test('um mapa sem segredo nenhum não escreve nada no cofre', () async {
-    // A migração roda em toda abertura do app. No Linux com chaveiro, cada
-    // escrita é uma ida ao D-Bus; no aparelho de quem nunca fez login, o número
-    // certo de idas é zero.
-    final vault = _VaultEspiao();
-    final migracao = SecretMigration(vault: vault, builtinAddonId: 'builtin');
+  test('a secret-free map writes nothing to the vault', () async {
+    // Each write is a D-Bus round trip on Linux with a keyring; for a user who
+    // never signed in, the right number is zero.
+    final vault = _VaultSpy();
+    final migration = SecretMigration(vault: vault, builtinAddonId: 'builtin');
 
-    await migracao.drain(_settings(consoleSettings: {
+    await migration.drain(_settings(consoleSettings: {
       'snes': {'downloadDir': '/roms/snes'},
     }));
 
-    expect(vault.escritas, 0);
+    expect(vault.writes, 0);
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/secret_migration_test.dart
 ```
 
-Esperado: `Undefined name 'SecretMigration'`.
+Expected: `Undefined name 'SecretMigration'`.
 
-- [ ] **Step 3: Implemente**
+- [ ] **Step 3: Implement**
 
-Crie `lib/services/secret_migration.dart`:
+Create `lib/services/secret_migration.dart`:
 
 ```dart
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// Tira os quatro segredos de dentro do JSON do `app_settings` e os põe no
-/// cofre.
+/// Takes the four secrets out of the `app_settings` JSON and puts them in the
+/// vault.
 ///
-/// Trabalha sobre o mapa **cru**, antes de `AppSettings.fromJson`, porque o
-/// modelo descarta campo desconhecido em silêncio: rodar depois da
-/// desserialização amarraria esta migração aos campos que a Grupo 2 vai tirar
-/// do modelo.
+/// Works on the **raw** map, before `AppSettings.fromJson`, because the model
+/// discards an unknown field silently: running after deserialization would tie
+/// this migration to the fields that Group 2 will take out of the model.
 ///
-/// Devolve o mapa limpo em vez de salvar. Quem salva é quem chama, e é lá que
-/// mora o `shared_preferences`.
+/// Returns the clean map instead of saving. Whoever saves is the caller, and
+/// that is where `shared_preferences` lives.
 ///
-/// **Não tem flag de "já rodei".** Depois da primeira passada os campos não
-/// estão mais no mapa, então a segunda é inócua sozinha. Se o salvamento
-/// falhar no meio, a próxima abertura tenta de novo, e aí vale a regra de que
-/// o valor já no cofre ganha do valor do arquivo.
+/// **There is no "already ran" flag.** After the first pass the fields are no
+/// longer in the map, so the second is harmless on its own. If the save fails
+/// midway, the next opening tries again, and then the rule that the value
+/// already in the vault wins over the file value applies.
 class SecretMigration {
   final SecretVault vault;
 
-  /// O addon a que pertencem os consoles do catálogo de hoje. Entra por
-  /// parâmetro porque a constante nasce na Grupo 3 e esta Task não pode
-  /// depender dela.
+  /// The addon that today's catalog consoles belong to. Enters via a parameter
+  /// because the constant is born in Group 3 and this Task cannot depend on it.
   final String builtinAddonId;
 
   const SecretMigration({required this.vault, required this.builtinAddonId});
 
   Future<Map<String, dynamic>> drain(Map<String, dynamic> raw) async {
-    final limpo = Map<String, dynamic>.from(raw);
+    final cleaned = Map<String, dynamic>.from(raw);
 
-    await _mover(limpo, 'iaAccessKey', SecretRef.iaAccessKey);
-    await _mover(limpo, 'iaSecretKey', SecretRef.iaSecretKey);
-    await _mover(limpo, 'iaCookies', SecretRef.iaCookies);
+    await _move(cleaned, 'iaAccessKey', SecretRef.iaAccessKey);
+    await _move(cleaned, 'iaSecretKey', SecretRef.iaSecretKey);
+    await _move(cleaned, 'iaCookies', SecretRef.iaCookies);
 
-    final consoles = limpo['consoleSettings'];
+    final consoles = cleaned['consoleSettings'];
     if (consoles is Map) {
-      final novos = <String, dynamic>{};
-      for (final entrada in consoles.entries) {
-        final id = entrada.key.toString();
-        final valor = entrada.value;
-        if (valor is! Map) {
-          // Arquivo editado à mão. Deixa passar intacto: a migração roda na
-          // abertura do app, e levantar aqui vira app que não abre.
-          novos[id] = valor;
+      final result = <String, dynamic>{};
+      for (final entry in consoles.entries) {
+        final id = entry.key.toString();
+        final value = entry.value;
+        if (value is! Map) {
+          // Hand-edited file. Let it through intact: the migration runs at app
+          // opening, and raising here becomes an app that does not open.
+          result[id] = value;
           continue;
         }
-        // Cópia própria, e não o mapa aninhado do chamador: `Map.from` no
-        // nível de cima é raso, e mexer no de dentro apagaria o token do mapa
-        // de quem chamou antes de qualquer coisa ter sido salva.
-        final console = Map<String, dynamic>.from(valor);
-        await _mover(console, 'authToken', SecretRef.addonToken(builtinAddonId, id));
-        novos[id] = console;
+        // Own copy, not the caller's nested map: `Map.from` above is shallow.
+        final console = Map<String, dynamic>.from(value);
+        await _move(console, 'authToken', SecretRef.addonToken(builtinAddonId, id));
+        result[id] = console;
       }
-      limpo['consoleSettings'] = novos;
+      cleaned['consoleSettings'] = result;
     }
 
-    return limpo;
+    return cleaned;
   }
 
-  /// Tira [campo] de [de] **sempre**, e grava no cofre só se houver o que
-  /// gravar e o cofre ainda não tiver valor.
-  Future<void> _mover(Map<String, dynamic> de, String campo, String chave) async {
-    final valor = de.remove(campo);
-    if (valor is! String || valor.isEmpty) return;
-    if (await vault.read(chave) != null) return;
-    await vault.write(chave, valor);
+  /// Removes [field] from [from] always, and writes to the vault only when there
+  /// is something to write and the vault has no value yet.
+  Future<void> _move(Map<String, dynamic> from, String field, String ref) async {
+    final value = from.remove(field);
+    if (value is! String || value.isEmpty) return;
+    if (await vault.read(ref) != null) return;
+    await vault.write(ref, value);
   }
 }
 ```
 
-- [ ] **Step 4: Rode para ver passar**
+- [ ] **Step 4: Run to see it pass**
 
 ```bash
 flutter test test/secret_migration_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Expected: `+11`, zero failures.
 
-**Tropeço provável:** o caso "não muta o mapa que recebeu" falha se você escrever `final limpo = Map<String, dynamic>.from(raw)` e mexer direto em `consoles`. O `Map.from` é raso: o `consoleSettings` da cópia é **o mesmo objeto** do original. Copiar cada mapa de console é o que fecha isso, e é por isso que o laço monta um `novos` em vez de editar no lugar.
+**Likely pitfall:** the case "does not mutate the map it received" fails if you write `final cleaned = Map<String, dynamic>.from(raw)` and touch `consoles` directly. `Map.from` is shallow: the copy's `consoleSettings` is **the same object** as the original's. Copying each console map is what closes this, and that is why the loop builds a `result` instead of editing in place.
 
-- [ ] **Step 5: Rode a suíte inteira**
+- [ ] **Step 5: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+389`, zero falha.
+Expected: `+389`, zero failures.
 
-- [ ] **Step 6: Analise**
+- [ ] **Step 6: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 7: Commit**
 
@@ -1542,48 +1506,48 @@ git add lib/services/secret_migration.dart
 git commit -m "feat(cofre): migracao unica que esvazia os segredos do app_settings"
 ```
 
-**Fim da Grupo 1.** O cofre existe, sabe qual implementação usar, sabe dizer se cifra, e sabe esvaziar o lugar velho. Nada disso está ligado ao app ainda: `flutter run` neste ponto se comporta exatamente como antes. Quem liga é a Grupo 2.
+**End of Group 1.** The vault exists, knows which implementation to use, knows how to say whether it encrypts, and knows how to empty the old place. None of that is wired to the app yet: `flutter run` at this point behaves exactly as before. Whoever wires it is Group 2.
 
-| Task | Novos | Acumulado |
+| Task | New | Cumulative |
 | --- | --- | --- |
-| linha de base | 0 | 340 |
+| baseline | 0 | 340 |
 | 1, `SecretRef` | 7 | 347 |
-| 2, `SecretVault` e contrato | 8 | 355 |
+| 2, `SecretVault` and contract | 8 | 355 |
 | 3, `PrefsVault` | 11 | 366 |
-| 4, `SecureStorageVault` e escolha | 14 | 380 |
-| 5, migração | 9 | 389 |
+| 4, `SecureStorageVault` and choice | 14 | 380 |
+| 5, migration | 9 | 389 |
 
 ---
 
-## Grupo 2: a correção da 6.3
+## Group 2: the 6.3 fix
 
-Três Tasks. A Grupo 1 construiu o cofre sem ligar fio nenhum; aqui os fios são ligados, e é aqui que a seção 6.3 do spec é cumprida.
+Three Tasks. Group 1 built the vault without wiring a single wire; here the wires are connected, and it is here that section 6.3 of the spec is fulfilled.
 
-A ordem importa e não é negociável: **o segredo só sai do arquivo depois de já estar no cofre**. Por isso a Task 6 faz as duas metades no mesmo commit, em vez de "primeiro para de escrever, depois passa a guardar". Entre esses dois commits existiria uma janela em que o token do usuário não estaria em lugar nenhum.
+The order matters and is not negotiable: **the secret only leaves the file after it is already in the vault**. That is why Task 6 does both halves in the same commit, instead of "first stop writing, then start storing". Between those two commits there would be a window in which the user's token would not be anywhere.
 
-### Task 6: os segredos passam a morar no cofre
+### Task 6: the secrets start living in the vault
 
 **Files:**
-- Modify: `lib/models/settings_model.dart:82-96` e `:151-160`
+- Modify: `lib/models/settings_model.dart:82-96` and `:151-160`
 - Modify: `lib/services/settings_service.dart`
 - Modify: `lib/providers/settings_provider.dart`
 - Test: `test/settings_model_secrets_test.dart`
 - Test: `test/settings_service_test.dart`
 
-Uma assimetria de propósito, que é a única coisa sutil desta Task: **`toJson` para de escrever os segredos, e `fromJson` continua sabendo lê-los.** Não é descuido. O arquivo do usuário que ainda não migrou tem os campos lá, e quem os tira é a migração da Task 5, que roda sobre o mapa cru. Tirar a leitura junto não ganharia nada e transformaria qualquer caminho que pule a migração em perda silenciosa.
+An asymmetry on purpose, which is the only subtle thing about this Task: **`toJson` stops writing the secrets, and `fromJson` keeps knowing how to read them.** It is not carelessness. The file of the user who has not migrated yet has the fields there, and whoever takes them out is the Task 5 migration, which runs on the raw map. Taking out the read along with it would gain nothing and would turn any path that skips the migration into a silent loss.
 
-A outra decisão que merece ser lida antes de codar: **salvar nunca apaga segredo.** `saveSettings` grava o que existe e ignora o que está `null`. Apagar é operação explícita, com método próprio. A razão é uma corrida real: `SettingsNotifier` já salva a partir de ações do usuário enquanto `_loadSettings` ainda está no ar, e um `saveSettings` que apagasse tudo que está `null` transformaria um clique apressado no boot em perda de todas as credenciais. Ninguém perceberia até o próximo download falhar.
+The other decision that deserves to be read before coding: **saving never deletes a secret.** `saveSettings` writes what exists and ignores what is `null`. Deleting is an explicit operation, with its own method. The reason is a real race: `SettingsNotifier` already saves from user actions while `_loadSettings` is still in flight, and a `saveSettings` that deleted everything that is `null` would turn a hasty click at boot into loss of all credentials. Nobody would notice until the next download failed.
 
-- [ ] **Step 1: Escreva o teste do modelo**
+- [ ] **Step 1: Write the model test**
 
-Crie `test/settings_model_secrets_test.dart`:
+Create `test/settings_model_secrets_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 
 void main() {
-  test('o JSON salvo não leva as três credenciais do Internet Archive', () {
+  test('the saved JSON does not carry the three Internet Archive credentials', () {
     const settings = AppSettings(iaAccessKey: 'AK', iaSecretKey: 'SK', iaCookies: 'logged-in-sig=xyz');
 
     final json = settings.toJson();
@@ -1593,7 +1557,7 @@ void main() {
     expect(json.containsKey('iaCookies'), isFalse);
   });
 
-  test('o JSON salvo não leva o token de console', () {
+  test('the saved JSON does not carry the console token', () {
     const console = BaseSettings(downloadDir: '/roms/snes', authToken: 'tok-snes');
 
     final json = console.toJson();
@@ -1602,11 +1566,12 @@ void main() {
     expect(json['downloadDir'], '/roms/snes');
   });
 
-  test('ler o formato legado continua funcionando', () {
-    // Assimetria deliberada: escreve sem, lê com. O arquivo de quem ainda não
-    // migrou tem os campos lá, e quem os tira é a migração da Task 5, que roda
-    // sobre o mapa cru. Tirar a leitura junto não fecharia buraco nenhum e
-    // faria qualquer caminho que pule a migração perder o token em silêncio.
+  test('reading the legacy format still works', () {
+    // Deliberate asymmetry: writes without, reads with. The file of whoever has
+    // not migrated yet has the fields there, and whoever takes them out is the
+    // Task 5 migration, which runs on the raw map. Taking out the read along
+    // with it would close no hole and would make any path that skips the
+    // migration lose the token silently.
     final settings = AppSettings.fromJson({
       'iaAccessKey': 'AK',
       'consoleSettings': {
@@ -1618,20 +1583,20 @@ void main() {
     expect(settings.consoleSettings['snes']?.authToken, 'tok-snes');
   });
 
-  test('o que não é segredo continua sendo salvo', () {
-    const settings = AppSettings(nszDecompressEnabled: false, catalogSourceUrl: 'https://exemplo/consoles.json');
+  test('what is not a secret keeps being saved', () {
+    const settings = AppSettings(nszDecompressEnabled: false, catalogSourceUrl: 'https://example/consoles.json');
 
     final json = settings.toJson();
 
     expect(json['nszDecompressEnabled'], isFalse);
-    expect(json['catalogSourceUrl'], 'https://exemplo/consoles.json');
+    expect(json['catalogSourceUrl'], 'https://example/consoles.json');
   });
 }
 ```
 
-- [ ] **Step 2: Escreva o teste do serviço**
+- [ ] **Step 2: Write the service test**
 
-Crie `test/settings_service_test.dart`:
+Create `test/settings_service_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -1643,8 +1608,8 @@ import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
-Future<SharedPreferences> _prefsCom(Map<String, Object> valores) async {
-  SharedPreferences.setMockInitialValues(valores);
+Future<SharedPreferences> _prefsWith(Map<String, Object> values) async {
+  SharedPreferences.setMockInitialValues(values);
   SharedPreferences.resetStatic();
   return SharedPreferences.getInstance();
 }
@@ -1657,32 +1622,32 @@ String _appSettings({String? iaAccessKey, String? authTokenSnes}) {
         if (authTokenSnes != null) 'authToken': authTokenSnes,
       },
     },
-    'generalSettings': {'downloadDir': '/home/joao/roms'},
+    'generalSettings': {'downloadDir': '/home/user/roms'},
     if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
     'nszDecompressEnabled': true,
   });
 }
 
-String _chaveDoSnes() => SecretRef.addonToken(SettingsService.builtinAddonId, 'snes');
+String _snesKey() => SecretRef.addonToken(SettingsService.builtinAddonId, 'snes');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('carregar tira o segredo do arquivo e o põe no cofre', () async {
-    await _prefsCom({'app_settings': _appSettings(iaAccessKey: 'AK', authTokenSnes: 'tok-snes')});
+  test('loading takes the secret out of the file and puts it in the vault', () async {
+    await _prefsWith({'app_settings': _appSettings(iaAccessKey: 'AK', authTokenSnes: 'tok-snes')});
     final vault = MemoryVault();
 
     await SettingsService().loadSettings(vault);
 
     expect(await vault.read(SecretRef.iaAccessKey), 'AK');
-    expect(await vault.read(_chaveDoSnes()), 'tok-snes');
+    expect(await vault.read(_snesKey()), 'tok-snes');
   });
 
-  test('carregar devolve as settings com o segredo, lido do cofre', () async {
-    // O app inteiro lê `settings.consoleSettings[id].authToken`. Se a carga
-    // drenasse sem reidratar, a migração apagaria o login de todo mundo na
-    // primeira abertura depois da atualização.
-    await _prefsCom({'app_settings': _appSettings(authTokenSnes: 'tok-snes')});
+  test('loading returns the settings with the secret, read from the vault', () async {
+    // The whole app reads `settings.consoleSettings[id].authToken`. If the load
+    // drained without rehydrating, the migration would erase everyone's login on
+    // the first opening after the update.
+    await _prefsWith({'app_settings': _appSettings(authTokenSnes: 'tok-snes')});
 
     final settings = await SettingsService().loadSettings(MemoryVault());
 
@@ -1690,30 +1655,30 @@ void main() {
     expect(settings.consoleSettings['snes']?.downloadDir, '/roms/snes');
   });
 
-  test('carregar reescreve o app_settings sem o segredo', () async {
-    final prefs = await _prefsCom({'app_settings': _appSettings(iaAccessKey: 'AK', authTokenSnes: 'tok-snes')});
+  test('loading rewrites app_settings without the secret', () async {
+    final prefs = await _prefsWith({'app_settings': _appSettings(iaAccessKey: 'AK', authTokenSnes: 'tok-snes')});
 
     await SettingsService().loadSettings(MemoryVault());
 
-    final salvo = prefs.getString('app_settings')!;
-    expect(salvo, isNot(contains('AK')));
-    expect(salvo, isNot(contains('tok-snes')));
-    expect(salvo, contains('/roms/snes'));
+    final saved = prefs.getString('app_settings')!;
+    expect(saved, isNot(contains('AK')));
+    expect(saved, isNot(contains('tok-snes')));
+    expect(saved, contains('/roms/snes'));
   });
 
-  test('carregar não reescreve o app_settings quando não havia segredo', () async {
-    // A carga roda em toda abertura. Reescrever sempre é escrita em disco por
-    // nada, e some com a pista de quando a migração de fato aconteceu.
-    final semSegredo = _appSettings();
-    final prefs = await _prefsCom({'app_settings': semSegredo});
+  test('loading does not rewrite app_settings when there was no secret', () async {
+    // The load runs on every opening. Rewriting always is a disk write for
+    // nothing, and it erases the clue of when the migration actually happened.
+    final withoutSecret = _appSettings();
+    final prefs = await _prefsWith({'app_settings': withoutSecret});
 
     await SettingsService().loadSettings(MemoryVault());
 
-    expect(prefs.getString('app_settings'), semSegredo);
+    expect(prefs.getString('app_settings'), withoutSecret);
   });
 
-  test('salvar grava o segredo no cofre', () async {
-    await _prefsCom({'app_settings': _appSettings()});
+  test('saving writes the secret to the vault', () async {
+    await _prefsWith({'app_settings': _appSettings()});
     final vault = MemoryVault();
     const settings = AppSettings(
       iaAccessKey: 'AK',
@@ -1723,11 +1688,11 @@ void main() {
     await SettingsService().saveSettings(settings, vault);
 
     expect(await vault.read(SecretRef.iaAccessKey), 'AK');
-    expect(await vault.read(_chaveDoSnes()), 'tok-snes');
+    expect(await vault.read(_snesKey()), 'tok-snes');
   });
 
-  test('salvar não escreve segredo dentro do app_settings', () async {
-    final prefs = await _prefsCom({'app_settings': _appSettings()});
+  test('saving does not write a secret inside app_settings', () async {
+    final prefs = await _prefsWith({'app_settings': _appSettings()});
     const settings = AppSettings(
       iaAccessKey: 'AK',
       consoleSettings: {'snes': BaseSettings(authToken: 'tok-snes')},
@@ -1739,24 +1704,24 @@ void main() {
     expect(prefs.getString('app_settings'), isNot(contains('tok-snes')));
   });
 
-  test('salvar NÃO apaga do cofre o que está null nas settings', () async {
-    // A corrida real: `SettingsNotifier` salva a partir de ação do usuário
-    // enquanto a carga ainda está no ar, e nesse instante o estado é
-    // `const AppSettings()`, tudo null. Se salvar apagasse o que está null, um
-    // clique apressado no boot levaria todas as credenciais junto, sem erro
-    // nenhum na tela. Apagar é operação explícita, e tem método próprio.
-    await _prefsCom({'app_settings': _appSettings()});
+  test('saving does NOT delete from the vault what is null in the settings', () async {
+    // The real race: `SettingsNotifier` saves from a user action while the load
+    // is still in flight, and at that instant the state is `const AppSettings()`,
+    // all null. If saving deleted what is null, a hasty click at boot would take
+    // all the credentials along, with no error on the screen. Deleting is an
+    // explicit operation, and has its own method.
+    await _prefsWith({'app_settings': _appSettings()});
     final vault = MemoryVault();
     await vault.write(SecretRef.iaAccessKey, 'AK');
-    await vault.write(_chaveDoSnes(), 'tok-snes');
+    await vault.write(_snesKey(), 'tok-snes');
 
     await SettingsService().saveSettings(const AppSettings(), vault);
 
     expect(await vault.read(SecretRef.iaAccessKey), 'AK');
-    expect(await vault.read(_chaveDoSnes()), 'tok-snes');
+    expect(await vault.read(_snesKey()), 'tok-snes');
   });
 
-  test('apagar as credenciais do IA leva as três', () async {
+  test('clearing the IA credentials takes all three', () async {
     final vault = MemoryVault();
     await vault.write(SecretRef.iaAccessKey, 'AK');
     await vault.write(SecretRef.iaSecretKey, 'SK');
@@ -1769,31 +1734,31 @@ void main() {
     expect(await vault.read(SecretRef.iaCookies), isNull);
   });
 
-  test('apagar o token de um console não leva o do vizinho', () async {
+  test('clearing one console token does not take the neighbor', () async {
     final vault = MemoryVault();
-    await vault.write(_chaveDoSnes(), 'tok-snes');
+    await vault.write(_snesKey(), 'tok-snes');
     await vault.write(SecretRef.addonToken(SettingsService.builtinAddonId, 'n64'), 'tok-n64');
 
     await SettingsService().clearConsoleToken('snes', vault);
 
-    expect(await vault.read(_chaveDoSnes()), isNull);
+    expect(await vault.read(_snesKey()), isNull);
     expect(await vault.read(SecretRef.addonToken(SettingsService.builtinAddonId, 'n64')), 'tok-n64');
   });
 }
 ```
 
-- [ ] **Step 3: Rode para ver falhar**
+- [ ] **Step 3: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/settings_model_secrets_test.dart test/settings_service_test.dart
 ```
 
-Esperado: os do modelo falham em asserção (`Expected: false, Actual: true`, porque hoje o `toJson` escreve mesmo), e os do serviço falham em compilação (`loadSettings` não aceita argumento).
+Expected: the model ones fail on an assertion (`Expected: false, Actual: true`, because today the `toJson` does write them), and the service ones fail at compile (`loadSettings` does not accept an argument).
 
-- [ ] **Step 4: Tire os segredos do `toJson`**
+- [ ] **Step 4: Take the secrets out of `toJson`**
 
-Em `lib/models/settings_model.dart`, no `AppSettings.toJson` (linhas 82-96), **apague** as três linhas:
+In `lib/models/settings_model.dart`, in `AppSettings.toJson` (lines 82-96), **delete** the three lines:
 
 ```dart
       if (iaAccessKey != null) 'iaAccessKey': iaAccessKey,
@@ -1801,17 +1766,17 @@ Em `lib/models/settings_model.dart`, no `AppSettings.toJson` (linhas 82-96), **a
       if (iaCookies != null) 'iaCookies': iaCookies,
 ```
 
-e, no `BaseSettings.toJson` (linhas 151-160), **apague**:
+and, in `BaseSettings.toJson` (lines 151-160), **delete**:
 
 ```dart
       if (authToken != null) 'authToken': authToken,
 ```
 
-**Não toque nos `fromJson`.** A assimetria é o ponto.
+**Do not touch the `fromJson`.** The asymmetry is the point.
 
-- [ ] **Step 5: Ligue o cofre no `SettingsService`**
+- [ ] **Step 5: Wire the vault into `SettingsService`**
 
-Reescreva `lib/services/settings_service.dart`:
+Rewrite `lib/services/settings_service.dart`:
 
 ```dart
 import 'dart:convert';
@@ -1826,13 +1791,13 @@ import 'package:roms_downloader/services/secret_vault.dart';
 class SettingsService {
   static const String _settingsKey = 'app_settings';
 
-  /// O addon a que pertencem os consoles do catálogo de hoje.
+  /// The addon that today's catalog consoles belong to.
   ///
-  /// Enquanto existe uma fonte só, este id é constante. Quando houver N
-  /// addons, este espelho continua sendo só do embutido, e o token dos outros
-  /// passa a ser lido sob demanda no cofre (Task 19). Ele vive aqui, e não em
-  /// [SecretRef], porque é fato sobre a instalação e não sobre o formato da
-  /// chave.
+  /// While there is a single source, this id is constant. When there are N
+  /// addons, this mirror stays the builtin's only, and the token of the others
+  /// starts being read on demand from the vault (Task 19). It lives here, and
+  /// not in [SecretRef], because it is a fact about the installation and not
+  /// about the key format.
   static const String builtinAddonId = 'builtin';
 
   final DirectoryService _directoryService = DirectoryService();
@@ -1843,20 +1808,19 @@ class SettingsService {
       final settingsJson = prefs.getString(_settingsKey);
 
       if (settingsJson != null) {
-        final cru = jsonDecode(settingsJson) as Map<String, dynamic>;
-        final limpo = await SecretMigration(vault: vault, builtinAddonId: builtinAddonId).drain(cru);
+        final raw = jsonDecode(settingsJson) as Map<String, dynamic>;
+        final cleaned = await SecretMigration(vault: vault, builtinAddonId: builtinAddonId).drain(raw);
 
-        // Só reescreve se a migração de fato tirou alguma coisa. A carga roda
-        // em toda abertura do app; reescrever sempre é escrita em disco por
-        // nada. A comparação é segura porque `drain` não mexe no mapa que
-        // recebeu.
-        final limpoJson = jsonEncode(limpo);
-        if (limpoJson != jsonEncode(cru)) {
-          await prefs.setString(_settingsKey, limpoJson);
+        // Only rewrites if the migration actually took something out. The load
+        // runs on every app opening; rewriting always is a disk write for
+        // nothing. The comparison is safe because `drain` does not touch the map
+        // it received.
+        final cleanedJson = jsonEncode(cleaned);
+        if (cleanedJson != jsonEncode(raw)) {
+          await prefs.setString(_settingsKey, cleanedJson);
         }
 
-        final hidratado = await _hydrate(AppSettings.fromJson(limpo), vault);
-        return hidratado;
+        return _hydrate(AppSettings.fromJson(cleaned), vault);
       }
     } catch (e) {
       debugPrint('Error loading settings: $e');
@@ -1868,15 +1832,15 @@ class SettingsService {
     );
   }
 
-  /// Devolve as settings com os segredos postos de volta, vindos do cofre.
+  /// Returns the settings with the secrets put back, coming from the vault.
   ///
-  /// Sem isto, a migração seria perda de dados: o app inteiro lê
-  /// `settings.consoleSettings[id].authToken`, e ele acabou de sair do arquivo.
+  /// Without this, the migration would be data loss: the whole app reads
+  /// `settings.consoleSettings[id].authToken`, and it just left the file.
   Future<AppSettings> _hydrate(AppSettings settings, SecretVault vault) async {
     final consoles = <String, BaseSettings>{};
-    for (final entrada in settings.consoleSettings.entries) {
-      final token = await vault.read(SecretRef.addonToken(builtinAddonId, entrada.key));
-      consoles[entrada.key] = token == null ? entrada.value : entrada.value.copyWith(authToken: token);
+    for (final entry in settings.consoleSettings.entries) {
+      final token = await vault.read(SecretRef.addonToken(builtinAddonId, entry.key));
+      consoles[entry.key] = token == null ? entry.value : entry.value.copyWith(authToken: token);
     }
 
     return settings.copyWith(
@@ -1897,26 +1861,26 @@ class SettingsService {
     }
   }
 
-  /// Grava o que existe e **não apaga o que está `null`**.
+  /// Writes what exists and **does not delete what is `null`**.
   ///
-  /// Apagar aqui seria tentador e é errado: `SettingsNotifier` salva a partir
-  /// de ação do usuário enquanto a carga ainda está no ar, e nesse instante o
-  /// estado é `const AppSettings()`, tudo `null`. Salvar apagando transformaria
-  /// um clique apressado no boot em perda de todas as credenciais, sem erro na
-  /// tela. Quem apaga são [clearIaSecrets] e [clearConsoleToken], chamados de
-  /// propósito.
+  /// Deleting here would be tempting and is wrong: `SettingsNotifier` saves from
+  /// a user action while the load is still in flight, and at that instant the
+  /// state is `const AppSettings()`, all `null`. Saving by deleting would turn a
+  /// hasty click at boot into loss of all credentials, with no error on the
+  /// screen. Whoever deletes is [clearIaSecrets] and [clearConsoleToken], called
+  /// on purpose.
   Future<void> _writeSecrets(AppSettings settings, SecretVault vault) async {
     await _writeIfPresent(vault, SecretRef.iaAccessKey, settings.iaAccessKey);
     await _writeIfPresent(vault, SecretRef.iaSecretKey, settings.iaSecretKey);
     await _writeIfPresent(vault, SecretRef.iaCookies, settings.iaCookies);
-    for (final entrada in settings.consoleSettings.entries) {
-      await _writeIfPresent(vault, SecretRef.addonToken(builtinAddonId, entrada.key), entrada.value.authToken);
+    for (final entry in settings.consoleSettings.entries) {
+      await _writeIfPresent(vault, SecretRef.addonToken(builtinAddonId, entry.key), entry.value.authToken);
     }
   }
 
-  Future<void> _writeIfPresent(SecretVault vault, String chave, String? valor) async {
-    if (valor == null || valor.isEmpty) return;
-    await vault.write(chave, valor);
+  Future<void> _writeIfPresent(SecretVault vault, String key, String? value) async {
+    if (value == null || value.isEmpty) return;
+    await vault.write(key, value);
   }
 
   Future<void> clearIaSecrets(SecretVault vault) async {
@@ -1954,24 +1918,24 @@ class SettingsService {
 }
 ```
 
-- [ ] **Step 6: Passe o cofre pelo provider**
+- [ ] **Step 6: Pass the vault through the provider**
 
-Em `lib/providers/settings_provider.dart`, o provider ganha o cofre:
+In `lib/providers/settings_provider.dart`, the provider gains the vault:
 
 ```dart
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
-  return SettingsNotifier(ref.watch(vaultProvider.future).then((escolha) => escolha.vault));
+  return SettingsNotifier(ref.watch(vaultProvider.future).then((choice) => choice.vault));
 });
 ```
 
-com os imports novos:
+with the new imports:
 
 ```dart
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 ```
 
-No `SettingsNotifier`, o topo da classe:
+In `SettingsNotifier`, the top of the class:
 
 ```dart
 class SettingsNotifier extends StateNotifier<AppSettings> {
@@ -1987,36 +1951,35 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = settings;
   }
 
-  /// Troca o estado e salva. Existe porque onze métodos faziam as duas linhas
-  /// na mão, e agora cada um deles precisaria também esperar o cofre.
-  Future<void> _persist(AppSettings novo) async {
-    state = novo;
-    await _settingsService.saveSettings(novo, await _vault);
+  /// Swaps the state and saves.
+  Future<void> _persist(AppSettings next) async {
+    state = next;
+    await _settingsService.saveSettings(next, await _vault);
   }
 ```
 
-Agora troque, nos **onze** sítios, o par
+Now swap, in the **eleven** sites, the pair
 
 ```dart
     state = newState;
     await _settingsService.saveSettings(newState);
 ```
 
-por
+for
 
 ```dart
     await _persist(newState);
 ```
 
-Confira que sobraram zero:
+Check that zero remain:
 
 ```bash
 grep -c "saveSettings(newState)" lib/providers/settings_provider.dart
 ```
 
-Esperado: `0`.
+Expected: `0`.
 
-Por fim, os dois métodos que apagam credencial passam a apagar de verdade:
+Finally, the two methods that clear a credential start clearing for real:
 
 ```dart
   Future<void> setConsoleAuthToken(String consoleId, String token) async {
@@ -2025,8 +1988,8 @@ Por fim, os dois métodos que apagam credencial passam a apagar de verdade:
         ? current.copyWith(clearAuthToken: true)
         : current.copyWith(authToken: token);
     if (token.isEmpty) {
-      // `saveSettings` de propósito não apaga o que está null. Sair da conta
-      // tem que apagar, e é aqui que isso é dito.
+      // `saveSettings` on purpose does not delete what is null. Logging out has
+      // to delete, and it is here that this is said.
       await _settingsService.clearConsoleToken(consoleId, await _vault);
     }
     await _persist(state.copyWith(
@@ -2040,34 +2003,34 @@ Por fim, os dois métodos que apagam credencial passam a apagar de verdade:
   }
 ```
 
-- [ ] **Step 7: Rode para ver passar**
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/settings_model_secrets_test.dart test/settings_service_test.dart
 ```
 
-Esperado: `+13`, zero falha.
+Expected: `+13`, zero failures.
 
-**Tropeço provável:** o caso "carregar não reescreve o app_settings quando não havia segredo" falha por diferença de formatação, e não de conteúdo, se o `_appSettings()` do teste tiver sido escrito à mão em vez de por `jsonEncode`. A comparação é entre duas saídas de `jsonEncode` sobre o mesmo mapa, que são idênticas caractere a caractere; texto digitado à mão com espaço depois dos dois-pontos não é.
+**Likely pitfall:** the case "loading does not rewrite app_settings when there was no secret" fails on a formatting difference, and not a content one, if the test's `_appSettings()` was written by hand instead of by `jsonEncode`. The comparison is between two `jsonEncode` outputs over the same map, which are identical character by character; hand-typed text with a space after the colon is not.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+402`, zero falha.
+Expected: `+402`, zero failures.
 
-Se algum teste **antigo** quebrar aqui, leia antes de consertar: pode ser teste que afirmava que o token ia no JSON, e aí ele estava certo ontem e está errado hoje. Conserte o teste dizendo por quê no commit. Se for teste que não fala de segredo, é regressão sua.
+If some **old** test breaks here, read before fixing: it may be a test that asserted the token went into the JSON, and then it was right yesterday and is wrong today. Fix the test saying why in the commit. If it is a test that does not talk about a secret, it is your regression.
 
-- [ ] **Step 9: Analise e compile**
+- [ ] **Step 9: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found` e build ok.
+Expected: `22 issues found` and build ok.
 
 - [ ] **Step 10: Commit**
 
@@ -2080,7 +2043,7 @@ git commit -m "feat(cofre): segredo sai do app_settings e passa a morar no cofre
 
 ---
 
-### Task 7: o token para de vir do arquivo, nos quatro sítios
+### Task 7: the token stops coming from the file, in the four sites
 
 **Files:**
 - Create: `lib/utils/console_auth.dart`
@@ -2090,15 +2053,15 @@ git commit -m "feat(cofre): segredo sai do app_settings e passa a morar no cofre
 - Modify: `lib/screens/setup_wizard_screen.dart:392`
 - Test: `test/console_auth_test.dart`
 
-Esta é a Task que fecha o vazamento de verdade, e é a metade da 6.3 que vale em toda plataforma, com chaveiro ou sem.
+This is the Task that truly closes the leak, and it is the half of 6.3 that holds on every platform, with a keyring or without.
 
-O spec lista dois sítios. São **quatro**. Os dois que ele não lista não montam header: eles decidem se a tela mostra o console como conectado, com a mesma expressão copiada nos dois arquivos. Se ficarem, o app passa a dizer "este console tem auth configurada" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface, e some do radar de qualquer `grep` por `buildConsoleAuthHeaders`.
+The spec lists two sites. There are **four**. The two it does not list do not build a header: they decide whether the screen shows the console as connected, with the same expression copied in both files. If they stay, the app starts saying "this console has auth configured" based on a field that nobody else reads to authenticate. It is not a leak, it is an interface lie, and it drops off the radar of any `grep` for `buildConsoleAuthHeaders`.
 
-Os dois viram uma função só, em arquivo novo, porque expressão duplicada em duas telas foi exatamente o que fez o spec contar dois em vez de quatro.
+The two become a single function, in a new file, because a duplicated expression in two screens was exactly what made the spec count two instead of four.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/console_auth_test.dart`:
+Create `test/console_auth_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -2108,67 +2071,67 @@ import 'package:roms_downloader/utils/network.dart';
 
 void main() {
   group('buildConsoleAuthHeaders', () {
-    test('o token que está no catálogo é ignorado', () {
-      // A falha da seção 6.3, literal. O catálogo é o arquivo que o usuário
-      // manda para outra pessoa; nada o cifra e nada avisa que tem segredo
-      // dentro. Depois desta Task ele pode até conter o campo, que não
-      // autentica ninguém.
-      final headers = buildConsoleAuthHeaders({'token': 'tok-do-arquivo'});
+    test('the token in the catalog is ignored', () {
+      // The section 6.3 flaw, literal. The catalog is the file the user sends to
+      // someone else; nothing encrypts it and nothing warns it has a secret
+      // inside. After this Task it may even contain the field, which
+      // authenticates nobody.
+      final headers = buildConsoleAuthHeaders({'token': 'tok-from-file'});
 
       expect(headers, isEmpty);
     });
 
-    test('o token de quem chama monta Bearer', () {
-      final headers = buildConsoleAuthHeaders({}, tokenOverride: 'tok-do-cofre');
+    test('the caller token builds a Bearer', () {
+      final headers = buildConsoleAuthHeaders({}, tokenOverride: 'tok-from-vault');
 
-      expect(headers, {'Authorization': 'Bearer tok-do-cofre'});
+      expect(headers, {'Authorization': 'Bearer tok-from-vault'});
     });
 
-    test('com cookies, monta Cookie com o nome do catálogo', () {
+    test('with cookies, builds Cookie with the catalog name', () {
       final headers = buildConsoleAuthHeaders(
         {'cookies': true, 'cookie_name': 'ultranx_session'},
-        tokenOverride: 'tok-do-cofre',
+        tokenOverride: 'tok-from-vault',
       );
 
-      expect(headers, {'Cookie': 'ultranx_session=tok-do-cofre'});
+      expect(headers, {'Cookie': 'ultranx_session=tok-from-vault'});
     });
 
-    test('sem cookie_name, o nome padrão é auth_token', () {
-      final headers = buildConsoleAuthHeaders({'cookies': true}, tokenOverride: 'tok-do-cofre');
+    test('with no cookie_name, the default name is auth_token', () {
+      final headers = buildConsoleAuthHeaders({'cookies': true}, tokenOverride: 'tok-from-vault');
 
-      expect(headers, {'Cookie': 'auth_token=tok-do-cofre'});
+      expect(headers, {'Cookie': 'auth_token=tok-from-vault'});
     });
 
-    test('ia_s3 não monta header nem com token de quem chama', () {
-      // O Internet Archive assina de outro jeito, e um Bearer aqui quebraria
-      // o download em vez de autenticar.
-      final headers = buildConsoleAuthHeaders({'type': 'ia_s3'}, tokenOverride: 'tok-do-cofre');
+    test('ia_s3 builds no header even with a caller token', () {
+      // The Internet Archive signs another way, and a Bearer here would break
+      // the download instead of authenticating.
+      final headers = buildConsoleAuthHeaders({'type': 'ia_s3'}, tokenOverride: 'tok-from-vault');
 
       expect(headers, isEmpty);
     });
 
-    test('console sem auth não monta header', () {
-      expect(buildConsoleAuthHeaders(null, tokenOverride: 'tok-do-cofre'), isEmpty);
+    test('a console with no auth builds no header', () {
+      expect(buildConsoleAuthHeaders(null, tokenOverride: 'tok-from-vault'), isEmpty);
     });
   });
 
   group('consoleHasToken', () {
-    test('o token do catálogo não conta como conectado', () {
-      // Este é o caso que o spec não lista. Sem ele, a tela do Tinfoil e o
-      // assistente mostram "conectado" lendo um campo que a Task inteira
-      // acabou de tirar do caminho de autenticação.
+    test('the catalog token does not count as connected', () {
+      // This is the case the spec does not list. Without it, the Tinfoil screen
+      // and the wizard show "connected" reading a field that the whole Task just
+      // took out of the authentication path.
       const settings = AppSettings();
 
       expect(consoleHasToken(settings, 'ultranx'), isFalse);
     });
 
-    test('o token das settings conta', () {
-      const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: 'tok-do-cofre')});
+    test('the settings token counts', () {
+      const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: 'tok-from-vault')});
 
       expect(consoleHasToken(settings, 'ultranx'), isTrue);
     });
 
-    test('token vazio não conta', () {
+    test('an empty token does not count', () {
       const settings = AppSettings(consoleSettings: {'ultranx': BaseSettings(authToken: '')});
 
       expect(consoleHasToken(settings, 'ultranx'), isFalse);
@@ -2177,112 +2140,112 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/console_auth_test.dart
 ```
 
-Esperado: erro de compilação em `console_auth.dart`. Depois de criar o arquivo, o primeiro caso de `buildConsoleAuthHeaders` falha com `Expected: empty, Actual: {'Authorization': 'Bearer tok-do-arquivo'}`, que é a 6.3 em uma linha.
+Expected: a compilation error in `console_auth.dart`. After creating the file, the first `buildConsoleAuthHeaders` case fails with `Expected: empty, Actual: {'Authorization': 'Bearer tok-from-file'}`, which is 6.3 in one line.
 
-- [ ] **Step 3: Corte o termo do arquivo em `network.dart`**
+- [ ] **Step 3: Cut the file term in `network.dart`**
 
-Em `lib/utils/network.dart`, linha 41, troque
+In `lib/utils/network.dart`, line 41, swap
 
 ```dart
   final token = tokenOverride ?? auth['token'] as String?;
 ```
 
-por
+for
 
 ```dart
-  // Só de quem chama, que leu do cofre. Antes havia `?? auth['token']`, isto
-  // é, o catálogo, que é o arquivo que o usuário compartilha com outra pessoa
-  // (seção 6.3 do spec). O campo pode continuar existindo no JSON de terceiro:
-  // ele simplesmente não autentica mais ninguém.
+  // Only from the caller, who read it from the vault. Before there was
+  // `?? auth['token']`, that is, the catalog, which is the file the user shares
+  // with someone else (section 6.3 of the spec). The field may keep existing in
+  // a third party's JSON: it simply authenticates nobody anymore.
   final token = tokenOverride;
 ```
 
-- [ ] **Step 4: Corte o termo do meio em `task_queue_service.dart`**
+- [ ] **Step 4: Cut the middle term in `task_queue_service.dart`**
 
-Linha 20, troque
+Line 20, swap
 
 ```dart
       final token = settings.consoleSettings[console.id]?.authToken ?? console.auth?['token'] as String? ?? '';
 ```
 
-por
+for
 
 ```dart
       final token = settings.consoleSettings[console.id]?.authToken ?? '';
 ```
 
-- [ ] **Step 5: Crie o predicado compartilhado**
+- [ ] **Step 5: Create the shared predicate**
 
-Crie `lib/utils/console_auth.dart`:
+Create `lib/utils/console_auth.dart`:
 
 ```dart
 import 'package:roms_downloader/models/settings_model.dart';
 
-/// Se o app tem token para este console.
+/// Whether the app has a token for this console.
 ///
-/// Serve para a UI decidir se mostra o console como conectado. Lê **só** as
-/// settings, que desde a Task 6 vêm do cofre.
+/// Serves for the UI to decide whether to show the console as connected. Reads
+/// **only** the settings, which since Task 6 come from the vault.
 ///
-/// Existe como função em vez de expressão inline porque a expressão estava
-/// copiada em duas telas, e foi essa duplicação que fez a seção 6.3 do spec
-/// contar dois sítios quando são quatro: um `grep` por
-/// `buildConsoleAuthHeaders` não acha nenhuma das duas.
+/// It exists as a function instead of an inline expression because the
+/// expression was copied in two screens, and it was that duplication that made
+/// section 6.3 of the spec count two sites when there are four: a `grep` for
+/// `buildConsoleAuthHeaders` finds neither of the two.
 bool consoleHasToken(AppSettings settings, String consoleId) => settings.consoleSettings[consoleId]?.authToken?.isNotEmpty ?? false;
 ```
 
-- [ ] **Step 6: Troque as duas telas**
+- [ ] **Step 6: Swap the two screens**
 
-Em `lib/screens/tinfoil_server_screen.dart`, linha 91, apague o `bool authed(Console c) => ...` inteiro e troque os usos de `authed(c)` por `consoleHasToken(settings, c.id)`. Mesma coisa em `lib/screens/setup_wizard_screen.dart`, linha 392. Os dois arquivos ganham:
+In `lib/screens/tinfoil_server_screen.dart`, line 91, delete the whole `bool authed(Console c) => ...` and swap the uses of `authed(c)` for `consoleHasToken(settings, c.id)`. Same thing in `lib/screens/setup_wizard_screen.dart`, line 392. The two files gain:
 
 ```dart
 import 'package:roms_downloader/utils/console_auth.dart';
 ```
 
-Confira que nenhum dos quatro sobrou:
+Check that none of the four remain:
 
 ```bash
 grep -rnE "auth\??\['token'\]" lib/
 ```
 
-Esperado: **exatamente uma linha**, o comentário que o Step 3 acabou de escrever em `lib/utils/network.dart:41`, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali. É texto, não leitura. Confira olhando a linha, não só contando. Qualquer segunda linha é sítio vivo que sobrou.
+Expected: **exactly one line**, the comment Step 3 just wrote in `lib/utils/network.dart:41`, which cites `` `?? auth['token']` `` between backticks to record what was there. It is text, not a read. Check by looking at the line, not just by counting. Any second line is a live site that remained.
 
-Se aparecer alguma em `console_model.dart`, leia antes de consertar. O `toJson`/`fromJson` do modelo continua sabendo carregar o campo, e isso é certo. Mas `Console.hasTokenAuth` (`console_model.dart:55-59`) também lê `auth!.containsKey('token')`, e esse **não** é sítio desta Task: ele não pergunta "qual é o token", pergunta "este console aceita token", que é capacidade declarada pelo catálogo e não segredo. Quem mexe nele é a Task 8, que troca a pergunta por `requires_token`. Não antecipe aqui.
+If any shows up in `console_model.dart`, read before fixing. The model's `toJson`/`fromJson` keeps knowing how to load the field, and that is right. But `Console.hasTokenAuth` (`console_model.dart:55-59`) also reads `auth!.containsKey('token')`, and that is **not** a site of this Task: it does not ask "what is the token", it asks "does this console accept a token", which is a capability declared by the catalog and not a secret. Whoever touches it is Task 8, which swaps the question for `requires_token`. Do not anticipate it here.
 
-**O `-E` é obrigatório, não é estilo.** Sem ele o `grep` é BRE, e aí `\?` vira quantificador sobre o `h` de `auth` enquanto o segundo `?` vira literal: o padrão passa a exigir uma `?` depois de `auth`, e **os únicos três sítios que casam são os que têm `auth?[`**. O quarto, `network.dart:41`, escreve `auth['token']` sem `?` e escapa. Medido antes da Task rodar, com os quatro ainda no lugar: o BRE achou três, o `-E` achou quatro. Quer dizer que a checagem em BRE daria "nenhuma linha" mesmo para quem esquecesse o Step 3, que é justamente o sítio que a seção 6.3 lista.
+**The `-E` is mandatory, it is not style.** Without it the `grep` is BRE, and then `\?` becomes a quantifier over the `h` of `auth` while the second `?` becomes a literal: the pattern starts to require a `?` after `auth`, and **the only three sites that match are the ones with `auth?[`**. The fourth, `network.dart:41`, writes `auth['token']` without `?` and escapes. Measured before the Task ran, with the four still in place: BRE found three, `-E` found four. It means the BRE check would give "no lines" even for someone who forgot Step 3, which is precisely the site that section 6.3 lists.
 
-- [ ] **Step 7: Rode para ver passar**
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/console_auth_test.dart
 ```
 
-Esperado: `+9`, zero falha. São os seis casos de `buildConsoleAuthHeaders` mais os três de `consoleHasToken`, que é o que o bloco do Step 1 tem. Este número já esteve escrito como `+11` e estava errado: quem fecha a conta é o Step 8, e `402 + 9 = 411` bate, enquanto `402 + 11` daria 413. Corrigido depois de medir `+9: All tests passed!` no arquivo isolado.
+Expected: `+9`, zero failures. It is the six `buildConsoleAuthHeaders` cases plus the three `consoleHasToken`, which is what the Step 1 block has. This number was once written as `+11` and was wrong: whoever closes the count is Step 8, and `402 + 9 = 411` matches, while `402 + 11` would give 413. Fixed after measuring `+9: All tests passed!` in the isolated file.
 
-**Tropeço provável:** `flutter analyze` acusando `unused_local_variable` para o `settings` do `setup_wizard_screen.dart`, se as duas telas usavam `settings` só dentro do `authed`. Se acontecer, `consoleHasToken(settings, c.id)` continua precisando dele, então o aviso quer dizer que você trocou por outra coisa.
+**Likely pitfall:** `flutter analyze` flagging `unused_local_variable` for the `settings` of `setup_wizard_screen.dart`, if the two screens used `settings` only inside `authed`. If it happens, `consoleHasToken(settings, c.id)` still needs it, so the warning means you swapped for something else.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+411`, zero falha.
+Expected: `+411`, zero failures.
 
-- [ ] **Step 9: Analise e compile**
+- [ ] **Step 9: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 10: Commit**
 
@@ -2295,26 +2258,26 @@ git commit -m "feat(seguranca): token de autenticacao para de vir do catalogo co
 
 ---
 
-### Task 8: instalar catálogo colhe o token e limpa o arquivo
+### Task 8: installing a catalog harvests the token and cleans the file
 
 **Files:**
 - Modify: `lib/services/catalog_service.dart:109-135`
 - Modify: `lib/models/console_model.dart:55-59`
-- Modify: `lib/screens/setup_wizard_screen.dart:94` e `:108`
-- Modify: `lib/widgets/settings/catalog_source_setting.dart:74` e `:82`
+- Modify: `lib/screens/setup_wizard_screen.dart:94` and `:108`
+- Modify: `lib/widgets/settings/catalog_source_setting.dart:74` and `:82`
 - Test: `test/catalog_auth_token_test.dart`
 
-A Task 7 fez o token do arquivo parar de autenticar. Esta faz ele parar de **existir** no arquivo salvo. O spec escreve as duas metades: "Na instalação, se o JSON vier com `auth.token` preenchido, o app move para o `flutter_secure_storage` e zera no arquivo salvo. Na exportação, remove."
+Task 7 made the file token stop authenticating. This one makes it stop **existing** in the saved file. The spec writes both halves: "On install, if the JSON comes with `auth.token` filled, the app moves it to `flutter_secure_storage` and zeroes it in the saved file. On export, remove it."
 
-Três notas de escopo, medidas:
+Three scope notes, measured:
 
-- **Não existe exportação de catálogo hoje.** `grep -rni "export" lib/ --include=*.dart` só acha as favoritas, que são outra coisa. A metade "na exportação, remove" não tem sítio nesta fatia. A Grupo 6 fecha isso por outro lado, com o teste de contrato do RTS, que é o único produtor deste formato no app.
-- **`addConsole` não pode carregar token hoje.** Ele passa o `Console.toJson()` adiante, e a tela que constrói esse console (`add_catalog_source_screen.dart`) não tem campo de `auth`: `grep -n "auth" lib/screens/add_catalog_source_screen.dart` não devolve nada. Se um dia tiver, a colheita tem que passar por ali também.
-- **Tirar a chave `token` apaga a tela de login, e por isso a colheita deixa uma marca no lugar.** Isto não é detalhe: é o efeito colateral que transformaria esta Task numa regressão silenciosa. `Console.hasTokenAuth` (`console_model.dart:55-59`) responde `auth!.containsKey('token') || auth!.containsKey('auth_message')`, e esse getter tem três leitores (`grep -rn "hasTokenAuth" lib/`): ele decide se a seção "Authentication" aparece nas settings (`settings_content.dart:152`), se o `task_queue_service` bloqueia download sem token (`task_queue_service.dart:18`) e quais consoles a tela do Tinfoil lista como precisando de login (`tinfoil_server_screen.dart:86`). Um catálogo privado cujo bloco de auth seja só `{'token': 'x'}`, que é o caso exato para o qual a fatia 4 existe, ficaria depois da colheita com `auth` vazio: sumia a tela onde o usuário digita o token, e sumia o bloqueio que avisa que falta token. O usuário perderia a auth e o app não diria nada. Por isso a colheita grava `requires_token: true` sempre que retira a chave, e o getter passa a aceitar essa marca. A marca **não é segredo**: ela diz que o console pede token, não qual é. Pode ir para o arquivo compartilhado à vontade, e é justamente onde ela precisa estar, porque é o arquivo que descreve o console.
+- **There is no catalog export today.** `grep -rni "export" lib/ --include=*.dart` only finds the favorites, which are another thing. The "on export, remove" half has no site in this slice. Group 6 closes that from another angle, with the RTS contract test, which is the only producer of this format in the app.
+- **`addConsole` cannot carry a token today.** It passes the `Console.toJson()` forward, and the screen that builds that console (`add_catalog_source_screen.dart`) has no `auth` field: `grep -n "auth" lib/screens/add_catalog_source_screen.dart` returns nothing. If it ever does, the harvest has to pass through there too.
+- **Removing the `token` key erases the login screen, and that is why the harvest leaves a mark in its place.** This is not a detail: it is the side effect that would turn this Task into a silent regression. `Console.hasTokenAuth` (`console_model.dart:55-59`) answers `auth!.containsKey('token') || auth!.containsKey('auth_message')`, and that getter has three readers (`grep -rn "hasTokenAuth" lib/`): it decides whether the "Authentication" section shows up in the settings (`settings_content.dart:152`), whether `task_queue_service` blocks a download with no token (`task_queue_service.dart:18`) and which consoles the Tinfoil screen lists as needing a login (`tinfoil_server_screen.dart:86`). A private catalog whose auth block is only `{'token': 'x'}`, which is the exact case slice 4 exists for, would end up after the harvest with an empty `auth`: gone was the screen where the user types the token, and gone was the block that warns a token is missing. The user would lose the auth and the app would say nothing. That is why the harvest writes `requires_token: true` whenever it removes the key, and the getter starts accepting that mark. The mark **is not a secret**: it says the console asks for a token, not what it is. It can go to the shared file freely, and it is precisely where it needs to be, because it is the file that describes the console.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/catalog_auth_token_test.dart`:
+Create `test/catalog_auth_token_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -2326,51 +2289,51 @@ import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
 void main() {
-  test('o token sai do catálogo salvo', () async {
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('the token leaves the saved catalog', () async {
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'url': 'https://ultranx.exemplo/',
-          'auth': {'token': 'tok-secreto', 'cookies': true},
+          'url': 'https://ultranx.example/',
+          'auth': {'token': 'tok-secret', 'cookies': true},
         },
       ]),
       vault: MemoryVault(),
       addonId: 'ultranx',
     );
 
-    expect(limpo, isNot(contains('tok-secreto')));
+    expect(cleaned, isNot(contains('tok-secret')));
   });
 
-  test('o token colhido vai para o cofre, chaveado por addon e console', () async {
+  test('the harvested token goes to the vault, keyed by addon and console', () async {
     final vault = MemoryVault();
 
     await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-secreto');
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-secret');
   });
 
-  test('o resto do auth sobrevive', () async {
-    // Limpar demais aqui quebra o login: `cookies`, `cookie_name`, `signin` e
-    // `message` são configuração do catálogo, não segredo.
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('the rest of auth survives', () async {
+    // Cleaning too much here breaks the login: `cookies`, `cookie_name`, `signin`
+    // and `message` are catalog configuration, not a secret.
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
           'auth': {
-            'token': 'tok-secreto',
+            'token': 'tok-secret',
             'cookies': true,
             'cookie_name': 'ultranx_session',
-            'message': 'Entre para baixar',
+            'message': 'Sign in to download',
           },
         },
       ]),
@@ -2378,76 +2341,74 @@ void main() {
       addonId: 'ultranx',
     );
 
-    final auth = (jsonDecode(limpo) as List).first['auth'] as Map;
+    final auth = (jsonDecode(cleaned) as List).first['auth'] as Map;
     expect(auth['cookies'], isTrue);
     expect(auth['cookie_name'], 'ultranx_session');
-    expect(auth['message'], 'Entre para baixar');
+    expect(auth['message'], 'Sign in to download');
     expect(auth.containsKey('token'), isFalse);
     expect(auth['requires_token'], isTrue);
   });
 
-  test('o console limpo continua declarando que pede token', () async {
-    // O caso que faz esta Task ser uma correção e não uma regressão. Sem a
-    // marca, um console cujo bloco de auth era só o token fica com `auth`
-    // vazio, `hasTokenAuth` vira falso, e o usuário perde de uma vez a tela
-    // onde digitaria o token e o aviso de que falta token. Ele veria uma fonte
-    // privada falhando calada.
-    final limpo = await CatalogService.harvestAuthTokens(
+  test('the cleaned console still declares it asks for a token', () async {
+    // The case that makes this Task a fix and not a regression. Without the
+    // mark, a console whose auth block was only the token ends up with an empty
+    // `auth`, `hasTokenAuth` becomes false, and the user loses at once the
+    // screen where they would type the token and the warning that a token is
+    // missing. They would see a private source failing silently.
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       ]),
       vault: MemoryVault(),
       addonId: 'ultranx',
     );
 
-    final auth = (jsonDecode(limpo) as List).first['auth'] as Map<String, dynamic>;
+    final auth = (jsonDecode(cleaned) as List).first['auth'] as Map<String, dynamic>;
     final console = Console(id: 'ultranx', name: 'UltraNX', urls: const [], auth: auth);
 
     expect(console.hasTokenAuth, isTrue);
   });
 
-  test('console sem auth passa intacto', () async {
+  test('a console with no auth passes through intact', () async {
     final original = jsonEncode([
-      {'name': 'Nintendo 64', 'url': 'https://exemplo/n64/'},
+      {'name': 'Nintendo 64', 'url': 'https://example/n64/'},
     ]);
 
-    final limpo = await CatalogService.harvestAuthTokens(original, vault: MemoryVault(), addonId: 'x');
+    final cleaned = await CatalogService.harvestAuthTokens(original, vault: MemoryVault(), addonId: 'x');
 
-    expect(jsonDecode(limpo), jsonDecode(original));
+    expect(jsonDecode(cleaned), jsonDecode(original));
   });
 
-  test('o formato de mapa legado também é limpo', () async {
-    // O app aceita as duas formas (`catalog_service.dart:79-100`). Limpar só a
-    // de array deixaria o buraco aberto para quem usa a antiga, que é
-    // exatamente quem tem catálogo mais velho.
+  test('the legacy map format is also cleaned', () async {
+    // The app accepts both forms (`catalog_service.dart:79-100`). Cleaning only
+    // the array one would leave the hole open for whoever uses the old one,
+    // which is exactly who has an older catalog.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode({
         'ultranx': {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-secreto'},
+          'auth': {'token': 'tok-secret'},
         },
       }),
       vault: vault,
       addonId: 'meu_addon',
     );
 
-    expect(limpo, isNot(contains('tok-secreto')));
-    expect(await vault.read(SecretRef.addonToken('meu_addon', 'ultranx')), 'tok-secreto');
+    expect(cleaned, isNot(contains('tok-secret')));
+    expect(await vault.read(SecretRef.addonToken('meu_addon', 'ultranx')), 'tok-secret');
   });
 
-  test('token vazio não cria chave no cofre, mas deixa a marca', () async {
-    // `{'token': ''}` é como um catálogo compartilhado declara "este console
-    // pede token, e eu não estou te dando o meu". Não há segredo para guardar,
-    // e a marca tem que ficar do mesmo jeito: é ela que mantém a tela de login
-    // de pé para o usuário digitar o token dele.
+  test('empty token does not create a vault key but leaves the requires_token mark', () async {
+    // `{'token': ''}` means "needs a token, mine is not included": nothing to
+    // store, but the mark must stay or the login screen never appears.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
@@ -2459,117 +2420,117 @@ void main() {
     );
 
     expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), isNull);
-    expect((jsonDecode(limpo) as List).first['auth']['requires_token'], isTrue);
+    expect((jsonDecode(cleaned) as List).first['auth']['requires_token'], isTrue);
   });
 
-  test('a entrada de descoberta também perde o token', () async {
-    // `list_systems: true` não vira console (`catalog_service.dart:87`), então
-    // é tentador pular. Não pule: o arquivo compartilhado é o mesmo, e o token
-    // lá dentro vaza igual. Ele vai para o cofre pelo id do nome, para não ser
-    // perdido se um dia o app passar a usar essas entradas.
+  test('discovery entry also loses its token', () async {
+    // `list_systems: true` entries do not become consoles, but the shared file
+    // is the same object and the token leaks just the same. It is stored under
+    // the name-derived id so it is not lost if the app ever uses these entries.
     final vault = MemoryVault();
 
-    final limpo = await CatalogService.harvestAuthTokens(
+    final cleaned = await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
-          'name': 'Descoberta',
+          'name': 'Discovery',
           'list_systems': true,
-          'auth': {'token': 'tok-descoberta'},
+          'auth': {'token': 'tok-discovery'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(limpo, isNot(contains('tok-descoberta')));
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'descoberta')), 'tok-descoberta');
+    expect(cleaned, isNot(contains('tok-discovery')));
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'discovery')), 'tok-discovery');
   });
 
-  test('o cofre já preenchido ganha do arquivo', () async {
-    // Mesma regra da migração: reinstalar um catálogo velho não pode devolver
-    // ao usuário um token que ele já trocou.
+  test('vault already filled beats the file', () async {
+    // Same rule as migration: reinstalling an old catalog must not replace a
+    // token the user already updated.
     final vault = MemoryVault();
-    await vault.write(SecretRef.addonToken('ultranx', 'ultranx'), 'tok-novo');
+    await vault.write(SecretRef.addonToken('ultranx', 'ultranx'), 'tok-new');
 
     await CatalogService.harvestAuthTokens(
       jsonEncode([
         {
           'name': 'UltraNX',
-          'auth': {'token': 'tok-velho'},
+          'auth': {'token': 'tok-old'},
         },
       ]),
       vault: vault,
       addonId: 'ultranx',
     );
 
-    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-novo');
+    expect(await vault.read(SecretRef.addonToken('ultranx', 'ultranx')), 'tok-new');
   });
 
-  test('JSON de formato desconhecido volta como veio', () async {
-    // Quem valida formato é `setCatalogFromJson`, com mensagem de erro própria.
-    // A colheita não pode levantar antes e trocar essa mensagem por um stack
-    // trace.
-    const cru = '"isto não é um catálogo"';
+  test('unknown JSON format is returned as-is', () async {
+    // Format validation belongs to `setCatalogFromJson`, with its own error
+    // message. The harvest must not throw first and replace that message with a
+    // stack trace.
+    const raw = '"this is not a catalog"';
 
-    expect(await CatalogService.harvestAuthTokens(cru, vault: MemoryVault(), addonId: 'x'), cru);
+    expect(await CatalogService.harvestAuthTokens(raw, vault: MemoryVault(), addonId: 'x'), raw);
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/catalog_auth_token_test.dart
 ```
 
-Esperado: `Undefined name 'harvestAuthTokens'`.
+Expected: `Undefined name 'harvestAuthTokens'`.
 
-- [ ] **Step 3: Implemente a colheita**
+- [ ] **Step 3: Implement the harvest**
 
-Em `lib/services/catalog_service.dart`, some os imports
+In `lib/services/catalog_service.dart`, add the imports
 
 ```dart
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 ```
 
-e o método estático, logo acima de `setCatalogFromJson`:
+and the static method, right above `setCatalogFromJson`:
 
 ```dart
-  /// Tira `auth.token` de todo o catálogo e guarda o que achou no cofre.
+  /// Takes `auth.token` out of the whole catalog and stores what it found in
+  /// the vault.
   ///
-  /// O catálogo é o arquivo que o usuário compartilha com outra pessoa. O
-  /// formato permite token lá dentro, e a seção 6.3 do spec manda mover para o
-  /// cofre na instalação. Esta é a metade da correção que vale em toda
-  /// plataforma: tirar do arquivo não depende de haver chaveiro.
+  /// The catalog is the file the user shares with someone else. The format
+  /// allows a token inside, and section 6.3 of the spec orders it moved to the
+  /// vault on install. This is the half of the fix that holds on every
+  /// platform: taking it out of the file does not depend on there being a
+  /// keyring.
   ///
-  /// Onde havia `token`, deixa `requires_token: true`. A marca não é segredo:
-  /// ela diz que o console pede token, não qual é, e o arquivo que descreve o
-  /// console é exatamente o lugar dela. Sem a marca, [Console.hasTokenAuth]
-  /// viraria falso e o usuário perderia a tela onde digitaria o token.
+  /// Where there was a `token`, it leaves `requires_token: true`. The mark is
+  /// not a secret: it says the console asks for a token, not what it is, and the
+  /// file that describes the console is exactly its place. Without the mark,
+  /// [Console.hasTokenAuth] would become false and the user would lose the
+  /// screen where they would type the token.
   ///
-  /// Devolve o JSON limpo. Não valida formato: quem valida é
-  /// [setCatalogFromJson], que tem mensagem de erro própria, e levantar aqui
-  /// trocaria essa mensagem por um stack trace.
+  /// Returns the clean JSON. Does not validate the format: whoever validates is
+  /// [setCatalogFromJson], which has its own error message, and raising here
+  /// would swap that message for a stack trace.
   static Future<String> harvestAuthTokens(String jsonStr, {required SecretVault vault, required String addonId}) async {
     final decoded = jsonDecode(jsonStr);
 
-    Future<void> colher(String id, Map<dynamic, dynamic> item) async {
+    Future<void> harvest(String id, Map<dynamic, dynamic> item) async {
       final auth = item['auth'];
       if (auth is! Map) return;
       if (!auth.containsKey('token')) return;
       final token = auth.remove('token');
-      // A marca entra mesmo quando o token vem vazio, porque é o `containsKey`
-      // que ela substitui, não o valor. `{'token': ''}` é como um catálogo
-      // compartilhado diz "este console pede token e eu não estou te dando o
-      // meu": quem lê tem que continuar sabendo disso.
+      // The marker replaces `containsKey`, not the value, so it stays even when
+      // the token is empty.
       auth['requires_token'] = true;
       if (token is! String || token.isEmpty) return;
-      final chave = SecretRef.addonToken(addonId, id);
-      // O que já está no cofre é o mais novo: reinstalar um catálogo velho não
-      // pode devolver ao usuário um token que ele já trocou.
-      if (await vault.read(chave) != null) return;
-      await vault.write(chave, token);
+      final key = SecretRef.addonToken(addonId, id);
+      // What is already in the vault is the newest: reinstalling an old catalog
+      // must not restore a token the user has since rotated.
+      if (await vault.read(key) != null) return;
+      await vault.write(key, token);
     }
 
     if (decoded is List) {
@@ -2577,16 +2538,15 @@ e o método estático, logo acima de `setCatalogFromJson`:
         if (item is! Map) continue;
         final name = item['name'] as String? ?? '';
         if (name.isEmpty) continue;
-        // As entradas de descoberta (`list_systems`) não viram console, e ainda
-        // assim entram aqui: o arquivo compartilhado é o mesmo e o token lá
-        // dentro vaza igual.
-        await colher(_nameToId(name), item);
+        // Discovery entries (`list_systems`) still pass through here: a token
+        // inside one leaks just the same.
+        await harvest(_nameToId(name), item);
       }
     } else if (decoded is Map) {
-      for (final entrada in decoded.entries) {
-        final valor = entrada.value;
-        if (valor is! Map) continue;
-        await colher(entrada.key.toString(), valor);
+      for (final entry in decoded.entries) {
+        final value = entry.value;
+        if (value is! Map) continue;
+        await harvest(entry.key.toString(), value);
       }
     } else {
       return jsonStr;
@@ -2596,60 +2556,60 @@ e o método estático, logo acima de `setCatalogFromJson`:
   }
 ```
 
-- [ ] **Step 4: O modelo passa a enxergar a marca**
+- [ ] **Step 4: The model starts to see the mark**
 
-Em `lib/models/console_model.dart`, linha 58, troque
+In `lib/models/console_model.dart`, line 58, swap
 
 ```dart
     return auth!.containsKey('token') || auth!.containsKey('auth_message');
 ```
 
-por
+for
 
 ```dart
-    // `requires_token` é o que a colheita da instalação deixa no lugar do
-    // token que tirou (`CatalogService.harvestAuthTokens`). Sem ele, um
-    // catálogo privado cujo bloco de auth era só o token ficaria sem nenhuma
-    // marca depois de instalado, e este getter passaria a responder "não pede
-    // token" para o console que mais pede.
+    // `requires_token` is what the install harvest leaves in place of the token
+    // it took out (`CatalogService.harvestAuthTokens`). Without it, a private
+    // catalog whose auth block was only the token would end up with no mark at
+    // all after installed, and this getter would start answering "does not ask
+    // for a token" for the console that asks most.
     return auth!['requires_token'] == true || auth!.containsKey('token') || auth!.containsKey('auth_message');
 ```
 
-O `containsKey('token')` fica. Ele ainda responde por dois casos vivos: o catálogo embutido que nunca passou pela colheita, e o arquivo que o usuário abriu na mão. Trocar em vez de somar quebraria os dois.
+The `containsKey('token')` stays. It still answers for two live cases: the embedded catalog that never went through the harvest, and the file the user opened by hand. Swapping instead of adding would break both.
 
-Repare que a guarda do `ia_s3`, duas linhas acima, continua saindo antes: um console do Internet Archive com token dentro é colhido igual, e mesmo assim `hasTokenAuth` segue falso para ele, porque a assinatura dele é outra. Esse comportamento não muda.
+Note that the `ia_s3` guard, two lines above, keeps exiting first: an Internet Archive console with a token inside is harvested the same, and even so `hasTokenAuth` stays false for it, because its signature is another. That behavior does not change.
 
-- [ ] **Step 5: Ligue na instalação**
+- [ ] **Step 5: Wire it into the install**
 
-Ainda em `catalog_service.dart`, as duas portas de instalação passam a exigir o cofre:
+Still in `catalog_service.dart`, the two install doors start requiring the vault:
 
 ```dart
   Future<void> setCatalogFromJson(String jsonStr, {required SecretVault vault, required String addonId}) async {
-    final limpo = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
-    final consoles = _parseConsoles(limpo);
+    final cleaned = await harvestAuthTokens(jsonStr, vault: vault, addonId: addonId);
+    final consoles = _parseConsoles(cleaned);
     if (consoles.isEmpty) {
       throw const FormatException('No consoles found in the provided catalog.');
     }
     final file = await _userConsolesFile();
     await file.parent.create(recursive: true);
-    await file.writeAsString(limpo);
+    await file.writeAsString(cleaned);
     _consolesCache.clear();
   }
 ```
 
-e o `setCatalogFromUrl` repassa:
+and `setCatalogFromUrl` forwards:
 
 ```dart
   Future<void> setCatalogFromUrl(String url, {required SecretVault vault, required String addonId}) async {
 ```
 
-com a chamada interna virando `await setCatalogFromJson(body, vault: vault, addonId: addonId);`.
+with the internal call becoming `await setCatalogFromJson(body, vault: vault, addonId: addonId);`.
 
-Repare na ordem: **colhe antes de validar**. Se validasse primeiro, um catálogo inválido com token dentro deixaria o token passar batido pelas mãos do app sem ir para lugar nenhum, e o usuário reinstalaria a versão corrigida já sem ele.
+Note the order: **harvest before validating**. If it validated first, an invalid catalog with a token inside would let the token pass through the app's hands without going anywhere, and the user would reinstall the corrected version already without it.
 
-- [ ] **Step 6: Ajuste os cinco chamadores**
+- [ ] **Step 6: Adjust the five callers**
 
-São cinco, todos em widget com `ref` à mão. Em `lib/screens/setup_wizard_screen.dart:94`, `:101` e `:108`, e em `lib/widgets/settings/catalog_source_setting.dart:74` e `:82`, cada chamada ganha o cofre. O `:101` é o `setCatalogFromUrl` do wizard: o Step 5 troca a assinatura dele, então esse sítio não compila sem o cofre, não é opcional. Uma versão anterior deste texto dizia "quatro" e omitia ele.
+There are five, all in a widget with `ref` at hand. In `lib/screens/setup_wizard_screen.dart:94`, `:101` and `:108`, and in `lib/widgets/settings/catalog_source_setting.dart:74` and `:82`, each call gains the vault. The `:101` is the wizard's `setCatalogFromUrl`: Step 5 swaps its signature, so that site does not compile without the vault, it is not optional. An earlier version of this text said "four" and omitted it.
 
 ```dart
 final vault = (await ref.read(vaultProvider.future)).vault;
@@ -2660,41 +2620,41 @@ await _installCatalog(() => _catalogService.setCatalogFromJson(
     ));
 ```
 
-Os dois arquivos ganham:
+The two files gain:
 
 ```dart
 import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 ```
 
-O `addonId` é o `builtinAddonId` porque, até a Grupo 3, existe uma fonte só. E **estes dois sítios continuam sendo o embutido depois dela**: instalar catálogo pela tela de Ferramentas é instalar o catálogo do addon embutido, hoje e no fim da fatia. Quem passa um id de addon de verdade para `harvestAuthTokens` é a Task 21, pela instalação por URL, e é aí que dois addons servindo o mesmo console param de dividir token.
+The `addonId` is `builtinAddonId` because, until Group 3, there is a single source. And **these two sites stay the builtin after it too**: installing a catalog from the Tools screen is installing the embedded addon's catalog, today and at the end of the slice. Whoever passes a real addon id to `harvestAuthTokens` is Task 21, through URL install, and it is there that two addons serving the same console stop sharing a token.
 
-- [ ] **Step 7: Rode para ver passar**
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/catalog_auth_token_test.dart
 ```
 
-Esperado: `+10`, zero falha.
+Expected: `+10`, zero failures.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+421`, zero falha. `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam nesse caminho: se quebrarem por causa da assinatura nova, o conserto é passar um `MemoryVault()`, não afrouxar a assinatura.
+Expected: `+421`, zero failures. `test/add_catalog_source_screen_test.dart` and `test/catalog_add_console_test.dart` touch this path: if they break because of the new signature, the fix is to pass a `MemoryVault()`, not to loosen the signature.
 
-**Tropeço provável:** um teste antigo de `Console` que afirme igualdade do mapa `auth` inteiro depois de uma instalação passa a ver a chave `requires_token` a mais. Confira com `grep -rn "requires_token\|'auth'" test/ | grep -v catalog_auth_token`. Se aparecer, o conserto é somar a chave na expectativa, não parar de gravá-la: sem ela o console perde a tela de login.
+**Likely pitfall:** an old `Console` test that asserts equality of the whole `auth` map after an install starts seeing the extra `requires_token` key. Check with `grep -rn "requires_token\|'auth'" test/ | grep -v catalog_auth_token`. If it shows up, the fix is to add the key to the expectation, not to stop writing it: without it the console loses the login screen.
 
-- [ ] **Step 9: Analise e compile**
+- [ ] **Step 9: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 10: Commit**
 
@@ -2705,35 +2665,35 @@ git add lib/services/catalog_service.dart lib/models/console_model.dart lib/scre
 git commit -m "feat(seguranca): instalar catalogo colhe o token para o cofre e limpa o arquivo"
 ```
 
-**Fim da Grupo 2.** A seção 6.3 está cumprida, **com a ressalva que a decisão travada obriga a repetir**: o token saiu do arquivo compartilhável em toda plataforma, e a cifragem em repouso é melhor esforço, que num Linux sem chaveiro não acontece. Quem relatar só a primeira metade está relatando maquiagem.
+**End of Group 2.** Section 6.3 is fulfilled, **with the caveat that the locked decision forces us to repeat**: the token left the shareable file on every platform, and encryption at rest is best effort, which on a Linux with no keyring does not happen. Whoever reports only the first half is reporting makeup.
 
-| Task | Novos | Acumulado |
+| Task | New | Cumulative |
 | --- | --- | --- |
-| 6, segredo no cofre | 13 | 402 |
-| 7, quatro sítios | 9 | 411 |
-| 8, colheita na instalação | 10 | 421 |
+| 6, secret in the vault | 13 | 402 |
+| 7, four sites | 9 | 411 |
+| 8, harvest on install | 10 | 421 |
 
 ---
 
-## Grupo 3: o modelo de addon
+## Group 3: the addon model
 
-Seis Tasks, mais a 11b, que a revisão da Task 9 obrigou a acrescentar e que só escreve teste. Aqui o app deixa de ter **um** catálogo e passa a ter **N**, numa lista ordenada que o usuário controla. É a parte grande da fatia, e a ordem das Tasks segue a mesma regra do Grupo 1: primeiro o que é Dart puro (9, 10, 12), depois o que encosta em disco e em `shared_preferences` (11, 13, 14). A 11b fica entre a 11 e a 12 porque ela fecha dois buracos de cobertura em `addon_model.dart`, e a Task 14 é a primeira a apoiar a prioridade arrastável nessas duas funções.
+Six Tasks, plus 11b, which the Task 9 review forced us to add and which only writes a test. Here the app stops having **one** catalog and starts having **N**, in an ordered list the user controls. It is the big part of the slice, and the order of the Tasks follows the same rule as Group 1: first what is pure Dart (9, 10, 12), then what touches disk and `shared_preferences` (11, 13, 14). The 11b sits between 11 and 12 because it closes two coverage holes in `addon_model.dart`, and Task 14 is the first to lean the draggable priority on those two functions.
 
-O problema central desta grupo não é guardar uma lista. É este: **`Console.auth` é um mapa só, e `_fetchCatalog` passa um `authToken` só para todas as urls do console** (`catalog_service.dart:304-316` e `:344`). Se dois addons declararem o mesmo console, fundir os dois num `Console` faz as urls do segundo serem buscadas com o token do primeiro, e o usuário vê "HTTP 401" numa fonte que ele configurou certo. Por isso a fusão não devolve só `Map<String, Console>`: devolve também, por console, a lista de `ConsoleSource`, que é onde a auth passa a morar.
+The central problem of this group is not storing a list. It is this: **`Console.auth` is a single map, and `_fetchCatalog` passes a single `authToken` to all the urls of the console** (`catalog_service.dart:304-316` and `:344`). If two addons declare the same console, merging the two into a `Console` makes the second's urls be fetched with the first's token, and the user sees "HTTP 401" on a source they configured right. That is why the merge does not return only `Map<String, Console>`: it also returns, per console, the list of `ConsoleSource`, which is where auth starts living.
 
-Uma decisão de escopo que economiza muito churn: **o arquivo de catálogo do addon embutido continua sendo `config/consoles.json`**. Só os addons novos ganham arquivo em `config/addons/<id>.json`. Com isso `setCatalogFromJson`, `addConsole`, `resetCatalog` e `hasUserCatalog` (`catalog_service.dart:170`, `:229`, `:249`, `:255`) seguem apontando para o mesmo arquivo de sempre, e a migração da Task 11 não move byte nenhum de disco: ela só escreve uma lista de um item no `shared_preferences`. Migração que não mexe em arquivo é migração que não tem como perder o catálogo do usuário.
+A scope decision that saves a lot of churn: **the embedded addon's catalog file stays `config/consoles.json`**. Only the new addons gain a file in `config/addons/<id>.json`. With that `setCatalogFromJson`, `addConsole`, `resetCatalog` and `hasUserCatalog` (`catalog_service.dart:170`, `:229`, `:249`, `:255`) keep pointing to the same file as always, and the Task 11 migration does not move a single byte on disk: it only writes a one-item list into `shared_preferences`. A migration that does not touch a file is a migration that has no way to lose the user's catalog.
 
-### Task 8b: a hidratação para de inventar configuração
+### Task 8b: hydration stops inventing configuration
 
 **Files:**
 - Modify: `lib/models/settings_model.dart:129-146`
 - Modify: `lib/services/settings_service.dart:63`
-- Modify: `test/settings_service_test.dart:68-77` (só o comentário)
+- Modify: `test/settings_service_test.dart:68-77` (comment only)
 - Test: `test/settings_hydrate_test.dart`
 
-Esta Task não estava no plano. Ela existe porque a revisão de qualidade da Task 6 achou, por mutação, um defeito de comportamento que a Task 6 introduziu e que nenhum teste pegava.
+This Task was not in the plan. It exists because the quality review of Task 6 found, through mutation, a behavior defect that Task 6 introduced and that no test caught.
 
-**O defeito.** `BaseSettings.copyWith` (`settings_model.dart:140-142`) não é um `copyWith` inocente:
+**The defect.** `BaseSettings.copyWith` (`settings_model.dart:140-142`) is not an innocent `copyWith`:
 
 ```dart
       autoExtract: autoExtract ?? this.autoExtract ?? true,
@@ -2741,15 +2701,15 @@ Esta Task não estava no plano. Ela existe porque a revisão de qualidade da Tas
       maxParallelExtractions: maxParallelExtractions ?? this.maxParallelExtractions ?? 2,
 ```
 
-Ele **materializa padrão em campo que estava `null`**. A Task 6 pôs uma chamada dele em `_hydrate` (`settings_service.dart:63`), que roda a cada abertura do app, para todo console que tenha token no cofre. Resultado: o console ganha override explícito de `autoExtract: true`, `maxParallelDownloads: 5` e `maxParallelExtractions: 2` que o usuário nunca pediu, e isso vai para o disco no salvamento seguinte, virando permanente.
+It **materializes a default into a field that was `null`**. Task 6 put a call to it in `_hydrate` (`settings_service.dart:63`), which runs at every app opening, for every console that has a token in the vault. Result: the console gains an explicit override of `autoExtract: true`, `maxParallelDownloads: 5` and `maxParallelExtractions: 2` that the user never asked for, and that goes to disk on the next save, becoming permanent.
 
-**Por que não é cosmético.** `autoExtract` muda comportamento. `download_provider.dart:230` chama `getAutoExtract(game.consoleId)`, e `getSetting` (`settings_service.dart`) consulta o console **antes** do geral. Então o usuário desliga a extração automática no geral, e o único efeito de ter login num console é que aquele console volta a extrair sozinho, em silêncio, a cada abertura.
+**Why it is not cosmetic.** `autoExtract` changes behavior. `download_provider.dart:230` calls `getAutoExtract(game.consoleId)`, and `getSetting` (`settings_service.dart`) consults the console **before** the general. So the user turns off auto extraction in the general, and the only effect of having a login on a console is that that console goes back to extracting on its own, silently, at every opening.
 
-**O que é novo e o que não é, com precisão.** O mecanismo é antigo: `setConsoleAuthToken` já fazia `copyWith(authToken: token)` antes da Task 6, conferido em `git show 058cef5~1:lib/providers/settings_provider.dart`. Mas ali ele dispara **por ação do usuário**, uma vez, na tela em que ele está mexendo em configuração. O que a Task 6 acrescentou é o disparo **a cada carga**. E a Task 8 piora: com a colheita, o token chega ao cofre sem o usuário jamais ter aberto a tela de login, então a hidratação passa a inventar configuração para console que o usuário nunca tocou. Não mexa no `copyWith` para consertar isso: o caminho do formulário quer o padrão materializado. Quem está errado é o chamador novo.
+**What is new and what is not, precisely.** The mechanism is old: `setConsoleAuthToken` already did `copyWith(authToken: token)` before Task 6, checked in `git show 058cef5~1:lib/providers/settings_provider.dart`. But there it fires **on a user action**, once, on the screen where they are touching configuration. What Task 6 added is the firing **on every load**. And Task 8 makes it worse: with the harvest, the token reaches the vault without the user ever having opened the login screen, so hydration starts inventing configuration for a console the user never touched. Do not touch the `copyWith` to fix this: the form path wants the materialized default. What is wrong is the new caller.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/settings_hydrate_test.dart`:
+Create `test/settings_hydrate_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -2761,24 +2721,25 @@ import 'package:roms_downloader/models/settings_model.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
-/// Arquivo de quem configurou o geral e **não** configurou o console.
+/// File of someone who configured the general and did **not** configure the
+/// console.
 ///
-/// `autoExtract: false` no geral é o que torna o defeito visível: se a
-/// hidratação inventar `autoExtract: true` no console, o console passa a
-/// ganhar do geral, porque `getSetting` consulta o console primeiro.
-String _arquivo() => jsonEncode({
+/// `autoExtract: false` in the general is what makes the defect visible: if
+/// hydration invents `autoExtract: true` on the console, the console starts to
+/// win over the general, because `getSetting` consults the console first.
+String _file() => jsonEncode({
       'consoleSettings': {
         'snes': {'downloadDir': '/roms/snes'},
       },
-      'generalSettings': {'downloadDir': '/casa/roms', 'autoExtract': false, 'maxParallelDownloads': 10},
+      'generalSettings': {'downloadDir': '/home/user/roms', 'autoExtract': false, 'maxParallelDownloads': 10},
     });
 
-Future<void> _prefsCom(String appSettings) async {
+Future<void> _prefsWith(String appSettings) async {
   SharedPreferences.setMockInitialValues({'app_settings': appSettings});
   SharedPreferences.resetStatic();
 }
 
-Future<SecretVault> _cofreComTokenDoSnes() async {
+Future<SecretVault> _vaultWithSnesToken() async {
   final vault = MemoryVault();
   await vault.write(SecretRef.addonToken(SettingsService.builtinAddonId, 'snes'), 'tok-snes');
   return vault;
@@ -2787,41 +2748,41 @@ Future<SecretVault> _cofreComTokenDoSnes() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('o console com token no cofre não ganha `autoExtract` que ninguém pediu', () async {
-    await _prefsCom(_arquivo());
+  test('the console with a token in the vault does not gain an unrequested `autoExtract`', () async {
+    await _prefsWith(_file());
 
-    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+    final settings = await SettingsService().loadSettings(await _vaultWithSnesToken());
 
     expect(settings.consoleSettings['snes']?.autoExtract, isNull);
     expect(SettingsService().getSetting<bool>(settings, AppSettings.autoExtract, 'snes'), isFalse);
   });
 
-  test('o console com token no cofre não ganha os dois limites de paralelismo', () async {
-    await _prefsCom(_arquivo());
+  test('the console with a token in the vault does not gain the two parallelism limits', () async {
+    await _prefsWith(_file());
 
-    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+    final settings = await SettingsService().loadSettings(await _vaultWithSnesToken());
 
     expect(settings.consoleSettings['snes']?.maxParallelDownloads, isNull);
     expect(settings.consoleSettings['snes']?.maxParallelExtractions, isNull);
     expect(SettingsService().getSetting<int>(settings, AppSettings.maxParallelDownloads, 'snes'), 10);
   });
 
-  test('a hidratação continua entregando o token e o que o usuário configurou', () async {
-    // O controle. Sem ele, apagar a hidratação inteira faria os dois casos de
-    // cima passarem, e eles são asserções sobre ausência.
-    await _prefsCom(_arquivo());
+  test('hydration still delivers the token and what the user configured', () async {
+    // The control. Without it, deleting the whole hydration would make the two
+    // cases above pass, and they are assertions about absence.
+    await _prefsWith(_file());
 
-    final settings = await SettingsService().loadSettings(await _cofreComTokenDoSnes());
+    final settings = await SettingsService().loadSettings(await _vaultWithSnesToken());
 
     expect(settings.consoleSettings['snes']?.authToken, 'tok-snes');
     expect(settings.consoleSettings['snes']?.downloadDir, '/roms/snes');
   });
 
-  test('salvar com segredo vazio não apaga o que está no cofre', () async {
-    // A guarda `valor.isEmpty` de `_writeIfPresent`. Sem ela, `vault.write`
-    // com string vazia vira `delete` (`secret_vault.dart:38-41`), e um
-    // salvamento comum apagaria a credencial.
-    await _prefsCom(_arquivo());
+  test('saving with an empty secret does not delete what is in the vault', () async {
+    // The `value.isEmpty` guard of `_writeIfPresent`. Without it, `vault.write`
+    // with an empty string becomes `delete` (`secret_vault.dart:38-41`), and a
+    // common save would delete the credential.
+    await _prefsWith(_file());
     final vault = MemoryVault();
     await vault.write(SecretRef.iaAccessKey, 'AK');
 
@@ -2832,30 +2793,30 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/settings_hydrate_test.dart
 ```
 
-Esperado: os dois primeiros casos falham com `Expected: null, Actual: <true>` e `Expected: null, Actual: <5>`. O terceiro e o quarto já passam: eles trancam o que já está certo, para que o conserto não os quebre.
+Expected: the first two cases fail with `Expected: null, Actual: <true>` and `Expected: null, Actual: <5>`. The third and fourth already pass: they lock what is already right, so that the fix does not break them.
 
-- [ ] **Step 3: Dê ao `BaseSettings` uma cópia que não inventa nada**
+- [ ] **Step 3: Give `BaseSettings` a copy that invents nothing**
 
-Em `lib/models/settings_model.dart`, logo depois do `copyWith`, acrescente:
+In `lib/models/settings_model.dart`, right after `copyWith`, add:
 
 ```dart
-  /// Devolve uma cópia com o token trocado e **nada mais**.
+  /// Returns a copy with the token swapped and **nothing else**.
   ///
-  /// Existe porque [copyWith] materializa padrão em campo `null`
-  /// (`autoExtract ?? this.autoExtract ?? true`, e os dois limites logo
-  /// abaixo). No formulário isso é o desejado: o usuário está mexendo em
-  /// configuração e ver o valor efetivo é útil. Na hidratação do cofre não é:
-  /// ela roda a cada abertura do app, e depois da Task 8 roda também para
-  /// console que o usuário nunca abriu, então gravaria override que ninguém
-  /// pediu. `autoExtract` chega a mudar comportamento, porque `getSetting`
-  /// consulta o console antes do geral (`download_provider.dart:230`).
+  /// It exists because [copyWith] materializes a default into a `null` field
+  /// (`autoExtract ?? this.autoExtract ?? true`, and the two limits right
+  /// below). In the form that is the desired behavior: the user is touching
+  /// configuration and seeing the effective value is useful. In the vault
+  /// hydration it is not: it runs at every app opening, and after Task 8 it runs
+  /// also for a console the user never opened, so it would write an override
+  /// nobody asked for. `autoExtract` even changes behavior, because `getSetting`
+  /// consults the console before the general (`download_provider.dart:230`).
   BaseSettings withAuthToken(String token) => BaseSettings(
         downloadDir: downloadDir,
         autoExtract: autoExtract,
@@ -2866,58 +2827,59 @@ Em `lib/models/settings_model.dart`, logo depois do `copyWith`, acrescente:
       );
 ```
 
-- [ ] **Step 4: Troque o chamador**
+- [ ] **Step 4: Swap the caller**
 
-Em `lib/services/settings_service.dart`, linha 63, troque
-
-```dart
-      consoles[entrada.key] = token == null ? entrada.value : entrada.value.copyWith(authToken: token);
-```
-
-por
+In `lib/services/settings_service.dart`, line 63, swap
 
 ```dart
-      consoles[entrada.key] = token == null ? entrada.value : entrada.value.withAuthToken(token);
+      consoles[entry.key] = token == null ? entry.value : entry.value.copyWith(authToken: token);
 ```
 
-- [ ] **Step 5: Conserte o comentário que promete demais**
-
-Em `test/settings_service_test.dart`, o caso "carregar não reescreve o app_settings quando não havia segredo" (linhas 68-77) compara **conteúdo**, e quando não há segredo `jsonEncode(limpo)` é idêntico a `jsonEncode(cru)`. Ou seja: ele não distingue "não escreveu" de "escreveu igual", e tirar o `if` de `settings_service.dart:38` o deixa verde. Medido por mutação. Troque o comentário dele por:
+for
 
 ```dart
-    // A carga roda em toda abertura. Reescrever sempre é escrita em disco por
-    // nada. ATENÇÃO ao que este caso tranca e ao que não tranca: ele compara o
-    // conteúdo, e quando não há segredo o JSON limpo é idêntico ao cru, então
-    // ele fica verde tanto para "não reescreveu" quanto para "reescreveu igual".
-    // Medido por mutação: tirar o `if` de `settings_service.dart:38` não o
-    // derruba. Trancar o ato de escrever exigiria injetar o `SharedPreferences`
-    // no `SettingsService`, que hoje o chama direto; está anotado para a fatia 5.
+      consoles[entry.key] = token == null ? entry.value : entry.value.withAuthToken(token);
 ```
 
-- [ ] **Step 6: Rode para ver passar**
+- [ ] **Step 5: Fix the comment that promises too much**
+
+In `test/settings_service_test.dart`, the case "loading does not rewrite app_settings when there was no secret" (lines 68-77) compares **content**, and when there is no secret `jsonEncode(cleaned)` is identical to `jsonEncode(raw)`. That is: it does not distinguish "did not write" from "wrote the same", and removing the `if` of `settings_service.dart:38` leaves it green. Measured through mutation. Swap its comment for:
+
+```dart
+    // The load runs on every opening. Rewriting always is a disk write for
+    // nothing. ATTENTION to what this case locks and what it does not lock: it
+    // compares content, and when there is no secret the clean JSON is identical
+    // to the raw one, so it stays green both for "did not rewrite" and for
+    // "rewrote the same". Measured through mutation: removing the `if` of
+    // `settings_service.dart:38` does not take it down. Locking the act of
+    // writing would require injecting `SharedPreferences` into `SettingsService`,
+    // which today calls it directly; it is noted for slice 5.
+```
+
+- [ ] **Step 6: Run to see it pass**
 
 ```bash
 flutter test test/settings_hydrate_test.dart test/settings_service_test.dart
 ```
 
-Esperado: `+13`, zero falha. São os 4 deste arquivo mais os 9 que `test/settings_service_test.dart` já tem. Este número já esteve escrito como `+17`, somando os 13 da Task 6 inteira; errado, porque 4 daqueles 13 estão em `test/settings_model_secrets_test.dart` (`git show --stat e7829f4`), que este comando não roda. Corrigido depois de medir `+13: All tests passed!`.
+Expected: `+13`, zero failures. It is the 4 from this file plus the 9 that `test/settings_service_test.dart` already has. This number was once written as `+17`, summing the 13 of the whole Task 6; wrong, because 4 of those 13 are in `test/settings_model_secrets_test.dart` (`git show --stat e7829f4`), which this command does not run. Fixed after measuring `+13: All tests passed!`.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+425`, zero falha.
+Expected: `+425`, zero failures.
 
-- [ ] **Step 8: Analise e compile**
+- [ ] **Step 8: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 9: Commit**
 
@@ -2930,20 +2892,20 @@ git commit -m "feat(cofre): hidratar o token nao pode inventar configuracao de c
 
 ---
 
-### Task 9: `Addon`, o modelo e a lista ordenada
+### Task 9: `Addon`, the model and the ordered list
 
 **Files:**
 - Create: `lib/models/addon_model.dart`
-- Modify: `lib/services/settings_service.dart` (perde a constante duplicada), `lib/screens/setup_wizard_screen.dart`, `lib/widgets/settings/catalog_source_setting.dart`
-- Test: `test/addon_model_test.dart`, e ajuste em `test/settings_service_test.dart` e `test/settings_hydrate_test.dart`
+- Modify: `lib/services/settings_service.dart` (loses the duplicated constant), `lib/screens/setup_wizard_screen.dart`, `lib/widgets/settings/catalog_source_setting.dart`
+- Test: `test/addon_model_test.dart`, and an adjustment in `test/settings_service_test.dart` and `test/settings_hydrate_test.dart`
 
-O addon é deliberadamente magro: id, nome e a url de origem. Nada de "habilitado", porque a seção 9 do spec de UI não especifica interruptor nenhum (`docs/stremio-de-jogos-ui.md:220-263` lista ícone, nome, cobertura, chip de conta, alça de arrasto e seta, e mais nada), e nada de data de instalação, porque não há tela que a mostre e ela só serviria para atrapalhar teste.
+The addon is deliberately thin: id, name and the origin url. No "enabled", because section 9 of the UI spec does not specify any toggle (`docs/stremio-de-jogos-ui.md:220-263` lists icon, name, coverage, account chip, drag handle and arrow, and nothing more), and no install date, because there is no screen that shows it and it would only serve to get in the way of testing.
 
-O ponto delicado é o **id**. Ele é a chave sob a qual o token do addon foi guardado no cofre, em `SecretRef.addonToken(addonId, consoleId)` (Task 1). Um id que muda entre duas instalações da mesma fonte deixa o token órfão no cofre e faz o usuário digitar de novo um segredo que ele já tinha dado. Por isso `Addon.idFromUrl` normaliza esquema, `www.`, caixa, query, fragmento e barra final.
+The delicate point is the **id**. It is the key under which the addon's token was stored in the vault, in `SecretRef.addonToken(addonId, consoleId)` (Task 1). An id that changes between two installs of the same source leaves the token orphan in the vault and makes the user type again a secret they had already given. That is why `Addon.idFromUrl` normalizes scheme, `www.`, case, query, fragment and trailing slash.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/addon_model_test.dart`:
+Create `test/addon_model_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -2951,126 +2913,139 @@ import 'package:roms_downloader/models/addon_model.dart';
 
 void main() {
   group('Addon.idFromUrl', () {
-    test('o mesmo catálogo em http e https dá o mesmo id', () {
-      expect(Addon.idFromUrl('http://exemplo.com/catalogo.json'), Addon.idFromUrl('https://exemplo.com/catalogo.json'));
+    test('http and https of the same catalog share an id, and surrounding space is ignored', () {
+      const cleaned = 'https://example.com/catalog.json';
+      expect(Addon.idFromUrl('http://example.com/catalog.json'), Addon.idFromUrl(cleaned));
+      // The `trim` matters: without it `Uri.tryParse` finds no host in a
+      // space-padded url and the id becomes `https_example_com_catalog_json`.
+      expect(Addon.idFromUrl('  $cleaned  '), Addon.idFromUrl(cleaned));
+      // The literal pins the format; comparing id to id survives any slug change.
+      expect(Addon.idFromUrl(cleaned), 'example_com_catalog_json');
     });
 
-    test('barra final, query e fragmento não mudam o id', () {
-      final base = Addon.idFromUrl('https://exemplo.com/catalogo/');
-      expect(Addon.idFromUrl('https://exemplo.com/catalogo'), base);
-      expect(Addon.idFromUrl('https://exemplo.com/catalogo?v=2'), base);
-      expect(Addon.idFromUrl('https://exemplo.com/catalogo#topo'), base);
+    test('trailing slash, query and fragment do not change the id', () {
+      final base = Addon.idFromUrl('https://example.com/catalog/');
+      expect(Addon.idFromUrl('https://example.com/catalog'), base);
+      expect(Addon.idFromUrl('https://example.com/catalog?v=2'), base);
+      expect(Addon.idFromUrl('https://example.com/catalog#top'), base);
     });
 
-    test('www. e caixa alta não mudam o id', () {
-      expect(Addon.idFromUrl('https://WWW.Exemplo.COM/Catalogo'), Addon.idFromUrl('https://exemplo.com/catalogo'));
+    test('www. and uppercase do not change the id', () {
+      expect(Addon.idFromUrl('https://WWW.Example.COM/Catalog'), Addon.idFromUrl('https://example.com/catalog'));
     });
 
-    test('dois catálogos no mesmo host têm ids diferentes', () {
-      expect(Addon.idFromUrl('https://exemplo.com/snes.json'), isNot(Addon.idFromUrl('https://exemplo.com/nes.json')));
+    test('two catalogs on the same host get different ids, and the port is part of the host', () {
+      expect(Addon.idFromUrl('https://example.com/snes.json'), isNot(Addon.idFromUrl('https://example.com/nes.json')));
+      // Two LAN servers on the same IP but different ports are two addons. With
+      // the port out of the id they would share a vault key and the second
+      // install's token would erase the first's.
+      expect(Addon.idFromUrl('http://192.168.0.10:8080/f/0/'), isNot(Addon.idFromUrl('http://192.168.0.10:8081/f/0/')));
+      expect(Addon.idFromUrl('https://example.com:8080/c.json'), isNot(Addon.idFromUrl('https://example.com/c.json')));
     });
 
-    test('nunca devolve o id do embutido, nem para uma url que daria nele', () {
+    test('the built-in id: no url maps to it, and only it answers isBuiltin', () {
       expect(Addon.idFromUrl('https://builtin/'), isNot(kBuiltinAddonId));
+      expect(const Addon(id: kBuiltinAddonId, name: 'Listing').isBuiltin, isTrue);
+      expect(const Addon(id: 'ultranx', name: 'UltraNX').isBuiltin, isFalse);
     });
 
-    test('url sem host cai num id derivado do texto, e não vazio', () {
+    test('a hostless url falls back to a text-derived id, not empty', () {
       expect(Addon.idFromUrl('    '), isNotEmpty);
     });
   });
 
   group('Addon json', () {
-    test('ida e volta preserva id, nome e url', () {
-      const addon = Addon(id: 'ultranx', name: 'UltraNX', url: 'https://ultranx.example/catalogo.json');
-      final volta = Addon.fromJson(addon.toJson());
-      expect(volta.id, addon.id);
-      expect(volta.name, addon.name);
-      expect(volta.url, addon.url);
+    test('round trip preserves id, name and url', () {
+      const addon = Addon(id: 'ultranx', name: 'UltraNX', url: 'https://ultranx.example/catalog.json');
+      final back = Addon.fromJson(addon.toJson());
+      expect(back.id, addon.id);
+      expect(back.name, addon.name);
+      expect(back.url, addon.url);
     });
 
-    test('sem nome no json, o nome vira o id', () {
+    test('with no name in the json, the name becomes the id', () {
       expect(Addon.fromJson({'id': 'ultranx'}).name, 'ultranx');
     });
   });
 
-  group('lista ordenada', () {
+  group('ordered list', () {
     const a = Addon(id: 'a', name: 'A');
     const b = Addon(id: 'b', name: 'B');
     const c = Addon(id: 'c', name: 'C');
 
-    test('upsertAddon acrescenta no fim quando o id é novo', () {
+    test('upsertAddon appends at the end when the id is new', () {
       expect(upsertAddon([a, b], c).map((x) => x.id), ['a', 'b', 'c']);
     });
 
-    test('upsertAddon substitui SEM mudar a posição', () {
-      final saida = upsertAddon([a, b, c], const Addon(id: 'b', name: 'B novo'));
-      expect(saida.map((x) => x.id), ['a', 'b', 'c']);
-      expect(saida[1].name, 'B novo');
+    test('upsertAddon replaces WITHOUT changing position', () {
+      final out = upsertAddon([a, b, c], const Addon(id: 'b', name: 'B new'));
+      expect(out.map((x) => x.id), ['a', 'b', 'c']);
+      expect(out[1].name, 'B new');
     });
 
-    test('removeAddon tira o que foi pedido e preserva a ordem do resto', () {
+    test('removeAddon drops the requested one and keeps the rest in order', () {
       expect(removeAddon([a, b, c], 'b').map((x) => x.id), ['a', 'c']);
     });
 
-    test('removeAddon com id desconhecido não muda a lista', () {
+    test('removeAddon with an unknown id leaves the list unchanged', () {
       expect(removeAddon([a, b], 'z').map((x) => x.id), ['a', 'b']);
     });
 
-    test('reorderAddons descendo aplica o desconto do ReorderableListView', () {
-      // Arrastar o "a" para o fim: o widget entrega newIndex = 3, contando com
-      // a vaga que o próprio "a" vai deixar.
+    test('reorderAddons moving down applies the ReorderableListView discount', () {
+      // Dragging "a" to the end: the widget passes newIndex = 3, counting the
+      // slot "a" itself will vacate.
       expect(reorderAddons([a, b, c], 0, 3).map((x) => x.id), ['b', 'c', 'a']);
     });
 
-    test('reorderAddons subindo não aplica desconto nenhum', () {
+    test('reorderAddons moving up applies no discount', () {
       expect(reorderAddons([a, b, c], 2, 0).map((x) => x.id), ['c', 'a', 'b']);
     });
 
-    test('reorderAddons com índice de origem fora da lista devolve a mesma lista', () {
+    test('reorderAddons with an out-of-range source index returns the same list', () {
       expect(reorderAddons([a, b], 5, 0).map((x) => x.id), ['a', 'b']);
     });
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/addon_model_test.dart
 ```
 
-Esperado: falha de compilação, `Target of URI doesn't exist: 'package:roms_downloader/models/addon_model.dart'`.
+Expected: a compilation error, `Target of URI doesn't exist: 'package:roms_downloader/models/addon_model.dart'`.
 
-- [ ] **Step 3: Escreva a implementação**
+- [ ] **Step 3: Write the implementation**
 
-Crie `lib/models/addon_model.dart`:
+Create `lib/models/addon_model.dart`:
 
 ```dart
 import 'package:flutter/foundation.dart';
 
-/// O id do addon que representa o `consoles.json` que o app já tinha.
+/// The id of the addon that represents the `consoles.json` the app already had.
 ///
-/// Ele não é especial em nada que o usuário veja: aparece na lista, pode ser
-/// arrastado e pode ser removido. A constante existe por uma razão só, e é de
-/// segurança: o token que a Task 8 colheu foi guardado sob
-/// `SecretRef.addonToken('builtin', consoleId)`, então mudar este valor deixa
-/// o segredo do usuário órfão dentro do cofre.
+/// It is not special in anything the user sees: it shows up in the list, can be
+/// dragged and can be removed. The constant exists for a single reason, and it
+/// is a security one: the token that Task 8 harvested was stored under
+/// `SecretRef.addonToken('builtin', consoleId)`, so changing this value leaves
+/// the user's secret orphan inside the vault.
 const kBuiltinAddonId = 'builtin';
 
-/// Uma fonte de catálogo instalada, na posição em que o usuário a pôs.
+/// An installed catalog source, in the position the user put it.
 ///
-/// A posição na lista **é** a prioridade: ela alimenta o `sourcePriority` de
-/// `planFromEntries` (`source_pick_service.dart:54`), que é o último critério
-/// de desempate da seção 6 do spec de UI. Por isso a lista é uma `List` e não
-/// um `Set` nem um mapa.
+/// The position in the list **is** the priority: it feeds the `sourcePriority`
+/// of `planFromEntries` (`source_pick_service.dart:54`), which is the last
+/// tiebreaker of section 6 of the UI spec. That is why the list is a `List` and
+/// not a `Set` nor a map.
 @immutable
 class Addon {
   final String id;
   final String name;
 
-  /// De onde o catálogo veio, quando veio de uma URL. É `null` no embutido e
-  /// num catálogo importado de arquivo; nesses casos a tela de detalhe mostra
-  /// a origem por extenso em vez de um endereço.
+  /// Where the catalog came from, when it came from a URL. It is `null` in the
+  /// builtin and in a catalog imported from a file; in those cases the detail
+  /// screen shows the origin in full instead of an address.
   final String? url;
 
   const Addon({required this.id, required this.name, this.url});
@@ -3079,18 +3054,18 @@ class Addon {
 
   Addon copyWith({String? name, String? url}) => Addon(id: id, name: name ?? this.name, url: url ?? this.url);
 
-  /// Um id estável para a URL de onde o catálogo veio.
+  /// A stable id for the URL a catalog came from: scheme, `www.`, query and
+  /// trailing slash all collapse to the same id, so reinstalling the same
+  /// source finds the token already in the vault.
   ///
-  /// Estável de propósito: `http` e `https`, com `www.` ou sem, com query ou
-  /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
-  /// fonte tem que reencontrar o token que já está no cofre, e o token está
-  /// guardado sob o id.
+  /// Warning: the port is part of the id on purpose, via `hasPort` not `port`,
+  /// so scheme-default ports stay collapsed while distinct ports stay distinct.
   static String idFromUrl(String url) {
     final uri = Uri.tryParse(url.trim());
-    final cru = (uri == null || uri.host.isEmpty) ? url : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.path}';
-    final slug = _slug(cru);
-    // Uma url cujo slug bata no embutido roubaria o token dele. Não é caso
-    // realista; é barato de impedir e caro de descobrir depois.
+    final raw = (uri == null || uri.host.isEmpty)
+        ? url
+        : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.hasPort ? ':${uri.port}' : ''}${uri.path}';
+    final slug = _slug(raw);
     return slug == kBuiltinAddonId ? '${slug}_1' : slug;
   }
 
@@ -3102,109 +3077,107 @@ class Addon {
   Map<String, dynamic> toJson() => {'id': id, 'name': name, if (url != null) 'url': url};
 }
 
-String _slug(String texto) {
-  final limpo = texto.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
-  return limpo.isEmpty ? 'addon' : limpo;
+String _slug(String text) {
+  final cleaned = text.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+  return cleaned.isEmpty ? 'addon' : cleaned;
 }
 
-/// Põe [novo] na lista. Se já existe um addon com o mesmo id, ele é
-/// **substituído onde estava**: reinstalar uma fonte para corrigir a url não
-/// pode rebaixá-la para o fim da fila de prioridade.
-List<Addon> upsertAddon(List<Addon> lista, Addon novo) {
-  final i = lista.indexWhere((a) => a.id == novo.id);
-  if (i < 0) return [...lista, novo];
-  final saida = [...lista];
-  saida[i] = novo;
-  return saida;
+/// Inserts [incoming]. If an addon with the same id exists, it is replaced in
+/// place: reinstalling a source to fix its url must not demote its priority.
+List<Addon> upsertAddon(List<Addon> list, Addon incoming) {
+  final i = list.indexWhere((a) => a.id == incoming.id);
+  if (i < 0) return [...list, incoming];
+  final result = [...list];
+  result[i] = incoming;
+  return result;
 }
 
-List<Addon> removeAddon(List<Addon> lista, String id) => [
-      for (final a in lista)
+List<Addon> removeAddon(List<Addon> list, String id) => [
+      for (final a in list)
         if (a.id != id) a,
     ];
 
-/// Move um item, com a semântica do `ReorderableListView`: quando o item
-/// desce, o `newIndex` que o widget entrega já conta com a vaga que o próprio
-/// item vai deixar, então o destino real é um a menos. Quando sobe, não.
-List<Addon> reorderAddons(List<Addon> lista, int from, int to) {
-  if (from < 0 || from >= lista.length) return lista;
-  final saida = [...lista];
-  final item = saida.removeAt(from);
-  final destino = to > from ? to - 1 : to;
-  saida.insert(destino.clamp(0, saida.length), item);
-  return saida;
+/// Moves an item with `ReorderableListView` semantics: a downward move's
+/// `newIndex` already counts the vacated slot, so the real target is one less.
+List<Addon> reorderAddons(List<Addon> list, int from, int to) {
+  if (from < 0 || from >= list.length) return list;
+  final result = [...list];
+  final item = result.removeAt(from);
+  final target = to > from ? to - 1 : to;
+  result.insert(target.clamp(0, result.length), item);
+  return result;
 }
 ```
 
-**Tropeço provável:** o `-1` do `ReorderableListView`. É fácil escrever `saida.insert(to, item)` e ver os testes de "subindo" passarem, porque subindo o desconto não existe. Só o caso de descer pega, e é o caso que o usuário faz primeiro, porque a fonte nova nasce no fim da lista e ele quer promovê-la. O teste "descendo aplica o desconto" foi escrito para isso e **não faz isso**, e esta frase já afirmou que fazia. Ele move para o fim da lista, e aí o `clamp` iguala `to - 1` e `to`, então a asserção passa com o desconto e sem. Quem pega é um destino do **meio**, e ele só entra na Task 11b. Deixo o erro escrito aqui em vez de apagar a frase, porque um "Tropeço provável" que aponta para o teste errado é pior que nenhum: ele convence o leitor de que a linha está guardada.
+**Likely pitfall:** the `-1` of `ReorderableListView`. It is easy to write `result.insert(to, item)` and see the "going up" tests pass, because going up the discount does not exist. Only the going-down case catches it, and it is the case the user does first, because the new source is born at the end of the list and they want to promote it. The test "going down applies the discount" was written for this and does **not** do it, and this sentence already claimed it did. It moves to the end of the list, and then the `clamp` equalizes `to - 1` and `to`, so the assertion passes with the discount and without. What catches it is a **middle** destination, and it only enters in Task 11b. I leave the mistake written here instead of deleting the sentence, because a "Likely pitfall" that points at the wrong test is worse than none: it convinces the reader that the line is guarded.
 
-- [ ] **Step 4: Tire a constante duplicada que a Task 6 criou**
+- [ ] **Step 4: Take out the duplicated constant that Task 6 created**
 
-A Task 6 precisou de `'builtin'` antes de esta Task existir e o pôs em `SettingsService.builtinAddonId`. Agora há dois nomes para o mesmo valor, e dois nomes para o mesmo valor é um bug esperando alguém mudar um só. O canônico é o `kBuiltinAddonId` deste arquivo, porque ele mora com o conceito.
+Task 6 needed `'builtin'` before this Task existed and put it in `SettingsService.builtinAddonId`. Now there are two names for the same value, and two names for the same value is a bug waiting for someone to change only one. The canonical one is the `kBuiltinAddonId` of this file, because it lives with the concept.
 
-Em `lib/services/settings_service.dart`, apague a constante **com o doc dela**, que são oito linhas:
+In `lib/services/settings_service.dart`, delete the constant **with its doc**, which is eight lines:
 
 ```dart
-  /// O addon a que pertencem os consoles do catálogo de hoje.
+  /// The addon that today's catalog consoles belong to.
   ///
-  /// Enquanto existe uma fonte só, este id é constante. Quando houver N
-  /// addons, este espelho continua sendo só do embutido, e o token dos outros
-  /// passa a ser lido sob demanda no cofre (Task 19). Ele vive aqui, e não em
-  /// [SecretRef], porque é fato sobre a instalação e não sobre o formato da
-  /// chave.
+  /// While there is a single source, this id is constant. When there are N
+  /// addons, this mirror stays the builtin's only, and the token of the others
+  /// starts being read on demand from the vault (Task 19). It lives here, and
+  /// not in [SecretRef], because it is a fact about the installation and not
+  /// about the key format.
   static const String builtinAddonId = 'builtin';
 ```
 
-Apagar só a linha da constante deixa o doc pendurado no membro seguinte, e um doc que descreve outra coisa é pior que doc nenhum.
+Deleting only the constant line leaves the doc hanging on the next member, and a doc that describes something else is worse than no doc.
 
-acrescente ao topo
+add to the top
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-e troque os quatro usos internos de `builtinAddonId` por `kBuiltinAddonId`, nas linhas 31, 62, 97 e 113. São quatro usos, e não cinco: o `grep` devolve cinco linhas neste arquivo, mas a primeira é a declaração que você acabou de apagar. Na linha 31 repare que `builtinAddonId: builtinAddonId` tem o nome duas vezes, e só o segundo é uso: o primeiro é o rótulo do parâmetro de `SecretMigration` e não muda. Confira com:
+and swap the four internal uses of `builtinAddonId` for `kBuiltinAddonId`, on lines 31, 62, 97 and 113. There are four uses, and not five: the `grep` returns five lines in this file, but the first is the declaration you just deleted. On line 31 note that `builtinAddonId: builtinAddonId` has the name twice, and only the second is a use: the first is the label of `SecretMigration`'s parameter and does not change. Check with:
 
 ```bash
 grep -rn "builtinAddonId" lib/ test/
 ```
 
-Devem sobrar só ocorrências de `kBuiltinAddonId`, mais o parâmetro `builtinAddonId` de `SecretMigration` (`lib/services/secret_migration.dart`), que é nome de parâmetro e não de constante, e continua entrando por injeção.
+Only occurrences of `kBuiltinAddonId` should remain, plus the `builtinAddonId` parameter of `SecretMigration` (`lib/services/secret_migration.dart`), which is a parameter name and not a constant, and keeps entering by injection.
 
-Os outros quatro arquivos que citam a constante trocam junto. **Esta lista foi remedida depois que a Task 8b entrou**, e mudou: `test/catalog_auth_token_test.dart` estava aqui por engano e saiu, porque ele passa `addonId: 'ultranx'` como literal e nunca citou a constante; `test/settings_hydrate_test.dart`, que a Task 8b criou depois de este texto ser escrito, entrou, porque cita na linha 29. Confira você mesmo com o `grep` acima antes de editar, em vez de confiar na tabela: a Task 8b é recente e outra Task pode ter mexido de novo.
+The other four files that cite the constant swap along. **This list was remeasured after Task 8b entered**, and it changed: `test/catalog_auth_token_test.dart` was here by mistake and left, because it passes `addonId: 'ultranx'` as a literal and never cited the constant; `test/settings_hydrate_test.dart`, which Task 8b created after this text was written, entered, because it cites it on line 29. Check yourself with the `grep` above before editing, instead of trusting the table: Task 8b is recent and another Task may have touched it again.
 
-| Arquivo | Ocorrências medidas | Troca |
+| File | Measured occurrences | Swap |
 | --- | --- | --- |
-| `lib/screens/setup_wizard_screen.dart` | 3 | `SettingsService.builtinAddonId` vira `kBuiltinAddonId` |
-| `lib/widgets/settings/catalog_source_setting.dart` | 2 | idem |
-| `test/settings_service_test.dart` | 3 | idem |
-| `test/settings_hydrate_test.dart` | 1 | idem |
+| `lib/screens/setup_wizard_screen.dart` | 3 | `SettingsService.builtinAddonId` becomes `kBuiltinAddonId` |
+| `lib/widgets/settings/catalog_source_setting.dart` | 2 | same |
+| `test/settings_service_test.dart` | 3 | same |
+| `test/settings_hydrate_test.dart` | 1 | same |
 
-**Nos dois arquivos de teste o import de `settings_service.dart` fica; nos dois de `lib/` ele sai.** Os dois de teste instanciam `SettingsService()` para valer (`settings_service_test.dart:39` e outras nove, `settings_hydrate_test.dart:39, 48, 60, 74`), então lá o import de `addon_model.dart` **se soma** ao que já está. Nos dois de `lib/` não: `SettingsService` aparece neles **só** como `SettingsService.builtinAddonId`, três vezes no wizard e duas no widget, e mais nada. Depois da troca o import fica morto e o `flutter analyze` sobe de 22 para 24, com dois `unused_import`, que são warning. Confira em vez de confiar nesta frase: depois da troca, `grep -n "SettingsService" lib/screens/setup_wizard_screen.dart lib/widgets/settings/catalog_source_setting.dart` tem que devolver zero. Duas versões deste texto erraram aqui, em direções opostas: a primeira mandava trocar o import nos arquivos de teste, o que deixaria os quatro sem compilar; a segunda dizia que em nenhum dos quatro o import saía e afirmava que isso tinha sido medido, quando só os dois de teste tinham sido medidos e os dois de `lib/` foram supostos. Medido nos quatro pelo implementador da Task 9, e conferido contra `git show 824434e:` depois.
+**In the two test files the `settings_service.dart` import stays; in the two `lib/` ones it leaves.** The two test ones instantiate `SettingsService()` for real (`settings_service_test.dart:39` and nine others, `settings_hydrate_test.dart:39, 48, 60, 74`), so there the `addon_model.dart` import **adds** to what is already there. In the two `lib/` ones it does not: `SettingsService` appears in them **only** as `SettingsService.builtinAddonId`, three times in the wizard and twice in the widget, and nothing more. After the swap the import is dead and `flutter analyze` rises from 22 to 24, with two `unused_import`, which are warnings. Check instead of trusting this sentence: after the swap, `grep -n "SettingsService" lib/screens/setup_wizard_screen.dart lib/widgets/settings/catalog_source_setting.dart` has to return zero. Two versions of this text got it wrong here, in opposite directions: the first ordered swapping the import in the test files, which would leave the four not compiling; the second said that in none of the four the import left and claimed that had been measured, when only the two test ones had been measured and the two `lib/` ones were supposed. Measured in all four by the Task 9 implementer, and checked against `git show 824434e:` afterward.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_model_test.dart
 ```
 
-Esperado: `+15`, zero falha.
+Expected: `+15`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+440`, zero falha. Se `test/settings_service_test.dart` ou `test/settings_hydrate_test.dart` ficarem vermelhos, é o Step 4 pela metade: a troca de constante tem que ser feita nos cinco arquivos, não só nos de `lib/`.
+Expected: `+440`, zero failures. If `test/settings_service_test.dart` or `test/settings_hydrate_test.dart` go red, it is Step 4 half done: the constant swap has to be made in the five files, not only in the `lib/` ones.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, nenhum em `lib/models/addon_model.dart` nem em `test/addon_model_test.dart`. Um `unused_import` aqui quer dizer que sobrou o import de `settings_service.dart` num dos dois arquivos de `lib/` que só o usavam pela constante, e não num arquivo de teste: os de teste continuam precisando dele.
+Expected: `22 issues found`, none in `lib/models/addon_model.dart` nor in `test/addon_model_test.dart`. An `unused_import` here means the `settings_service.dart` import remained in one of the two `lib/` files that used it only for the constant, and not in a test file: the test ones keep needing it.
 
 - [ ] **Step 8: Commit**
 
@@ -3215,20 +3188,20 @@ git add lib/models/addon_model.dart lib/services/settings_service.dart lib/scree
 git commit -m "feat(addon): modelo de addon, id estavel por url e as operacoes da lista ordenada"
 ```
 
-### Task 10: `console_merge.dart`, fundir N catálogos sem perder a auth
+### Task 10: `console_merge.dart`, merging N catalogs without losing the auth
 
 **Files:**
 - Create: `lib/services/console_merge.dart`
-- Modify: `lib/models/console_model.dart` (ganha `withUrls`)
+- Modify: `lib/models/console_model.dart` (gains `withUrls`)
 - Test: `test/console_merge_test.dart`
 
-Esta é a Task que resolve o problema central da grupo. A fusão devolve duas coisas: o `Map<String, Console>` que todo o app já consome, e um `Map<String, List<ConsoleSource>>` que diz, por console, de qual addon e com que auth cada url veio.
+This is the Task that solves the central problem of the group. The merge returns two things: the `Map<String, Console>` that the whole app already consumes, and a `Map<String, List<ConsoleSource>>` that says, per console, which addon and with what auth each url came from.
 
-O invariante que amarra os dois, e que a Task 13 usa sem conferir em tempo de execução: **para todo id, `sources[id]!.map((s) => s.url)` é igual a `consoles[id]!.urls`, na mesma ordem.** Um teste fixa isso.
+The invariant that ties the two, and that Task 13 uses without checking at runtime: **for every id, `sources[id]!.map((s) => s.url)` equals `consoles[id]!.urls`, in the same order.** A test locks this.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/console_merge_test.dart`:
+Create `test/console_merge_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -3239,128 +3212,128 @@ Console _console(String id, List<String> urls, {String? regex, Map<String, dynam
     Console(id: id, name: name ?? id, urls: urls, regex: regex, auth: auth);
 
 void main() {
-  test('lista vazia dá catálogo vazio', () {
+  test('empty list yields empty catalog', () {
     final merged = mergeCatalogs(const []);
     expect(merged.consoles, isEmpty);
     expect(merged.sources, isEmpty);
     expect(merged.isEmpty, isTrue);
   });
 
-  test('um addon só: os consoles saem iguais e cada fonte carrega o id do addon', () {
+  test('single addon: consoles pass through and each source carries the addon id', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
     ]);
     expect(merged.consoles.keys, ['snes']);
     expect(merged.consoles['snes']!.urls, ['https://a/']);
-    expect(merged.sources['snes']!.single.addonId, 'um');
+    expect(merged.sources['snes']!.single.addonId, 'one');
     expect(merged.sources['snes']!.single.url, 'https://a/');
   });
 
-  test('console que só o segundo addon declara entra do mesmo jeito', () {
+  test('console declared only by the second addon is included', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
-      (addonId: 'dois', consoles: {'nes': _console('nes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'two', consoles: {'nes': _console('nes', ['https://b/'])}),
     ]);
     expect(merged.consoles.keys, containsAll(['snes', 'nes']));
-    expect(merged.sources['nes']!.single.addonId, 'dois');
+    expect(merged.sources['nes']!.single.addonId, 'two');
   });
 
-  test('mesmo console nos dois: os metadados são do PRIMEIRO addon', () {
+  test('same console in both addons: metadata comes from the FIRST addon', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'], name: 'Super Nintendo', regex: 'DO UM')}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'], name: 'SNES', regex: 'DO DOIS')}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'], name: 'Super Nintendo', regex: 'FROM ONE')}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'], name: 'SNES', regex: 'FROM TWO')}),
     ]);
     expect(merged.consoles['snes']!.name, 'Super Nintendo');
-    expect(merged.consoles['snes']!.regex, 'DO UM');
+    expect(merged.consoles['snes']!.regex, 'FROM ONE');
   });
 
-  test('mesmo console nos dois: as urls concatenam na ordem dos addons', () {
+  test('same console in both addons: urls concatenate in addon order', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/', 'https://a2/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/', 'https://a2/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'])}),
     ]);
     expect(merged.consoles['snes']!.urls, ['https://a/', 'https://a2/', 'https://b/']);
   });
 
-  test('url repetida entre dois addons entra uma vez só, do primeiro', () {
+  test('duplicate url across addons enters once, from the first', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://mesma/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://mesma/', 'https://outra/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://same/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://same/', 'https://other/'])}),
     ]);
-    expect(merged.consoles['snes']!.urls, ['https://mesma/', 'https://outra/']);
-    expect(merged.sources['snes']!.map((f) => f.addonId), ['um', 'dois']);
+    expect(merged.consoles['snes']!.urls, ['https://same/', 'https://other/']);
+    expect(merged.sources['snes']!.map((f) => f.addonId), ['one', 'two']);
   });
 
-  test('url repetida dentro do mesmo addon entra uma vez só', () {
+  test('duplicate url within the same addon enters once', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/', 'https://a/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/', 'https://a/'])}),
     ]);
     expect(merged.consoles['snes']!.urls, ['https://a/']);
   });
 
-  test('a auth de cada fonte é a do addon que declarou AQUELA url', () {
+  test('each source auth comes from the addon that declared that url', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'], auth: {'token': 'nao usado', 'cookies': true})}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'], auth: {'type': 'ia_s3'})}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'], auth: {'token': 'unused', 'cookies': true})}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'], auth: {'type': 'ia_s3'})}),
     ]);
-    final fontes = merged.sources['snes']!;
-    expect(fontes[0].auth!['cookies'], true);
-    expect(fontes[1].auth!['type'], 'ia_s3');
+    final sources = merged.sources['snes']!;
+    expect(sources[0].auth!['cookies'], true);
+    expect(sources[1].auth!['type'], 'ia_s3');
   });
 
-  test('o invariante: as urls do console são as urls das fontes, na mesma ordem', () {
+  test('invariant: console urls match source urls in the same order', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/']), 'nes': _console('nes', ['https://n1/', 'https://n2/'])}),
-      (addonId: 'dois', consoles: {'snes': _console('snes', ['https://b/'])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/']), 'nes': _console('nes', ['https://n1/', 'https://n2/'])}),
+      (addonId: 'two', consoles: {'snes': _console('snes', ['https://b/'])}),
     ]);
     for (final id in merged.consoles.keys) {
       expect(merged.sources[id]!.map((f) => f.url).toList(), merged.consoles[id]!.urls, reason: 'console $id');
     }
   });
 
-  test('console sem url nenhuma entra com lista de fontes vazia', () {
+  test('console with no urls enters with an empty source list', () {
     final merged = mergeCatalogs([
-      (addonId: 'um', consoles: {'snes': _console('snes', const [])}),
+      (addonId: 'one', consoles: {'snes': _console('snes', const [])}),
     ]);
     expect(merged.consoles.containsKey('snes'), isTrue);
     expect(merged.sources['snes'], isEmpty);
   });
 
-  test('addon sem console nenhum não atrapalha os outros', () {
+  test('addon with no consoles does not affect others', () {
     final merged = mergeCatalogs([
-      (addonId: 'vazio', consoles: const {}),
-      (addonId: 'um', consoles: {'snes': _console('snes', ['https://a/'])}),
+      (addonId: 'empty', consoles: const {}),
+      (addonId: 'one', consoles: {'snes': _console('snes', ['https://a/'])}),
     ]);
     expect(merged.consoles.keys, ['snes']);
-    expect(merged.sources['snes']!.single.addonId, 'um');
+    expect(merged.sources['snes']!.single.addonId, 'one');
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/console_merge_test.dart
 ```
 
-Esperado: falha de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/console_merge.dart'`.
+Expected: a compilation error, `Target of URI doesn't exist: 'package:roms_downloader/services/console_merge.dart'`.
 
-- [ ] **Step 3: Dê ao `Console` a cópia com outras urls**
+- [ ] **Step 3: Give `Console` the copy with other urls**
 
-Em `lib/models/console_model.dart`, logo depois do getter `url` (linha 51), acrescente:
+In `lib/models/console_model.dart`, right after the `url` getter (line 51), add:
 
 ```dart
-  /// Uma cópia com outra lista de urls, e mais nada diferente.
+  /// A copy with another list of urls, and nothing else different.
   ///
-  /// Existe só para `mergeCatalogs` (`console_merge.dart`), que acrescenta as
-  /// urls de outro addon ao console sem tocar em mais nenhum campo. É um
-  /// `copyWith` de um campo só de propósito: um `copyWith` completo de vinte e
-  /// um campos seria vinte parâmetros que ninguém passa e um lugar a mais para
-  /// esquecer de atualizar quando o `Console` crescer.
-  Console withUrls(List<String> novas) => Console(
+  /// It exists only for `mergeCatalogs` (`console_merge.dart`), which appends
+  /// the urls of another addon to the console without touching any other field.
+  /// It is a single-field `copyWith` on purpose: a full `copyWith` of twenty-one
+  /// fields would be twenty parameters nobody passes and one more place to
+  /// forget to update when the `Console` grows.
+  Console withUrls(List<String> next) => Console(
         id: id,
         name: name,
-        urls: novas,
+        urls: next,
         regex: regex,
         boxarts: boxarts,
         fileFormat: fileFormat,
@@ -3382,21 +3355,21 @@ Em `lib/models/console_model.dart`, logo depois do getter `url` (linha 51), acre
       );
 ```
 
-- [ ] **Step 4: Escreva a fusão**
+- [ ] **Step 4: Write the merge**
 
-Crie `lib/services/console_merge.dart`:
+Create `lib/services/console_merge.dart`:
 
 ```dart
 import 'package:flutter/foundation.dart';
 import 'package:roms_downloader/models/console_model.dart';
 
-/// Uma url de catálogo, com de qual addon ela veio e com que auth ela fala.
+/// A catalog url, with which addon it came from and with what auth it talks.
 ///
-/// Existe porque `Console.auth` é um mapa só e `_fetchCatalog` passava um
-/// `authToken` só para todas as urls do console (`catalog_service.dart:304` e
-/// `:344`). Com dois addons servindo o mesmo console, isso mandaria o token do
-/// primeiro para o servidor do segundo. A auth não pertence ao console: ela
-/// pertence à url.
+/// It exists because `Console.auth` is a single map and `_fetchCatalog` passed
+/// a single `authToken` to all the urls of the console (`catalog_service.dart:304`
+/// and `:344`). With two addons serving the same console, that would send the
+/// first's token to the second's server. The auth does not belong to the
+/// console: it belongs to the url.
 @immutable
 class ConsoleSource {
   final String addonId;
@@ -3406,13 +3379,13 @@ class ConsoleSource {
   const ConsoleSource({required this.addonId, required this.url, this.auth});
 }
 
-/// O catálogo do app: os consoles que a tela desenha e, por console, de onde
-/// veio cada url.
+/// The app's catalog: the consoles the screen draws and, per console, where
+/// each url came from.
 ///
-/// **Invariante**, que os testes fixam e que `_fetchCatalog` usa sem conferir:
-/// para todo id, `sources[id]!.map((s) => s.url)` é igual a
-/// `consoles[id]!.urls`, na mesma ordem. É o que permite iterar as fontes em
-/// vez das urls sem uma tabela de tradução no meio.
+/// **Invariant**, which the tests lock and which `_fetchCatalog` uses without
+/// checking: for every id, `sources[id]!.map((s) => s.url)` equals
+/// `consoles[id]!.urls`, in the same order. It is what allows iterating over the
+/// sources instead of the urls without a translation table in between.
 @immutable
 class MergedCatalog {
   final Map<String, Console> consoles;
@@ -3423,39 +3396,36 @@ class MergedCatalog {
   bool get isEmpty => consoles.isEmpty;
 }
 
-/// O catálogo de um addon, já parseado.
+/// An addon's catalog, already parsed.
 typedef AddonCatalog = ({String addonId, Map<String, Console> consoles});
 
-/// Funde os catálogos na ordem em que vierem, que é a ordem de prioridade que
-/// o usuário arrastou na tela de addons.
+/// Merges the catalogs in the order they come, which is the priority order the
+/// user dragged on the addons screen.
 ///
-/// Três regras, todas decorrentes da ordem:
-/// - os metadados do console (nome, regex, boxarts, formatos) são do
-///   **primeiro** addon que o declarou. O segundo acrescenta url, não
-///   reescreve console. Sem isso, instalar uma fonte nova mudaria em silêncio
-///   como os arquivos de uma fonte antiga são parseados.
-/// - as urls concatenam na ordem dos addons.
-/// - url repetida entra uma vez só, da primeira vez que apareceu. Dois addons
-///   apontando para o mesmo servidor não fazem o app buscar duas vezes nem
-///   mostrar o jogo duplicado na grade.
-MergedCatalog mergeCatalogs(List<AddonCatalog> catalogos) {
+/// Three rules, all deriving from the order:
+/// - the console metadata (name, regex, boxarts, formats) is from the **first**
+///   addon that declared it. The second appends a url, it does not rewrite the
+///   console. Without this, installing a new source would silently change how
+///   the files of an old source are parsed.
+/// - the urls concatenate in the addon order.
+/// - a repeated url enters only once, from the first time it appeared. Two
+///   addons pointing to the same server do not make the app fetch twice nor show
+///   the game duplicated in the grid.
+MergedCatalog mergeCatalogs(List<AddonCatalog> catalogs) {
   final consoles = <String, Console>{};
   final sources = <String, List<ConsoleSource>>{};
 
-  for (final catalogo in catalogos) {
-    for (final entrada in catalogo.consoles.entries) {
-      final id = entrada.key;
-      final console = entrada.value;
-      final fontes = sources.putIfAbsent(id, () => <ConsoleSource>[]);
-      final jaTem = fontes.map((f) => f.url).toSet();
+  for (final catalog in catalogs) {
+    for (final entry in catalog.consoles.entries) {
+      final id = entry.key;
+      final console = entry.value;
+      final existing = sources.putIfAbsent(id, () => <ConsoleSource>[]);
+      final seenUrls = existing.map((f) => f.url).toSet();
       for (final url in console.urls) {
-        if (!jaTem.add(url)) continue;
-        fontes.add(ConsoleSource(addonId: catalogo.addonId, url: url, auth: console.auth));
+        if (!seenUrls.add(url)) continue;
+        existing.add(ConsoleSource(addonId: catalog.addonId, url: url, auth: console.auth));
       }
-      // `consoles[id] ?? console`: o primeiro que declarou manda nos
-      // metadados. `withUrls` reescreve só a lista de urls, que é justamente
-      // o que a fusão acumula.
-      consoles[id] = (consoles[id] ?? console).withUrls([for (final f in fontes) f.url]);
+      consoles[id] = (consoles[id] ?? console).withUrls([for (final f in existing) f.url]);
     }
   }
 
@@ -3463,31 +3433,31 @@ MergedCatalog mergeCatalogs(List<AddonCatalog> catalogos) {
 }
 ```
 
-**Tropeço provável:** deduplicar url com um `Set` global em vez de um por console. Duas urls iguais em consoles diferentes são legítimas (um servidor que lista tudo no mesmo diretório), e um `Set` global comeria a segunda em silêncio. O `jaTem` é recalculado dentro do laço de cada console, a partir das fontes daquele console, e é por isso.
+**Likely pitfall:** deduplicating a url with a global `Set` instead of one per console. Two equal urls in different consoles are legitimate (a server that lists everything in the same directory), and a global `Set` would eat the second silently. The `jaTem` is recomputed inside each console's loop, from that console's sources, and that is why.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/console_merge_test.dart
 ```
 
-Esperado: `+11`, zero falha.
+Expected: `+11`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+451`, zero falha.
+Expected: `+451`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 8: Commit**
 
@@ -3498,22 +3468,22 @@ git add lib/services/console_merge.dart lib/models/console_model.dart
 git commit -m "feat(addon): fusao de N catalogos preservando a auth por url"
 ```
 
-### Task 11: `AddonStore`, onde a lista e os catálogos moram
+### Task 11: `AddonStore`, where the list and the catalogs live
 
 **Files:**
 - Create: `lib/services/addon_store.dart`
-- Modify: `lib/services/settings_service.dart` (`_settingsKey` vira `settingsKey`)
+- Modify: `lib/services/settings_service.dart` (`_settingsKey` becomes `settingsKey`)
 - Test: `test/addon_store_test.dart`
 
-Duas coisas a persistir: a **lista ordenada**, que vai para uma chave nova do `shared_preferences`, e o **catálogo de cada addon**, que vai para disco.
+Two things to persist: the **ordered list**, which goes to a new `shared_preferences` key, and the **catalog of each addon**, which goes to disk.
 
-A raiz de disco entra por construtor. Isso não é gosto por injeção: `getApplicationSupportDirectory()` é `path_provider`, que num teste sem plataforma lança `MissingPluginException`. Com a raiz injetada, os testes usam `Directory.systemTemp.createTemp()` e exercitam IO de verdade, que é o que importa aqui, em vez de simular disco.
+The disk root enters via the constructor. This is not a taste for injection: `getApplicationSupportDirectory()` is `path_provider`, which in a test with no platform throws `MissingPluginException`. With the root injected, the tests use `Directory.systemTemp.createTemp()` and exercise real IO, which is what matters here, instead of simulating disk.
 
-E a decisão de escopo que o intro da grupo já anunciou: **o embutido continua em `config/consoles.json`**. `catalogFile` é a única função que sabe disso, e é por isso que ela existe em vez de uma concatenação de caminho espalhada.
+And the scope decision the group intro already announced: **the builtin stays in `config/consoles.json`**. `catalogFile` is the only function that knows this, and that is why it exists instead of a path concatenation scattered around.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/addon_store_test.dart`:
+Create `test/addon_store_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -3524,58 +3494,58 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/services/addon_store.dart';
 
-Future<AddonStore> _store([Map<String, Object> valores = const {}]) async {
-  SharedPreferences.setMockInitialValues(valores);
+Future<AddonStore> _store([Map<String, Object> values = const {}]) async {
+  SharedPreferences.setMockInitialValues(values);
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('addon_store_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  return AddonStore(await SharedPreferences.getInstance(), raiz);
+  final root = await Directory.systemTemp.createTemp('addon_store_test');
+  addTearDown(() => root.delete(recursive: true));
+  return AddonStore(await SharedPreferences.getInstance(), root);
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('migração', () {
-    test('sem a chave, a lista é só o embutido', () async {
+  group('migration', () {
+    test('with no key, the list is just the built-in', () async {
       final store = await _store();
-      final lista = store.load();
-      expect(lista.map((a) => a.id), [kBuiltinAddonId]);
-      expect(lista.single.name, isNotEmpty);
+      final list = store.load();
+      expect(list.map((a) => a.id), [kBuiltinAddonId]);
+      expect(list.single.name, isNotEmpty);
     });
 
-    test('ler NÃO grava: a chave continua ausente depois do load', () async {
+    test('reading does NOT write: the key stays absent after load', () async {
       final store = await _store();
       store.load();
       expect((await SharedPreferences.getInstance()).getString(AddonStore.prefsKey), isNull);
     });
 
-    test('o embutido herda a url que o usuário tinha salvo em catalogSourceUrl', () async {
+    test('the built-in inherits the url saved in catalogSourceUrl', () async {
       final store = await _store({
-        'app_settings': jsonEncode({'catalogSourceUrl': 'https://exemplo.com/catalogo.json'}),
+        'app_settings': jsonEncode({'catalogSourceUrl': 'https://example.com/catalog.json'}),
       });
-      expect(store.load().single.url, 'https://exemplo.com/catalogo.json');
+      expect(store.load().single.url, 'https://example.com/catalog.json');
     });
 
-    test('app_settings ilegível não derruba a migração', () async {
-      final store = await _store({'app_settings': 'isto não é json'});
+    test('unreadable app_settings does not break the migration', () async {
+      final store = await _store({'app_settings': 'this is not json'});
       expect(store.load().map((a) => a.id), [kBuiltinAddonId]);
       expect(store.load().single.url, isNull);
     });
 
-    test('app_settings sem catalogSourceUrl dá embutido sem url', () async {
+    test('app_settings without catalogSourceUrl gives a built-in with no url', () async {
       final store = await _store({'app_settings': jsonEncode({'downloadDir': '/tmp'})});
       expect(store.load().single.url, isNull);
     });
 
-    test('lista corrompida cai na migração em vez de lançar', () async {
-      final store = await _store({AddonStore.prefsKey: '{não é uma lista}'});
+    test('a corrupt list falls into migration instead of throwing', () async {
+      final store = await _store({AddonStore.prefsKey: '{not a list}'});
       expect(store.load().map((a) => a.id), [kBuiltinAddonId]);
     });
 
-    test('item sem id é ignorado, e o resto da lista entra', () async {
+    test('an item with no id is dropped and the rest of the list enters', () async {
       final store = await _store({
         AddonStore.prefsKey: jsonEncode([
-          {'nome': 'sem id'},
+          {'name': 'no id'},
           {'id': 'ultranx', 'name': 'UltraNX'},
         ]),
       });
@@ -3583,50 +3553,50 @@ void main() {
     });
   });
 
-  group('lista', () {
-    test('save e load fecham o ciclo preservando a ordem', () async {
+  group('list', () {
+    test('save and load close the cycle preserving order', () async {
       final store = await _store();
       await store.save(const [
         Addon(id: 'b', name: 'B'),
-        Addon(id: kBuiltinAddonId, name: 'Embutido'),
+        Addon(id: kBuiltinAddonId, name: 'Built-in'),
         Addon(id: 'a', name: 'A', url: 'https://a/'),
       ]);
-      final volta = store.load();
-      expect(volta.map((x) => x.id), ['b', kBuiltinAddonId, 'a']);
-      expect(volta.last.url, 'https://a/');
+      final back = store.load();
+      expect(back.map((x) => x.id), ['b', kBuiltinAddonId, 'a']);
+      expect(back.last.url, 'https://a/');
     });
 
-    test('salvar lista vazia é legítimo e não volta para a migração', () async {
+    test('saving an empty list is legitimate and does not return to migration', () async {
       final store = await _store();
       await store.save(const []);
       expect(store.load(), isEmpty);
     });
   });
 
-  group('catálogo em disco', () {
-    test('o embutido mora no consoles.json de sempre', () async {
+  group('catalog on disk', () {
+    test('the built-in lives in the usual consoles.json', () async {
       final store = await _store();
       expect(store.catalogFile(kBuiltinAddonId).path, endsWith('${Platform.pathSeparator}config${Platform.pathSeparator}consoles.json'));
     });
 
-    test('addon instalado mora em config/addons/<id>.json', () async {
+    test('an installed addon lives in config/addons/<id>.json', () async {
       final store = await _store();
       expect(store.catalogFile('ultranx').path,
           endsWith('${Platform.pathSeparator}config${Platform.pathSeparator}addons${Platform.pathSeparator}ultranx.json'));
     });
 
-    test('writeCatalog cria o diretório e readCatalog lê de volta', () async {
+    test('writeCatalog creates the directory and readCatalog reads it back', () async {
       final store = await _store();
       await store.writeCatalog('ultranx', '[{"name":"SNES"}]');
       expect(await store.readCatalog('ultranx'), '[{"name":"SNES"}]');
     });
 
-    test('readCatalog de addon sem arquivo devolve null', () async {
+    test('readCatalog of an addon with no file returns null', () async {
       final store = await _store();
       expect(await store.readCatalog('ultranx'), isNull);
     });
 
-    test('deleteCatalog apaga, e apagar o que não existe não lança', () async {
+    test('deleteCatalog deletes, and deleting what does not exist does not raise', () async {
       final store = await _store();
       await store.writeCatalog('ultranx', '[]');
       await store.deleteCatalog('ultranx');
@@ -3637,42 +3607,43 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/addon_store_test.dart
 ```
 
-Esperado: falha de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/addon_store.dart'`.
+Expected: a compilation error, `Target of URI doesn't exist: 'package:roms_downloader/services/addon_store.dart'`.
 
-- [ ] **Step 3: Abra a chave das settings**
+- [ ] **Step 3: Open the settings key**
 
-Em `lib/services/settings_service.dart`, troque
+In `lib/services/settings_service.dart`, swap
 
 ```dart
   static const String _settingsKey = 'app_settings';
 ```
 
-por
+for
 
 ```dart
-  /// A chave única onde o app guarda as settings. Pública porque a migração de
-  /// addons (`addon_store.dart`) precisa ler o `catalogSourceUrl` de antes da
-  /// fatia 4, e uma string literal repetida nos dois arquivos seria pior.
+  /// The single key where the app stores the settings. Public because the addon
+  /// migration (`addon_store.dart`) needs to read the pre-slice-4
+  /// `catalogSourceUrl`, and a literal string repeated in the two files would be
+  /// worse.
   static const String settingsKey = 'app_settings';
 ```
 
-e troque os três usos internos de `_settingsKey` por `settingsKey`. Confira:
+and swap the three internal uses of `_settingsKey` for `settingsKey`. Check:
 
 ```bash
 grep -rn "_settingsKey" lib/
 ```
 
-Esperado: nada.
+Expected: nothing.
 
-- [ ] **Step 4: Escreva o store**
+- [ ] **Step 4: Write the store**
 
-Crie `lib/services/addon_store.dart`:
+Create `lib/services/addon_store.dart`:
 
 ```dart
 import 'dart:convert';
@@ -3685,14 +3656,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/services/settings_service.dart';
 
-/// Onde a lista de addons e os catálogos de cada um moram.
-///
-/// A raiz de disco entra por construtor porque `getApplicationSupportDirectory`
-/// é `path_provider`, que num teste sem plataforma lança
-/// `MissingPluginException`. Com ela injetada, o teste usa
-/// `Directory.systemTemp.createTemp()` e exercita IO de verdade.
+/// Where the addon list and each addon's catalog live.
 class AddonStore {
-  /// A chave do `shared_preferences` onde a lista ordenada é serializada.
+  /// The `shared_preferences` key holding the serialized ordered list.
   static const String prefsKey = 'addons';
 
   final SharedPreferences _prefs;
@@ -3705,64 +3671,48 @@ class AddonStore {
         await getApplicationSupportDirectory(),
       );
 
-  /// A lista instalada, na ordem de prioridade.
+  /// The installed list, in priority order.
   ///
-  /// Quando a chave não existe, devolve a lista de migração (o embutido
-  /// sozinho) **sem gravar nada**. Gravar aqui faria uma leitura ter efeito
-  /// colateral, e o teste "ler NÃO grava" existe para prender isso: quem
-  /// persiste é a primeira instalação, remoção ou arrasto.
-  ///
-  /// Lista vazia salva é estado legítimo, e diferente de chave ausente: o
-  /// usuário que removeu todos os addons não pode ver o embutido voltar
-  /// sozinho no próximo boot.
+  /// A missing key returns the migration list (the built-in alone) without
+  /// writing: reading must not have a side effect. A saved empty list is a
+  /// legitimate state, distinct from a missing key.
   List<Addon> load() {
-    final cru = _prefs.getString(prefsKey);
-    if (cru == null) return [_builtinMigrado()];
+    final raw = _prefs.getString(prefsKey);
+    if (raw == null) return [_migratedBuiltin()];
     try {
-      final decoded = jsonDecode(cru);
-      if (decoded is! List) return [_builtinMigrado()];
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [_migratedBuiltin()];
       return [
         for (final item in decoded)
           if (item is Map<String, dynamic> && item['id'] is String) Addon.fromJson(item),
       ];
     } catch (e) {
-      debugPrint('Lista de addons ilegível, caindo na migração: $e');
-      return [_builtinMigrado()];
+      debugPrint('Unreadable addon list, falling back to migration: $e');
+      return [_migratedBuiltin()];
     }
   }
 
-  Future<void> save(List<Addon> lista) async {
-    await _prefs.setString(prefsKey, jsonEncode([for (final addon in lista) addon.toJson()]));
+  Future<void> save(List<Addon> list) async {
+    await _prefs.setString(prefsKey, jsonEncode([for (final addon in list) addon.toJson()]));
   }
 
-  /// O addon que representa o `consoles.json` de antes da fatia 4.
-  ///
-  /// A url sai do `catalogSourceUrl` que o usuário já tinha salvo, quando ele
-  /// instalou o catálogo por endereço. É só nome de tela: `app_settings`
-  /// ilegível ou campo ausente dão um addon sem url, e o app funciona igual.
-  Addon _builtinMigrado() {
+  /// The addon representing the pre-slice-4 `consoles.json`.
+  Addon _migratedBuiltin() {
     String? url;
     try {
-      final cru = _prefs.getString(SettingsService.settingsKey);
-      if (cru != null) {
-        final decoded = jsonDecode(cru);
-        final valor = decoded is Map ? decoded['catalogSourceUrl'] : null;
-        if (valor is String && valor.isNotEmpty) url = valor;
+      final raw = _prefs.getString(SettingsService.settingsKey);
+      if (raw != null) {
+        final decoded = jsonDecode(raw);
+        final value = decoded is Map ? decoded['catalogSourceUrl'] : null;
+        if (value is String && value.isNotEmpty) url = value;
       }
     } catch (e) {
-      debugPrint('catalogSourceUrl ilegível na migração de addons: $e');
+      debugPrint('Unreadable catalogSourceUrl during addon migration: $e');
     }
-    return Addon(id: kBuiltinAddonId, name: 'Catálogo embutido', url: url);
+    return Addon(id: kBuiltinAddonId, name: 'Built-in catalog', url: url);
   }
 
-  /// Onde mora o catálogo de cada addon.
-  ///
-  /// O embutido continua em `config/consoles.json`, que é exatamente onde
-  /// `CatalogService.setCatalogFromJson`, `addConsole` e `resetCatalog` já
-  /// escrevem (`catalog_service.dart:104-107`). É por isso que a migração não
-  /// move byte nenhum de disco: ela só escreve uma lista no
-  /// `shared_preferences`, e migração que não mexe em arquivo não tem como
-  /// perder o catálogo do usuário.
+  /// Where each addon's catalog lives.
   File catalogFile(String addonId) => addonId == kBuiltinAddonId
       ? File(path.join(_root.path, 'config', 'consoles.json'))
       : File(path.join(_root.path, 'config', 'addons', '$addonId.json'));
@@ -3786,33 +3736,33 @@ class AddonStore {
 }
 ```
 
-**Tropeço provável:** tratar chave ausente e lista vazia como a mesma coisa. Se `load()` devolvesse o embutido sempre que a lista saísse vazia, o usuário que removeu todos os addons de propósito veria o embutido ressuscitar no próximo boot, e não teria como impedir. O teste "salvar lista vazia é legítimo" prende exatamente essa diferença, e ele passa de graça na implementação errada só se você testar pela chave e não pelo tamanho.
+**Likely pitfall:** treating an absent key and an empty list as the same thing. If `load()` returned the builtin whenever the list came out empty, the user who removed all the addons on purpose would see the builtin resurrect on the next boot, and would have no way to prevent it. The test "saving an empty list is legitimate" locks exactly that difference, and it passes for free on the wrong implementation only if you test by the key and not by the size.
 
-**Segundo tropeço:** `deleteCatalog(kBuiltinAddonId)` apaga o `config/consoles.json`, que é o mesmo arquivo que `resetCatalog` apaga. É o comportamento certo (remover o addon embutido é remover o catálogo dele), mas quem chamar sem querer perde o catálogo importado do usuário. A Task 14 só chama `deleteCatalog` no caminho de remoção explícita.
+**Second pitfall:** `deleteCatalog(kBuiltinAddonId)` deletes `config/consoles.json`, which is the same file `resetCatalog` deletes. It is the correct behavior (removing the builtin addon is removing its catalog), but whoever calls it by accident loses the user's imported catalog. Task 14 only calls `deleteCatalog` on the explicit removal path.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_store_test.dart
 ```
 
-Esperado: `+14`, zero falha. São 7 casos de migração, 2 de lista e 5 de disco. Este número já esteve escrito como `+13`, e estava errado: contei os `test(` do bloco do Step 1 e são 14.
+Expected: `+14`, zero failures. It is 7 migration cases, 2 list ones and 5 disk ones. This number was once written as `+13`, and was wrong: I counted the `test(` of the Step 1 block and there are 14.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+465`, zero falha.
+Expected: `+465`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 8: Commit**
 
@@ -3823,85 +3773,85 @@ git add lib/services/addon_store.dart lib/services/settings_service.dart
 git commit -m "feat(addon): persistencia da lista de addons e do catalogo de cada um"
 ```
 
-### Task 11b: os dois casos que a lista ordenada não tinha
+### Task 11b: the two cases the ordered list did not have
 
 **Files:**
-- Test: `test/addon_model_test.dart` (dois casos novos, nada mais)
+- Test: `test/addon_model_test.dart` (two new cases, nothing more)
 
-Esta Task nasceu da revisão da Task 9 e **não muda uma linha de produção**. `upsertAddon` e `reorderAddons` estão certos; o que não está é a cobertura deles. Por isso ela tem um commit só, `test(...)`, e nenhum `feat(...)`: a regra de nunca misturar `lib/` e `test/` num commit continua valendo, e aqui simplesmente não há `lib/` para commitar.
+This Task was born from the Task 9 review and does **not change a single line of production**. `upsertAddon` and `reorderAddons` are right; what is not is their coverage. That is why it has a single commit, `test(...)`, and no `feat(...)`: the rule of never mixing `lib/` and `test/` in a commit still holds, and here there simply is no `lib/` to commit.
 
-Os dois buracos foram achados por mutação, não por leitura, e cada um é um mutante que sobrevive à suíte inteira:
+The two holes were found through mutation, not through reading, and each is a mutant that survives the whole suite:
 
-**Primeiro: `to - 1` pode virar `to` e nada fica vermelho.** O caso que existe hoje se chama `'reorderAddons descendo aplica o desconto do ReorderableListView'` e faz `reorderAddons([a, b, c], 0, 3)`. Ele não testa o desconto. Mover para o **fim** apaga a diferença: tirado o item de origem sobram dois, e tanto `to - 1 = 2` quanto `to = 3` passam pelo `clamp(0, 2)` e dão 2. O nome do caso promete uma coisa e a asserção fixa outra, que é a pior forma de teste, porque ele parece cobrir. O desconto só aparece quando o destino é uma vaga do **meio**: em `[a, b, c, d]`, mover 0 para 2 dá `['b', 'a', 'c', 'd']` com desconto e `['b', 'c', 'a', 'd']` sem. O plano afirmava o contrário num "Tropeço provável" da Task 9; a afirmação estava errada.
+**First: `to - 1` can become `to` and nothing goes red.** The case that exists today is named `'reorderAddons going down applies the ReorderableListView discount'` and does `reorderAddons([a, b, c], 0, 3)`. It does not test the discount. Moving to the **end** erases the difference: with the source item removed two remain, and both `to - 1 = 2` and `to = 3` pass through the `clamp(0, 2)` and give 2. The case name promises one thing and the assertion locks another, which is the worst kind of test, because it looks like it covers. The discount only appears when the destination is a **middle** slot: in `[a, b, c, d]`, moving 0 to 2 gives `['b', 'a', 'c', 'd']` with the discount and `['b', 'c', 'a', 'd']` without. The plan claimed the opposite in a "Likely pitfall" of Task 9; the claim was wrong.
 
-**Segundo: `i < 0` pode virar `i <= 0` e nada fica vermelho.** O caso `'upsertAddon substitui SEM mudar a posição'` substitui o addon da posição 1. Com `i = 1` os dois operadores concordam. Na posição 0 eles divergem, e a posição 0 é exatamente a do embutido: sob o mutante, reinstalar o addon que está em primeiro lugar não o substituiria, acrescentaria uma segunda cópia no fim. Isso é um estado que a tela de addons mostraria como duas linhas com o mesmo id.
+**Second: `i < 0` can become `i <= 0` and nothing goes red.** The case `'upsertAddon replaces WITHOUT changing the position'` replaces the addon at position 1. With `i = 1` the two operators agree. At position 0 they diverge, and position 0 is exactly the builtin's: under the mutant, reinstalling the addon in first place would not replace it, it would add a second copy at the end. That is a state the addons screen would show as two lines with the same id.
 
-- [ ] **Step 1: Escreva os dois casos**
+- [ ] **Step 1: Write the two cases**
 
-Em `test/addon_model_test.dart`, dentro do mesmo `group` onde os casos de `upsertAddon` e `reorderAddons` já estão, acrescente:
+In `test/addon_model_test.dart`, inside the same `group` where the `upsertAddon` and `reorderAddons` cases already are, add:
 
 ```dart
-    test('upsertAddon substitui na posição 0, que é a do embutido', () {
-      final saida = upsertAddon([a, b, c], const Addon(id: 'a', name: 'A novo'));
-      expect(saida.map((x) => x.id), ['a', 'b', 'c']);
-      expect(saida.first.name, 'A novo');
+    test('upsertAddon replaces at position 0, the built-in slot', () {
+      final out = upsertAddon([a, b, c], const Addon(id: 'a', name: 'A new'));
+      expect(out.map((x) => x.id), ['a', 'b', 'c']);
+      expect(out.first.name, 'A new');
     });
 
-    test('reorderAddons descendo para o meio desconta a vaga que o item deixou', () {
+    test('reorderAddons moving down into the middle discounts the vacated slot', () {
       const d = Addon(id: 'd', name: 'D');
       expect(reorderAddons([a, b, c, d], 0, 2).map((x) => x.id), ['b', 'a', 'c', 'd']);
     });
 ```
 
-O `const d` é local ao caso de propósito: `a`, `b` e `c` já existem no arquivo e um quarto no topo só serviria a este caso.
+The `const d` is local to the case on purpose: `a`, `b` and `c` already exist in the file and a fourth at the top would only serve this case.
 
-- [ ] **Step 2: Prove que cada um pega o seu mutante**
+- [ ] **Step 2: Prove each one catches its mutant**
 
-Isto não é opcional, e é o motivo de a Task existir. Um caso que passa não prova nada; o que prova é o caso ficando vermelho quando a linha que ele cobre muda.
+This is not optional, and it is the reason the Task exists. A case that passes proves nothing; what proves is the case going red when the line it covers changes.
 
 ```bash
-sed -i 's/final destino = to > from ? to - 1 : to;/final destino = to;/' lib/models/addon_model.dart
+sed -i 's/final target = to > from ? to - 1 : to;/final target = to;/' lib/models/addon_model.dart
 flutter test test/addon_model_test.dart 2>&1 | tr '\r' '\n' | tail -3
 git checkout -- lib/models/addon_model.dart
 
-sed -i 's/if (i < 0) return \[...lista, novo\];/if (i <= 0) return [...lista, novo];/' lib/models/addon_model.dart
+sed -i 's/if (i < 0) return \[...list, incoming\];/if (i <= 0) return [...list, incoming];/' lib/models/addon_model.dart
 flutter test test/addon_model_test.dart 2>&1 | tr '\r' '\n' | tail -3
 git checkout -- lib/models/addon_model.dart
 ```
 
-Esperado: cada uma das duas rodadas falha, e falha **no caso novo correspondente**, não em outro. Se alguma passar, o caso não está pegando o que ele diz pegar e não adianta seguir.
+Expected: each of the two rounds fails, and fails **in the corresponding new case**, not in another. If any passes, the case is not catching what it says it catches and there is no point going on.
 
-Depois das duas, confira que a restauração foi de verdade antes de medir qualquer coisa:
+After the two, check that the restore was real before measuring anything:
 
 ```bash
 git status --short lib/models/addon_model.dart
 ```
 
-Esperado: nenhuma linha. Um `M` aqui quer dizer que um `git checkout --` não rodou, e todo número dos Steps seguintes seria o do mutante.
+Expected: no line. An `M` here means a `git checkout --` did not run, and every number in the following Steps would be the mutant's.
 
-- [ ] **Step 3: Rode o arquivo**
+- [ ] **Step 3: Run the file**
 
 ```bash
 flutter test test/addon_model_test.dart
 ```
 
-Esperado: `+17`, zero falha. São os 15 da Task 9 mais estes 2.
+Expected: `+17`, zero failures. It is the 15 from Task 9 plus these 2.
 
-- [ ] **Step 4: Rode a suíte inteira**
+- [ ] **Step 4: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+467`, zero falha.
+Expected: `+467`, zero failures.
 
-- [ ] **Step 5: Analise**
+- [ ] **Step 5: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 6: Commit**
 
@@ -3910,23 +3860,23 @@ git add test/addon_model_test.dart
 git commit -m "test(addon): a substituicao na posicao 0 e o desconto de descida para o meio"
 ```
 
-### Task 12: `Game.sourceId`, o jogo sabe de qual addon veio
+### Task 12: `Game.sourceId`, the game knows which addon it came from
 
 **Files:**
 - Modify: `lib/models/game_model.dart`
 - Test: `test/game_source_id_test.dart`
 
-O `Game` de hoje não sabe de onde veio (`game_model.dart:4-19`: título, url, tamanho, console, metadados, detalhes). Com um addon só isso nunca fez falta. Com N, é o campo que faz a prioridade arrastável significar alguma coisa: sem ele, `planFromEntries` recebe um `sourcePriority` que não casa com fonte nenhuma e o critério de desempate vira decoração.
+Today's `Game` does not know where it came from (`game_model.dart:4-19`: title, url, size, console, metadata, details). With a single addon this was never missed. With N, it is the field that makes the draggable priority mean anything: without it, `planFromEntries` receives a `sourcePriority` that matches no source and the tiebreaker becomes decoration.
 
-Dois detalhes que decidem a forma do campo:
+Two details that decide the shape of the field:
 
-**Ele é não-nulável, com valor padrão.** O `Game` vai e volta de disco: `_fetchCatalog` escreve `jsonEncode(catalog.map((g) => g.toJson()))` no arquivo de cache (`catalog_service.dart:327`) e `loadCatalog` lê de lá (`:271-273`). Todo cache escrito antes desta fatia existe e não tem o campo. Se o campo fosse nulável, cada consumidor teria que lembrar do `?? algo`, e o primeiro que esquecesse produziria um jogo sem fonte no meio da grade. Não-nulável com padrão resolve a degradação **num lugar só**, dentro do `fromJson`.
+**It is non-nullable, with a default value.** The `Game` goes and comes back from disk: `_fetchCatalog` writes `jsonEncode(catalog.map((g) => g.toJson()))` to the cache file (`catalog_service.dart:327`) and `loadCatalog` reads from there (`:271-273`). Every cache written before this slice exists and does not have the field. If the field were nullable, every consumer would have to remember the `?? something`, and the first that forgot would produce a game with no source in the middle of the grid. Non-nullable with a default resolves the degradation **in a single place**, inside `fromJson`.
 
-**O padrão é `kBuiltinAddonId` e não `kBuiltinSourceId`.** O `sourceId` agora é id de addon, e ele é comparado contra a lista de ids que o usuário arrastou. Um jogo marcado `'listagem'` nunca casaria com nenhum addon da lista. O `kBuiltinSourceId` da fatia 3 era explicitamente provisório (`source_pick_model.dart:4-17`: "Na fatia 4 ele vira o id do addon que serviu o arquivo") e a Task 15 o remove.
+**The default is `kBuiltinAddonId` and not `kBuiltinSourceId`.** The `sourceId` is now an addon id, and it is compared against the list of ids the user dragged. A game marked `'listagem'` would never match any addon in the list. The `kBuiltinSourceId` of slice 3 was explicitly provisional (`source_pick_model.dart:4-17`: "In slice 4 it becomes the id of the addon that served the file") and Task 15 removes it.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/game_source_id_test.dart`:
+Create `test/game_source_id_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -3936,80 +3886,81 @@ import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/game_model.dart';
 
 void main() {
-  const jogo = Game(title: 'Chrono Trigger (USA).zip', url: 'https://a/ct.zip', size: 1024, consoleId: 'snes');
+  const game = Game(title: 'Crystal Vanguard (USA).zip', url: 'https://a/ct.zip', size: 1024, consoleId: 'snes');
 
-  test('sem fonte declarada, o jogo é do addon embutido', () {
-    expect(jogo.sourceId, kBuiltinAddonId);
+  test('no source declared means the game belongs to the built-in addon', () {
+    expect(game.sourceId, kBuiltinAddonId);
   });
 
-  test('o sourceId sobrevive à ida e volta pelo json do cache', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    final volta = Game.fromJson(jsonDecode(jsonEncode(marcado.toJson())) as Map<String, dynamic>);
-    expect(volta.sourceId, 'ultranx');
-    expect(volta.title, jogo.title);
-    expect(volta.url, jogo.url);
-    expect(volta.consoleId, jogo.consoleId);
+  test('sourceId survives a round-trip through the cache json', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    final restored = Game.fromJson(jsonDecode(jsonEncode(tagged.toJson())) as Map<String, dynamic>);
+    expect(restored.sourceId, 'ultranx');
+    expect(restored.title, game.title);
+    expect(restored.url, game.url);
+    expect(restored.consoleId, game.consoleId);
   });
 
-  test('toJson emite o campo', () {
-    expect(jogo.copyWith(sourceId: 'ultranx').toJson()['sourceId'], 'ultranx');
+  test('toJson emits the field', () {
+    expect(game.copyWith(sourceId: 'ultranx').toJson()['sourceId'], 'ultranx');
   });
 
-  test('cache antigo, escrito sem o campo, degrada para o embutido', () {
-    final antigo = {'title': 'a.zip', 'url': 'https://a/a.zip', 'size': 1, 'consoleId': 'snes'};
-    expect(Game.fromJson(antigo).sourceId, kBuiltinAddonId);
+  test('old cache written without the field degrades to the built-in addon', () {
+    final old = {'title': 'a.zip', 'url': 'https://a/a.zip', 'size': 1, 'consoleId': 'snes'};
+    expect(Game.fromJson(old).sourceId, kBuiltinAddonId);
   });
 
-  test('copyWith troca a fonte sem mexer no resto', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    expect(marcado.sourceId, 'ultranx');
-    expect(marcado.title, jogo.title);
-    expect(marcado.size, jogo.size);
+  test('copyWith replaces the source without touching other fields', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    expect(tagged.sourceId, 'ultranx');
+    expect(tagged.title, game.title);
+    expect(tagged.size, game.size);
   });
 
-  test('copyWith sem sourceId preserva a fonte que já estava', () {
-    final marcado = jogo.copyWith(sourceId: 'ultranx');
-    expect(marcado.copyWith(size: 2048).sourceId, 'ultranx');
+  test('copyWith without sourceId preserves the existing source', () {
+    final tagged = game.copyWith(sourceId: 'ultranx');
+    expect(tagged.copyWith(size: 2048).sourceId, 'ultranx');
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/game_source_id_test.dart
 ```
 
-Esperado: falha de compilação, `No named parameter with the name 'sourceId'`.
+Expected: a compilation error, `No named parameter with the name 'sourceId'`.
 
-- [ ] **Step 3: Escreva a implementação**
+- [ ] **Step 3: Write the implementation**
 
-Em `lib/models/game_model.dart`, acrescente o import
+In `lib/models/game_model.dart`, add the import
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-o campo, depois de `consoleId` (linha 8):
+the field, after `consoleId` (line 8):
 
 ```dart
-  /// O id do addon que serviu este arquivo.
+  /// The id of the addon that served this file.
   ///
-  /// Não-nulável de propósito. O `Game` vai e volta de disco pelo cache de
-  /// catálogo (`catalog_service.dart:327` escreve, `:271` lê), e todo cache
-  /// escrito antes da fatia 4 não tem o campo. Com padrão, a degradação
-  /// acontece uma vez, no `fromJson`; com `null`, ela viraria um `??` em cada
-  /// consumidor e o primeiro esquecido põe um jogo sem fonte na grade.
+  /// Non-nullable on purpose. The `Game` goes and comes back from disk through
+  /// the catalog cache (`catalog_service.dart:327` writes, `:271` reads), and
+  /// every cache written before slice 4 does not have the field. With a default,
+  /// the degradation happens once, in `fromJson`; with `null`, it would become a
+  /// `??` in every consumer and the first forgotten one puts a game with no
+  /// source in the grid.
   final String sourceId;
 ```
 
-o parâmetro, no construtor:
+the parameter, in the constructor:
 
 ```dart
     this.sourceId = kBuiltinAddonId,
 ```
 
-o parâmetro e o repasse no `copyWith`:
+the parameter and the forwarding in `copyWith`:
 
 ```dart
     String? sourceId,
@@ -4018,43 +3969,43 @@ o parâmetro e o repasse no `copyWith`:
       sourceId: sourceId ?? this.sourceId,
 ```
 
-a leitura no `fromJson`:
+the read in `fromJson`:
 
 ```dart
       sourceId: json['sourceId'] as String? ?? kBuiltinAddonId,
 ```
 
-e a escrita no `toJson`:
+and the write in `toJson`:
 
 ```dart
       'sourceId': sourceId,
 ```
 
-**Tropeço provável:** ler `json['sourceId']` sem o `as String?`. O mapa vem de `jsonDecode` e é `Map<String, dynamic>`, então um `json['sourceId'] ?? kBuiltinAddonId` compila e entrega `dynamic` para um campo `String`, o que só explode em tempo de execução, e só com um cache que tenha o campo com outro tipo. Os outros campos do `fromJson` sofrem do mesmo (`title: json['title']`, linha 41), mas isso é dívida anterior e não é desta fatia consertar.
+**Likely pitfall:** reading `json['sourceId']` without the `as String?`. The map comes from `jsonDecode` and is `Map<String, dynamic>`, so a `json['sourceId'] ?? kBuiltinAddonId` compiles and delivers `dynamic` to a `String` field, which only blows up at runtime, and only with a cache that has the field with another type. The other fields of `fromJson` suffer from the same (`title: json['title']`, line 41), but that is prior debt and it is not this slice's job to fix.
 
-- [ ] **Step 4: Rode para ver passar**
+- [ ] **Step 4: Run to see it pass**
 
 ```bash
 flutter test test/game_source_id_test.dart
 ```
 
-Esperado: `+6`, zero falha.
+Expected: `+6`, zero failures.
 
-- [ ] **Step 5: Rode a suíte inteira**
+- [ ] **Step 5: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+473`, zero falha. Nenhum teste existente deve mudar: o campo tem padrão, e o padrão é o comportamento de antes.
+Expected: `+473`, zero failures. No existing test should change: the field has a default, and the default is the behavior from before.
 
-- [ ] **Step 6: Analise**
+- [ ] **Step 6: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 7: Commit**
 
@@ -4065,81 +4016,78 @@ git add lib/models/game_model.dart
 git commit -m "feat(addon): o Game carrega o id do addon que o serviu"
 ```
 
-### Task 12b: a porta que o id descarta e os dezessete campos que o `withUrls` pode esquecer
+### Task 12b: the port the id discards and the seventeen fields `withUrls` can forget
 
 **Files:**
-- Modify: `lib/models/addon_model.dart` (`idFromUrl` passa a distinguir a porta)
+- Modify: `lib/models/addon_model.dart` (`idFromUrl` starts to distinguish the port)
 - Test: `test/addon_model_test.dart`, `test/console_merge_test.dart`
 
-Esta Task não estava no plano original. Ela sai da revisão por mutação das Tasks 9 e 10, depois de a Task 11b já ter fechado os dois mutantes da lista ordenada. São dois assuntos, e só um é defeito de produção.
+This Task was not in the original plan. It comes out of the mutation review of Tasks 9 and 10, after Task 11b had already closed the two mutants of the ordered list. There are two subjects, and only one is a production defect.
 
-**O defeito: `Addon.idFromUrl` joga a porta fora.** `Uri.host` não inclui a porta, e o id é montado com `uri.host + uri.path`. Medido, com a lógica de hoje inlineada num script:
+**The defect: `Addon.idFromUrl` throws the port away.** `Uri.host` does not include the port, and the id is built with `uri.host + uri.path`. Measured, with today's logic inlined in a script:
 
 ```
-exemplo_com_catalogo_json      <https://exemplo.com/catalogo.json>
-exemplo_com_catalogo_json      <https://exemplo.com:8080/catalogo.json>
-exemplo_com_catalogo_json      <http://exemplo.com:9000/catalogo.json>
+example_com_catalog_json      <https://example.com/catalog.json>
+example_com_catalog_json      <https://example.com:8080/catalog.json>
+example_com_catalog_json      <http://example.com:9000/catalog.json>
 ```
 
-Os três são o mesmo addon aos olhos do app. Isso importa porque o id é chave de cofre (`SecretRef.addonToken(addonId, consoleId)`) e vira chave de arquivo em disco na Task 13: dois addons que colidem no id não convivem, `upsertAddon` substitui um pelo outro na lista e o token do segundo sobrescreve o do primeiro. O doc do próprio método enumera o que ele normaliza de propósito, "esquema, `www.`, caixa, query, fragmento, barra final", e a porta não está na lista. Não foi decisão, foi descuido. E este app serve LAN em porta: `RtsServerService.consoleJson` monta `http://$hostPort/f/$index/`, então dois servidores no mesmo host em portas diferentes é o caso realista, não o exótico.
+The three are the same addon in the app's eyes. This matters because the id is a vault key (`SecretRef.addonToken(addonId, consoleId)`) and becomes a disk file key in Task 13: two addons that collide on the id do not coexist, `upsertAddon` replaces one with the other in the list and the second's token overwrites the first's. The method's own doc enumerates what it normalizes on purpose, "scheme, `www.`, case, query, fragment, trailing slash", and the port is not in the list. It was not a decision, it was an oversight. And this app serves LAN on a port: `RtsServerService.consoleJson` builds `http://$hostPort/f/$index/`, so two servers on the same host on different ports is the realistic case, not the exotic one.
 
-**A lacuna de teste: `Console.withUrls` copia vinte e um campos na mão e só um está preso.** A revisão apagou cada linha de campo da cópia (`console_model.dart:64-81`) e rodou a suíte: dezessete apagam em silêncio, com tudo verde. Só `regex` é pego, pelo teste de precedência de metadados. O comentário do método diz que escolheu a cópia manual em vez de um `copyWith` completo, e a razão escrita é "um lugar a mais para esquecer de atualizar quando o `Console` crescer". Escolha defensável; o que falta é o teste que prova que ela não esqueceu. O risco é baixo hoje, porque `withUrls` tem um consumidor só, e sobe na Task 13, quando `mergeCatalogs` entra no `CatalogService`.
+**The test gap: `Console.withUrls` copies twenty-one fields by hand and only one is locked.** The review deleted each field line of the copy (`console_model.dart:64-81`) and ran the suite: seventeen delete silently, with everything green. Only `regex` is caught, by the metadata precedence test. The method's comment says it chose the manual copy over a full `copyWith`, and the written reason is "one more place to forget to update when the `Console` grows". A defensible choice; what is missing is the test that proves it did not forget. The risk is low today, because `withUrls` has a single consumer, and it rises in Task 13, when `mergeCatalogs` enters the `CatalogService`.
 
-**Por que isto custa só um caso à cadeia.** Três dos quatro buracos de `addon_model.dart` (a porta, o `trim`, e o `isBuiltin`) cabem como `expect` a mais dentro de casos que já existem e já falam desse assunto, então não criam `test(` nenhum. Só o `withUrls` precisa de um caso novo, porque não há caso existente sobre cópia de campos. Reforçar um caso existente vale tanto quanto criar um, e não move a cadeia de totais de dezesseis Tasks.
+**Why this costs the chain only one case.** Three of the four holes in `addon_model.dart` (the port, the `trim`, and `isBuiltin`) fit as an extra `expect` inside cases that already exist and already talk about that subject, so they create no `test(`. Only `withUrls` needs a new case, because there is no existing case about field copying. Reinforcing an existing case is worth as much as creating one, and it does not move the totals chain of sixteen Tasks.
 
-- [ ] **Step 1: Reforce três casos que já existem**
+- [ ] **Step 1: Reinforce three cases that already exist**
 
-Em `test/addon_model_test.dart`, troque o caso `'o mesmo catálogo em http e https dá o mesmo id'` inteiro por:
+In `test/addon_model_test.dart`, swap the whole case `'http and https of the same catalog share an id, and surrounding space is ignored'` for:
 
 ```dart
-    test('o mesmo catálogo em http e https dá o mesmo id, e o espaço colado junto não conta', () {
-      const limpa = 'https://exemplo.com/catalogo.json';
-      expect(Addon.idFromUrl('http://exemplo.com/catalogo.json'), Addon.idFromUrl(limpa));
-      // O `trim` não é enfeite: sem ele `Uri.tryParse` não acha host nenhum
-      // numa url colada com espaço, e o id vira `https_exemplo_com_catalogo_json`.
-      // Colar com espaço é o que um campo de texto entrega.
-      expect(Addon.idFromUrl('  $limpa  '), Addon.idFromUrl(limpa));
-      // E o formato fica preso a um literal. Comparar id com id sobrevive a
-      // qualquer troca do slug, inclusive a uma que embaralhe o id inteiro.
-      expect(Addon.idFromUrl(limpa), 'exemplo_com_catalogo_json');
+    test('http and https of the same catalog share an id, and surrounding space is ignored', () {
+      const cleaned = 'https://example.com/catalog.json';
+      expect(Addon.idFromUrl('http://example.com/catalog.json'), Addon.idFromUrl(cleaned));
+      // The `trim` matters: without it `Uri.tryParse` finds no host in a
+      // space-padded url and the id becomes `https_example_com_catalog_json`.
+      expect(Addon.idFromUrl('  $cleaned  '), Addon.idFromUrl(cleaned));
+      // The literal pins the format; comparing id to id survives any slug change.
+      expect(Addon.idFromUrl(cleaned), 'example_com_catalog_json');
     });
 ```
 
-o caso `'dois catálogos no mesmo host têm ids diferentes'` inteiro por:
+the whole case `'two catalogs on the same host get different ids, and the port is part of the host'` for:
 
 ```dart
-    test('dois catálogos no mesmo host têm ids diferentes, e a porta faz parte do host', () {
-      expect(Addon.idFromUrl('https://exemplo.com/snes.json'), isNot(Addon.idFromUrl('https://exemplo.com/nes.json')));
-      // Dois servidores de LAN no mesmo IP, em portas diferentes, são dois
-      // addons. Com a porta fora do id eles dividiriam a chave de cofre, e o
-      // token do segundo instalado apagaria o do primeiro.
+    test('two catalogs on the same host get different ids, and the port is part of the host', () {
+      expect(Addon.idFromUrl('https://example.com/snes.json'), isNot(Addon.idFromUrl('https://example.com/nes.json')));
+      // Two LAN servers on the same IP but different ports are two addons. With
+      // the port out of the id they would share a vault key and the second
+      // install's token would erase the first's.
       expect(Addon.idFromUrl('http://192.168.0.10:8080/f/0/'), isNot(Addon.idFromUrl('http://192.168.0.10:8081/f/0/')));
-      expect(Addon.idFromUrl('https://exemplo.com:8080/c.json'), isNot(Addon.idFromUrl('https://exemplo.com/c.json')));
+      expect(Addon.idFromUrl('https://example.com:8080/c.json'), isNot(Addon.idFromUrl('https://example.com/c.json')));
     });
 ```
 
-e o caso `'nunca devolve o id do embutido, nem para uma url que daria nele'` inteiro por:
+and the whole case `'the built-in id: no url maps to it, and only it answers isBuiltin'` for:
 
 ```dart
-    test('o id do embutido: nenhuma url cai nele, e só ele responde isBuiltin', () {
+    test('the built-in id: no url maps to it, and only it answers isBuiltin', () {
       expect(Addon.idFromUrl('https://builtin/'), isNot(kBuiltinAddonId));
-      expect(const Addon(id: kBuiltinAddonId, name: 'Listagem').isBuiltin, isTrue);
+      expect(const Addon(id: kBuiltinAddonId, name: 'Listing').isBuiltin, isTrue);
       expect(const Addon(id: 'ultranx', name: 'UltraNX').isBuiltin, isFalse);
     });
 ```
 
-O nome dos três casos muda junto com o corpo, de propósito: um caso que afirma mais do que o nome diz é um caso que ninguém vai reler quando quebrar.
+The name of the three cases changes together with the body, on purpose: a case that asserts more than the name says is a case nobody will reread when it breaks.
 
-- [ ] **Step 2: Escreva o caso novo do `withUrls`**
+- [ ] **Step 2: Write the new `withUrls` case**
 
-Ainda sem tocar em `lib/`. Em `test/console_merge_test.dart`, acrescente antes do `}` que fecha o `main`:
+Still without touching `lib/`. In `test/console_merge_test.dart`, add before the `}` that closes `main`:
 
 ```dart
-  test('withUrls troca as urls e não perde nenhum dos outros campos', () {
-    // Todo campo aqui vale o CONTRÁRIO do padrão do construtor. Se algum
-    // valesse o padrão, apagar a linha correspondente do `withUrls` passaria
-    // despercebido: o construtor repõe o mesmo valor e o teste segue verde.
-    const cheio = Console(
+  test('withUrls replaces urls without losing any other field', () {
+    // Every field is the OPPOSITE of its constructor default, so a dropped
+    // `withUrls` line cannot be masked by the constructor restoring the default.
+    const full = Console(
       id: 'snes',
       name: 'Super Nintendo',
       urls: ['https://a/'],
@@ -4153,9 +4101,9 @@ Ainda sem tocar em `lib/`. Em `test/console_merge_test.dart`, acrescente antes d
       usaRegex: r'\(USA\)',
       shouldDecompressNsz: true,
       ignoreExtensionFiltering: true,
-      downloadUrl: 'https://baixa/',
+      downloadUrl: 'https://download/',
       auth: {'type': 'cookies'},
-      listUrl: 'https://lista/',
+      listUrl: 'https://list/',
       listJsonFileLocation: 'items',
       listItemId: 'title',
       listSystems: true,
@@ -4163,98 +4111,99 @@ Ainda sem tocar em `lib/`. Em `test/console_merge_test.dart`, acrescente antes d
       convert3dsToCia: true,
     );
 
-    final copia = cheio.withUrls(['https://b/', 'https://c/']);
+    final copy = full.withUrls(['https://b/', 'https://c/']);
 
-    expect(copia.urls, ['https://b/', 'https://c/']);
-    expect(copia.id, cheio.id);
-    expect(copia.name, cheio.name);
-    expect(copia.regex, cheio.regex);
-    expect(copia.boxarts, cheio.boxarts);
-    expect(copia.fileFormat, cheio.fileFormat);
-    expect(copia.romsFolder, cheio.romsFolder);
-    expect(copia.shouldUnzip, cheio.shouldUnzip);
-    expect(copia.extractContents, cheio.extractContents);
-    expect(copia.shouldFilterUsa, cheio.shouldFilterUsa);
-    expect(copia.usaRegex, cheio.usaRegex);
-    expect(copia.shouldDecompressNsz, cheio.shouldDecompressNsz);
-    expect(copia.ignoreExtensionFiltering, cheio.ignoreExtensionFiltering);
-    expect(copia.downloadUrl, cheio.downloadUrl);
-    expect(copia.auth, cheio.auth);
-    expect(copia.listUrl, cheio.listUrl);
-    expect(copia.listJsonFileLocation, cheio.listJsonFileLocation);
-    expect(copia.listItemId, cheio.listItemId);
-    expect(copia.listSystems, cheio.listSystems);
-    expect(copia.added, cheio.added);
-    expect(copia.convert3dsToCia, cheio.convert3dsToCia);
+    expect(copy.urls, ['https://b/', 'https://c/']);
+    expect(copy.id, full.id);
+    expect(copy.name, full.name);
+    expect(copy.regex, full.regex);
+    expect(copy.boxarts, full.boxarts);
+    expect(copy.fileFormat, full.fileFormat);
+    expect(copy.romsFolder, full.romsFolder);
+    expect(copy.shouldUnzip, full.shouldUnzip);
+    expect(copy.extractContents, full.extractContents);
+    expect(copy.shouldFilterUsa, full.shouldFilterUsa);
+    expect(copy.usaRegex, full.usaRegex);
+    expect(copy.shouldDecompressNsz, full.shouldDecompressNsz);
+    expect(copy.ignoreExtensionFiltering, full.ignoreExtensionFiltering);
+    expect(copy.downloadUrl, full.downloadUrl);
+    expect(copy.auth, full.auth);
+    expect(copy.listUrl, full.listUrl);
+    expect(copy.listJsonFileLocation, full.listJsonFileLocation);
+    expect(copy.listItemId, full.listItemId);
+    expect(copy.listSystems, full.listSystems);
+    expect(copy.added, full.added);
+    expect(copy.convert3dsToCia, full.convert3dsToCia);
   });
 ```
 
-**Tropeço provável:** pôr um campo no valor padrão para encurtar. `shouldUnzip` já é `false` e `extractContents` já é `true` no construtor, então escrever esses dois valores faz o caso passar mesmo com a linha apagada do `withUrls`. O que prende o campo não é ele estar no `expect`, é ele valer algo que o padrão não repõe.
+**Likely pitfall:** putting a field at the default value to shorten. `shouldUnzip` is already `false` and `extractContents` is already `true` in the constructor, so writing those two values makes the case pass even with the line deleted from `withUrls`. What locks the field is not it being in the `expect`, it is it being worth something the default does not put back.
 
-- [ ] **Step 3: Rode para ver falhar**
+- [ ] **Step 3: Run to see it fail**
 
 ```bash
 flutter test test/addon_model_test.dart test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -20
 ```
 
-Esperado: **uma falha só**, e é a da porta, no caso `'dois catálogos no mesmo host têm ids diferentes, e a porta faz parte do host'`. As outras adições (o `trim`, o literal do id, o `isBuiltin`, e os vinte e um campos do `withUrls`) descrevem comportamento que já está certo hoje, então passam de primeira. Isso é o esperado, não é motivo de suspeita: elas existem para travar o que funciona, não para consertar.
+Expected: **one failure only**, and it is the port one, in the case `'two catalogs on the same host have different ids, and the port is part of the host'`. The other additions (the `trim`, the id literal, the `isBuiltin`, and the twenty-one fields of `withUrls`) describe behavior that is already right today, so they pass on the first try. That is what is expected, it is not a cause for suspicion: they exist to lock what works, not to fix.
 
-- [ ] **Step 4: Ponha a porta no id**
+- [ ] **Step 4: Put the port in the id**
 
-Em `lib/models/addon_model.dart`, no doc de `idFromUrl`, troque a frase da normalização:
+In `lib/models/addon_model.dart`, in the doc of `idFromUrl`, swap the normalization sentence:
 
 ```dart
-  /// Estável de propósito: `http` e `https`, com `www.` ou sem, com query ou
-  /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
-  /// fonte tem que reencontrar o token que já está no cofre, e o token está
-  /// guardado sob o id.
+  /// Stable on purpose: `http` and `https`, with `www.` or without, with a query
+  /// or without, with a trailing slash or without, all fall into the same id.
+  /// Reinstalling the same source has to re-find the token already in the vault,
+  /// and the token is stored under the id.
 ```
 
-por:
+for:
 
 ```dart
-  /// Estável de propósito: `http` e `https`, com `www.` ou sem, com query ou
-  /// sem, com barra no fim ou sem, tudo cai no mesmo id. Reinstalar a mesma
-  /// fonte tem que reencontrar o token que já está no cofre, e o token está
-  /// guardado sob o id.
+  /// Stable on purpose: `http` and `https`, with `www.` or without, with a query
+  /// or without, with a trailing slash or without, all fall into the same id.
+  /// Reinstalling the same source has to re-find the token already in the vault,
+  /// and the token is stored under the id.
   ///
-  /// **A porta entra no id, e não é normalização esquecida.** `Uri.host` a
-  /// descarta, então sem isto `192.168.0.10:8080/f/0/` e `192.168.0.10:8081/f/0/`
-  /// seriam o mesmo addon, dividindo chave de cofre e arquivo de catálogo. Dois
-  /// servidores de LAN no mesmo aparelho é o caso comum aqui, não o exótico.
-  /// Uso `hasPort` e não `port` porque `port` resolve o padrão do esquema: com
-  /// ele, `http://e.com/c` daria 80 e `https://e.com/c` daria 443, e a estabilidade
-  /// entre esquemas, que é a primeira promessa deste método, iria embora. O preço
-  /// é que uma url que escreve `:80` à toa vira um id diferente da que não escreve.
-  /// Esse erro cria um addon duplicado, que se vê na lista; o erro oposto apagaria
-  /// um token em silêncio.
+  /// **The port enters the id, and it is not forgotten normalization.** `Uri.host`
+  /// discards it, so without this `192.168.0.10:8080/f/0/` and `192.168.0.10:8081/f/0/`
+  /// would be the same addon, sharing a vault key and a catalog file. Two LAN
+  /// servers on the same device is the common case here, not the exotic one.
+  /// I use `hasPort` and not `port` because `port` resolves the scheme default:
+  /// with it, `http://e.com/c` would give 80 and `https://e.com/c` would give 443,
+  /// and the stability across schemes, which is this method's first promise, would
+  /// be gone. The price is that a url that writes `:80` for nothing becomes a
+  /// different id from the one that does not write it. That mistake creates a
+  /// duplicated addon, which is seen in the list; the opposite mistake would erase
+  /// a token silently.
 ```
 
-e troque a linha do `cru`:
+and swap the `raw` line:
 
 ```dart
-    final cru = (uri == null || uri.host.isEmpty) ? url : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.path}';
+    final raw = (uri == null || uri.host.isEmpty) ? url : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.path}';
 ```
 
-por:
+for:
 
 ```dart
-    final cru = (uri == null || uri.host.isEmpty)
+    final raw = (uri == null || uri.host.isEmpty)
         ? url
         : '${uri.host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '')}${uri.hasPort ? ':${uri.port}' : ''}${uri.path}';
 ```
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_model_test.dart test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -3
 ```
 
-Esperado: `+29`, zero falha. São os `+17` de `addon_model_test.dart`, que **não muda**, porque o Step 1 só acrescentou `expect` dentro de casos existentes, mais os `+12` de `console_merge_test.dart`, que era `+11`. Se o primeiro número virar `+18` ou mais, algum dos três blocos do Step 1 virou caso novo em vez de substituir o antigo, e aí a cadeia de totais deste plano está errada a partir daqui.
+Expected: `+29`, zero failures. It is the `+17` of `addon_model_test.dart`, which does **not** change, because Step 1 only added `expect` inside existing cases, plus the `+12` of `console_merge_test.dart`, which was `+11`. If the first number turns into `+18` or more, one of the three blocks of Step 1 became a new case instead of replacing the old one, and then the totals chain of this plan is wrong from here on.
 
-- [ ] **Step 6: Prove que o caso do `withUrls` pega o que diz pegar**
+- [ ] **Step 6: Prove the `withUrls` case catches what it says it catches**
 
-Um caso que passa não prova nada. Escolha dois campos, um `bool` com padrão e um nulável, apague a linha de cada um no `withUrls` e veja o caso ficar vermelho:
+A case that passes proves nothing. Pick two fields, a `bool` with a default and a nullable one, delete the line of each in `withUrls` and watch the case go red:
 
 ```bash
 sed -i '/^        auth: auth,$/d' lib/models/console_model.dart
@@ -4266,29 +4215,29 @@ flutter test test/console_merge_test.dart 2>&1 | tr '\r' '\n' | tail -3
 git checkout -- lib/models/console_model.dart
 ```
 
-Cada rodada tem que falhar no caso `'withUrls troca as urls e não perde nenhum dos outros campos'`. Depois das duas, confira a restauração antes de medir qualquer outra coisa:
+Each round has to fail in the case `'withUrls swaps the urls and loses none of the other fields'`. After the two, check the restore before measuring anything else:
 
 ```bash
 git status --short lib/models/console_model.dart
 ```
 
-Esperado: **nenhuma linha**. Se aparecer ` M`, o `git checkout` não rodou e todo número daqui para a frente é de uma árvore mutada.
+Expected: **no line**. If ` M` shows up, the `git checkout` did not run and every number from here on is from a mutated tree.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the whole suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+474`, zero falha.
+Expected: `+474`, zero failures.
 
-- [ ] **Step 8: Analise**
+- [ ] **Step 8: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -4301,31 +4250,31 @@ git commit -m "feat(addon): a porta passa a fazer parte do id do addon"
 
 ---
 
-### Task 13: o `CatalogService` lê N addons e busca cada fonte com a auth dela
+### Task 13: the `CatalogService` reads N addons and fetches each source with its own auth
 
 **Files:**
 - Modify: `lib/services/catalog_service.dart`, `lib/providers/catalog_provider.dart`
-- Modify: `lib/providers/tinfoil_server_provider.dart:69` e `lib/providers/fbi_server_provider.dart:95` (os dois passam o parâmetro que esta Task apaga)
+- Modify: `lib/providers/tinfoil_server_provider.dart:69` and `lib/providers/fbi_server_provider.dart:95` (both pass the parameter this Task deletes)
 - Test: `test/catalog_addons_test.dart`
 
-Esta é a Task que liga tudo o que veio antes. Duas metades:
+This is the Task that wires up everything that came before. Two halves:
 
-**Metade de leitura.** `getConsoles` para de ler um arquivo e passa a ler a lista de addons, fundindo os catálogos com `mergeCatalogs`. O cache estático deixa de ser um mapa por caminho de arquivo e vira um `MergedCatalog` só.
+**Read half.** `getConsoles` stops reading one file and starts reading the addon list, merging the catalogs with `mergeCatalogs`. The static cache stops being a map per file path and becomes a single `MergedCatalog`.
 
-**Metade de busca.** `_fetchCatalog` para de iterar `console.urls` e passa a iterar `sources`, mandando para cada url a auth do addon que a declarou e o token daquele addon. Cada jogo que volta é marcado com o `sourceId` da fonte.
+**Fetch half.** `_fetchCatalog` stops iterating `console.urls` and starts iterating `sources`, sending to each url the auth of the addon that declared it and that addon's token. Each game that comes back is marked with the source's `sourceId`.
 
-Dois seams de teste, porque o caminho inteiro passa por `path_provider` (`getApplicationSupportDirectory` no store, `getApplicationCacheDirectory` no cache de catálogo) e num teste sem plataforma isso lança `MissingPluginException`:
+Two test seams, because the whole path goes through `path_provider` (`getApplicationSupportDirectory` in the store, `getApplicationCacheDirectory` in the catalog cache) and in a test with no platform that throws `MissingPluginException`:
 
-- `buildCatalog(AddonStore store)`, que recebe o store pronto, com raiz de disco temporária.
-- `fetchSources(client, console, sources, ...)`, que é o miolo de rede sem cache e sem boxart.
+- `buildCatalog(AddonStore store)`, which receives the ready store, with a temporary disk root.
+- `fetchSources(client, console, sources, ...)`, which is the network core with no cache and no boxart.
 
-São métodos públicos com doc dizendo para que servem, sem `@visibleForTesting`. O repositório não usa a anotação em lugar nenhum (`grep -rn "visibleForTesting" lib/` não acha nada), e introduzir a primeira nesta Task acrescenta risco de `flutter analyze` mudar de 22 por um detalhe que não é o assunto da fatia.
+They are public methods with a doc saying what they are for, without `@visibleForTesting`. The repository does not use the annotation anywhere (`grep -rn "visibleForTesting" lib/` finds nothing), and introducing the first one in this Task adds risk of `flutter analyze` changing from 22 over a detail that is not the subject of the slice.
 
-**O teste de rede serve JSON, não HTML.** `_fetchFromUrl` manda HTML para `compute(_parseHtmlIsolate, ...)`, que sobe isolate de verdade; o ramo JSON (`_parseJsonListing`, `catalog_service.dart:479`) é síncrono e no mesmo isolate. Um corpo que começa com `[` cai no ramo JSON (`:354-356`), e é o que o teste usa.
+**The network test serves JSON, not HTML.** `_fetchFromUrl` sends HTML to `compute(_parseHtmlIsolate, ...)`, which spins up a real isolate; the JSON branch (`_parseJsonListing`, `catalog_service.dart:479`) is synchronous and in the same isolate. A body that starts with `[` falls into the JSON branch (`:354-356`), and that is what the test uses.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/catalog_addons_test.dart`:
+Create `test/catalog_addons_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -4339,104 +4288,98 @@ import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 
-typedef _Espiao = ({String url, List<Map<String, String?>> vistos});
+typedef _Spy = ({String url, List<Map<String, String?>> seen});
 
-/// Um servidor local que grava os cabeçalhos que recebeu e responde [corpo].
-Future<_Espiao> _servidor(String corpo, {int status = 200}) async {
-  final servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  addTearDown(() => servidor.close(force: true));
-  final vistos = <Map<String, String?>>[];
-  servidor.listen((req) async {
-    vistos.add({
+/// A local server that records the headers it received and answers [body].
+Future<_Spy> _server(String body, {int status = 200}) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  addTearDown(() => server.close(force: true));
+  final seen = <Map<String, String?>>[];
+  server.listen((req) async {
+    seen.add({
       'authorization': req.headers.value('authorization'),
       'cookie': req.headers.value('cookie'),
     });
     req.response.statusCode = status;
-    req.response.write(corpo);
+    req.response.write(body);
     await req.response.close();
   });
-  return (url: 'http://${servidor.address.address}:${servidor.port}/', vistos: vistos);
+  return (url: 'http://${server.address.address}:${server.port}/', seen: seen);
 }
 
-String _listagem(List<String> nomes) => jsonEncode([
-      for (final nome in nomes) {'name': nome, 'size': 1024},
+String _listing(List<String> names) => jsonEncode([
+      for (final name in names) {'name': name, 'size': 1024},
     ]);
 
-Future<AddonStore> _store(List<Addon> addons, Map<String, String> catalogos) async {
+Future<AddonStore> _store(List<Addon> addons, Map<String, String> catalogs) async {
   SharedPreferences.setMockInitialValues({});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('catalog_addons_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
+  final root = await Directory.systemTemp.createTemp('catalog_addons_test');
+  addTearDown(() => root.delete(recursive: true));
+  final store = AddonStore(await SharedPreferences.getInstance(), root);
   await store.save(addons);
-  for (final entrada in catalogos.entries) {
-    await store.writeCatalog(entrada.key, entrada.value);
+  for (final entry in catalogs.entries) {
+    await store.writeCatalog(entry.key, entry.value);
   }
   return store;
 }
 
-String _catalogo(String nomeDoConsole, String url, {Map<String, dynamic>? auth}) => jsonEncode([
-      {'name': nomeDoConsole, 'url': url, 'file_format': ['.zip'], if (auth != null) 'auth': auth},
+String _catalog(String consoleName, String url, {Map<String, dynamic>? auth}) => jsonEncode([
+      {'name': consoleName, 'url': url, 'file_format': ['.zip'], if (auth != null) 'auth': auth},
     ]);
 
 void main() {
-  // Sem `TestWidgetsFlutterBinding.ensureInitialized()` de propósito, e não é
-  // esquecimento: o binding instala um `HttpOverrides` que devolve 400 em toda
-  // requisição, e o grupo `fetchSources` fala com um `HttpServer` de verdade em
-  // loopback. Os outros cinco arquivos que usam `setMockInitialValues` chamam o
-  // binding, mas nenhum deles precisa: `setMockInitialValues` só troca
-  // `SharedPreferencesStorePlatform.instance` por um store em memória
-  // (`shared_preferences_legacy.dart:279`), sem passar pelo binary messenger.
-  // `tinfoil_server_proxy_test.dart`, o outro arquivo da suíte que sobe um
-  // `HttpServer`, também não chama binding nenhum.
+  // No `TestWidgetsFlutterBinding.ensureInitialized()` on purpose: the binding
+  // installs an `HttpOverrides` that returns 400 for every request, and
+  // `fetchSources` talks to a real loopback `HttpServer`.
 
   group('buildCatalog', () {
-    test('dois addons com arquivo entram os dois, na ordem da lista', () async {
+    test('two addons with a file both enter, in list order', () async {
       final store = await _store(
-        const [Addon(id: 'um', name: 'Um'), Addon(id: 'dois', name: 'Dois')],
+        const [Addon(id: 'one', name: 'One'), Addon(id: 'two', name: 'Two')],
         {
-          'um': _catalogo('SNES', 'https://um/'),
-          'dois': _catalogo('SNES', 'https://dois/'),
+          'one': _catalog('SNES', 'https://one/'),
+          'two': _catalog('SNES', 'https://two/'),
         },
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.consoles['snes']!.urls, ['https://um/', 'https://dois/']);
-      expect(merged.sources['snes']!.map((f) => f.addonId), ['um', 'dois']);
+      expect(merged.consoles['snes']!.urls, ['https://one/', 'https://two/']);
+      expect(merged.sources['snes']!.map((f) => f.addonId), ['one', 'two']);
     });
 
-    test('addon sem arquivo não entra e não derruba os outros', () async {
+    test('addon with no catalog file is skipped without affecting others', () async {
       final store = await _store(
-        const [Addon(id: 'fantasma', name: 'Fantasma'), Addon(id: 'um', name: 'Um')],
-        {'um': _catalogo('SNES', 'https://um/')},
+        const [Addon(id: 'ghost', name: 'Ghost'), Addon(id: 'one', name: 'One')],
+        {'one': _catalog('SNES', 'https://one/')},
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.sources['snes']!.single.addonId, 'um');
+      expect(merged.sources['snes']!.single.addonId, 'one');
     });
 
-    test('catálogo ilegível de um addon não derruba os outros', () async {
+    test('unreadable catalog from one addon does not affect others', () async {
       final store = await _store(
-        const [Addon(id: 'quebrado', name: 'Quebrado'), Addon(id: 'um', name: 'Um')],
-        {'quebrado': 'isto não é json', 'um': _catalogo('SNES', 'https://um/')},
+        const [Addon(id: 'broken', name: 'Broken'), Addon(id: 'one', name: 'One')],
+        {'broken': 'this is not json', 'one': _catalog('SNES', 'https://one/')},
       );
       final merged = await CatalogService().buildCatalog(store);
       expect(merged.consoles.keys, ['snes']);
-      expect(merged.sources['snes']!.single.addonId, 'um');
+      expect(merged.sources['snes']!.single.addonId, 'one');
     });
 
-    test('a auth de cada fonte é a do addon que declarou o console', () async {
+    test('each source auth comes from the addon that declared the console', () async {
       final store = await _store(
-        const [Addon(id: 'um', name: 'Um'), Addon(id: 'dois', name: 'Dois')],
+        const [Addon(id: 'one', name: 'One'), Addon(id: 'two', name: 'Two')],
         {
-          'um': _catalogo('SNES', 'https://um/', auth: {'auth_message': 'cole o token'}),
-          'dois': _catalogo('SNES', 'https://dois/', auth: {'cookies': true}),
+          'one': _catalog('SNES', 'https://one/', auth: {'auth_message': 'paste the token'}),
+          'two': _catalog('SNES', 'https://two/', auth: {'cookies': true}),
         },
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.sources['snes']![0].auth!['auth_message'], 'cole o token');
+      expect(merged.sources['snes']![0].auth!['auth_message'], 'paste the token');
       expect(merged.sources['snes']![1].auth!['cookies'], true);
     });
 
-    test('lista de addons vazia dá catálogo vazio', () async {
+    test('empty addon list yields empty catalog', () async {
       final store = await _store(const [], const {});
       final merged = await CatalogService().buildCatalog(store);
       expect(merged.isEmpty, isTrue);
@@ -4446,9 +4389,9 @@ void main() {
   group('fetchSources', () {
     const console = Console(id: 'snes', name: 'SNES', urls: [], fileFormat: ['.zip']);
 
-    test('cada fonte é buscada com a auth do SEU addon', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
-      final b = await _servidor(_listagem(['B (USA).zip']));
+    test('each source is fetched with its own addon auth', () async {
+      final a = await _server(_listing(['A (USA).zip']));
+      final b = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
@@ -4456,67 +4399,67 @@ void main() {
         client,
         console,
         [
-          ConsoleSource(addonId: 'um', url: a.url, auth: const {'auth_message': 'cole'}),
-          ConsoleSource(addonId: 'dois', url: b.url, auth: const {'cookies': true, 'cookie_name': 'sessao'}),
+          ConsoleSource(addonId: 'one', url: a.url, auth: const {'auth_message': 'paste'}),
+          ConsoleSource(addonId: 'two', url: b.url, auth: const {'cookies': true, 'cookie_name': 'session'}),
         ],
-        tokens: const {'um': 'tok-um', 'dois': 'tok-dois'},
+        tokens: const {'one': 'tok-one', 'two': 'tok-two'},
       );
 
-      expect(a.vistos.single['authorization'], 'Bearer tok-um');
-      expect(a.vistos.single['cookie'], isNull);
-      expect(b.vistos.single['cookie'], 'sessao=tok-dois');
-      expect(b.vistos.single['authorization'], isNull);
+      expect(a.seen.single['authorization'], 'Bearer tok-one');
+      expect(a.seen.single['cookie'], isNull);
+      expect(b.seen.single['cookie'], 'session=tok-two');
+      expect(b.seen.single['authorization'], isNull);
     });
 
-    test('os jogos voltam marcados com o addon que os serviu', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
-      final b = await _servidor(_listagem(['B (USA).zip']));
+    test('games are tagged with the addon that served them', () async {
+      final a = await _server(_listing(['A (USA).zip']));
+      final b = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
-      final jogos = await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'um', url: a.url),
-        ConsoleSource(addonId: 'dois', url: b.url),
+      final games = await CatalogService().fetchSources(client, console, [
+        ConsoleSource(addonId: 'one', url: a.url),
+        ConsoleSource(addonId: 'two', url: b.url),
       ]);
 
-      final porTitulo = {for (final jogo in jogos) jogo.title: jogo.sourceId};
-      expect(porTitulo, {'A (USA).zip': 'um', 'B (USA).zip': 'dois'});
+      final byTitle = {for (final game in games) game.title: game.sourceId};
+      expect(byTitle, {'A (USA).zip': 'one', 'B (USA).zip': 'two'});
     });
 
-    test('sem token para o addon, nenhum cabeçalho de auth é mandado', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
+    test('no token for the addon means no auth header is sent', () async {
+      final a = await _server(_listing(['A (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
       await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'um', url: a.url, auth: const {'auth_message': 'cole'}),
+        ConsoleSource(addonId: 'one', url: a.url, auth: const {'auth_message': 'paste'}),
       ]);
 
-      expect(a.vistos.single['authorization'], isNull);
+      expect(a.seen.single['authorization'], isNull);
     });
 
-    test('uma fonte que falha não impede a outra de entregar', () async {
-      final ruim = await _servidor('erro', status: 500);
-      final boa = await _servidor(_listagem(['B (USA).zip']));
+    test('one failing source does not prevent the other from delivering', () async {
+      final bad = await _server('error', status: 500);
+      final good = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
-      final jogos = await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'ruim', url: ruim.url),
-        ConsoleSource(addonId: 'boa', url: boa.url),
+      final games = await CatalogService().fetchSources(client, console, [
+        ConsoleSource(addonId: 'bad', url: bad.url),
+        ConsoleSource(addonId: 'good', url: good.url),
       ]);
 
-      expect(jogos.map((j) => j.title), ['B (USA).zip']);
-      expect(jogos.single.sourceId, 'boa');
+      expect(games.map((j) => j.title), ['B (USA).zip']);
+      expect(games.single.sourceId, 'good');
     });
 
-    test('todas as fontes falhando propaga o erro', () async {
-      final ruim = await _servidor('erro', status: 500);
+    test('all sources failing propagates the error', () async {
+      final bad = await _server('error', status: 500);
       final client = HttpClient();
       addTearDown(client.close);
 
       expect(
-        () => CatalogService().fetchSources(client, console, [ConsoleSource(addonId: 'ruim', url: ruim.url)]),
+        () => CatalogService().fetchSources(client, console, [ConsoleSource(addonId: 'bad', url: bad.url)]),
         throwsA(isA<Exception>()),
       );
     });
@@ -4524,17 +4467,17 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/catalog_addons_test.dart
 ```
 
-Esperado: falha de compilação, `The method 'buildCatalog' isn't defined for the type 'CatalogService'`.
+Expected: a compilation error, `The method 'buildCatalog' isn't defined for the type 'CatalogService'`.
 
-- [ ] **Step 3: Troque o cache e a leitura do catálogo**
+- [ ] **Step 3: Swap the cache and the catalog read**
 
-Em `lib/services/catalog_service.dart`, acrescente aos imports:
+In `lib/services/catalog_service.dart`, add to the imports:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
@@ -4542,32 +4485,32 @@ import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 ```
 
-Troque o campo estático da linha 17
+Swap the static field on line 17
 
 ```dart
   static final Map<String, Map<String, Console>> _consolesCache = {};
 ```
 
-por
+for
 
 ```dart
-  /// O catálogo fundido de todos os addons instalados. Um só, porque a lista
-  /// de addons é uma só. Invalidado por `clearCache`, que toda escrita de
-  /// catálogo chama.
+  /// The merged catalog of all installed addons. A single one, because the
+  /// addon list is a single one. Invalidated by `clearCache`, which every
+  /// catalog write calls.
   static MergedCatalog? _merged;
 ```
 
-e substitua `getConsoles` (linhas 20-48) por:
+and replace `getConsoles` (lines 20-48) with:
 
 ```dart
-  /// Os consoles de todos os addons instalados, fundidos.
+  /// The consoles of all installed addons, merged.
   ///
-  /// O parâmetro `consolesFilePath` que este método tinha nunca foi usado com
-  /// valor diferente do padrão pelos nove chamadores, e não sobreviveria à
-  /// lista de addons, onde não existe "o arquivo".
+  /// The `consolesFilePath` parameter this method had was never used with a
+  /// value different from the default by the nine callers, and would not survive
+  /// the addon list, where there is no "the file".
   Future<Map<String, Console>> getConsoles() async => (await mergedCatalog()).consoles;
 
-  /// De onde vem cada url de um console, na mesma ordem de `console.urls`.
+  /// Where each url of a console comes from, in the same order as `console.urls`.
   Future<List<ConsoleSource>> sourcesFor(String consoleId) async => (await mergedCatalog()).sources[consoleId] ?? const [];
 
   Future<MergedCatalog> mergedCatalog() async {
@@ -4581,34 +4524,33 @@ e substitua `getConsoles` (linhas 20-48) por:
     }
   }
 
-  /// Lê e funde os catálogos dos addons de [store].
+  /// Reads and merges the catalogs of the addons of [store].
   ///
-  /// Público porque `AddonStore.open()` passa por `path_provider`, que num
-  /// teste sem plataforma lança `MissingPluginException`. Com o store entrando
-  /// por parâmetro, o teste monta uma raiz em `Directory.systemTemp` e
-  /// exercita disco de verdade.
+  /// Public because `AddonStore.open()` goes through `path_provider`, which in a
+  /// test with no platform throws `MissingPluginException`. With the store
+  /// entering via a parameter, the test builds a root in `Directory.systemTemp`
+  /// and exercises real disk.
   Future<MergedCatalog> buildCatalog(AddonStore store) async {
-    final catalogos = <AddonCatalog>[];
+    final catalogs = <AddonCatalog>[];
     for (final addon in store.load()) {
-      final cru = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
-      if (cru == null) continue;
+      final raw = await store.readCatalog(addon.id) ?? await _bundledCatalog(addon.id);
+      if (raw == null) continue;
       try {
-        catalogos.add((addonId: addon.id, consoles: _parseConsoles(cru)));
+        catalogs.add((addonId: addon.id, consoles: parseConsoles(raw)));
       } catch (e) {
-        // Um addon com JSON quebrado não pode derrubar os outros: o usuário
-        // perderia a biblioteca inteira por causa de uma fonte de terceiro.
-        debugPrint('Catálogo ilegível do addon ${addon.id}: $e');
+        // One addon's broken JSON must not take the others down.
+        debugPrint('Unreadable catalog for addon ${addon.id}: $e');
       }
     }
-    final merged = mergeCatalogs(catalogos);
+    final merged = mergeCatalogs(catalogs);
     if (!merged.isEmpty) _merged = merged;
     return merged;
   }
 
-  /// O catálogo de exemplo empacotado no app (`assets/catalog/`, git-ignored).
+  /// The example catalog bundled in the app (`assets/catalog/`, git-ignored).
   ///
-  /// Só o embutido tem um, e é a terceira e última precedência dele: arquivo
-  /// do usuário, asset, nada. É a mesma precedência de antes da fatia 4.
+  /// Only the builtin has one, and it is its third and last precedence: user
+  /// file, asset, nothing. It is the same precedence as before slice 4.
   static Future<String?> _bundledCatalog(String addonId) async {
     if (addonId != kBuiltinAddonId) return null;
     try {
@@ -4618,11 +4560,11 @@ e substitua `getConsoles` (linhas 20-48) por:
     }
   }
 
-  /// Esquece o catálogo fundido. Toda escrita de catálogo chama.
+  /// Forgets the merged catalog. Every catalog write calls it.
   static void clearCache() => _merged = null;
 ```
 
-Troque `consoleByIdSync` (linhas 52-59) por:
+Swap `consoleByIdSync` (lines 52-59) for:
 
 ```dart
   static Console? consoleByIdSync(String? id) {
@@ -4631,13 +4573,13 @@ Troque `consoleByIdSync` (linhas 52-59) por:
   }
 ```
 
-E troque as três chamadas de `_consolesCache.clear()` (`setCatalogFromJson`, `addConsole`, `resetCatalog`) por `clearCache()`.
+And swap the three `_consolesCache.clear()` calls (`setCatalogFromJson`, `addConsole`, `resetCatalog`) for `clearCache()`.
 
-Nota de escopo: `setCatalogFromJson`, `addConsole` e `resetCatalog` continuam escrevendo em `config/consoles.json` via `_userConsolesFile()`, que não muda. Esse é exatamente o arquivo do addon embutido (`AddonStore.catalogFile`), então instalar catálogo pela tela de Ferramentas continua atualizando o embutido. A instalação como addon **novo** é a Task 21.
+Scope note: `setCatalogFromJson`, `addConsole` and `resetCatalog` keep writing to `config/consoles.json` via `_userConsolesFile()`, which does not change. That is exactly the embedded addon's file (`AddonStore.catalogFile`), so installing a catalog from the Tools screen keeps updating the builtin. Installing as a **new** addon is Task 21.
 
-- [ ] **Step 4: Troque a busca para iterar fontes**
+- [ ] **Step 4: Swap the fetch to iterate over sources**
 
-Ainda em `lib/services/catalog_service.dart`, substitua `loadCatalog` (linhas 195-228) e `_fetchCatalog` (230-274) por:
+Still in `lib/services/catalog_service.dart`, replace `loadCatalog` (lines 195-228) and `_fetchCatalog` (230-274) with:
 
 ```dart
   Future<List<Game>> loadCatalog(String consoleId,
@@ -4704,17 +4646,11 @@ Ainda em `lib/services/catalog_service.dart`, substitua `loadCatalog` (linhas 19
     return catalog;
   }
 
-  /// Busca todas as [sources] em paralelo e devolve os jogos de todas, cada um
-  /// já marcado com o addon que o serviu, ordenados por título.
+  /// Fetches all [sources] in parallel and returns all their games, each tagged
+  /// with the addon that served it, sorted by title.
   ///
-  /// Público e sem disco por uma razão de teste: `_fetchCatalog` grava o cache
-  /// por `getApplicationCacheDirectory`, que é `path_provider`, e num teste sem
-  /// plataforma lança. Aqui entra um `HttpClient` e sai uma lista.
-  ///
-  /// Cada fonte fala com a auth do addon que a declarou e com o token daquele
-  /// addon (`tokens[addonId]`). Antes da fatia 4 era uma auth e um token para
-  /// todas as urls do console, o que, com dois addons, mandaria o token do
-  /// primeiro para o servidor do segundo.
+  /// Each source speaks with the auth and token of the addon that declared it
+  /// (`tokens[addonId]`), so one addon's token never reaches another's server.
   Future<List<Game>> fetchSources(HttpClient client, Console console, List<ConsoleSource> sources,
       {String? iaAccessKey,
       String? iaSecretKey,
@@ -4731,8 +4667,8 @@ Ainda em `lib/services/catalog_service.dart`, substitua `loadCatalog` (linhas 19
             onProgress?.call(++done, total);
             return games;
           }).catchError((Object e) {
-            // Mantém o resultado parcial quando só algumas páginas falham;
-            // o erro só sobe quando nenhuma entregou nada (ex.: auth exigida).
+            // Keep the partial result when only some pages fail; the error
+            // rises only when none delivered anything.
             firstError ??= e;
             onProgress?.call(++done, total);
             return <Game>[];
@@ -4746,7 +4682,7 @@ Ainda em `lib/services/catalog_service.dart`, substitua `loadCatalog` (linhas 19
   }
 ```
 
-E troque `_fetchFromUrl` e `_fetchFromUrlIA` (linhas 276-321) para receberem a fonte em vez da url solta:
+Replace `_fetchFromUrl` and `_fetchFromUrlIA` (lines 276-321) so they receive the source instead of the bare url:
 
 ```dart
   Future<List<Game>> _fetchFromUrl(HttpClient client, ConsoleSource source, Console console,
@@ -4757,8 +4693,8 @@ E troque `_fetchFromUrl` e `_fetchFromUrlIA` (linhas 276-321) para receberem a f
     }
 
     final request = await client.getUrl(Uri.parse(url));
-    // `source.auth` e não `console.auth`: a auth pertence à url, não ao
-    // console, porque dois addons podem servir o mesmo console.
+    // `source.auth`, not `console.auth`: auth belongs to the url, since two
+    // addons can serve the same console.
     final headers = buildDownloadHeaders(url, buildConsoleAuthHeaders(source.auth, tokenOverride: authToken));
     headers.forEach(request.headers.set);
 
@@ -4802,129 +4738,87 @@ E troque `_fetchFromUrl` e `_fetchFromUrlIA` (linhas 276-321) para receberem a f
   }
 ```
 
-**Tropeço provável:** deixar `console.auth` em `_fetchFromUrlIA` ao trocar só o `_fetchFromUrl`. A auth de IA S3 é lida por outro caminho (`auth['type'] == 'ia_s3'`, `catalog_service.dart:368-369`), e o grep por `buildConsoleAuthHeaders` não acha esse trecho. O critério é: **dentro de `_fetchFromUrl` e `_fetchFromUrlIA` não pode sobrar nenhuma leitura de `console.auth`.** Confira:
+**Likely pitfall:** leaving `console.auth` in `_fetchFromUrlIA` when only `_fetchFromUrl` is swapped. IA S3 auth is read through a different path (`auth['type'] == 'ia_s3'`, `catalog_service.dart:368-369`), and a grep for `buildConsoleAuthHeaders` misses that section. The criterion: **inside `_fetchFromUrl` and `_fetchFromUrlIA`, no remaining reads of `console.auth`.** Verify:
 
 ```bash
 grep -n "console.auth" lib/services/catalog_service.dart
 ```
 
-Esperado: nada.
+Expected: nothing.
 
-- [ ] **Step 5: Acerte os dois chamadores que passavam `authToken`**
+- [ ] **Step 5: Fix the two callers that passed `authToken`**
 
-`loadCatalog` perdeu o parâmetro `authToken` e ganhou `tokens`, e **dois arquivos ainda passam o antigo**: `lib/providers/tinfoil_server_provider.dart:69` e `lib/providers/fbi_server_provider.dart:95`, os dois com a mesma linha
+`loadCatalog` lost the `authToken` parameter and gained `tokens`, and **two files still pass the old one**: `lib/providers/tinfoil_server_provider.dart:69` and `lib/providers/fbi_server_provider.dart:95`, both with the same line
 
 ```dart
           authToken: settings.consoleSettings[console.id]?.authToken,
 ```
 
-Isso é erro de compilação, não aviso: sem este Step o `flutter test` do Step 7 nem chega a rodar. Nos dois arquivos, troque a linha por
+This is a compilation error, not a warning: without this Step the `flutter test` of Step 7 does not even get to run. In both files, replace the line with
 
 ```dart
-          // Só o embutido. Ver a limitação escrita no doc de `_authHeaders`,
-          // logo abaixo neste mesmo arquivo.
-          tokens: _tokensDoEmbutido(settings, console.id),
+          tokens: _builtinTokens(settings, console.id),
 ```
 
-e acrescente, nos dois, os imports
+and add the following imports to both files
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/models/settings_model.dart';
 ```
 
-O de `settings_model.dart` é obrigatório e fácil de esquecer: nenhum dos dois arquivos o importa hoje, eles chegam em `settings.consoleSettings` pelo tipo inferido de `_ref.read(settingsProvider)`, e **não existe um único `export` em `lib/`**, então escrever `AppSettings` na assinatura sem o import é erro de compilação.
+The `settings_model.dart` import is mandatory and easy to forget: neither file imports it today; they reach `settings.consoleSettings` through the inferred type of `_ref.read(settingsProvider)`, and **there is not a single `export` in `lib/`**, so writing `AppSettings` in the signature without the import is a compilation error.
 
-Depois, o método privado. Ele vai nos **dois** arquivos, mas o parágrafo do meio do doc **não é o mesmo nos dois**, porque o mecanismo não é o mesmo. Conferido agora: `TinfoilServerService.start` recebe `authHeaders` como `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`) e o provider o passa em `:121`; `FbiServerService.start` não recebe `authHeaders` nenhum, leva só `port` e `cacheDir` (`fbi_server_service.dart:72`). Copiar a frase do Tinfoil para o FBI põe uma afirmação falsa sobre uma assinatura, que é o tipo de doc que ninguém desconfia depois. Em `lib/providers/tinfoil_server_provider.dart`:
+Then, the private method. It goes in **both** files, but the middle paragraph of the doc **is not the same in both**, because the mechanism is not the same. Verified: `TinfoilServerService.start` receives `authHeaders` as `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`) and the provider passes it at `:121`; `FbiServerService.start` receives no `authHeaders` at all, taking only `port` and `cacheDir` (`fbi_server_service.dart:72`). Copying the Tinfoil paragraph to the FBI file puts a false claim about a signature, the kind of doc that nobody questions later. In `lib/providers/tinfoil_server_provider.dart`:
 
 ```dart
-  /// O token do addon embutido para este console, no formato que
-  /// `loadCatalog` espera.
+  /// The builtin addon's token for this console, in the shape `loadCatalog`
+  /// expects.
   ///
-  /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
-  /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
-  /// A razão é o `_authHeaders` daqui: ele é síncrono, porque
-  /// `TinfoilServerService.start` o recebe como
-  /// `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`),
-  /// e só tem um `Console` em mãos, sem o `Game` que diria de qual addon o
-  /// arquivo veio. Ler o cofre de lá exigiria mudar o contrato
-  /// do servidor HTTP, que não é assunto desta fatia. Consequência honesta:
-  /// um console servido por um addon de terceiro com auth aparece na listagem
-  /// do Tinfoil e falha ao baixar. O caminho normal do app, que é a grade e o
-  /// download pelo `download_provider`, usa o token certo por addon.
-  ///
-  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
-  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
-  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
-  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
-  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
-  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
-  Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
+  /// The LAN servers only serve the builtin addon's credential, so a console
+  /// served by a third-party addon with auth lists here but fails to download.
+  Map<String, String> _builtinTokens(AppSettings settings, String consoleId) {
     final token = settings.consoleSettings[consoleId]?.authToken ?? '';
     return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
 ```
 
-**Não requebre a linha do `Map<String, String> Function(Console)`.** Ela cabe inteira numa linha de doc de propósito: com o tipo partido em duas, o span de crase fica aberto no fim da primeira e o `unintended_html_in_doc_comment` acusa o `<String,` como HTML. Medido: com a quebra só no Tinfoil, o analyze deu **23**. O lint é um `info` por ocorrência, então o bloco quebrado colado nos dois providers dá 24; esse 24 eu não rodei, é aritmética. É o único motivo da citação `tinfoil_server_service.dart:80` estar ali dentro, a reboque, em vez de na prosa.
+**Do not break the `Map<String, String> Function(Console)` line.** It fits on one line on purpose: split across two, the backtick span is left open at the end of the first line and `unintended_html_in_doc_comment` flags `<String,` as HTML. Measured: with the break only in Tinfoil, analyze returned **23**. The lint is one `info` per occurrence, so the broken block pasted into both providers gives 24; that 24 was not run, it is arithmetic. It is the only reason the `tinfoil_server_service.dart:80` citation appears inside the doc comment rather than in prose.
 
-E em `lib/providers/fbi_server_provider.dart`, o mesmo método com o parágrafo do meio trocado:
+And in `lib/providers/fbi_server_provider.dart`, the same method with the middle paragraph replaced:
 
 ```dart
-  /// O token do addon embutido para este console, no formato que
-  /// `loadCatalog` espera.
+  /// The builtin addon's token for this console, in the shape `loadCatalog`
+  /// expects.
   ///
-  /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
-  /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
-  /// A razão aqui **não é a mesma do Tinfoil**, e por isso está escrita por
-  /// extenso em vez de copiada de lá. `FbiServerService.start` não recebe
-  /// `authHeaders` nenhum: leva só `port` e `cacheDir`. Quem chama
-  /// `_authHeaders` é o `prepareCatalog` (linha 214), e ele **tem** o `Game`
-  /// em mãos, porque `FbiGame` é `({Game game, Console console})`. O que falta
-  /// aqui é só que `_authHeaders` é síncrono e a leitura do cofre é assíncrona.
-  /// Ou seja: a limitação do FBI é mais estreita e mais barata de levantar que
-  /// a do Tinfoil, onde o `Console` é mesmo tudo o que existe. Levantar
-  /// qualquer uma das duas não é desta Task. Consequência honesta, e essa é
-  /// igual nos dois: um console servido por um addon de terceiro com auth
-  /// aparece na listagem do FBI e falha ao baixar. O caminho normal do app,
-  /// que é a grade e o download pelo `download_provider`, usa o token certo
-  /// por addon.
-  ///
-  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
-  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
-  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
-  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
-  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
-  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
-  Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
+  /// The LAN servers only serve the builtin addon's credential, so a console
+  /// served by a third-party addon with auth lists here but fails to download.
+  Map<String, String> _builtinTokens(AppSettings settings, String consoleId) {
     final token = settings.consoleSettings[consoleId]?.authToken ?? '';
     return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
 ```
 
-O `settings.consoleSettings[...].authToken` é o espelho do embutido, e continua sendo exatamente o que estas duas linhas liam antes. O comportamento de hoje fica idêntico; o que muda é que ele para de vazar para os outros addons.
+`settings.consoleSettings[...].authToken` mirrors the builtin, and is exactly what these two lines read before. Today's behavior stays identical; what changes is that it stops leaking to other addons.
 
-**Não procure os outros dois chamadores neste Step.** `lib/providers/jdkv_server_provider.dart:96` e `lib/services/sports_rom_lookup.dart:41` também chamam `loadCatalog`, mas passam só o id: nunca passaram `authToken` e por isso não quebram na troca de assinatura. Um console com auth já falhava por lá antes desta fatia e continua falhando igual. Isso é dívida anterior, está escrito no doc de `_tokensDoEmbutido` para não sumir, e não é desta Task consertar.
+**Do not look for the other two callers in this Step.** `lib/providers/jdkv_server_provider.dart:96` and `lib/services/sports_rom_lookup.dart:41` also call `loadCatalog`, but pass only the id: they never passed `authToken`, so they do not break on the signature change. A console with auth already failed there before this slice and continues failing the same way. That is prior debt, documented in the `_builtinTokens` doc so it does not disappear, and it is not this Task to fix.
 
-- [ ] **Step 6: Ligue o provider ao cofre**
+- [ ] **Step 6: Wire the provider to the vault**
 
-Em `lib/providers/catalog_provider.dart`, acrescente aos imports:
+In `lib/providers/catalog_provider.dart`, add to the imports:
 
 ```dart
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 ```
 
-e troque o bloco das linhas 57-68 por:
+and replace the block at lines 57-68 with:
 
 ```dart
       final settings = _ref.read(settingsProvider);
-      // Um token por addon que serve este console, não um token por console.
-      // A lista de addons não entra aqui: quem sabe quais addons servem este
-      // console é a fusão, e ler só esses evita ida ao cofre por addon que
-      // não tem nada a ver com o console aberto.
       final vault = (await _ref.read(vaultProvider.future)).vault;
       final tokens = <String, String>{};
-      for (final addonId in {for (final fonte in await catalogService.sourcesFor(console.id)) fonte.addonId}) {
+      for (final addonId in {for (final source in await catalogService.sourcesFor(console.id)) source.addonId}) {
         final token = await vault.read(SecretRef.addonToken(addonId, console.id));
         if (token != null && token.isNotEmpty) tokens[addonId] = token;
       }
@@ -4942,30 +4836,30 @@ e troque o bloco das linhas 57-68 por:
       );
 ```
 
-- [ ] **Step 7: Rode para ver passar**
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/catalog_addons_test.dart
 ```
 
-Esperado: `+10`, zero falha.
+Expected: `+10`, zero failures.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+484`, zero falha. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart` e `test/catalog_add_console_test.dart` encostam em `CatalogService`: se algum quebrar por assinatura, o conserto é acompanhar a assinatura nova, nunca reintroduzir o parâmetro `authToken`.
+Expected: `+484`, zero failures. `test/catalog_selection_test.dart`, `test/add_catalog_source_screen_test.dart`, and `test/catalog_add_console_test.dart` touch `CatalogService`: if any break on the signature, the fix is to follow the new signature, never to reintroduce the `authToken` parameter.
 
-- [ ] **Step 9: Analise e compile**
+- [ ] **Step 9: Analyze and compile**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 10: Commit**
 
@@ -4976,20 +4870,20 @@ git add lib/services/catalog_service.dart lib/providers/catalog_provider.dart li
 git commit -m "feat(addon): catalogo lido de N addons, cada fonte com a auth e o token do seu"
 ```
 
-### Task 14: `addonProvider` e a prioridade derivada
+### Task 14: `addonProvider` and the derived priority
 
 **Files:**
 - Create: `lib/providers/addon_provider.dart`
-- Modify: `lib/services/catalog_service.dart` (ganha `invalidateForAddonChange`)
+- Modify: `lib/services/catalog_service.dart` (gains `invalidateForAddonChange`)
 - Test: `test/addon_provider_test.dart`
 
-O provider é fino de propósito: ele guarda a lista, persiste toda mudança e deriva a prioridade. As regras de lista já são funções puras da Task 9, e o disco já é o store da Task 11.
+The provider is thin by design: it holds the list, persists every change, and derives the priority. The list rules are already pure functions from Task 9, and the disk is already the store from Task 11.
 
-A única coisa não óbvia é **a ordem da invalidação**. Quando a lista muda, duas coisas ficam velhas: os arquivos de cache de jogo de cada console (`catalog_<id>.json`) e a fusão de catálogos em memória. `clearCatalogCache()` varre os caches de jogo iterando `getConsoles()`, ou seja, ela **precisa do catálogo antigo** para saber quais arquivos apagar. Se a fusão for esquecida primeiro, a varredura roda com a lista nova e deixa para trás o cache de um console que só o addon removido servia, e esse cache continuaria alimentando a grade.
+The one non-obvious thing is **the invalidation order**. When the list changes, two things go stale: the per-console game cache files (`catalog_<id>.json`) and the in-memory catalog merge. `clearCatalogCache()` sweeps the game caches by iterating `getConsoles()`, meaning it **needs the old catalog** to know which files to delete. If the merge is cleared first, the sweep runs with the new list and leaves behind the cache for a console that only the removed addon served, and that cache would keep feeding the grid.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/addon_provider_test.dart`:
+Create `test/addon_provider_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -5004,136 +4898,132 @@ import 'package:roms_downloader/services/addon_store.dart';
 Future<AddonStore> _store(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('addon_provider_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
+  final root = await Directory.systemTemp.createTemp('addon_provider_test');
+  addTearDown(() => root.delete(recursive: true));
+  final store = AddonStore(await SharedPreferences.getInstance(), root);
   await store.save(addons);
   return store;
 }
 
-/// Devolve o container já com a lista inicial carregada, mais o store e o
-/// contador de invalidações.
-///
-/// No topo do arquivo, e não dentro de `main`, por causa do lint
-/// `no_leading_underscores_for_local_identifiers`, que vem ligado no
-/// `flutter_lints` e vale para função local. `addTearDown` continua legal aqui
-/// porque quem chama é sempre um corpo de teste.
-Future<({ProviderContainer container, AddonStore store, List<int> invalidacoes})> _montar(List<Addon> iniciais) async {
-  final store = await _store(iniciais);
-  final invalidacoes = <int>[];
+/// Returns the container with the initial list loaded, plus the store and the
+/// invalidation counter. At the top of the file, not inside `main`, to satisfy
+/// `no_leading_underscores_for_local_identifiers`.
+Future<({ProviderContainer container, AddonStore store, List<int> invalidations})> _build(List<Addon> initial) async {
+  final store = await _store(initial);
+  final invalidations = <int>[];
   final container = ProviderContainer(overrides: [
     addonProvider.overrideWith((ref) => AddonNotifier(
           Future.value(store),
-          invalidarCache: () async => invalidacoes.add(1),
+          invalidateCache: () async => invalidations.add(1),
         )),
   ]);
   addTearDown(container.dispose);
   await container.read(addonProvider.notifier).ready;
-  return (container: container, store: store, invalidacoes: invalidacoes);
+  return (container: container, store: store, invalidations: invalidations);
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('carrega a lista do store no boot', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+  test('loads the store list on boot', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
     expect(m.container.read(addonProvider).map((x) => x.id), ['a', 'b']);
   });
 
-  test('install acrescenta no fim e persiste', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A')]);
+  test('install appends at the end and persists', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A')]);
     await m.container.read(addonProvider.notifier).install(const Addon(id: 'b', name: 'B'), '[]');
     expect(m.container.read(addonProvider).map((x) => x.id), ['a', 'b']);
     expect(m.store.load().map((x) => x.id), ['a', 'b']);
   });
 
-  test('install do mesmo id substitui sem mudar a posição', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
-    await m.container.read(addonProvider.notifier).install(const Addon(id: 'a', name: 'A corrigido'), '[]');
+  test('install of the same id replaces without changing position', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+    await m.container.read(addonProvider.notifier).install(const Addon(id: 'a', name: 'A fixed'), '[]');
     expect(m.container.read(addonProvider).map((x) => x.id), ['a', 'b']);
-    expect(m.container.read(addonProvider).first.name, 'A corrigido');
+    expect(m.container.read(addonProvider).first.name, 'A fixed');
   });
 
-  test('install grava o catálogo no arquivo do addon', () async {
-    final m = await _montar(const []);
+  test('install writes the catalog to the addon file', () async {
+    final m = await _build(const []);
     await m.container.read(addonProvider.notifier).install(const Addon(id: 'a', name: 'A'), '[{"name":"SNES"}]');
     expect(await m.store.readCatalog('a'), '[{"name":"SNES"}]');
   });
 
-  test('remove tira da lista e persiste', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+  test('remove drops from the list and persists', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
     await m.container.read(addonProvider.notifier).remove('a');
     expect(m.container.read(addonProvider).map((x) => x.id), ['b']);
     expect(m.store.load().map((x) => x.id), ['b']);
   });
 
-  test('remove apaga o arquivo de catálogo do addon', () async {
-    final m = await _montar(const []);
+  test('remove deletes the addon\'s catalog file', () async {
+    final m = await _build(const []);
     final notifier = m.container.read(addonProvider.notifier);
     await notifier.install(const Addon(id: 'a', name: 'A'), '[]');
     await notifier.remove('a');
     expect(await m.store.readCatalog('a'), isNull);
   });
 
-  test('reorder aplica a semântica do ReorderableListView e persiste', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B'), Addon(id: 'c', name: 'C')]);
+  test('reorder applies ReorderableListView semantics and persists', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B'), Addon(id: 'c', name: 'C')]);
     await m.container.read(addonProvider.notifier).reorder(0, 3);
     expect(m.container.read(addonProvider).map((x) => x.id), ['b', 'c', 'a']);
     expect(m.store.load().map((x) => x.id), ['b', 'c', 'a']);
   });
 
-  test('install e remove invalidam o cache, reorder também', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+  test('install and remove invalidate the cache, and so does reorder', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
     final notifier = m.container.read(addonProvider.notifier);
     await notifier.install(const Addon(id: 'c', name: 'C'), '[]');
     await notifier.remove('a');
     await notifier.reorder(0, 2);
-    expect(m.invalidacoes.length, 3);
+    expect(m.invalidations.length, 3);
   });
 
-  test('sourcePriority devolve os ids na ordem da lista', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+  test('sourcePriority returns the ids in list order', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
     expect(m.container.read(sourcePriorityProvider), ['a', 'b']);
   });
 
-  test('sourcePriority acompanha o arrasto', () async {
-    final m = await _montar(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
+  test('sourcePriority follows the drag', () async {
+    final m = await _build(const [Addon(id: 'a', name: 'A'), Addon(id: 'b', name: 'B')]);
     await m.container.read(addonProvider.notifier).reorder(1, 0);
     expect(m.container.read(sourcePriorityProvider), ['b', 'a']);
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/addon_provider_test.dart
 ```
 
-Esperado: falha de compilação, `Target of URI doesn't exist: 'package:roms_downloader/providers/addon_provider.dart'`.
+Expected: compilation failure, `Target of URI doesn't exist: 'package:roms_downloader/providers/addon_provider.dart'`.
 
-- [ ] **Step 3: Dê ao `CatalogService` a invalidação na ordem certa**
+- [ ] **Step 3: Give `CatalogService` the invalidation in the right order**
 
-Em `lib/services/catalog_service.dart`, logo depois de `clearCatalogCache` (que fecha a classe), acrescente:
+In `lib/services/catalog_service.dart`, right after `clearCatalogCache` (which closes the class), add:
 
 ```dart
-  /// Esquece tudo que dependia da lista de addons: os arquivos de cache de
-  /// jogo de cada console **e depois** a fusão de catálogos.
+  /// Forgets everything that depended on the addon list: the per-console game
+  /// cache files **and then** the in-memory catalog merge.
   ///
-  /// A ordem não é estilo. `clearCatalogCache` descobre quais arquivos apagar
-  /// iterando `getConsoles()`, então ela precisa do catálogo **antigo**.
-  /// Invertida, a varredura rodaria com a lista nova e deixaria para trás o
-  /// cache de um console que só o addon removido servia, e esse arquivo
-  /// continuaria alimentando a grade depois da remoção.
+  /// The order is not style. `clearCatalogCache` discovers which files to
+  /// delete by iterating `getConsoles()`, so it needs the **old** catalog.
+  /// Reversed, the sweep would run with the new list and leave behind the
+  /// cache of a console only the removed addon served, and that file would
+  /// keep feeding the grid after the removal.
   Future<void> invalidateForAddonChange() async {
     await clearCatalogCache();
     clearCache();
   }
 ```
 
-- [ ] **Step 4: Escreva o provider**
+- [ ] **Step 4: Write the provider**
 
-Crie `lib/providers/addon_provider.dart`:
+Create `lib/providers/addon_provider.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5145,101 +5035,89 @@ final addonProvider = StateNotifierProvider<AddonNotifier, List<Addon>>((ref) {
   return AddonNotifier(AddonStore.open());
 });
 
-/// A ordem de prioridade das fontes, derivada da ordem da lista.
-///
-/// É o que alimenta o `sourcePriority` de `planFromEntries`
-/// (`source_pick_service.dart:54`), o último critério de desempate da seção 6
-/// do spec de UI. Derivado e não guardado: prioridade que fosse um campo
-/// próprio poderia discordar da ordem que o usuário vê na tela.
+/// Source priority order, derived from the list order.
 final sourcePriorityProvider = Provider<List<String>>((ref) => [for (final addon in ref.watch(addonProvider)) addon.id]);
 
 class AddonNotifier extends StateNotifier<List<Addon>> {
   final Future<AddonStore> _store;
 
-  /// O que esquecer quando a lista muda. Entra por parâmetro porque o padrão
-  /// passa por `path_provider`, que num teste sem plataforma lança; o teste
-  /// passa uma função que só conta quantas vezes foi chamada.
-  final Future<void> Function() _invalidarCache;
+  final Future<void> Function() _invalidateCache;
 
-  /// Resolve quando a lista inicial chegou do disco.
+  /// Resolves once the initial list has loaded from disk.
   late final Future<void> ready;
 
-  AddonNotifier(this._store, {Future<void> Function()? invalidarCache})
-      : _invalidarCache = invalidarCache ?? CatalogService().invalidateForAddonChange,
+  AddonNotifier(this._store, {Future<void> Function()? invalidateCache})
+      : _invalidateCache = invalidateCache ?? CatalogService().invalidateForAddonChange,
         super(const []) {
-    ready = _carregar();
+    ready = _load();
   }
 
-  Future<void> _carregar() async {
+  Future<void> _load() async {
     final store = await _store;
     if (!mounted) return;
     state = store.load();
   }
 
-  /// Instala, ou reinstala, um addon com o catálogo já baixado.
-  ///
-  /// Reinstalar mantém a posição (`upsertAddon`), e é por isso que corrigir a
-  /// url de uma fonte não rebaixa a prioridade dela.
-  Future<void> install(Addon addon, String catalogoJson) async {
+  /// Installs, or reinstalls, an addon with the already-fetched catalog.
+  /// Reinstalling keeps the position (`upsertAddon`).
+  Future<void> install(Addon addon, String catalogJson) async {
     final store = await _store;
-    await store.writeCatalog(addon.id, catalogoJson);
-    final nova = upsertAddon(state, addon);
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    await store.writeCatalog(addon.id, catalogJson);
+    final next = upsertAddon(state, addon);
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 
-  /// Tira o addon da lista e apaga o catálogo dele do disco.
-  ///
-  /// **Não** apaga o segredo do cofre. Reinstalar a mesma fonte tem que
-  /// reencontrar o token, e é para isso que `Addon.idFromUrl` é estável. Quem
-  /// apaga credencial é a tela de conta, por pedido explícito (Grupo 5).
+  /// Removes the addon from the list and deletes its catalog from disk.
+  /// Does not delete the vault secret: reinstalling the same source must find
+  /// the token again, which is why `Addon.idFromUrl` is stable.
   Future<void> remove(String id) async {
     final store = await _store;
     await store.deleteCatalog(id);
-    final nova = removeAddon(state, id);
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    final next = removeAddon(state, id);
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 
   Future<void> reorder(int from, int to) async {
-    final nova = reorderAddons(state, from, to);
+    final next = reorderAddons(state, from, to);
     final store = await _store;
-    await store.save(nova);
-    await _invalidarCache();
-    if (mounted) state = nova;
+    await store.save(next);
+    await _invalidateCache();
+    if (mounted) state = next;
   }
 }
 ```
 
-**Tropeço provável:** `remove` apagando também o segredo do cofre, "para limpar". Parece higiene e é perda de dado: o usuário que remove um addon para reinstalá-lo com a url corrigida teria que descobrir de novo o token. A escolha está escrita no doc do método para não ser "consertada" numa revisão.
+**Likely pitfall:** `remove` also deleting the vault secret, "for cleanliness." That looks like hygiene and is data loss: a user who removes an addon to reinstall it with a corrected URL would have to rediscover the token. The choice is written in the method doc so it does not get "fixed" in a review.
 
-**Segundo tropeço, sem teste que o pegue:** a ordem dentro de `invalidateForAddonChange`. Ela não é coberta por teste porque as duas metades passam por `path_provider`: `clearCatalogCache` chama `getApplicationCacheDirectory` e `getConsoles` chama `getApplicationSupportDirectory`, e num teste sem plataforma as duas viram no-op silencioso em vez de falhar. O que existe é o comentário no método, e é honesto dizer que essa linha é conferida por leitura, não por suíte.
+**Second pitfall, with no test to catch it:** the order inside `invalidateForAddonChange`. It is not covered by the suite because both halves go through `path_provider`: `clearCatalogCache` calls `getApplicationCacheDirectory` and `getConsoles` calls `getApplicationSupportDirectory`, and in a platform-less test both become silent no-ops instead of failing. What exists is the comment in the method, and it is honest to say that line is verified by reading, not by the suite.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_provider_test.dart
 ```
 
-Esperado: `+10`, zero falha.
+Expected: `+10`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+494`, zero falha.
+Expected: `+494`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 8: Commit**
 
@@ -5250,228 +5128,222 @@ git add lib/providers/addon_provider.dart lib/services/catalog_service.dart
 git commit -m "feat(addon): provider da lista de addons e a prioridade derivada da ordem"
 ```
 
-**Fim da Grupo 3.** O app tem N catálogos, cada um com identidade, auth e token próprios, e uma ordem que o usuário vai poder arrastar na Grupo 5. O que ainda não acontece: a grade continua dizendo que toda fonte é `kBuiltinSourceId`, e o lote continua sem receber a prioridade. É a Grupo 4.
+**End of Group 3.** The app has N catalogs, each with its own identity, auth, and token, and an order the user will be able to drag in Group 5. What still does not happen: the grid continues to report that every source is `kBuiltinSourceId`, and the batch still receives no priority. That is Group 4.
 
-| Task | Novos | Acumulado |
+| Task | New | Cumulative |
 | --- | --- | --- |
-| 8b, hidratação sem inventar config | 4 | 425 |
-| 9, modelo de addon | 15 | 440 |
-| 10, fusão de catálogos | 11 | 451 |
-| 11, persistência | 14 | 465 |
-| 11b, os dois casos da lista ordenada | 2 | 467 |
+| 8b, hydration without inventing config | 4 | 425 |
+| 9, addon model | 15 | 440 |
+| 10, catalog merge | 11 | 451 |
+| 11, persistence | 14 | 465 |
+| 11b, the two ordered list cases | 2 | 467 |
 | 12, `Game.sourceId` | 6 | 473 |
-| 12b, o campo esquecido e a porta descartada | 1 | 474 |
-| 13, catálogo de N addons | 10 | 484 |
-| 14, provider e prioridade | 10 | 494 |
+| 12b, the forgotten field and the discarded port | 1 | 474 |
+| 13, catalog from N addons | 10 | 484 |
+| 14, provider and priority | 10 | 494 |
 
 ---
 
-## Grupo 4: a fonte com identidade
+## Group 4: the source with identity
 
-A Grupo 3 deu identidade ao catálogo: cada `Console` sabe quais addons o servem, cada `Game` que sai da rede já vem carimbado com o `sourceId` de quem o serviu, e `sourcePriorityProvider` já devolve a ordem da lista. Nada disso chegou na grade nem nas telas ainda.
+Group 3 gave the catalog its identity: each `Console` knows which addons serve it, each `Game` coming from the network already carries the `sourceId` of its server, and `sourcePriorityProvider` already returns the list order. None of that has reached the grid or the screens yet.
 
-Três coisas faltam, e cada uma é uma Task:
+Three things are missing, and each is a Task:
 
-1. **O carimbo não é lido.** `pack_grid_provider.dart:75` e `source_pick_service.dart:27` escrevem `kBuiltinSourceId` na mão, uma constante de fatia 3 cujo próprio doc já anunciava a data de validade: *"Na fatia 4 ele vira o id do addon que serviu o arquivo"* (`source_pick_model.dart:4-9`). A Task 15 lê `game.sourceId` nos dois lugares e apaga a constante.
-2. **A prioridade não chega em quem escolhe.** `planFromEntries` aceita `sourcePriority` desde a fatia 3 (`source_pick_service.dart:54`) e os dois chamadores, `home_screen.dart:43` e `game_detail_screen.dart:74`, não passam nada. O parâmetro tem valor padrão, então isso compila hoje e continuaria compilando para sempre. A Task 16 liga os dois.
-3. **A tela mostra o id, e o usuário não escolheu um id.** A seção 7 do spec de UI pede "4.0 MB, Myrient". Depois da Task 15 o campo passa a valer `myrient_org_files`, que é chave de cofre e de disco, não texto de tela. A Task 17 resolve o id para o nome do addon nos dois lugares onde ele é desenhado.
+1. **The stamp is not read.** `pack_grid_provider.dart:75` and `source_pick_service.dart:27` write `kBuiltinSourceId` by hand, a slice 3 constant whose own doc already announced its expiry: *"In slice 4 it becomes the id of the addon that served the file"* (`source_pick_model.dart:4-9`). Task 15 reads `game.sourceId` in both places and deletes the constant.
+2. **The priority never reaches the picker.** `planFromEntries` has accepted `sourcePriority` since slice 3 (`source_pick_service.dart:54`) and both callers, `home_screen.dart:43` and `game_detail_screen.dart:74`, pass nothing. The parameter has a default, so this compiles today and would keep compiling forever. Task 16 wires the two together.
+3. **The screen shows the id, and the user did not choose an id.** UI spec section 7 asks for "4.0 MB, Myrient". After Task 15 the field becomes `myrient_org_files`, which is a vault and disk key, not screen text. Task 17 resolves the id to the addon name in the two places where it is drawn.
 
-**Uma regra para as trocas de `kBuiltinSourceId` nos testes, porque ela decide quatro arquivos.** A constante morre na Task 15. Onze linhas a citam pelo nome, e **sete delas estão em teste**, espalhadas por quatro arquivos: `game_detail_screen_test.dart:46`, `pack_grid_provider_test.dart:108`, `:126` e `:141`, `source_pick_service_test.dart:50`, e `pack_grid_test.dart:24` e `:39`. As outras quatro estão em produção (`source_pick_service.dart:27`, `pack_grid_provider.dart:75`, e a declaração mais o doc do campo em `source_pick_model.dart:17` e `:35`), e essas a Task 15 resolve sem regra nenhuma. As sete de teste não são todas a mesma coisa:
+**One rule for the `kBuiltinSourceId` replacements in the tests, because it decides four files.** The constant dies in Task 15. Eleven lines name it, and **seven of them are in test**, spread across four files: `game_detail_screen_test.dart:46`, `pack_grid_provider_test.dart:108`, `:126` and `:141`, `source_pick_service_test.dart:50`, and `pack_grid_test.dart:24` and `:39`. The other four are in production (`source_pick_service.dart:27`, `pack_grid_provider.dart:75`, and the declaration plus field doc in `source_pick_model.dart:17` and `:35`), and Task 15 handles those with no special rule. The seven in test are not all the same thing:
 
-- Onde o teste **afirma o que a produção calculou**, a troca é por `kBuiltinAddonId`. É um sítio só: `test/pack_grid_provider_test.dart:108`, que lê o `sourceId` que o `sourceIndexProvider` montou a partir de um `Game`.
-- Onde o id é **dado de entrada inventado pelo teste**, a troca é pelo literal `'listagem'`, que é o que oito outras linhas da suíte já usam (`source_verification_provider_test.dart:18`, `source_pick_model_test.dart:17`, `pack_grid_filter_test.dart:10`, `batch_confirm_sheet_test.dart:12`, `source_pick_service_test.dart:20`, `source_index_test.dart:25` e `:67`, `grid_entry_model_test.dart:9`). Nesses sítios o id é opaco: qualquer string não vazia serve, e nenhuma asserção depende de qual é.
+- Where the test **asserts what production computed**, the replacement is `kBuiltinAddonId`. That is one site only: `test/pack_grid_provider_test.dart:108`, which reads the `sourceId` that `sourceIndexProvider` built from a `Game`.
+- Where the id is **fixture data invented by the test**, the replacement is the literal `'listagem'`, which is what eight other lines in the suite already use (`source_verification_provider_test.dart:18`, `source_pick_model_test.dart:17`, `pack_grid_filter_test.dart:10`, `batch_confirm_sheet_test.dart:12`, `source_pick_service_test.dart:20`, `source_index_test.dart:25` and `:67`, `grid_entry_model_test.dart:9`). In those sites the id is opaque: any non-empty string works, and no assertion depends on which one it is.
 
-**Não faça um `sed` do literal `'listagem'` para `'builtin'`.** Parece a limpeza óbvia e custa caro por nada: em `test/game_detail_screen_test.dart` o `sourceId` da fonte é desenhado na tela, e nove expectativas do arquivo carregam a string (`'4.0 MB, listagem'` na linha 121, e mais oito entre as linhas 269 e 462). Trocar o literal obrigaria a reescrever as nove, num commit que é sobre apagar uma constante. O literal fica. A linha 206 também diz "listagem", mas em prosa (`'a fonte saiu da listagem antes de a fila começar'`): essa não é `sourceId` e não entra na conta.
+**Do not `sed` the literal `'listagem'` to `'builtin'`.** That looks like the obvious cleanup and costs a lot for nothing: in `test/game_detail_screen_test.dart` the source's `sourceId` is drawn on screen, and nine expectations in the file carry that string (`'4.0 MB, listagem'` on line 121, and eight more between lines 269 and 462). Replacing the literal would require rewriting all nine, in a commit that is about deleting a constant. The literal stays. Line 206 also says "listagem", but in prose (`'the source left the listing before the queue started'`): that is not a `sourceId` and does not count.
 
-### Task 15: o id do addon chega na grade e no lote
+### Task 15: the addon id reaches the grid and the batch
 
 **Files:**
-- Modify: `lib/providers/pack_grid_provider.dart:75` (mais o import da linha 5, que fica órfão)
+- Modify: `lib/providers/pack_grid_provider.dart:75` (plus the import at line 5, which becomes orphaned)
 - Modify: `lib/services/source_pick_service.dart:27`
-- Modify: `lib/models/source_pick_model.dart:4-17` (apaga `kBuiltinSourceId`) e `:35-37` (o doc do campo)
+- Modify: `lib/models/source_pick_model.dart:4-17` (deletes `kBuiltinSourceId`) and `:35-37` (the field doc)
 - Test: `test/pack_grid_provider_test.dart`, `test/source_pick_service_test.dart`, `test/pack_grid_test.dart`, `test/game_detail_screen_test.dart`
 
-São duas linhas de produção e uma constante apagada. O que dá trabalho é a arrumação nos testes, e ela é mecânica se você seguir a regra do topo do grupo.
+Two production lines and one deleted constant. The work is the test cleanup, and it is mechanical if you follow the rule at the top of the group.
 
-Repare no detalhe do import: `lib/providers/pack_grid_provider.dart` importa `source_pick_model.dart` na linha 5 **só** por causa de `kBuiltinSourceId`. Conferido com `grep -n "SourcePick\|BatchPlan\|PickFailure\|kBuiltinSourceId" lib/providers/pack_grid_provider.dart`, que devolve uma linha só, a 75. Tirado o uso, o import vira `unused_import` e o analyze sai de 22. Em `lib/services/source_pick_service.dart` o import fica, porque de lá vêm `SourcePick` e `BatchPlan`.
+Note the import detail: `lib/providers/pack_grid_provider.dart` imports `source_pick_model.dart` at line 5 **only** because of `kBuiltinSourceId`. Verified with `grep -n "SourcePick\|BatchPlan\|PickFailure\|kBuiltinSourceId" lib/providers/pack_grid_provider.dart`, which returns one line only, line 75. Once the usage is removed, the import becomes an `unused_import` and analyze rises above 22. In `lib/services/source_pick_service.dart` the import stays, because that is where `SourcePick` and `BatchPlan` come from.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Em `test/pack_grid_provider_test.dart`, acrescente o import do modelo de addon junto dos outros:
+In `test/pack_grid_provider_test.dart`, add the addon model import alongside the others:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-troque a assinatura do `_game` das linhas 28 a 33 por esta, que aceita o addon:
+replace the `_game` signature at lines 28 to 33 with this, which accepts the addon:
 
 ```dart
 Game _game(String filename, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename,
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: 2048,
       consoleId: 'snes',
       sourceId: sourceId,
     );
 ```
 
-troque as três citações de `kBuiltinSourceId` do arquivo **pela regra do topo do grupo, que as separa**: a da linha 108 vira `kBuiltinAddonId`, porque ali o teste afirma o `sourceId` que a produção calculou; as das linhas 126 e 141 viram o literal `'listagem'`, porque ali o id é `MatchedSource` de entrada, inventado pelo teste, e nenhuma asserção dos dois casos o lê (uma lê `achado?.filename`, a outra lê `achado, isNull`). **E apague o `import 'package:roms_downloader/models/source_pick_model.dart';` da linha 8 deste arquivo.** Ele existia só por causa da constante: depois da troca, a única menção ao arquivo que sobra é uma frase de comentário na linha 146 (``// É o caminho que vira `PickFailure` na Task 14``), e `PickFailure` entre crases dentro de comentário não é símbolo. Deixado para trás, ele vira `unused_import`, que é **warning** e não `info`, e o analyze vai a 23. Depois acrescente este caso logo depois do teste `'a fonte casada carrega o tamanho e o id de fonte embutido'`:
+Replace the three `kBuiltinSourceId` references in the file **by the rule at the top of the group, which separates them**: the one at line 108 becomes `kBuiltinAddonId`, because there the test asserts the `sourceId` production computed; the ones at lines 126 and 141 become the literal `'listagem'`, because there the id is a `MatchedSource` fixture invented by the test and neither case's assertion reads it (one reads `found?.filename`, the other reads `found, isNull`). **Also delete `import 'package:roms_downloader/models/source_pick_model.dart';` at line 8 of this file.** It existed only because of the constant: after the replacement, the only remaining mention of that file is a comment phrase at line 146 (``// the path that becomes `PickFailure` in Task 14``), and `PickFailure` in backticks inside a comment is not a symbol. Left behind, it becomes an `unused_import`, which is a **warning**, not an `info`, and analyze rises to 23. Then add this case right after the test `'the matched source carries the size and the built-in source id'`:
 
 ```dart
-  test('cada fonte carrega o id do addon do jogo que a originou', () async {
-    final container = _container(jogos: [
-      _game('Chrono Trigger (USA).zip', sourceId: 'myrient'),
-      _game('Super Metroid (USA).zip', sourceId: 'arquivo-do-fulano'),
+  test('each source carries the addon id of the game that produced it', () async {
+    final container = _container(games: [
+      _game('Crystal Vanguard (USA).zip', sourceId: 'myrient'),
+      _game('Super Vectron (USA).zip', sourceId: 'someones-archive'),
     ]);
-    await _pronto(container);
+    await _ready(container);
 
-    // Mapa e não lista: o que está sendo afirmado é que cada fonte ficou com
-    // o id do **seu** jogo, e isso não depende da ordem da grade.
+    // A map, not a list: what is asserted is that each source kept its own
+    // game's id, independent of grid order.
     expect(
       {for (final e in container.read(packGridEntriesProvider)) e.game.id: e.sources.single.sourceId},
-      {'snes/chrono-trigger': 'myrient', 'snes/super-metroid': 'arquivo-do-fulano'},
+      {'snes/crystal-vanguard': 'myrient', 'snes/super-vectron': 'someones-archive'},
     );
   });
 ```
 
-Em `test/source_pick_service_test.dart`, troque o `_game` das linhas 10 a 15 por:
+In `test/source_pick_service_test.dart`, replace the `_game` helper at lines 10 to 15 with:
 
 ```dart
 Game _game(String filename, int size, {String sourceId = kBuiltinAddonId}) => Game(
       title: filename.replaceAll('.zip', ''),
-      url: 'https://exemplo.org/snes/$filename',
+      url: 'https://example.org/snes/$filename',
       size: size,
       consoleId: 'snes',
       sourceId: sourceId,
     );
 ```
 
-acrescente o import do modelo de addon:
+add the addon model import:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-troque o `kBuiltinSourceId` da linha 50, dentro do helper `_v`, pelo literal `'listagem'` (é fixture: `_v` monta a entrada de `splitByVerification` e nenhuma asserção do arquivo lê esse campo), e acrescente os dois casos abaixo logo depois do teste `'cada jogo selecionado vira uma escolha, na mesma ordem'`:
+replace the `kBuiltinSourceId` at line 50 inside the `_v` helper with the literal `'listing'` (it is fixture: `_v` builds the input to `splitByVerification` and no assertion in the file reads that field), and add the two cases below right after the test `'each selected game becomes a pick, in the same order'`:
 
 ```dart
-  test('planFromGames carrega o id do addon de cada jogo', () {
+  test('planFromGames carries each game addon id', () {
     final plan = planFromGames([
-      _game('Chrono Trigger (USA).zip', 4 * 1024 * 1024, sourceId: 'myrient'),
-      _game('Super Metroid (USA).zip', 2 * 1024 * 1024, sourceId: 'arquivo-do-fulano'),
+      _game('Crystal Vanguard (USA).zip', 4 * 1024 * 1024, sourceId: 'myrient'),
+      _game('Super Vectron (USA).zip', 2 * 1024 * 1024, sourceId: 'someones-archive'),
     ]);
 
-    expect(plan.picks.map((p) => p.sourceId), ['myrient', 'arquivo-do-fulano']);
+    expect(plan.picks.map((p) => p.sourceId), ['myrient', 'someones-archive']);
   });
 
-  test('jogo de cache antigo, sem addon declarado, vira o embutido', () {
-    // `Game.sourceId` tem padrão (Task 12), então um `Game` vindo de um
-    // `catalog_<id>.json` gravado antes desta fatia entra aqui sem carimbo.
-    // Ele não pode virar string vazia: fonte sem id some da prioridade e
-    // apareceria na tela como ", " entre o tamanho e o selo.
-    //
-    // O `Game` é montado à mão, sem o `_game`, de propósito: o helper tem
-    // padrão próprio, então ele passaria `sourceId` explícito e este caso
-    // exercitaria o padrão do helper, não o de `Game`.
+  test('a cached game with no declared addon becomes the builtin', () {
+    // Built by hand, without `_game`, so the case exercises `Game`'s default
+    // rather than the helper's own default.
     final plan = planFromGames([
-      Game(title: 'Chrono Trigger (USA)', url: 'https://exemplo.org/snes/Chrono Trigger (USA).zip', size: 1024, consoleId: 'snes'),
+      Game(title: 'Crystal Vanguard (USA)', url: 'https://example.org/snes/Crystal Vanguard (USA).zip', size: 1024, consoleId: 'snes'),
     ]);
 
     expect(plan.picks.single.sourceId, kBuiltinAddonId);
   });
 ```
 
-Em `test/pack_grid_test.dart`, troque os dois `kBuiltinSourceId` (linhas 24 e 39) pelo literal `'listagem'` e apague o import de `source_pick_model.dart` se ele ficar sem uso. Confira com `grep -n "source_pick_model\|SourcePick\|BatchPlan" test/pack_grid_test.dart` antes de apagar: se o arquivo usa `SourcePick` em outro lugar, o import fica.
+In `test/pack_grid_test.dart`, replace both `kBuiltinSourceId` occurrences (lines 24 and 39) with the literal `'listing'` and delete the `source_pick_model.dart` import if it has no remaining uses. Verify with `grep -n "source_pick_model\|SourcePick\|BatchPlan" test/pack_grid_test.dart` before deleting: if the file uses `SourcePick` elsewhere, the import stays.
 
-Em `test/game_detail_screen_test.dart`, troque o `kBuiltinSourceId` da linha 46 pelo literal `'listagem'` e apague o import de `source_pick_model.dart` pelo mesmo critério. Aqui o `grep` é obrigatório e não decorativo: o arquivo usa `SourcePick` no callback `onDownload`, então é provável que o import fique.
+In `test/game_detail_screen_test.dart`, replace the `kBuiltinSourceId` at line 46 with the literal `'listing'` and delete the `source_pick_model.dart` import by the same criterion. The `grep` here is mandatory, not decorative: the file uses `SourcePick` in the `onDownload` callback, so the import probably stays.
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart test/source_pick_service_test.dart
 ```
 
-Esperado: erro de compilação, `Undefined name 'kBuiltinSourceId'` nos arquivos que ainda a citam e `No named parameter with the name 'sourceId'` se você tiver pulado a Task 12. Depois que compilar, os três casos novos falham: a grade e o lote ainda carimbam a constante.
+Expected: compilation error, `Undefined name 'kBuiltinSourceId'` in the files that still name it and `No named parameter with the name 'sourceId'` if Task 12 was skipped. Once it compiles, the three new cases fail: the grid and the batch still stamp the constant.
 
-- [ ] **Step 3: A grade lê o carimbo do jogo**
+- [ ] **Step 3: The grid reads the game stamp**
 
-Em `lib/providers/pack_grid_provider.dart`, apague o import da linha 5:
+In `lib/providers/pack_grid_provider.dart`, delete the import at line 5:
 
 ```dart
 import 'package:roms_downloader/models/source_pick_model.dart';
 ```
 
-e troque a linha 75:
+and replace line 75:
 
 ```dart
       (filename: game.filename, sourceId: game.sourceId, size: game.size, url: game.url),
 ```
 
-- [ ] **Step 4: O lote lê o carimbo do jogo**
+- [ ] **Step 4: The batch reads the game stamp**
 
-Em `lib/services/source_pick_service.dart`, na linha 27, dentro de `planFromGames`:
+In `lib/services/source_pick_service.dart`, at line 27 inside `planFromGames`:
 
 ```dart
           sourceId: game.sourceId,
 ```
 
-e ajuste o doc da função, que hoje diz que a regra de prioridade "só tem sujeito em MODO PACK". Continua verdade, mas a menção à Task 14 da fatia 3 confunde numa fatia que também tem Task 14:
+and update the function doc, which currently says the priority rule "only has a subject in PACK MODE". Still true, but the mention of slice 3 Task 14 is confusing in a slice that also has Task 14:
 
 ```dart
-/// A regra de verdade da seção 6 do spec de UI, com região, revisão,
-/// confiança e prioridade de addon, mora em `planFromEntries` e só tem
-/// sujeito em MODO PACK, onde existe mais de uma versão do mesmo jogo.
+/// The batch plan for SOURCE MODE.
+///
+/// There is no choice to make here: each selected `Game` is already a file, so
+/// no pick is uncertain and the failure list is always empty. The real rule,
+/// with region, revision, confidence, and addon priority, lives in
+/// `planFromEntries`.
 ```
 
-- [ ] **Step 5: Apague a constante**
+- [ ] **Step 5: Delete the constant**
 
-Em `lib/models/source_pick_model.dart`, apague o bloco das linhas 4 a 17 inteiro, doc e constante. Se o arquivo ficar sem uso para o import de `game_model.dart`, confira antes: `SourcePick.game` é um `Game`, então o import fica.
+In `lib/models/source_pick_model.dart`, delete the entire block at lines 4 to 17, doc and constant. If the file has no remaining use for the `game_model.dart` import, verify first: `SourcePick.game` is a `Game`, so the import stays.
 
-Troque o doc do campo `sourceId`, nas linhas 35 a 37, que descreve um mundo que acabou de deixar de existir:
+Replace the doc of the `sourceId` field, at lines 35 to 37, which describes a world that just stopped existing:
 
 ```dart
-  /// De qual addon veio, pelo id de [Addon]. É o que a linha "4.0 MB,
-  /// Myrient" da seção 7 mostra, depois de a tela resolver o id para o nome
-  /// (Task 17). Vem de `Game.sourceId`, carimbado pelo `CatalogService` na
-  /// hora de buscar a listagem.
+  /// Which addon it came from, by [Addon] id. Comes from `Game.sourceId`.
   final String sourceId;
 ```
 
-Confira que não sobrou nada:
+Verify nothing remains:
 
 ```bash
 grep -rn "kBuiltinSourceId" lib/ test/
 ```
 
-Esperado: nenhuma linha.
+Expected: no lines.
 
-- [ ] **Step 6: Rode os arquivos tocados**
+- [ ] **Step 6: Run the touched files**
 
 ```bash
 flutter test test/pack_grid_provider_test.dart test/source_pick_service_test.dart test/pack_grid_test.dart test/game_detail_screen_test.dart
 ```
 
-Esperado: zero falha. Os três casos novos passam e nenhum dos antigos mudou de resultado, inclusive as nove expectativas de `'... listagem ...'` da tela de detalhe, que continuam valendo porque o literal ficou.
+Expected: zero failures. The three new cases pass and none of the old ones changed result, including the nine `'... listagem ...'` expectations in the detail screen, which remain valid because the literal stayed.
 
-**Tropeço provável:** apagar o import da linha 5 de `pack_grid_provider.dart` e não apagar, ou apagar um import que ainda é usado em `pack_grid_test.dart` e `game_detail_screen_test.dart`. Os dois erros são pegos pelo `flutter analyze` do Step 8, um como `unused_import` e o outro como erro de compilação, mas o primeiro é `info` e passa batido numa leitura apressada da saída. O critério é o `grep` de cada arquivo, não o olho.
+**Likely pitfall:** deleting the import at line 5 of `pack_grid_provider.dart` but not the right one, or deleting an import still used in `pack_grid_test.dart` and `game_detail_screen_test.dart`. Both errors are caught by `flutter analyze` in Step 8, one as `unused_import` and the other as a compilation error, but the first is an `info` and is easy to miss in a quick read of the output. The criterion is the `grep` for each file, not the eye.
 
-**Segundo tropeço:** trocar o literal `'listagem'` por `'builtin'` "para ficar coerente". Está escrito na abertura do grupo por quê, e a consequência é dez expectativas de string vermelhas em `game_detail_screen_test.dart` numa Task que não mexeu em tela nenhuma.
+**Second pitfall:** replacing the literal `'listagem'` with `'builtin'` "for consistency." The opening of the group explains why, and the consequence is ten red string expectations in `game_detail_screen_test.dart` in a Task that touched no screen.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+497`, zero falha.
+Expected: `+497`, zero failures.
 
-- [ ] **Step 8: Analise**
+- [ ] **Step 8: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -5482,139 +5354,136 @@ git add lib/providers/pack_grid_provider.dart lib/services/source_pick_service.d
 git commit -m "feat(addon): a fonte casada passa a carregar o id do addon que a serviu"
 ```
 
-### Task 16: as duas telas passam a prioridade do usuário
+### Task 16: both screens pass the user priority
 
 **Files:**
 - Modify: `lib/screens/home_screen.dart:43-47`
 - Modify: `lib/screens/game_detail_screen.dart:74-78`
 - Test: `test/game_detail_screen_test.dart`
 
-`planFromEntries` tem `List<String> sourcePriority = const []` com valor padrão desde a fatia 3, e é por isso que esta Task é necessária: sem o padrão, o compilador teria cobrado os dois chamadores no dia em que o parâmetro nasceu. Com ele, o app compila hoje passando lista vazia para sempre, e a ordem que o usuário vai arrastar na Grupo 5 não decidiria nada.
+`planFromEntries` has had `List<String> sourcePriority = const []` with a default value since slice 3, and that is why this Task is needed: without the default, the compiler would have demanded both callers on the day the parameter was born. With it, the app compiles today passing an empty list forever, and the order the user will drag in Group 5 would decide nothing.
 
-**Uma honestidade sobre cobertura, antes dos passos.** `test/` não tem teste de `HomeScreen`: a tela monta o app inteiro, com fila de download, estado global e catálogo. A linha dela é conferida por leitura e pelo `flutter build linux --debug` do Step 6, não por suíte. O que a suíte prova é a outra metade: a tela de detalhe chama a mesma função com a mesma lista, e os testes abaixo mostram que a saída muda quando a lista muda. Não escreva no relatório que "as duas telas estão testadas".
+**A note on coverage before the steps.** `test/` has no test for `HomeScreen`: the screen mounts the entire app, with the download queue, global state, and catalog. Its line is verified by reading and by the `flutter build linux --debug` of Step 6, not by the suite. What the suite proves is the other half: the detail screen calls the same function with the same list, and the cases below show that the output changes when the list changes. Do not write in the report that "both screens are tested."
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Em `test/game_detail_screen_test.dart`, acrescente o import do provider de addon:
+In `test/game_detail_screen_test.dart`, add the addon provider import:
 
 ```dart
 import 'package:roms_downloader/providers/addon_provider.dart';
 ```
 
-dê ao `_fonte` das linhas 39 a 49 um id de fonte configurável:
+give the `_source` helper at lines 39 to 49 a configurable source id:
 
 ```dart
-MatchedSource _fonte(
+MatchedSource _source(
   String filename, {
   int size = 4 * 1024 * 1024,
-  MatchConfidence confianca = MatchConfidence.likely,
-  String sourceId = 'listagem',
+  MatchConfidence confidence = MatchConfidence.likely,
+  String sourceId = 'listing',
 }) =>
     MatchedSource(
       filename: filename,
       sourceId: sourceId,
-      confidence: confianca,
+      confidence: confidence,
       size: size,
     );
 ```
 
-e dê ao `_host` um parâmetro de prioridade, com a sobrescrita do provider:
+and give `_host` a priority parameter, with the provider override:
 
 ```dart
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   VoidCallback? onBatchDownload,
   GameResolver? resolver,
-  SourceVerification Function(String filename)? verificacao,
-  List<String> prioridade = const [],
+  SourceVerification Function(String filename)? verification,
+  List<String> priority = const [],
 }) {
   return ProviderScope(
     overrides: [
-      semDiscoDeFavoritos,
-      packTargetProvider.overrideWithValue(_alvo),
+      withoutFavoritesDisk,
+      packTargetProvider.overrideWithValue(_target),
       preferredRegionsProvider.overrideWithValue(const {'USA'}),
-      gameResolverProvider.overrideWithValue(resolver ?? _resolvePadrao),
-      // Obrigatória, e não conveniência: sem ela o provider de verdade seria
-      // construído, e ele lê `addonProvider`, que abre `AddonStore` por
-      // `path_provider`. Num teste de widget sem plataforma isso lança
-      // `MissingPluginException` dentro de um `Future` que ninguém espera.
-      sourcePriorityProvider.overrideWithValue(prioridade),
+      gameResolverProvider.overrideWithValue(resolver ?? _resolveDefault),
+      // Required, not convenience: without it the real provider reads
+      // `addonProvider`, which opens `AddonStore` via `path_provider` and throws
+      // `MissingPluginException` in a widget test with no platform.
+      sourcePriorityProvider.overrideWithValue(priority),
 ```
 
-**A mesma sobrescrita tem que entrar no `ProviderScope` solto do teste `'o checkbox alterna a seleção pela chave de pack'`, nas linhas 158 a 178**, que não usa o `_host`. Lá ela vai com a lista vazia:
+**The same override must also enter the standalone `ProviderScope` of the test `'the checkbox toggles selection by pack key'`, at lines 158 to 178**, which does not use `_host`. There it goes with an empty list:
 
 ```dart
         sourcePriorityProvider.overrideWithValue(const []),
 ```
 
-Acrescente os três casos no fim do `main`:
+Add the three cases at the end of `main`:
 
 ```dart
-  testWidgets('a prioridade do usuário decide o destaque entre fontes empatadas', (tester) async {
-    // Mesmo nome de arquivo nas duas, então região, revisão e confiança
-    // empatam e sobra só o eixo de addon. O `size` difere porque ele não
-    // entra no desempate e serve de observável: é ele que diz qual das duas
-    // ganhou, e não só o que o motivo escreveu.
+  testWidgets('the user priority decides the highlight between tied sources', (tester) async {
+    // Same filename on both, so region, revision and confidence tie and only
+    // the addon axis remains. `size` differs as an observable of which one won.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
       ]),
-      prioridade: const ['rapido', 'lento'],
+      priority: const ['fast', 'slow'],
     ));
 
-    // Pela ordem de chegada venceria a de 10 bytes. Venceu a de 20.
-    expect(find.text('20.0 B, rapido'), findsOneWidget);
+    // By arrival order the 10-byte one would win. The 20-byte one won.
+    expect(find.text('20.0 B, fast'), findsOneWidget);
   });
 
-  testWidgets('invertida a ordem dos addons, o destaque troca', (tester) async {
-    // O par do caso acima, com a ordem de chegada invertida junto com a
-    // prioridade. Os dois juntos são o que separa "a tela passa a lista do
-    // usuário" de "a tela passa uma lista qualquer que por sorte acertou".
+  testWidgets('reversing addon order swaps the highlight', (tester) async {
+    // The pair of the case above, with arrival order reversed alongside
+    // priority: together they separate "the screen passes the user's list" from
+    // "the screen passes any list that happened to be right".
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
       ]),
-      prioridade: const ['lento', 'rapido'],
+      priority: const ['slow', 'fast'],
     ));
 
-    expect(find.text('10.0 B, lento'), findsOneWidget);
+    expect(find.text('10.0 B, slow'), findsOneWidget);
   });
 
-  testWidgets('sem addon na lista, o desempate volta para a ordem de chegada', (tester) async {
-    // O estado de um usuário que removeu todos os addons e ficou só com o
-    // cache. Lista vazia não pode virar exceção nem sumir com o destaque.
+  testWidgets('with no addon in the list, the tiebreak falls back to arrival order', (tester) async {
+    // A user who removed every addon and kept only the cache. An empty list
+    // must not throw nor drop the highlight.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'lento'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'rapido'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'slow'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'fast'),
       ]),
-      prioridade: const [],
+      priority: const [],
     ));
 
-    expect(find.text('10.0 B, lento'), findsOneWidget);
+    expect(find.text('10.0 B, slow'), findsOneWidget);
   });
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: os dois primeiros casos falham com `Expected: exactly one matching candidate / Actual: _TextFinder:<zero widgets>`, porque a tela ainda não passa prioridade nenhuma e o destaque sai pela ordem de chegada. O terceiro já passa, e é assim mesmo: ele é rede de segurança, não motor.
+Expected: the first two cases fail with `Expected: exactly one matching candidate / Actual: _TextFinder:<zero widgets>`, because the screen still passes no priority and the highlight comes out in arrival order. The third already passes, and that is correct: it is a safety net, not the driving assertion.
 
-- [ ] **Step 3: A tela de detalhe passa a prioridade**
+- [ ] **Step 3: The detail screen passes the priority**
 
-Em `lib/screens/game_detail_screen.dart`, acrescente o import:
+In `lib/screens/game_detail_screen.dart`, add the import:
 
 ```dart
 import 'package:roms_downloader/providers/addon_provider.dart';
 ```
 
-e a linha nova na chamada das linhas 74 a 78:
+and the new line in the call at lines 74 to 78:
 
 ```dart
     final plan = planFromEntries(
@@ -5625,62 +5494,62 @@ e a linha nova na chamada das linhas 74 a 78:
     );
 ```
 
-`watch` e não `read`, como os vizinhos: arrastar um addon na tela de addons tem que redesenhar o destaque de uma tela de detalhe aberta atrás dela.
+`watch`, not `read`, like the neighbors: dragging an addon on the addons screen must redraw the highlight on an open detail screen behind it.
 
-- [ ] **Step 4: A tela inicial passa a prioridade**
+- [ ] **Step 4: The home screen passes the priority**
 
-Em `lib/screens/home_screen.dart`, acrescente o import:
+In `lib/screens/home_screen.dart`, add the import:
 
 ```dart
 import 'package:roms_downloader/providers/addon_provider.dart';
 ```
 
-e a linha nova em `_planoDaSelecao`, linhas 43 a 47:
+and the new line in `_selectionPlan`, lines 43 to 47:
 
 ```dart
       return planFromEntries(
-        entriesForSelection(ref.read(allPackEntriesProvider), selecionadas),
+        entriesForSelection(ref.read(allPackEntriesProvider), selected),
         preferredRegions: ref.read(preferredRegionsProvider),
         resolveGame: ref.read(gameResolverProvider),
         sourcePriority: ref.read(sourcePriorityProvider),
       );
 ```
 
-`read` e não `watch`, como os vizinhos: isto roda dentro de um callback de botão, e um `watch` fora de `build` é erro do Riverpod, não questão de gosto.
+`read`, not `watch`, like the neighbors: this runs inside a button callback, and `watch` outside of `build` is a Riverpod error, not a style choice.
 
-**Tropeço provável:** copiar o `watch` da tela de detalhe para dentro de `_planoDaSelecao`. O método é chamado de `_confirmarLote`, que é um `Future<void>` disparado por toque. `ref.watch` ali lança em tempo de execução, e o teste que pegaria isso não existe, porque `HomeScreen` não tem teste. O que pega é o Step 6.
+**Likely pitfall:** copying the `watch` from the detail screen into `_selectionPlan`. The method is called from `_confirmBatch`, which is a `Future<void>` triggered by a tap. `ref.watch` there throws at runtime, and the test that would catch it does not exist, because `HomeScreen` has no test. What catches it is Step 6.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/game_detail_screen_test.dart
 ```
 
-Esperado: zero falha.
+Expected: zero failures.
 
-- [ ] **Step 6: Compile o app inteiro**
+- [ ] **Step 6: Compile the full app**
 
 ```bash
 flutter build linux --debug
 ```
 
-Esperado: `Building Linux application...` e nenhum erro. É o que cobre `home_screen.dart`, que não tem teste de widget. Não prova o que aparece na tela: prova que a tela compila com a chamada nova e que nenhum import ficou faltando.
+Expected: `Building Linux application...` and no errors. This is what covers `home_screen.dart`, which has no widget test. It does not prove what appears on screen: it proves the screen compiles with the new call and that no import is missing.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+500`, zero falha.
+Expected: `+500`, zero failures.
 
-- [ ] **Step 8: Analise**
+- [ ] **Step 8: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -5691,268 +5560,257 @@ git add lib/screens/game_detail_screen.dart lib/screens/home_screen.dart
 git commit -m "feat(addon): as telas passam a ordem de addons do usuario para a regra de escolha"
 ```
 
-### Task 17: a tela de detalhe mostra o nome do addon, não o id
+### Task 17: the detail screen shows the addon name, not the id
 
 **Files:**
-- Modify: `lib/providers/addon_provider.dart` (ganha `addonNamesProvider`)
-- Modify: `lib/screens/game_detail_screen.dart` (`_Destaque` e `_OutrasFontes`/`_LinhaFonte` ganham o mapa)
+- Modify: `lib/providers/addon_provider.dart` (gains `addonNamesProvider`)
+- Modify: `lib/screens/game_detail_screen.dart` (`_Highlight` and `_OtherSources`/`_SourceRow` gain the map)
 - Test: `test/addon_provider_test.dart`, `test/game_detail_screen_test.dart`
 
-A seção 7 do spec de UI pede "4.0 MB, Myrient". Depois da Task 15, `SourcePick.sourceId` vale `myrient_org_files`, porque `Addon.idFromUrl` normaliza a url para virar chave de cofre e nome de arquivo. Chave é para máquina. A tela tem que mostrar o `Addon.name`.
+UI spec section 7 asks for "4.0 MB, Myrient". After Task 15, `SourcePick.sourceId` is `myrient_org_files`, because `Addon.idFromUrl` normalizes the URL to become a vault key and filename. A key is for machines. The screen must show `Addon.name`.
 
-Os dois sítios que desenham o id são `game_detail_screen.dart:346`, dentro de `_Destaque`, e `:501`, dentro de `_LinhaFonte`. Os dois são `StatelessWidget`, e o arquivo tem uma regra escrita sobre isso: *"Os widgets filhos não veem `ref`: eles são burros como todo o resto desta fatia"* (`game_detail_screen.dart:64-66`). Então o mapa desce como dado, igual a todo o resto. Não transforme `_Destaque` em `ConsumerWidget`.
+The two sites that draw the id are `game_detail_screen.dart:346`, inside `_Highlight`, and `:501`, inside `_SourceRow`. Both are `StatelessWidget`, and the file has a written rule about this: *"The child widgets never see `ref`"* (`game_detail_screen.dart:55`). So the map descends as data, like everything else. Do not turn `_Highlight` into a `ConsumerWidget`.
 
-**De quando são os números de linha desta Task.** Todo `game_detail_screen.dart:NNN` daqui foi conferido contra a árvore **depois da Task 16**, que é a que você vai encontrar. A Task 16 somou duas linhas a este arquivo, e as duas não deslocam tudo por igual: o import de `addon_provider.dart` fica acima de tudo, mas o argumento `sourcePriority:` cai na linha 79, ou seja **abaixo** do `final resolver` e do comentário dos widgets burros. Por isso esses dois desceram uma linha só e o resto desceu duas. Medido, não calculado: eu escrevi "some 2 em tudo" antes de a Task 16 rodar e estava errado nos dois primeiros.
+**How current these line numbers are.** Every `game_detail_screen.dart:NNN` here was verified against the tree **after Task 16**, which is what you will find. Task 16 added two lines to this file, and they do not shift everything uniformly: the `addon_provider.dart` import lands above everything, but the `sourcePriority:` argument falls at line 79, meaning **below** `final resolver` and the dumb-widgets comment. So those two shifted by one line only, and the rest by two. Measured, not calculated: "add 2 to everything" was wrong for the first two before Task 16 ran.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Em `test/addon_provider_test.dart`, acrescente o caso no fim do `main`:
+In `test/addon_provider_test.dart`, add the case at the end of `main`:
 
 ```dart
-  test('addonNames mapeia cada id para o nome do addon', () async {
-    final m = await _montar(const [
+  test('addonNames maps each id to the addon name', () async {
+    final m = await _build(const [
       Addon(id: 'myrient', name: 'Myrient'),
-      Addon(id: kBuiltinAddonId, name: 'Catálogo embutido'),
+      Addon(id: kBuiltinAddonId, name: 'Built-in catalog'),
     ]);
 
     expect(m.container.read(addonNamesProvider), {
       'myrient': 'Myrient',
-      kBuiltinAddonId: 'Catálogo embutido',
+      kBuiltinAddonId: 'Built-in catalog',
     });
   });
 ```
 
-Em `test/game_detail_screen_test.dart`, dê ao `_host` o mapa de nomes:
+In `test/game_detail_screen_test.dart`, give `_host` the names map:
 
 ```dart
 Widget _host(
-  PackGridEntry entrada, {
+  PackGridEntry entry, {
   void Function(SourcePick)? onDownload,
   VoidCallback? onBatchDownload,
   GameResolver? resolver,
-  SourceVerification Function(String filename)? verificacao,
-  List<String> prioridade = const [],
-  Map<String, String> nomes = const {},
+  SourceVerification Function(String filename)? verification,
+  List<String> priority = const [],
+  Map<String, String> names = const {},
 }) {
 ```
 
-com a sobrescrita logo abaixo da de prioridade, pela mesma razão dela (o provider de verdade lê `addonProvider`, que abre disco):
+with the override right below the priority override, for the same reason (the real provider reads `addonProvider`, which opens disk):
 
 ```dart
-      addonNamesProvider.overrideWithValue(nomes),
+      addonNamesProvider.overrideWithValue(names),
 ```
 
-e a mesma linha, com `const {}`, no `ProviderScope` solto do teste `'o checkbox alterna a seleção pela chave de pack'`.
+and the same line, with `const {}`, in the standalone `ProviderScope` of the test `'the checkbox toggles selection by pack key'`.
 
-Repare que o padrão é mapa vazio, e é ele que mantém verdes as nove expectativas de `'... listagem ...'` do arquivo: sem nome conhecido, a tela desenha o id, e o id nesses testes é `'listagem'`.
+Note that the default is an empty map, and it is that default which keeps the nine `'... listagem ...'` expectations in the file green: without a known name, the screen draws the id, and in those tests the id is `'listagem'`.
 
-Acrescente os três casos no fim do `main`:
+Add the three cases at the end of `main`:
 
 ```dart
-  testWidgets('o destaque mostra o nome do addon, não o id', (tester) async {
+  testWidgets('the highlight shows the addon name, not the id', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'myrient_org_files')]),
-      nomes: const {'myrient_org_files': 'Myrient'},
+      _entry(sources: [_source('Crystal Vanguard (USA).zip', sourceId: 'myrient_org_files')]),
+      names: const {'myrient_org_files': 'Myrient'},
     ));
 
     expect(find.text('4.0 MB, Myrient'), findsOneWidget);
   });
 
-  testWidgets('a lista de outras fontes também mostra o nome', (tester) async {
+  testWidgets('the other-sources list also shows the name', (tester) async {
     await tester.pumpWidget(_host(
-      _entrada(fontes: [
-        _fonte('Chrono Trigger (USA).zip', size: 10, sourceId: 'myrient_org_files'),
-        _fonte('Chrono Trigger (USA).zip', size: 20, sourceId: 'arquivo_do_fulano'),
+      _entry(sources: [
+        _source('Crystal Vanguard (USA).zip', size: 10, sourceId: 'myrient_org_files'),
+        _source('Crystal Vanguard (USA).zip', size: 20, sourceId: 'someones_archive'),
       ]),
-      nomes: const {'myrient_org_files': 'Myrient', 'arquivo_do_fulano': 'Arquivo do Fulano'},
+      names: const {'myrient_org_files': 'Myrient', 'someones_archive': "Someone's Files"},
     ));
 
-    await tester.tap(find.text('outra fonte'));
+    await tester.tap(find.text('other source'));
     await tester.pumpAndSettle();
 
-    expect(find.text('20.0 B, Arquivo do Fulano, HTTP, casamento provável'), findsOneWidget);
+    expect(find.text("20.0 B, Someone's Files, HTTP, likely match"), findsOneWidget);
   });
 
-  testWidgets('addon que não está mais na lista cai no id, e não em branco', (tester) async {
-    // O usuário removeu o addon e o cache de jogo dele ainda está em disco.
-    // A informação vira ruim, e tem que continuar existindo: "4.0 MB, " com
-    // a vírgula pendurada é pior que um id feio.
+  testWidgets('an addon no longer in the list falls back to the id, not blank', (tester) async {
+    // The user removed the addon and its game cache is still on disk. The info
+    // goes stale and must still exist: "4.0 MB, " with a dangling comma is worse
+    // than an ugly id.
     await tester.pumpWidget(_host(
-      _entrada(fontes: [_fonte('Chrono Trigger (USA).zip', sourceId: 'addon_removido')]),
-      nomes: const {},
+      _entry(sources:[_source('Crystal Vanguard (USA).zip', sourceId: 'addon_removed')]),
+      names: const {},
     ));
 
-    expect(find.text('4.0 MB, addon_removido'), findsOneWidget);
+    expect(find.text('4.0 MB, addon_removed'), findsOneWidget);
   });
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/addon_provider_test.dart test/game_detail_screen_test.dart
 ```
 
-Esperado: erro de compilação, `Undefined name 'addonNamesProvider'`.
+Expected: compilation error, `Undefined name 'addonNamesProvider'`.
 
-- [ ] **Step 3: O provider do mapa**
+- [ ] **Step 3: The names map provider**
 
-Em `lib/providers/addon_provider.dart`, logo abaixo de `sourcePriorityProvider`:
+In `lib/providers/addon_provider.dart`, right below `sourcePriorityProvider`:
 
 ```dart
-/// Do id do addon para o nome que o usuário escreveu ou que o catálogo trouxe.
+/// Addon id to the display name the user wrote or the catalog carried.
 ///
-/// A seção 7 do spec de UI pede "4.0 MB, Myrient", e `SourcePick.sourceId`
-/// guarda `myrient_org_files`, que é chave de cofre e nome de arquivo. Mapa e
-/// não busca linear porque a lista de outras fontes resolve um nome por linha.
-///
-/// Quem lê tem que tratar id ausente: o cache de jogo de um addon removido
-/// sobrevive à remoção, e o `sourceId` dele não está mais na lista.
+/// Callers must handle a missing id: a removed addon's cached games outlive
+/// the removal, and their `sourceId` is no longer in the list.
 final addonNamesProvider = Provider<Map<String, String>>(
   (ref) => {for (final addon in ref.watch(addonProvider)) addon.id: addon.name},
 );
 ```
 
-- [ ] **Step 4: O mapa desce até quem desenha**
+- [ ] **Step 4: The map descends to those that draw**
 
-Em `lib/screens/game_detail_screen.dart`, dentro do `build`, logo depois de `final resolver = ref.watch(gameResolverProvider);` (linha 62):
+In `lib/screens/game_detail_screen.dart`, inside `build`, right after `final resolver = ref.watch(gameResolverProvider);` (line 62):
 
 ```dart
-    final nomesDeAddon = ref.watch(addonNamesProvider);
+    final addonNames = ref.watch(addonNamesProvider);
 ```
 
-passe para o `_Destaque` (linhas 148 a 155):
+pass it to `_Highlight` (lines 136 to 144):
 
 ```dart
-            _Destaque(
-              pick: escolha,
-              addonNames: nomesDeAddon,
-              verification: vencedora.state,
-              confirmadoPorCrc: split.confirmed,
-              // Hesita só enquanto a hesitação pode mudar alguma coisa.
-              hesita: split.verifying && !split.confirmed,
-              onDownload: () => onDownload(escolha),
+            _Highlight(
+              pick: choice,
+              addonNames: addonNames,
+              verification: winner.state,
+              crcConfirmed: split.confirmed,
+              hesitating: split.verifying && !split.confirmed,
+              onDownload: () => onDownload(choice),
             ),
 ```
 
-e para o `_OutrasFontes` (linhas 165 a 170):
+and to `_OtherSources` (lines 154 to 160):
 
 ```dart
-            _OutrasFontes(
-              sources: outras,
-              addonNames: nomesDeAddon,
-              descartadas: split.discarded.length,
-              comecaAberta: split.noCertainty,
-              onDownload: split.noCertainty ? baixarFonte : null,
+            _OtherSources(
+              sources: others,
+              addonNames: addonNames,
+              discarded: split.discarded.length,
+              startsOpen: split.noCertainty,
+              onDownload: split.noCertainty ? downloadSource : null,
             ),
 ```
 
-Em `_Destaque` (linha 292), acrescente o campo e o parâmetro:
+In `_Highlight` (line 277), add the field and the parameter:
 
 ```dart
-class _Destaque extends StatelessWidget {
+class _Highlight extends StatelessWidget {
   final SourcePick pick;
-
-  /// Id do addon para nome. Vazio é estado legítimo: quem não estiver no mapa
-  /// é desenhado pelo id.
   final Map<String, String> addonNames;
   final SourceVerification verification;
-  final bool confirmadoPorCrc;
-  final bool hesita;
+  final bool crcConfirmed;
+  final bool hesitating;
   final VoidCallback onDownload;
 
-  const _Destaque({
+  const _Highlight({
     required this.pick,
     required this.addonNames,
     required this.verification,
-    required this.confirmadoPorCrc,
-    required this.hesita,
+    required this.crcConfirmed,
+    required this.hesitating,
     required this.onDownload,
   });
 ```
 
-e troque a linha 346:
+and replace the size/addon line:
 
 ```dart
             '${formatBytes(pick.size)}, ${addonNames[pick.sourceId] ?? pick.sourceId}'
-            '${selo == null ? '' : ', $selo'}',
+            '${badge == null ? '' : ', $badge'}',
 ```
 
-Em `_OutrasFontes` (linha 434), acrescente o campo, o parâmetro, e o repasse:
+In `_OtherSources` (line 420), add the field, the parameter, and the pass-through:
 
 ```dart
-class _OutrasFontes extends StatelessWidget {
+class _OtherSources extends StatelessWidget {
   final List<VerifiedSource> sources;
   final Map<String, String> addonNames;
-  final int descartadas;
-  final bool comecaAberta;
-
-  /// Null na maioria das vezes: o botão por linha é só o estado "verificação
-  /// impossível" da seção 8.
+  final int discarded;
+  final bool startsOpen;
   final void Function(VerifiedSource item)? onDownload;
 
-  const _OutrasFontes({
+  const _OtherSources({
     required this.sources,
     required this.addonNames,
-    required this.descartadas,
-    required this.comecaAberta,
+    required this.discarded,
+    required this.startsOpen,
     required this.onDownload,
   });
 ```
 
 ```dart
           for (final item in sources)
-            _LinhaFonte(
+            _SourceRow(
               item: item,
               addonNames: addonNames,
               onDownload: onDownload == null ? null : () => onDownload!(item),
             ),
 ```
 
-Em `_LinhaFonte` (linha 479):
+In `_SourceRow` (line 467):
 
 ```dart
-class _LinhaFonte extends StatelessWidget {
+class _SourceRow extends StatelessWidget {
   final VerifiedSource item;
   final Map<String, String> addonNames;
   final VoidCallback? onDownload;
 
-  const _LinhaFonte({required this.item, required this.addonNames, required this.onDownload});
+  const _SourceRow({required this.item, required this.addonNames, required this.onDownload});
 ```
 
-e troque a linha 501:
+and replace the size/addon line:
 
 ```dart
             '${formatBytes(item.source.size)}, '
             '${addonNames[item.source.sourceId] ?? item.source.sourceId}, '
 ```
 
-**Tropeço provável:** trocar o `?? item.source.sourceId` por `?? ''` ou por `?? 'desconhecido'`. O primeiro deixa `"4.0 MB, , HTTP, ..."` na tela, com a vírgula pendurada, e é o que acontece com todo jogo em cache de um addon removido. O segundo apaga a única pista que o usuário tem de onde o arquivo veio. O id feio é a resposta certa aqui.
+**Likely pitfall:** replacing `?? item.source.sourceId` with `?? ''` or `?? 'unknown'`. The first leaves `"4.0 MB, , HTTP, ..."` on screen with a dangling comma, and that is what happens with every game in the cache of a removed addon. The second erases the only clue the user has about where the file came from. The ugly id is the right answer here.
 
-**Segundo tropeço:** transformar `_Destaque` ou `_LinhaFonte` em `ConsumerWidget` para ler o provider direto. Funciona e quebra a regra escrita em `game_detail_screen.dart:64-66`, que existe por um motivo medido na fatia 3: os widgets filhos são testados pelo `_host`, com dado injetado, e um `ref` dentro deles obrigaria todo teste de widget filho a montar `ProviderScope`.
+**Second pitfall:** turning `_Highlight` or `_SourceRow` into a `ConsumerWidget` to read the provider directly. That works and breaks the rule written at `game_detail_screen.dart:55`, which exists for a reason measured in slice 3: the child widgets are tested via `_host`, with injected data, and a `ref` inside them would require every child widget test to mount a `ProviderScope`.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_provider_test.dart test/game_detail_screen_test.dart
 ```
 
-Esperado: zero falha. As nove expectativas de `'... listagem ...'` continuam verdes, porque o mapa padrão do `_host` é vazio e a tela cai no id.
+Expected: zero failures. The nine `'... listagem ...'` expectations remain green, because the `_host` default map is empty and the screen falls back to the id.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+504`, zero falha.
+Expected: `+504`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 8: Commit**
 
@@ -5963,49 +5821,49 @@ git add lib/providers/addon_provider.dart lib/screens/game_detail_screen.dart
 git commit -m "feat(addon): a tela de detalhe mostra o nome do addon, com o id como reserva"
 ```
 
-**Fim da Grupo 4.** O multi-addon está inteiro por dentro: cada fonte diz de onde veio, a ordem do usuário decide o desempate, e a tela fala o nome que ele deu. O que não existe ainda é a tela onde ele instala, arrasta e remove, nem a tela de contas com o aviso do cofre em texto puro. É a Grupo 5.
+**End of Group 4.** Multi-addon is complete on the inside: each source says where it came from, the user's order decides the tiebreak, and the screen speaks the name they gave. What does not exist yet is the screen where they install, drag, and remove, nor the accounts screen with the plaintext vault warning. That is Group 5.
 
-| Task | Novos | Acumulado |
+| Task | New | Cumulative |
 | --- | --- | --- |
-| 15, o id do addon na grade e no lote | 3 | 497 |
-| 16, a prioridade chega nas telas | 3 | 500 |
-| 17, o nome do addon na tela | 4 | 504 |
+| 15, addon id in the grid and batch | 3 | 497 |
+| 16, priority reaches the screens | 3 | 500 |
+| 17, addon name on screen | 4 | 504 |
 
 ---
 
-## Grupo 5: as telas
+## Group 5: the screens
 
-Tudo que a seção 9 do spec de UI pede existe por dentro e não tem porta. O usuário não consegue instalar um addon que não seja o embutido, não consegue arrastar a ordem que `sourcePriorityProvider` deriva, não consegue digitar o token de um addon de terceiro, não vê as contas que tem num lugar só, e não recebe o aviso de que o cofre caiu para texto puro. Esta grupo é o que transforma dezessete Tasks de encanamento em software que alguém usa.
+Everything UI spec section 9 asks for exists on the inside and has no door. The user cannot install an addon other than the builtin, cannot drag the order that `sourcePriorityProvider` derives, cannot type a third-party addon's token, does not see all their accounts in one place, and does not receive the warning that the vault fell back to plaintext. This group is what turns seventeen plumbing Tasks into software someone can use.
 
-A ordem tem um critério, e é o de **não entregar elemento de UI morto**: cada Task deixa a tela que ela criou inteiramente ligada antes de a seguinte começar. Por isso o serviço de instalação vem antes da tela de detalhe, a tela de detalhe vem antes da lista que a abre, e as portas de entrada vêm por último, quando já existe para onde mandar o usuário. O Accounts consolidado fecha a grupo porque ele reúne o que as Tasks anteriores espalharam: sem a lista de addons e sem o formulário por par, não haveria o que reunir.
+The ordering has one criterion: **never deliver a dead UI element**. Each Task leaves the screen it created fully wired before the next one begins. That is why the install service comes before the detail screen, the detail screen before the list that opens it, and the entry points last, when there is already somewhere to send the user. The consolidated Accounts closes the group because it reunites what the earlier Tasks scattered: without the addon list and without the per-pair form, there would be nothing to reunite.
 
-Antes das telas vêm duas Tasks sem pixel nenhum, pelo mesmo motivo de sempre: o que dá para testar como função pura não vai para dentro de widget. A Task 18 tira do catálogo fundido as três perguntas que as telas fazem, e a Task 19 fecha a última metade do cofre, que é o token deixar de ser por console e passar a ser por par (addon, console).
+Before the screens come two Tasks with no pixels, for the usual reason: what can be tested as a pure function does not go inside a widget. Task 18 extracts from the merged catalog the three questions the screens ask, and Task 19 closes the last half of the vault, which is the token moving from per-console to per-pair (addon, console).
 
-**O que esta grupo não faz, e está escrito para não ser descoberto na revisão:** a seção 9 pede, na Cobertura, "quais consoles ele atende **e quantos itens em cada**". A contagem de itens por console só existe depois de `loadCatalog`, que é rede por url. Desenhá-la na tela de detalhe significaria buscar N catálogos ao abrir a tela de um addon. Fica de fora, com a Cobertura mostrando os consoles e não a contagem, e a varredura da Grupo 6 lista isso como lacuna conhecida em vez de dizer que a seção 9 está cumprida.
+**What this group does not do, stated here so it is not discovered in review:** section 9 asks, under Coverage, "which consoles it serves **and how many items in each**." The per-console item count only exists after `loadCatalog`, which is a network call by URL. Drawing it on the detail screen would mean fetching N catalogs when opening an addon's screen. It is left out, with Coverage showing the consoles but not the count, and the Group 6 sweep lists this as a known gap rather than claiming section 9 is complete.
 
 ---
 
-### Task 18: as três perguntas que as telas fazem ao catálogo
+### Task 18: the three questions the screens ask the catalog
 
 **Files:**
-- Modify: `lib/models/console_model.dart:84-95` (o getter vira uma chamada)
-- Modify: `lib/services/console_merge.dart` (ganha `authForAddon`, `AddonCoverage` e `MergedCatalog.coverage`)
-- Modify: `lib/providers/addon_provider.dart` (ganha `addonCoverageProvider`)
+- Modify: `lib/models/console_model.dart:84-95` (the getter becomes a call)
+- Modify: `lib/services/console_merge.dart` (gains `authForAddon`, `AddonCoverage`, and `MergedCatalog.coverage`)
+- Modify: `lib/providers/addon_provider.dart` (gains `addonCoverageProvider`)
 - Test: `test/addon_coverage_test.dart`
 
-Três perguntas, e nenhuma delas tem resposta hoje:
+Three questions, and none of them has an answer today:
 
-1. **"esta fonte pede conta?"** `Console.hasTokenAuth` responde pelo console, e desde a Grupo 3 a auth que importa é a da fonte: com dois addons servindo o mesmo console, `Console.auth` é a do primeiro que o declarou. Quem tem um `ConsoleSource` em mãos não tem `Console` para chamar o getter.
-2. **"com que auth este addon fala neste console?"** É o que falta para o `download_provider` da Task 19 parar de mandar o cookie de um servidor para o outro.
-3. **"o que este addon cobre?"** É o `"25 consoles"` e o chip de conta da linha da seção 9.
+1. **"does this source require an account?"** `Console.hasTokenAuth` answers for the console, and since Group 3 the auth that matters is the source's: with two addons serving the same console, `Console.auth` is that of the first one that declared it. A caller with a `ConsoleSource` in hand has no `Console` to call the getter on.
+2. **"with what auth does this addon speak on this console?"** That is what the Task 19 `download_provider` needs to stop sending one server's cookie to another.
+3. **"what does this addon cover?"** That is the `"25 consoles"` and the account chip in the section 9 row.
 
-As três são funções puras sobre dado que a fusão já tem. Escrever isso dentro das telas seria transformar regra testável em teste de widget.
+All three are pure functions over data the merge already has. Writing this inside the screens would turn a testable rule into a widget test.
 
-O arquivo de teste é novo, `test/addon_coverage_test.dart`, por dois motivos: não existe arquivo de teste do modelo `Console` no repositório (`ls test/` não tem nenhum), e `test/console_merge_test.dart` já existe desde a Task 10 com os onze casos da fusão, que são sobre outra coisa.
+The test file is new, `test/addon_coverage_test.dart`, for two reasons: there is no `Console` model test file in the repository (`ls test/` has none), and `test/console_merge_test.dart` has existed since Task 10 with the eleven merge cases, which are about something else.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/addon_coverage_test.dart`:
+Create `test/addon_coverage_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -6015,44 +5873,41 @@ import 'package:roms_downloader/services/console_merge.dart';
 Console _console(String id, List<String> urls, {Map<String, dynamic>? auth}) =>
     Console(id: id, name: id.toUpperCase(), urls: urls, auth: auth);
 
-AddonCatalog _catalogo(String addonId, Map<String, Console> consoles) => (addonId: addonId, consoles: consoles);
+AddonCatalog _catalog(String addonId, Map<String, Console> consoles) => (addonId: addonId, consoles: consoles);
 
 void main() {
   group('authNeedsToken', () {
-    test('console sem bloco de auth não pede token', () {
+    test('console with no auth block needs no token', () {
       expect(authNeedsToken(null), isFalse);
     });
 
-    test('a marca que a colheita deixou basta', () {
-      // `requires_token` é o que a Task 8 grava no lugar do token que tira do
-      // arquivo compartilhável. Sem este caso, um catálogo privado instalado
-      // perderia justamente a tela onde o usuário digitaria o token dele.
+    test('the harvest mark alone is enough', () {
+      // `requires_token` is what the harvest writes in place of the token it
+      // strips from the shareable file.
       expect(authNeedsToken(const {'requires_token': true}), isTrue);
     });
 
-    test('o campo cru do catálogo ainda conta', () {
-      // O embutido nunca passou pela colheita, e um arquivo que o usuário
-      // abriu na mão também não.
+    test('the raw catalog field still counts', () {
+      // The built-in never went through the harvest, nor did a hand-opened file.
       expect(authNeedsToken(const {'token': 'tok'}), isTrue);
     });
 
-    test('só a mensagem de login já conta', () {
-      expect(authNeedsToken(const {'auth_message': 'Peça convite no fórum.'}), isTrue);
+    test('the login message alone counts', () {
+      expect(authNeedsToken(const {'auth_message': 'Ask for an invite on the forum.'}), isTrue);
     });
 
-    test('ia_s3 não pede token, nem com a marca', () {
-      // O Internet Archive assina de outro jeito e tem tela própria em
-      // Accounts. Um campo de token aqui seria campo que não autentica nada.
+    test('ia_s3 needs no token, even with the mark', () {
+      // Internet Archive signs differently and has its own screen in Accounts.
       expect(authNeedsToken(const {'type': 'ia_s3', 'requires_token': true}), isFalse);
     });
 
-    test('auth que não fala de token não pede token', () {
+    test('auth that says nothing about a token needs none', () {
       expect(authNeedsToken(const {'cookies': true, 'cookie_name': 'sess'}), isFalse);
     });
 
-    test('hasTokenAuth é a função, e não uma segunda regra', () {
-      // O caso que impede a volta da duplicação: se alguém mexer num dos dois
-      // lugares, este expect para de valer.
+    test('hasTokenAuth is the function, not a second rule', () {
+      // Guards against the duplication returning: if someone edits one of the
+      // two places, this expect stops holding.
       const auth = {'requires_token': true};
       expect(_console('snes', const ['https://a/'], auth: auth).hasTokenAuth, authNeedsToken(auth));
       expect(_console('snes', const ['https://a/']).hasTokenAuth, authNeedsToken(null));
@@ -6060,155 +5915,138 @@ void main() {
   });
 
   group('authForAddon', () {
-    final fundido = mergeCatalogs([
-      _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-      _catalogo('ultranx', {
+    final merged = mergeCatalogs([
+      _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+      _catalog('ultranx', {
         'snes': _console('snes', const ['https://ultranx/snes/'], auth: const {'token': 'tok', 'cookies': true}),
       }),
     ]);
 
-    test('devolve a auth da fonte do addon pedido', () {
-      expect(authForAddon(fundido.sources['snes']!, 'ultranx'), {'token': 'tok', 'cookies': true});
+    test('returns the auth of the requested addon\'s source', () {
+      expect(authForAddon(merged.sources['snes']!, 'ultranx'), {'token': 'tok', 'cookies': true});
     });
 
-    test('addon que não serve este console devolve null', () {
-      expect(authForAddon(fundido.sources['snes']!, 'arquivo-do-fulano'), isNull);
+    test('addon that does not serve this console returns null', () {
+      expect(authForAddon(merged.sources['snes']!, 'someones-archive'), isNull);
     });
 
-    test('addon que serve sem declarar auth também devolve null', () {
-      // As duas ausências viram o mesmo `null` de propósito: quem lê faz a
-      // mesma coisa nos dois casos, que é não mandar header nenhum.
-      expect(authForAddon(fundido.sources['snes']!, 'myrient'), isNull);
+    test('addon that serves without declaring auth also returns null', () {
+      // Both absences become the same `null` on purpose: the reader treats them
+      // alike, sending no header.
+      expect(authForAddon(merged.sources['snes']!, 'myrient'), isNull);
     });
 
-    test('entre duas fontes do mesmo addon, a primeira manda', () {
-      // Não sai da fusão, que dá a mesma auth a todas as urls de um console
-      // num mesmo catálogo. A regra fica fixada porque `coverage` depende dela
-      // para concordar com esta função.
-      const lista = [
-        ConsoleSource(addonId: 'a', url: 'https://um/', auth: {'token': 'primeiro'}),
-        ConsoleSource(addonId: 'a', url: 'https://dois/', auth: {'token': 'segundo'}),
+    test('between two sources of the same addon, the first wins', () {
+      const list = [
+        ConsoleSource(addonId: 'a', url: 'https://one/', auth: {'token': 'first'}),
+        ConsoleSource(addonId: 'a', url: 'https://two/', auth: {'token': 'second'}),
       ];
 
-      expect(authForAddon(lista, 'a'), {'token': 'primeiro'});
+      expect(authForAddon(list, 'a'), {'token': 'first'});
     });
   });
 
   group('coverage', () {
-    test('lista os consoles de cada addon', () {
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {
+    test('lists each addon\'s consoles', () {
+      final merged = mergeCatalogs([
+        _catalog('myrient', {
           'snes': _console('snes', const ['https://myrient/snes/']),
           'md': _console('md', const ['https://myrient/md/']),
         }),
-        _catalogo('ultranx', {'switch': _console('switch', const ['https://ultranx/'])}),
+        _catalog('ultranx', {'switch': _console('switch', const ['https://ultranx/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes', 'md']);
-      expect(fundido.coverage()['ultranx']!.consoles, ['switch']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes', 'md']);
+      expect(merged.coverage()['ultranx']!.consoles, ['switch']);
     });
 
-    test('console servido por dois addons conta para os dois', () {
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-        _catalogo('fulano', {'snes': _console('snes', const ['https://fulano/snes/'])}),
+    test('a console served by two addons counts for both', () {
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+        _catalog('acme', {'snes': _console('snes', const ['https://acme/snes/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes']);
-      expect(fundido.coverage()['fulano']!.consoles, ['snes']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes']);
+      expect(merged.coverage()['acme']!.consoles, ['snes']);
     });
 
-    test('duas urls do mesmo addon no mesmo console contam um console só', () {
-      // A linha da seção 9 diz "25 consoles", não "25 urls". Um espelho a mais
-      // não deixa a fonte maior.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {
-          'snes': _console('snes', const ['https://myrient/snes/', 'https://espelho/snes/']),
+    test('two urls of the same addon on the same console count one console', () {
+      // The count is "25 consoles", not "25 urls". One more mirror does not make
+      // the source bigger.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {
+          'snes': _console('snes', const ['https://myrient/snes/', 'https://mirror/snes/']),
         }),
       ]);
 
-      expect(fundido.coverage()['myrient']!.consoles, ['snes']);
+      expect(merged.coverage()['myrient']!.consoles, ['snes']);
     });
 
-    test('authConsoles traz só os consoles que pedem conta', () {
-      final fundido = mergeCatalogs([
-        _catalogo('ultranx', {
+    test('authConsoles carries only the consoles that need an account', () {
+      final merged = mergeCatalogs([
+        _catalog('ultranx', {
           'switch': _console('switch', const ['https://ultranx/switch/'], auth: const {'requires_token': true}),
           'wiiu': _console('wiiu', const ['https://ultranx/wiiu/']),
         }),
       ]);
 
-      final cobertura = fundido.coverage()['ultranx']!;
+      final coverage = merged.coverage()['ultranx']!;
 
-      expect(cobertura.consoles, ['switch', 'wiiu']);
-      expect(cobertura.authConsoles, ['switch']);
+      expect(coverage.consoles, ['switch', 'wiiu']);
+      expect(coverage.authConsoles, ['switch']);
     });
 
-    test('addon sem conta em console nenhum tem authConsoles vazio', () {
-      // É este vazio que apaga o chip de conta da linha, e ele precisa ser
-      // lista vazia e não `null`: a tela pergunta `isNotEmpty`.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+    test('addon with no account on any console has empty authConsoles', () {
+      // This empty is what hides the account chip, and it must be an empty list,
+      // not `null`: the screen asks `isNotEmpty`.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
       ]);
 
-      expect(fundido.coverage()['myrient']!.authConsoles, isEmpty);
+      expect(merged.coverage()['myrient']!.authConsoles, isEmpty);
     });
 
-    test('addon que não serve nenhum console não aparece no mapa', () {
-      // O caso do addon recém instalado cujo catálogo ainda não foi lido, e o
-      // do addon cuja url morreu. Quem desenha a linha trata ausente como
-      // zero, e é por isso que a tela da Task 23 usa
-      // `?? (consoles: const <String>[], authConsoles: const <String>[])` em
-      // vez de `!`.
-      final fundido = mergeCatalogs([
-        _catalogo('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
-        _catalogo('vazio', const {}),
+    test('addon serving no console does not appear in the map', () {
+      // A freshly installed addon whose catalog is not read yet, or one whose
+      // url died. The row treats absent as zero, so the screen uses a fallback
+      // record instead of `!`.
+      final merged = mergeCatalogs([
+        _catalog('myrient', {'snes': _console('snes', const ['https://myrient/snes/'])}),
+        _catalog('empty', const {}),
       ]);
 
-      expect(fundido.coverage().containsKey('vazio'), isFalse);
+      expect(merged.coverage().containsKey('empty'), isFalse);
     });
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/addon_coverage_test.dart
 ```
 
-Esperado: erro de compilação, `Undefined name 'authNeedsToken'`.
+Expected: compilation error, `Undefined name 'authNeedsToken'`.
 
-- [ ] **Step 3: A regra do token sai do getter**
+- [ ] **Step 3: The token rule moves out of the getter**
 
-Em `lib/models/console_model.dart`, **acima** da declaração `class Console {` da linha 1, acrescente a função de topo:
+In `lib/models/console_model.dart`, **above** the `class Console {` declaration at line 1, add the top-level function:
 
 ```dart
-/// Se este bloco de `auth` diz que o console pede um token do usuário.
+/// Whether this `auth` block means the console needs a user token.
 ///
-/// Existe como função de topo, e não só como getter, porque desde a Grupo 3 a
-/// auth que importa é a da **fonte** (`ConsoleSource.auth`) e não a do
-/// `Console`: com dois addons servindo o mesmo console, `Console.auth` é a do
-/// primeiro que o declarou. Quem tem uma fonte em mãos não tem um `Console`
-/// para chamar o getter.
-///
-/// `requires_token` é a marca que a colheita da instalação deixa no lugar do
-/// token que tirou (`CatalogService.harvestAuthTokens`). Os outros dois termos
-/// continuam valendo para o catálogo embutido, que nunca passou pela colheita,
-/// e para arquivo aberto na mão.
+/// A top-level function, not just a getter, so a caller holding a source
+/// (`ConsoleSource.auth`) can ask without a `Console`.
 bool authNeedsToken(Map<String, dynamic>? auth) {
   if (auth == null) return false;
-  // O Internet Archive assina de outro jeito, e a conta dele é gerida pelo
-  // fluxo de login próprio, em Accounts. Sai antes dos outros três termos de
-  // propósito: um item do IA colhido com token continua não pedindo campo de
-  // token na tela.
   if (auth['type'] == 'ia_s3') return false;
   return auth['requires_token'] == true || auth.containsKey('token') || auth.containsKey('auth_message');
 }
 ```
 
-e troque as linhas 84 a 95 por:
+and replace lines 84 to 95 with:
 
 ```dart
   /// True when this console uses a user-editable bearer/cookie token for auth.
@@ -6216,134 +6054,101 @@ e troque as linhas 84 a 95 por:
   bool get hasTokenAuth => authNeedsToken(auth);
 ```
 
-**Duas ressalvas sobre esse intervalo, porque ele já esteve escrito errado de duas maneiras.** A primeira é que são 84 a 95, e não 55 a 59: o plano foi escrito contra `ef5ee57`, e desde então a Task 8 pôs cinco linhas de comentário dentro do getter e a Task 10 pôs `withUrls` acima dele. Confira antes de apagar: `sed -n '84,95p' lib/models/console_model.dart` tem que começar em `/// True when this console uses` e terminar no `}` do getter. A segunda é que o intervalo **inclui as duas linhas de doc**, e não só o corpo. Tem que incluir, porque o bloco acima já traz essas duas linhas de volta; trocar só o corpo deixaria o doc duplicado. Esta era a segunda forma do erro, e ela existia desde a primeira versão do plano, independente da defasagem.
+**Two caveats about that range, because it has been written wrong two ways.** The first is that it is 84 to 95, not 55 to 59: the plan was written against `ef5ee57`, and since then Task 8 added five comment lines inside the getter and Task 10 added `withUrls` above it. Verify before deleting: `sed -n '84,95p' lib/models/console_model.dart` must start at `/// True when this console uses` and end at the getter's `}`. The second is that the range **includes the two doc lines**, not just the body. It must, because the block above already brings those two lines back; replacing only the body would leave the doc duplicated. That was the second form of the error, present since the first version of the plan regardless of the offset.
 
-As cinco linhas de comentário que a Task 8 pôs dentro do getter somem aqui, e isso é mudança de lugar e não perda: elas explicavam `requires_token` e a colheita, e esse texto está no doc de `authNeedsToken`, logo acima, que é onde a regra passa a morar.
+The five comment lines Task 8 put inside the getter disappear here, and that is relocation not loss: they explained `requires_token` and the harvest, and that text is now in the `authNeedsToken` doc above, where the rule lives.
 
-**Tropeço provável:** copiar a regra para a função e deixar o corpo antigo no getter, "para não mexer no que funciona". Fica igual hoje e diverge no primeiro dia em que alguém corrigir um dos dois. O caso `'hasTokenAuth é a função, e não uma segunda regra'` existe para pegar isso, e ele passa com a duplicação: o que ele fixa é que os dois concordam, e o que impede a divergência é a delegação. Delegue.
+**Likely pitfall:** copying the rule into the function and leaving the old body in the getter, "to avoid touching what works." It behaves the same today and diverges the first day someone fixes one of the two. The case `'hasTokenAuth is the function, not a second rule'` exists to catch this, and it passes with duplication: what it fixes is that the two agree, and what prevents divergence is the delegation. Delegate.
 
-- [ ] **Step 4: A auth por addon e a cobertura**
+- [ ] **Step 4: The per-addon auth and coverage**
 
-Em `lib/services/console_merge.dart`, logo depois do `typedef AddonCatalog`, acrescente:
+In `lib/services/console_merge.dart`, right after the `typedef AddonCatalog`, add:
 
 ```dart
-/// A auth com que [addonId] fala neste console, ou `null` se ele não o serve.
-///
-/// Recebe a lista e não um `MergedCatalog` porque o chamador de produção é o
-/// `download_provider`, que tem em mãos o retorno de
-/// `CatalogService.sourcesFor(consoleId)` e nenhum catálogo fundido.
-///
-/// Duas ausências viram o mesmo `null`: o addon não serve este console, e o
-/// addon serve e não declara auth. Quem lê faz a mesma coisa nos dois casos,
-/// que é não mandar header.
+/// The auth [addonId] speaks in this console, or `null` if it doesn't serve
+/// it. Not serving and serving without auth both return `null`.
 Map<String, dynamic>? authForAddon(List<ConsoleSource> sources, String addonId) {
-  for (final fonte in sources) {
-    if (fonte.addonId == addonId) return fonte.auth;
+  for (final source in sources) {
+    if (source.addonId == addonId) return source.auth;
   }
   return null;
 }
 
-/// O que um addon cobre: os consoles que ele serve, e quais deles pedem conta.
-///
-/// Uma estrutura só para as duas perguntas da linha da seção 9 do spec de UI:
-/// o `"25 consoles"` é `consoles.length`, e o chip de conta é
-/// `authConsoles.isNotEmpty`. Duas listas e não uma lista mais um contador
-/// porque a tela de detalhe desenha os nomes, e a lista desenha o número.
+/// What an addon covers: the consoles it serves, and which of them need auth.
 typedef AddonCoverage = ({List<String> consoles, List<String> authConsoles});
 ```
 
-e, dentro de `MergedCatalog`, logo depois de `isEmpty`:
+and, inside `MergedCatalog`, right after `isEmpty`:
 
 ```dart
-  /// De cada addon para o que ele cobre.
+  /// From each addon to what it covers.
   ///
-  /// Percorre `sources` e não `consoles` porque é `sources` que sabe de qual
-  /// addon veio cada url. Um addon que serve o mesmo console por duas urls
-  /// conta uma vez.
-  ///
-  /// Addon que não serve console nenhum **não aparece no mapa**, e isso é o
-  /// caso normal de um addon recém instalado cujo catálogo ainda não foi lido.
-  /// Quem lê trata ausente como cobertura zero.
+  /// An addon serving no console is absent from the map; readers treat absent
+  /// as zero coverage.
   Map<String, AddonCoverage> coverage() {
-    final porAddon = <String, List<String>>{};
-    final comConta = <String, List<String>>{};
+    final byAddon = <String, List<String>>{};
+    final withAccount = <String, List<String>>{};
 
-    for (final entrada in sources.entries) {
-      final vistos = <String>{};
-      for (final fonte in entrada.value) {
-        // Só a primeira fonte de cada addon neste console conta, e ela é a
-        // mesma que `authForAddon` devolve. As duas concordam de propósito:
-        // a tela que diz "pede conta" e a que monta o header têm que estar
-        // olhando para o mesmo bloco de auth.
-        if (!vistos.add(fonte.addonId)) continue;
-        porAddon.putIfAbsent(fonte.addonId, () => <String>[]).add(entrada.key);
-        if (authNeedsToken(fonte.auth)) {
-          comConta.putIfAbsent(fonte.addonId, () => <String>[]).add(entrada.key);
+    for (final entry in sources.entries) {
+      final seen = <String>{};
+      for (final source in entry.value) {
+        if (!seen.add(source.addonId)) continue;
+        byAddon.putIfAbsent(source.addonId, () => <String>[]).add(entry.key);
+        if (authNeedsToken(source.auth)) {
+          withAccount.putIfAbsent(source.addonId, () => <String>[]).add(entry.key);
         }
       }
     }
 
     return {
-      for (final entrada in porAddon.entries)
-        entrada.key: (consoles: entrada.value, authConsoles: comConta[entrada.key] ?? const <String>[]),
+      for (final entry in byAddon.entries)
+        entry.key: (consoles: entry.value, authConsoles: withAccount[entry.key] ?? const <String>[]),
     };
   }
 ```
 
-**Tropeço provável:** deduplicar o addon com um `Set` por fora do laço dos consoles, em vez de um por console. Assim o addon entraria uma vez no mapa inteiro e a cobertura dele viraria sempre `["snes"]`, o primeiro console que ele servisse. O `vistos` nasce dentro do laço de `sources.entries`, e é por isso.
+**Likely pitfall:** deduplicating the addon with a `Set` outside the console loop, instead of one per console. That would enter the addon once into the entire map and its coverage would always become `["snes"]`, the first console it served. The `seen` set is born inside the `sources.entries` loop, and that is why.
 
-- [ ] **Step 5: O provider que as telas sobrescrevem**
+- [ ] **Step 5: The provider the screens override**
 
-Em `lib/providers/addon_provider.dart`, logo depois de `addonNamesProvider`:
+In `lib/providers/addon_provider.dart`, right after `addonNamesProvider`:
 
 ```dart
-/// A cobertura de cada addon, recalculada toda vez que a lista muda.
-///
-/// `ref.watch(addonProvider)` está ali pelo efeito e não pelo valor: a fusão
-/// mora dentro do `CatalogService`, e é ela que muda quando o usuário instala,
-/// remove ou arrasta.
-///
-/// **Sem teste, e de propósito.** `mergedCatalog()` chega em disco por
-/// `path_provider`, que num teste sem plataforma não falha: ele devolve vazio
-/// em silêncio. Um teste aqui afirmaria cobertura zero e passaria para sempre,
-/// inclusive depois de a regra quebrar. O que tem teste é
-/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22
-/// e 23 sobrescrevem este provider.
+/// Per-addon coverage, derived from the merged catalog.
 final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
-  ref.watch(addonProvider);
-  return (await CatalogService().mergedCatalog()).coverage();
+  return (await ref.watch(mergedCatalogProvider.future)).coverage();
 });
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/services/console_merge.dart';
 ```
 
-- [ ] **Step 6: Rode para ver passar**
+- [ ] **Step 6: Run to see it pass**
 
 ```bash
 flutter test test/addon_coverage_test.dart
 ```
 
-Esperado: `+17`, zero falha.
+Expected: `+17`, zero failures.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+521`, zero falha.
+Expected: `+521`, zero failures.
 
-- [ ] **Step 8: Analise**
+- [ ] **Step 8: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`.
+Expected: `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -6356,28 +6161,28 @@ git commit -m "feat(addon): auth por fonte e cobertura por addon sobre o catalog
 
 ---
 
-### Task 19: o token deixa de ser do console e passa a ser do par (addon, console)
+### Task 19: the token moves from the console to the (addon, console) pair
 
 **Files:**
-- Modify: `lib/services/settings_service.dart` (`clearConsoleToken` vira `writeAddonToken`, mais `readAddonToken`)
-- Modify: `lib/providers/settings_provider.dart` (`ready`, `setAddonToken`, `readAddonToken`, `setConsoleAuthToken` delega)
-- Modify: `lib/utils/console_auth.dart` (ganha `addonsThatNeedToken`)
+- Modify: `lib/services/settings_service.dart` (`clearConsoleToken` becomes `writeAddonToken`, plus `readAddonToken`)
+- Modify: `lib/providers/settings_provider.dart` (`ready`, `setAddonToken`, `readAddonToken`, `setConsoleAuthToken` delegates)
+- Modify: `lib/utils/console_auth.dart` (gains `addonsThatNeedToken`)
 - Modify: `lib/providers/download_provider.dart:429-441`
 - Modify: `lib/services/task_queue_service.dart:15-26`
-- Modify: `test/settings_service_test.dart` (um caso muda de método, e a contagem do arquivo não muda)
+- Modify: `test/settings_service_test.dart` (one case switches method, and the file count does not change)
 - Test: `test/addon_token_test.dart`
 
-A Task 13 já fez o **catálogo** buscar cada url com o token do addon dono dela. Sobraram dois caminhos falando de token por console: o download de um arquivo (`download_provider.dart:434`) e o bloqueio do lote (`task_queue_service.dart:18-24`). Os dois ainda leem `settings.consoleSettings[consoleId].authToken`, que é o espelho do embutido. Com dois addons no mesmo console, o primeiro manda o token do embutido para o servidor do terceiro, e o segundo bloqueia o lote inteiro por uma conta que talvez nem seja a da fonte de onde o jogo veio.
+Task 13 already made the **catalog** fetch each URL with the token of the addon that owns it. Two paths talking about a per-console token remained: downloading a file (`download_provider.dart:434`) and blocking the batch (`task_queue_service.dart:18-24`). Both still read `settings.consoleSettings[consoleId].authToken`, which is the builtin mirror. With two addons on the same console, the first sends the builtin's token to the third-party server, and the second blocks the entire batch because of an account that may not belong to the source the game came from.
 
-Duas decisões dentro desta Task valem mais lidas antes do código.
+Two decisions inside this Task are worth reading before the code.
 
-**O espelho fica, e fica só para o embutido.** Seria tentador hidratar todo token de addon dentro de `AppSettings.consoleSettings` e deixar todo mundo lendo dali, síncrono. Não dá, por duas razões independentes. A primeira é de contrato: `SecretVault` não enumera, não tem `readAll`, e isso é de propósito (Task 2), então o app não consegue descobrir para quais pares existe segredo sem já saber a lista. A segunda é de segurança: `consoleHasToken` e os dois `_authHeaders` de LAN leem esse espelho de forma síncrona e sem saber de addon, então um token de terceiro espelhado ali sairia pelo servidor do Tinfoil como se fosse do embutido. Quem precisa de token de terceiro lê sob demanda, no cofre.
+**The mirror stays, and stays only for the builtin.** It would be tempting to hydrate every addon token into `AppSettings.consoleSettings` and let everyone read from there, synchronously. That doesn't work, for two independent reasons. The first is a contract reason: `SecretVault` does not enumerate, has no `readAll`, and that is intentional (Task 2), so the app cannot discover which pairs have a secret without already knowing the list. The second is a security reason: `consoleHasToken` and the two LAN `_authHeaders` read that mirror synchronously and without knowing which addon it belongs to, so a third-party token mirrored there would go out through the Tinfoil server as if it were the builtin's. Whoever needs a third-party token reads on demand, from the vault.
 
-**O bloqueio do lote passa a ser por fonte.** Hoje é `console.hasTokenAuth`, uma pergunta sobre o console. Um console servido por um addon aberto e por um privado bloquearia o download do arquivo aberto por causa da conta do privado. A regra nova pergunta quais dos addons que serviram **estes jogos** pedem token, e cobra só desses.
+**Batch blocking is now per source.** Today it is `console.hasTokenAuth`, a question about the console. A console served by an open addon and a private one would block the download of the open file because of the private addon's account. The new rule asks which of the addons that served **these games** need a token, and charges only those.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/addon_token_test.dart`:
+Create `test/addon_token_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -6394,14 +6199,14 @@ import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/utils/console_auth.dart';
 
-/// Container com o `settingsProvider` de verdade sobre um cofre de mentira.
+/// Container with the real `settingsProvider` over a fake vault.
 ///
-/// O `app_settings` entra semeado com `{}` de propósito. Sem a chave,
-/// `loadSettings` cai no ramo padrão, que chama
-/// `DirectoryService.getDownloadDir`, que em Android pergunta permissão por
-/// plugin e num teste sem plataforma não responde. Com a chave, a carga segue
-/// o caminho normal e `AppSettings.fromJson({})` devolve os padrões.
-Future<({ProviderContainer container, MemoryVault vault})> _montar() async {
+/// `app_settings` is seeded with `{}` on purpose. Without the key,
+/// `loadSettings` falls into the default branch, which calls
+/// `DirectoryService.getDownloadDir`, which on Android asks for permission via
+/// plugin and gets no reply in a platformless test. With the key, loading
+/// follows the normal path and `AppSettings.fromJson({})` returns the defaults.
+Future<({ProviderContainer container, MemoryVault vault})> _build() async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
   final vault = MemoryVault();
@@ -6415,21 +6220,21 @@ Future<({ProviderContainer container, MemoryVault vault})> _montar() async {
 
 Game _game(String title, {required String sourceId}) => Game(
       title: title,
-      url: 'https://exemplo.org/snes/$title',
+      url: 'https://example.org/snes/$title',
       size: 2048,
       consoleId: 'snes',
       sourceId: sourceId,
     );
 
-ConsoleSource _fonte(String addonId, {Map<String, dynamic>? auth}) =>
+ConsoleSource _source(String addonId, {Map<String, dynamic>? auth}) =>
     ConsoleSource(addonId: addonId, url: 'https://$addonId/snes/', auth: auth);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('setAddonToken e readAddonToken', () {
-    test('grava o token na chave do par (addon, console)', () async {
-      final m = await _montar();
+  group('setAddonToken and readAddonToken', () {
+    test('writes the token under the (addon, console) pair key', () async {
+      final m = await _build();
 
       await m.container.read(settingsProvider.notifier).setAddonToken('ultranx', 'snes', 'tok');
 
@@ -6437,16 +6242,16 @@ void main() {
       expect(await m.container.read(settingsProvider.notifier).readAddonToken('ultranx', 'snes'), 'tok');
     });
 
-    test('ler o que nunca foi gravado devolve vazio, e não null', () async {
-      // Vazio e não `null` porque todo chamador pergunta `isEmpty`. O cofre
-      // devolve `null`, e é aqui que a tradução acontece, uma vez só.
-      final m = await _montar();
+    test('reading what was never written returns empty, not null', () async {
+      // Empty, not `null`, because every caller asks `isEmpty`. The vault
+      // returns `null`, and this is where the translation happens, once only.
+      final m = await _build();
 
       expect(await m.container.read(settingsProvider.notifier).readAddonToken('ultranx', 'snes'), '');
     });
 
-    test('token vazio apaga a chave', () async {
-      final m = await _montar();
+    test('empty token deletes the key', () async {
+      final m = await _build();
       final notifier = m.container.read(settingsProvider.notifier);
       await notifier.setAddonToken('ultranx', 'snes', 'tok');
 
@@ -6455,29 +6260,29 @@ void main() {
       expect(await m.vault.read(SecretRef.addonToken('ultranx', 'snes')), isNull);
     });
 
-    test('o token do embutido espelha nas settings', () async {
-      // O espelho é o que mantém de pé `consoleHasToken` e os dois
-      // `_authHeaders` de LAN, que leem síncrono e não sabem de addon.
-      final m = await _montar();
+    test('the builtin token mirrors into settings', () async {
+      // The mirror is what keeps `consoleHasToken` and the two LAN
+      // `_authHeaders` alive, which read synchronously and know nothing about addons.
+      final m = await _build();
 
       await m.container.read(settingsProvider.notifier).setAddonToken(kBuiltinAddonId, 'snes', 'tok');
 
       expect(m.container.read(settingsProvider).consoleSettings['snes']?.authToken, 'tok');
     });
 
-    test('o token de um addon de terceiro não espelha nas settings', () async {
-      // O caso que faz esta Task ser sobre segurança. Se espelhasse, o
-      // servidor do Tinfoil mandaria a credencial do UltraNX para o servidor
-      // do embutido, porque ele lê o espelho sem perguntar de qual addon é.
-      final m = await _montar();
+    test('a third-party addon token does not mirror into settings', () async {
+      // The case that makes this Task a security task. If it mirrored, the
+      // Tinfoil server would send the UltraNX credential to the builtin server,
+      // because it reads the mirror without asking which addon it belongs to.
+      final m = await _build();
 
       await m.container.read(settingsProvider.notifier).setAddonToken('ultranx', 'snes', 'tok');
 
       expect(m.container.read(settingsProvider).consoleSettings['snes']?.authToken, isNull);
     });
 
-    test('apagar o token do embutido limpa o espelho', () async {
-      final m = await _montar();
+    test('deleting the builtin token clears the mirror', () async {
+      final m = await _build();
       final notifier = m.container.read(settingsProvider.notifier);
       await notifier.setAddonToken(kBuiltinAddonId, 'snes', 'tok');
 
@@ -6487,21 +6292,21 @@ void main() {
       expect(await m.vault.read(SecretRef.addonToken(kBuiltinAddonId, 'snes')), isNull);
     });
 
-    test('dois addons no mesmo console guardam tokens separados', () async {
-      final m = await _montar();
+    test('two addons on the same console keep separate tokens', () async {
+      final m = await _build();
       final notifier = m.container.read(settingsProvider.notifier);
 
       await notifier.setAddonToken('ultranx', 'snes', 'tok-ultranx');
-      await notifier.setAddonToken('fulano', 'snes', 'tok-fulano');
+      await notifier.setAddonToken('acme', 'snes', 'tok-acme');
 
       expect(await notifier.readAddonToken('ultranx', 'snes'), 'tok-ultranx');
-      expect(await notifier.readAddonToken('fulano', 'snes'), 'tok-fulano');
+      expect(await notifier.readAddonToken('acme', 'snes'), 'tok-acme');
     });
 
-    test('setConsoleAuthToken é o caso particular do embutido', () async {
-      // Quatro telas ainda chamam o nome antigo. Ele não pode virar outra
-      // coisa por baixo.
-      final m = await _montar();
+    test('setConsoleAuthToken is the builtin special case', () async {
+      // Four screens still call the old name. It cannot silently become
+      // something else underneath.
+      final m = await _build();
 
       await m.container.read(settingsProvider.notifier).setConsoleAuthToken('snes', 'tok');
 
@@ -6511,146 +6316,146 @@ void main() {
   });
 
   group('addonsThatNeedToken', () {
-    test('addon cuja fonte pede token entra', () {
-      final pedem = addonsThatNeedToken(
-        [_game('Xenoblade.nsp', sourceId: 'ultranx')],
-        [_fonte('ultranx', auth: const {'requires_token': true})],
+    test('addon whose source needs a token is included', () {
+      final needing = addonsThatNeedToken(
+        [_game('Aethel.nsp', sourceId: 'ultranx')],
+        [_source('ultranx', auth: const {'requires_token': true})],
       );
 
-      expect(pedem, ['ultranx']);
+      expect(needing, ['ultranx']);
     });
 
-    test('addon cuja fonte não pede token fica fora', () {
-      final pedem = addonsThatNeedToken(
-        [_game('Chrono Trigger.zip', sourceId: 'myrient')],
-        [_fonte('myrient')],
+    test('addon whose source does not need a token is excluded', () {
+      final needing = addonsThatNeedToken(
+        [_game('Crystal Vanguard (USA).zip', sourceId: 'myrient')],
+        [_source('myrient')],
       );
 
-      expect(pedem, isEmpty);
+      expect(needing, isEmpty);
     });
 
-    test('a conta de um addon não bloqueia o download do outro', () {
-      // O motivo de a pergunta ser por fonte. O console é servido pelos dois, e
-      // o lote só tem arquivo do aberto: cobrar a conta do privado aqui seria
-      // impedir um download que não precisa dela.
-      final pedem = addonsThatNeedToken(
-        [_game('Chrono Trigger.zip', sourceId: 'myrient')],
-        [_fonte('myrient'), _fonte('ultranx', auth: const {'requires_token': true})],
+    test("one addon's account does not block the other's download", () {
+      // The reason the question is per-source. The console is served by both,
+      // and the batch only has a file from the open one: charging the private
+      // addon's account here would block a download that doesn't need it.
+      final needing = addonsThatNeedToken(
+        [_game('Crystal Vanguard (USA).zip', sourceId: 'myrient')],
+        [_source('myrient'), _source('ultranx', auth: const {'requires_token': true})],
       );
 
-      expect(pedem, isEmpty);
+      expect(needing, isEmpty);
     });
 
-    test('jogo de addon que não serve mais este console fica fora', () {
-      // Cache de um addon removido. Bloquear por causa dele seria cobrar conta
-      // de uma fonte que não existe mais, e o usuário não teria onde digitar.
-      final pedem = addonsThatNeedToken(
-        [_game('Xenoblade.nsp', sourceId: 'removido')],
-        [_fonte('myrient')],
+    test('game from an addon that no longer serves this console is excluded', () {
+      // Cache from a removed addon. Blocking because of it would charge an
+      // account for a source that no longer exists, and the user would have
+      // nowhere to type it.
+      final needing = addonsThatNeedToken(
+        [_game('Aethel.nsp', sourceId: 'removed')],
+        [_source('myrient')],
       );
 
-      expect(pedem, isEmpty);
+      expect(needing, isEmpty);
     });
 
-    test('cada addon entra uma vez, mesmo com muitos jogos', () {
-      final pedem = addonsThatNeedToken(
+    test('each addon appears once, even with many games', () {
+      final needing = addonsThatNeedToken(
         [
-          _game('Xenoblade.nsp', sourceId: 'ultranx'),
-          _game('Zelda.nsp', sourceId: 'ultranx'),
-          _game('Mario.nsp', sourceId: 'ultranx'),
+          _game('Aethel.nsp', sourceId: 'ultranx'),
+          _game('Kaelis.nsp', sourceId: 'ultranx'),
+          _game('Pixel.nsp', sourceId: 'ultranx'),
         ],
-        [_fonte('ultranx', auth: const {'requires_token': true})],
+        [_source('ultranx', auth: const {'requires_token': true})],
       );
 
-      expect(pedem, ['ultranx']);
+      expect(needing, ['ultranx']);
     });
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/addon_token_test.dart
 ```
 
-Esperado: erro de compilação, `The method 'setAddonToken' isn't defined`.
+Expected: compile error, `The method 'setAddonToken' isn't defined`.
 
-- [ ] **Step 3: O serviço passa a saber gravar, e não só apagar**
+- [ ] **Step 3: The service learns to write, not only to delete**
 
-Em `lib/services/settings_service.dart`, troque o método `clearConsoleToken` inteiro por:
+In `lib/services/settings_service.dart`, replace the entire `clearConsoleToken` method with:
 
 ```dart
-  /// O token de um par (addon, console) no cofre. Valor vazio **apaga**.
+  /// The token for an (addon, console) pair in the vault. An empty value **deletes**.
   ///
-  /// Era `clearConsoleToken(consoleId, vault)`, que sabia apagar e não sabia
-  /// gravar, e que assumia o embutido. O addon vira parâmetro porque dois
-  /// addons servindo o mesmo console têm tokens diferentes, e misturá-los é
-  /// mandar a credencial de um servidor para o outro.
+  /// Was `clearConsoleToken(consoleId, vault)`, which knew how to delete but not
+  /// write, and assumed the builtin. The addon becomes a parameter because two
+  /// addons serving the same console have different tokens, and mixing them means
+  /// sending one server's credential to the other.
   ///
-  /// Continua morando nesta classe, e não no notifier, porque ela é a única
-  /// dona do formato da chave: [_hydrate] e [_writeSecrets] leem e escrevem a
-  /// mesma `SecretRef.addonToken`.
+  /// Still lives in this class, not in the notifier, because it is the sole owner
+  /// of the key format: [_hydrate] and [_writeSecrets] read and write the same
+  /// `SecretRef.addonToken`.
   Future<void> writeAddonToken(String addonId, String consoleId, String token, SecretVault vault) async {
-    final chave = SecretRef.addonToken(addonId, consoleId);
-    if (token.isEmpty) return vault.delete(chave);
-    return vault.write(chave, token);
+    final key = SecretRef.addonToken(addonId, consoleId);
+    if (token.isEmpty) return vault.delete(key);
+    return vault.write(key, token);
   }
 
-  /// O token do par, ou string vazia. A tradução de `null` para `''` acontece
-  /// aqui, uma vez só, porque todo chamador pergunta `isEmpty`.
+  /// The pair's token, or empty string. The translation from `null` to `''`
+  /// happens here, once only, because every caller asks `isEmpty`.
   Future<String> readAddonToken(String addonId, String consoleId, SecretVault vault) async =>
       await vault.read(SecretRef.addonToken(addonId, consoleId)) ?? '';
 ```
 
-e no doc de `_writeSecrets`, troque a frase
+and in the `_writeSecrets` doc, replace the phrase
 
 ```dart
-  /// um clique apressado no boot em perda de todas as credenciais, sem erro na
-  /// tela. Quem apaga são [clearIaSecrets] e [clearConsoleToken], chamados de
-  /// propósito.
+  /// a hasty click on boot into losing all credentials, no error on screen.
+  /// Deletion is [clearIaSecrets] and [clearConsoleToken], called on purpose.
 ```
 
-por
+with
 
 ```dart
-  /// um clique apressado no boot em perda de todas as credenciais, sem erro na
-  /// tela. Quem apaga são [clearIaSecrets] e [writeAddonToken] com valor
-  /// vazio, chamados de propósito.
+  /// Writes what exists and does not delete what is `null`: a save triggered
+  /// while the load is still in flight would otherwise wipe every credential.
+  /// Deletion is [clearIaSecrets] and [writeAddonToken] with an empty value.
 ```
 
-- [ ] **Step 4: Reaponte o caso de teste da Task 6**
+- [ ] **Step 4: Retarget the Task 6 test case**
 
-O caso `'apagar o token de um console não leva o do vizinho'`, em `test/settings_service_test.dart`, chama o método que acabou de sumir. Ele continua sendo o mesmo caso, com o mesmo valor: troque a linha
+The case `'clearing one console token leaves the neighbor'`, in `test/settings_service_test.dart`, calls the method that just disappeared. It is still the same case, with the same value: replace the line
 
 ```dart
     await SettingsService().clearConsoleToken('snes', vault);
 ```
 
-por
+with
 
 ```dart
     await SettingsService().writeAddonToken(kBuiltinAddonId, 'snes', '', vault);
 ```
 
-A contagem do arquivo **não muda**. Se você se pegar acrescentando um caso aqui, pare: o par (addon, console) tem cobertura própria em `test/addon_token_test.dart`, e um caso a mais aqui empurraria o acumulado de todas as Tasks seguintes.
+The file count **does not change**. If you find yourself adding a case here, stop: the (addon, console) pair has its own coverage in `test/addon_token_test.dart`, and one more case here would shift the running total of all subsequent Tasks.
 
-- [ ] **Step 5: O notifier ganha `ready` e os dois métodos por addon**
+- [ ] **Step 5: The notifier gains `ready` and the two per-addon methods**
 
-Em `lib/providers/settings_provider.dart`, o topo da classe passa a ser:
+In `lib/providers/settings_provider.dart`, the top of the class becomes:
 
 ```dart
 class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
   final Future<SecretVault> _vault;
 
-  /// Resolve quando a carga inicial chegou do prefs e do cofre.
+  /// Resolves when the initial load from prefs and vault has arrived.
   ///
-  /// Existe pelo teste, e não é enfeite: sem ela, um teste que leia o estado
-  /// logo depois de construir o container lê `const AppSettings()` e passa por
-  /// acidente, inclusive depois de a carga quebrar. Mesma saída do
-  /// `AddonNotifier.ready` da Task 14.
+  /// Exists for tests, and is not decoration: without it, a test that reads
+  /// state right after building the container reads `const AppSettings()` and
+  /// passes by accident, including after a broken load. Same pattern as
+  /// `AddonNotifier.ready` from Task 14.
   late final Future<void> ready;
 
   SettingsNotifier(this._vault) : super(const AppSettings()) {
@@ -6658,23 +6463,23 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   }
 ```
 
-e o `setConsoleAuthToken` da Task 6 é substituído por três membros:
+and the `setConsoleAuthToken` from Task 6 is replaced by three members:
 
 ```dart
-  /// Guarda, ou apaga, o token de um par (addon, console).
+  /// Saves, or deletes, the token for an (addon, console) pair.
   ///
-  /// **O espelho em `AppSettings.consoleSettings` só é mexido para o addon
-  /// embutido, e isso não é economia.** `consoleHasToken` (as duas telas da
-  /// Task 7) e os dois `_authHeaders` de LAN leem esse espelho de forma
-  /// síncrona e sem saber de addon. Espelhar ali o token de um terceiro faria
-  /// o servidor de LAN mandar a credencial de um servidor para outro, que é o
-  /// vazamento que a Task 13 acabou de fechar.
+  /// **The mirror in `AppSettings.consoleSettings` is only touched for the
+  /// builtin addon, and that is not an optimization.** `consoleHasToken` (the
+  /// two Task 7 screens) and the two LAN `_authHeaders` read that mirror
+  /// synchronously and without knowing which addon it belongs to. Mirroring a
+  /// third-party token there would make the LAN server send one server's
+  /// credential to another, which is the leak that Task 13 just closed.
   ///
-  /// O token de terceiro mora só no cofre. Ele não pode ser hidratado em
-  /// `AppSettings` porque `SecretVault` não enumera: não existe `readAll`, de
-  /// propósito (Task 2), então o app não descobre para quais pares existe
-  /// segredo sem já saber a lista. Quem precisa lê sob demanda, por
-  /// [readAddonToken].
+  /// The third-party token lives only in the vault. It cannot be hydrated into
+  /// `AppSettings` because `SecretVault` does not enumerate: there is no
+  /// `readAll`, by design (Task 2), so the app cannot discover which pairs have
+  /// a secret without already knowing the list. Whoever needs it reads on
+  /// demand, via [readAddonToken].
   Future<void> setAddonToken(String addonId, String consoleId, String token) async {
     await _settingsService.writeAddonToken(addonId, consoleId, token, await _vault);
     if (addonId != kBuiltinAddonId) return;
@@ -6689,54 +6494,50 @@ e o `setConsoleAuthToken` da Task 6 é substituído por três membros:
   Future<String> readAddonToken(String addonId, String consoleId) async =>
       _settingsService.readAddonToken(addonId, consoleId, await _vault);
 
-  /// O caso particular do addon embutido. Continua existindo com este nome
-  /// porque quatro telas o chamam.
+  /// The builtin addon special case. Keeps this name because four screens call it.
   Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-**Tropeço provável:** deixar `_persist` fora do ramo do terceiro "para salvar de qualquer jeito". `_persist` chama `saveSettings`, que chama `_writeSecrets`, que grava `SecretRef.addonToken(kBuiltinAddonId, id)` para cada console do espelho. Rodar isso depois de gravar um token de terceiro não estraga nada, mas é escrita em disco por nada em toda digitação de token de addon. O `return` antecipado é intencional.
+**Likely pitfall:** leaving `_persist` outside the third-party branch "just to be safe". `_persist` calls `saveSettings`, which calls `_writeSecrets`, which writes `SecretRef.addonToken(kBuiltinAddonId, id)` for each console in the mirror. Running it after writing a third-party token causes no corruption, but is a disk write for nothing on every addon token keystroke. The early `return` is intentional.
 
-- [ ] **Step 6: A regra do bloqueio vira função pura**
+- [ ] **Step 6: The blocking rule becomes a pure function**
 
-Em `lib/utils/console_auth.dart`, acrescente:
+In `lib/utils/console_auth.dart`, add:
 
 ```dart
-/// Os addons que serviram [games] e cuja fonte neste console pede token.
+/// The addons that served [games] and whose source on this console needs a token.
 ///
-/// Pura e aqui, e não dentro de `TaskQueueService._downloadBlockReason`,
-/// porque aquele método é estático, assíncrono e cheio de `ref`: sem separar,
-/// a regra de bloqueio só teria teste através de widget.
+/// Pure and here, not inside `TaskQueueService._downloadBlockReason`,
+/// because that method is static, async, and full of `ref`: without separating,
+/// the blocking rule would only be testable through a widget test.
 ///
-/// Dois casos que a lista deixa de fora de propósito. Um jogo cujo `sourceId`
-/// não está mais entre as fontes do console (cache de addon removido) não
-/// bloqueia nada, porque não haveria onde o usuário digitar a conta que
-/// faltou. E um addon aberto no mesmo console que um privado não é contagiado
-/// pela conta do vizinho: baixar do aberto não precisa dela.
+/// Two cases deliberately excluded. A game whose `sourceId` is no longer among
+/// the console's sources (cache from a removed addon) blocks nothing, because
+/// there would be nowhere for the user to type the missing account. And an open
+/// addon on the same console as a private one is not infected by the neighbor's
+/// account: downloading from the open one doesn't need it.
 List<String> addonsThatNeedToken(List<Game> games, List<ConsoleSource> sources) {
-  final pedem = <String>{};
-  final vistos = <String>{};
-  for (final fonte in sources) {
-    // Primeira fonte de cada addon manda, igual a `authForAddon` e a
-    // `MergedCatalog.coverage`. Sem isto, um addon com um espelho sem auth e
-    // outro com auth responderia uma coisa aqui e outra na tela.
-    if (!vistos.add(fonte.addonId)) continue;
-    if (authNeedsToken(fonte.auth)) pedem.add(fonte.addonId);
+  final needing = <String>{};
+  final seen = <String>{};
+  for (final source in sources) {
+    if (!seen.add(source.addonId)) continue;
+    if (authNeedsToken(source.auth)) needing.add(source.addonId);
   }
 
   return [
     for (final addonId in {for (final game in games) game.sourceId})
-      if (pedem.contains(addonId)) addonId,
+      if (needing.contains(addonId)) addonId,
   ];
 }
 ```
 
-com os imports novos:
+with the new imports:
 
 ```dart
 import 'package:roms_downloader/models/console_model.dart';
@@ -6744,9 +6545,9 @@ import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 ```
 
-- [ ] **Step 7: O lote cobra por fonte**
+- [ ] **Step 7: The batch charges per source**
 
-Em `lib/services/task_queue_service.dart`, troque as **linhas 15 a 26** por:
+In `lib/services/task_queue_service.dart`, replace **lines 15 to 26** with:
 
 ```dart
     final catalogService = CatalogService();
@@ -6755,9 +6556,9 @@ Em `lib/services/task_queue_service.dart`, troque as **linhas 15 a 26** por:
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
-    // Por fonte, e não por console. Um console servido por um addon aberto e
-    // por um privado bloquearia o arquivo do aberto por causa da conta do
-    // privado, que é conta que aquele download não usa.
+    // Per source, not per console. A console served by an open addon and a
+    // private one would block the open file because of the private addon's
+    // account, which that download doesn't need.
     for (final addonId in addonsThatNeedToken(games, await catalogService.sourcesFor(console.id))) {
       if ((await settingsNotifier.readAddonToken(addonId, console.id)).isEmpty) {
         return console.authMessage ?? 'This system requires authentication. Sign in from the system settings first.';
@@ -6765,37 +6566,32 @@ Em `lib/services/task_queue_service.dart`, troque as **linhas 15 a 26** por:
     }
 ```
 
-**Confira o intervalo antes de apagar**, porque a versão anterior desta Task dizia `14-24` e a linha 14 é a **assinatura** de `_downloadBlockReason`, que não sai. Medido na árvore: a linha 15 é `final console = (await CatalogService().getConsoles())[consoleId];`, a 24 é o `}` que fecha o `if (console.hasTokenAuth)`, a 25 é em branco e a 26 é `final settingsNotifier = ref.read(settingsProvider.notifier);`. As doze saem juntas: o `settingsNotifier` da linha 26 não some, ele sobe para dentro do bloco acima, e o bloco do NSZ, que começa na linha 27, continua igual e continua usando esse mesmo `settingsNotifier`. Deixe uma linha em branco entre o `}` do `for` e o `if` do NSZ.
+**Check the range before deleting**, because an earlier version of this Task said `14-24` and line 14 is the **signature** of `_downloadBlockReason`, which does not leave. Measured in the tree: line 15 is `final console = (await CatalogService().getConsoles())[consoleId];`, line 24 is the `}` closing `if (console.hasTokenAuth)`, line 25 is blank, and line 26 is `final settingsNotifier = ref.read(settingsProvider.notifier);`. All twelve leave together: the `settingsNotifier` from line 26 does not disappear, it moves up into the block above, and the NSZ block, which starts at line 27, stays the same and keeps using that same `settingsNotifier`. Leave a blank line between the `for`'s `}` and the NSZ `if`.
 
-Os imports mudam: entra
+The imports change: add
 
 ```dart
 import 'package:roms_downloader/utils/console_auth.dart';
 ```
 
-e o `import 'package:roms_downloader/providers/settings_provider.dart';` continua, porque é dele que vem `settingsProvider`.
+and keep `import 'package:roms_downloader/providers/settings_provider.dart';`, because that is where `settingsProvider` comes from.
 
-**Tropeço provável:** a mensagem. Ela continua sendo `console.authMessage ?? ...`, exatamente a de hoje, e não nomeia o addon. Nomear seria melhor e custaria trazer `addonNamesProvider` para dentro de um método estático, num commit que é sobre qual conta é cobrada. Fica como está, de propósito.
+**Likely pitfall:** the message. It stays as `console.authMessage ?? ...`, exactly as it is today, and does not name the addon. Naming it would be better and would cost bringing `addonNamesProvider` into a static method in a commit that is about which account is charged. Left as-is, on purpose.
 
-- [ ] **Step 8: O download usa a auth e o token da fonte do arquivo**
+- [ ] **Step 8: The download uses the auth and token of the file's source**
 
-Em `lib/providers/download_provider.dart`, troque o bloco das linhas 429 a 441 por:
+In `lib/providers/download_provider.dart`, replace the block on lines 429 to 441 with:
 
 ```dart
-    // Same auth as catalog fetches, agora pela fonte que serviu este arquivo.
     final settings = _ref.read(settingsProvider);
     final catalogService = CatalogService();
     final isIaUrl = game.url.contains('archive.org/download/');
-    // A auth é da fonte e não do console: `console.auth` é a do primeiro addon
-    // que declarou o console, então usá-la aqui mandaria o cookie de um
-    // servidor junto com o token de outro. `null` quando o addon que serviu o
-    // arquivo não serve mais este console, e aí não vai header nenhum.
+    // Auth is per source, not per console: `console.auth` is the first addon's,
+    // so using it here would send one server's cookie with another's token.
     final auth = authForAddon(await catalogService.sourcesFor(game.consoleId), game.sourceId);
     final token = await _ref.read(settingsProvider.notifier).readAddonToken(game.sourceId, game.consoleId);
     final headers = <String, String>{
       ...buildConsoleAuthHeaders(auth, tokenOverride: token.isEmpty ? null : token),
-      // Restricted ("loggedin") IA items only accept session cookies; S3 keys
-      // are kept as a fallback for older flows.
       if (isIaUrl && (settings.iaCookies?.isNotEmpty ?? false))
         'Cookie': settings.iaCookies!
       else if (isIaUrl && (settings.iaAccessKey?.isNotEmpty ?? false) && (settings.iaSecretKey?.isNotEmpty ?? false))
@@ -6803,42 +6599,42 @@ Em `lib/providers/download_provider.dart`, troque o bloco das linhas 429 a 441 p
     };
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/services/console_merge.dart';
 ```
 
-Repare que a linha `final console = (await CatalogService().getConsoles())[game.consoleId];` **sai**. Ela só existia para o `console?.auth`, e deixá-la vira `unused_local_variable`, que é um finding a mais no `flutter analyze` e derruba o `22 issues found`.
+Note that the line `final console = (await CatalogService().getConsoles())[game.consoleId];` **leaves**. It only existed for `console?.auth`, and leaving it becomes `unused_local_variable`, which is an extra finding in `flutter analyze` and breaks the `22 issues found` target.
 
-**Tropeço provável:** manter um `?? console?.auth` como reserva, "para não quebrar cache antigo". Isso desfaz a Task inteira no caso mais perigoso, que é justamente o console com dois addons. Um cache de antes da fatia tem `sourceId == kBuiltinAddonId` (o padrão do `Game.fromJson` da Task 12), e o embutido está nas fontes, então esse caso já funciona. O que sobra sem header é cache de addon **removido**, e para esse a resposta certa é falhar visivelmente, não mandar a credencial do vizinho.
+**Likely pitfall:** keeping a `?? console?.auth` fallback "to avoid breaking old cache". That undoes the entire Task in the most dangerous case, which is exactly the console with two addons. Cache from before the slice has `sourceId == kBuiltinAddonId` (the default of `Game.fromJson` from Task 12), and the builtin is among the sources, so that case already works. What remains without a header is cache from a **removed** addon, and for that the right answer is to fail visibly, not to send the neighbor's credential.
 
-**Este Step não tem teste, e é honesto dizer.** `executeDownload` chega em `CatalogService`, em `background_downloader` e em disco, e um teste aqui exigiria três dublês para afirmar um mapa de headers. O que tem teste é `authForAddon` (Task 18) e `readAddonToken` (esta Task), que são as duas peças. A ligação entre elas é conferida por leitura e pelo `flutter build linux --debug` do Step 11.
+**This Step has no test, and it is honest to say so.** `executeDownload` reaches `CatalogService`, `background_downloader`, and disk, and a test here would require three fakes to assert a header map. What has tests is `authForAddon` (Task 18) and `readAddonToken` (this Task), which are the two pieces. The link between them is verified by reading and by the `flutter build linux --debug` in Step 11.
 
-- [ ] **Step 9: Rode para ver passar**
+- [ ] **Step 9: Run to see it pass**
 
 ```bash
 flutter test test/addon_token_test.dart test/settings_service_test.dart
 ```
 
-Esperado: `+13` no arquivo novo, e o de serviço com a mesma contagem de antes, zero falha nos dois.
+Expected: `+13` in the new file, and the service file with the same count as before, zero failures in both.
 
-- [ ] **Step 10: Rode a suíte inteira**
+- [ ] **Step 10: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+534`, zero falha.
+Expected: `+534`, zero failures.
 
-- [ ] **Step 11: Analise e compile**
+- [ ] **Step 11: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 12: Commit**
 
@@ -6851,25 +6647,25 @@ git commit -m "feat(seguranca): token por par addon e console, e bloqueio de lot
 
 ---
 
-### Task 20: o formulário de conta passa a ser de um addon
+### Task 20: the account form becomes per-addon
 
 **Files:**
-- Modify: `lib/widgets/settings/console_auth_setting.dart` (ganha `addonId` e lê do cofre)
+- Modify: `lib/widgets/settings/console_auth_setting.dart` (gains `addonId` and reads from the vault)
 - Modify: `lib/widgets/settings/settings_content.dart:158`
-- Modify: `lib/screens/tinfoil_server_screen.dart:106` (o segundo chamador, mais o import)
-- Modify: `lib/screens/setup_wizard_screen.dart:435` (o terceiro chamador)
-- Modify: `lib/providers/settings_provider.dart:168-174` (dois docs que ficam sem leitor)
+- Modify: `lib/screens/tinfoil_server_screen.dart:106` (the second caller, plus the import)
+- Modify: `lib/screens/setup_wizard_screen.dart:435` (the third caller)
+- Modify: `lib/providers/settings_provider.dart:168-174` (two docs left without a reader)
 - Test: `test/console_auth_setting_test.dart`
 
-`ConsoleAuthSetting` é o formulário que a seção 9 pede dentro do detalhe do addon ("**Conta**: o formulário de credencial"). Ele já existe e já sabe fazer login por usuário e senha, colar token cru, mostrar a mensagem do catálogo e deslogar. O que ele não sabe é de qual addon é o token: ele lê `settingsProvider.consoleSettings[id].authToken`, que depois da Task 19 é o espelho do embutido e mais nada.
+`ConsoleAuthSetting` is the form that section 9 asks for inside the addon detail ("**Account**: the credential form"). It already exists and already knows how to log in by username and password, paste a raw token, show the catalog message, and log out. What it does not know is which addon's token it belongs to: it reads `settingsProvider.consoleSettings[id].authToken`, which after Task 19 is the builtin mirror and nothing else.
 
-A mudança é de fonte de verdade, não de aparência: o token vem do cofre, pelo par (addon, console), e vai para o cofre pelo mesmo par. Como ler do cofre é assíncrono e `initState` não é, o widget ganha um estado de carga. Isso é visível: por um quadro, o formulário mostra uma barra em vez do campo.
+The change is about the data source, not about appearance: the token comes from the vault, via the (addon, console) pair, and goes back into the vault via the same pair. Because reading from the vault is async and `initState` is not, the widget gains a loading state. This is visible: for one frame, the form shows a progress bar instead of the field.
 
-O arquivo de teste é novo. Nenhum dos quatro widgets de settings tem teste hoje (`grep -rl "ConsoleAuthSetting" test/` não acha nada), e esta Task é a primeira que dá um a um deles.
+The test file is new. None of the four settings widgets has a test today (`grep -rl "ConsoleAuthSetting" test/` finds nothing), and this Task is the first to give one to one of them.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/console_auth_setting_test.dart`:
+Create `test/console_auth_setting_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -6886,11 +6682,11 @@ import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 
-const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://exemplo.org/snes/'], auth: {'requires_token': true});
+const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://example.org/snes/'], auth: {'requires_token': true});
 
-/// `Scaffold` porque o widget chama `ScaffoldMessenger` ao salvar, e o
-/// `app_settings` semeado com `{}` pelo mesmo motivo do `addon_token_test`:
-/// sem a chave a carga cai no ramo que pergunta diretório por plugin.
+/// `Scaffold` because the widget calls `ScaffoldMessenger` when saving, and
+/// `app_settings` seeded with `{}` for the same reason as `addon_token_test`:
+/// without the key the load falls into the branch that asks for directory via plugin.
 Widget _host(MemoryVault vault, {String addonId = kBuiltinAddonId}) {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
@@ -6907,7 +6703,7 @@ Widget _host(MemoryVault vault, {String addonId = kBuiltinAddonId}) {
 ProviderContainer _container(WidgetTester tester) => ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
 
 void main() {
-  testWidgets('sem token guardado, mostra o campo para digitar', (tester) async {
+  testWidgets('with no stored token, shows the input field', (tester) async {
     await tester.pumpWidget(_host(MemoryVault()));
     await tester.pumpAndSettle();
 
@@ -6915,10 +6711,10 @@ void main() {
     expect(find.text('Signed in'), findsNothing);
   });
 
-  testWidgets('com token no cofre, mostra assinado', (tester) async {
-    // A leitura é assíncrona, então o estado inicial é carregando e só depois
-    // vira "Signed in". Sem o `pumpAndSettle`, este caso passaria a ver o
-    // formulário vazio e a afirmar o contrário do que o usuário vê.
+  testWidgets('with a token in the vault, shows signed in', (tester) async {
+    // The read is async, so the initial state is loading and only then becomes
+    // "Signed in". Without `pumpAndSettle`, this case would see the empty form
+    // and assert the opposite of what the user sees.
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken(kBuiltinAddonId, 'snes'), 'tok');
 
@@ -6928,7 +6724,7 @@ void main() {
     expect(find.text('Signed in'), findsOneWidget);
   });
 
-  testWidgets('salvar grava na chave do par (addon, console)', (tester) async {
+  testWidgets('saving writes under the (addon, console) pair key', (tester) async {
     final vault = MemoryVault();
     await tester.pumpWidget(_host(vault, addonId: 'ultranx'));
     await tester.pumpAndSettle();
@@ -6941,9 +6737,9 @@ void main() {
     expect(await vault.read(SecretRef.addonToken('ultranx', 'snes')), 'tok-ultranx');
   });
 
-  testWidgets('o mesmo console em dois addons não divide token', (tester) async {
-    // O que esta Task existe para garantir. O usuário tem conta no UltraNX e
-    // não tem no embutido, e os dois servem `snes`.
+  testWidgets('the same console on two addons does not share the token', (tester) async {
+    // What this Task exists to guarantee. The user has an account on UltraNX
+    // but not on the builtin, and both serve `snes`.
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken('ultranx', 'snes'), 'tok-ultranx');
 
@@ -6954,7 +6750,7 @@ void main() {
     expect(find.text('Bearer token'), findsOneWidget);
   });
 
-  testWidgets('deslogar apaga a chave do par', (tester) async {
+  testWidgets('logging out deletes the pair key', (tester) async {
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken('ultranx', 'snes'), 'tok-ultranx');
 
@@ -6967,60 +6763,60 @@ void main() {
     expect(find.text('Bearer token'), findsOneWidget);
   });
 
-  testWidgets('o token do embutido continua chegando no espelho das settings', (tester) async {
-    // O espelho é o que mantém de pé `consoleHasToken` e os `_authHeaders` de
-    // LAN. Salvar pela tela tem que continuar alimentando os dois.
+  testWidgets('the builtin token still reaches the settings mirror', (tester) async {
+    // The mirror is what keeps `consoleHasToken` and the LAN `_authHeaders`
+    // alive. Saving through the screen must continue feeding both.
     final vault = MemoryVault();
     await tester.pumpWidget(_host(vault));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'tok-embutido');
+    await tester.enterText(find.byType(TextField), 'tok-builtin');
     await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(_container(tester).read(settingsProvider).consoleSettings['snes']?.authToken, 'tok-embutido');
+    expect(_container(tester).read(settingsProvider).consoleSettings['snes']?.authToken, 'tok-builtin');
   });
 }
 ```
 
-**Por que `find.text('Save')` e não `find.widgetWithText(FilledButton, 'Save')`:** `FilledButton.icon` é uma fábrica que devolve `_FilledButtonWithIcon`, e `find.byType` casa por tipo de execução exato (`finders.dart`: `candidate.widget.runtimeType == widgetType`). O finder por tipo acharia zero e o teste morreria em `Bad state: No element` antes de afirmar coisa alguma, que foi exatamente o que manteve `test/rar_decompress_screen_test.dart` vermelho por meses. Tocar no `Text` funciona porque ele está dentro da área de toque do botão.
+**Why `find.text('Save')` and not `find.widgetWithText(FilledButton, 'Save')`:** `FilledButton.icon` is a factory that returns `_FilledButtonWithIcon`, and `find.byType` matches by exact runtime type (`finders.dart`: `candidate.widget.runtimeType == widgetType`). The type-based finder would find zero and the test would die at `Bad state: No element` before asserting anything, which is exactly what kept `test/rar_decompress_screen_test.dart` red for months. Tapping the `Text` works because it is inside the button's tap area.
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/console_auth_setting_test.dart
 ```
 
-Esperado: erro de compilação, `No named parameter with the name 'addonId'`.
+Expected: compile error, `No named parameter with the name 'addonId'`.
 
-- [ ] **Step 3: O widget passa a ser de um addon**
+- [ ] **Step 3: The widget becomes per-addon**
 
-Em `lib/widgets/settings/console_auth_setting.dart`, o cabeçalho:
+In `lib/widgets/settings/console_auth_setting.dart`, the header:
 
 ```dart
 class ConsoleAuthSetting extends ConsumerStatefulWidget {
   final Console console;
 
-  /// De qual addon é esta conta. O mesmo console pode ser servido por dois
-  /// addons, com credenciais diferentes, e o formulário é de um deles.
+  /// Which addon this account belongs to. The same console can be served by
+  /// two addons with different credentials, and the form belongs to one of them.
   final String addonId;
 
   const ConsoleAuthSetting({super.key, required this.console, required this.addonId});
 ```
 
-o estado ganha dois campos e perde a leitura síncrona:
+the state gains two fields and loses the synchronous read:
 
 ```dart
 class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   final TextEditingController _tokenController = TextEditingController();
   final Map<String, TextEditingController> _signinControllers = {};
 
-  /// O que está guardado no cofre agora. Não vem de `settingsProvider`: o
-  /// espelho de lá é só do addon embutido (Task 19).
+  /// What is currently stored in the vault. Not from `settingsProvider`: that
+  /// mirror only covers the builtin addon (Task 19).
   String _saved = '';
-  bool _carregando = true;
+  bool _loading = true;
   bool _obscure = true;
   bool _dirty = false;
   bool _signingIn = false;
@@ -7033,29 +6829,29 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
     for (final param in _signinParams) {
       _signinControllers[param] = TextEditingController();
     }
-    _carregarToken();
+    _loadToken();
   }
 
-  /// O cofre é assíncrono e `initState` não é, então o formulário nasce em
-  /// estado de carga. Um quadro com barra é melhor que um quadro com o campo
-  /// vazio: o campo vazio diz "você não tem conta" para quem tem.
-  Future<void> _carregarToken() async {
+  /// The vault is async and `initState` is not, so the form starts in loading
+  /// state. One frame with a bar is better than one frame with an empty field:
+  /// the empty field says "you have no account" to someone who does.
+  Future<void> _loadToken() async {
     final token = await ref.read(settingsProvider.notifier).readAddonToken(widget.addonId, widget.console.id);
     if (!mounted) return;
     setState(() {
       _saved = token;
       _tokenController.text = token;
-      _carregando = false;
+      _loading = false;
     });
   }
 ```
 
-Repare que `_tokenController` deixou de ser `late final` com texto inicial e virou um controller vazio criado no campo: o texto chega em `_carregarToken`.
+Note that `_tokenController` is no longer a `late final` with an initial text value; it became an empty controller created in the field: the text arrives in `_loadToken`.
 
-Os três métodos que gravam passam pelo par:
+The three methods that write go through the pair:
 
 ```dart
-  Future<void> _guardar(String token) async {
+  Future<void> _store(String token) async {
     await ref.read(settingsProvider.notifier).setAddonToken(widget.addonId, widget.console.id, token);
     if (!mounted) return;
     setState(() {
@@ -7072,7 +6868,7 @@ Os três métodos que gravam passam pelo par:
         {for (final e in _signinControllers.entries) e.key: e.value.text.trim()},
       );
       _tokenController.text = token;
-      await _guardar(token);
+      await _store(token);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Signed in, token saved.'), duration: Duration(seconds: 2)),
@@ -7090,7 +6886,7 @@ Os três métodos que gravam passam pelo par:
   }
 
   Future<void> _save() async {
-    await _guardar(_tokenController.text.trim());
+    await _store(_tokenController.text.trim());
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Auth token saved.'), duration: Duration(seconds: 2)),
@@ -7100,18 +6896,18 @@ Os três métodos que gravam passam pelo par:
 
   Future<void> _clear() async {
     _tokenController.clear();
-    await _guardar('');
+    await _store('');
   }
 ```
 
-O `_save` de hoje chama `setState` **antes** do `if (mounted)`, o que é uma janela para `setState() called after dispose` se o usuário sair da tela durante a gravação. Isso desaparece porque agora quem chama `setState` é `_guardar`, atrás do seu próprio `if (!mounted) return`. Não é escopo desta Task e sai de graça junto.
+Today's `_save` calls `setState` **before** the `if (mounted)`, which is a window for `setState() called after dispose` if the user leaves the screen during a save. This disappears because now it is `_store` that calls `setState`, behind its own `if (!mounted) return`. It is not in scope for this Task and comes out for free.
 
-E o `build` troca as duas primeiras linhas:
+And the `build` swaps the first two lines:
 
 ```dart
   @override
   Widget build(BuildContext context) {
-    if (_carregando) {
+    if (_loading) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
         child: LinearProgressIndicator(),
@@ -7120,102 +6916,101 @@ E o `build` troca as duas primeiras linhas:
     final hasToken = _saved.isNotEmpty;
 ```
 
-O resto do `build` e o `_tokenSection` ficam idênticos.
+The rest of `build` and `_tokenSection` stay identical.
 
-**Tropeço provável:** deixar o `ref.watch(settingsProvider)` no `build` "porque não custa". Custa: o widget passaria a reconstruir a cada salvamento de qualquer setting, e, pior, alguém leria dali o token de novo daqui a seis meses achando que aquele é o valor vivo. Para addon de terceiro ele é sempre `null`. A linha some.
+**Likely pitfall:** leaving `ref.watch(settingsProvider)` in `build` "because it's free". It's not: the widget would rebuild on every save of any setting, and, worse, someone would read the token from there six months from now thinking that is the live value. For a third-party addon it is always `null`. The line goes away.
 
-- [ ] **Step 4: A tela de settings diz de qual addon é**
+- [ ] **Step 4: The settings screen says which addon it is**
 
-Em `lib/widgets/settings/settings_content.dart`, linha 158:
+In `lib/widgets/settings/settings_content.dart`, line 158:
 
 ```dart
-              // O painel de settings de um console é a porta do catálogo
-              // embutido. A conta de um addon de terceiro se edita no detalhe
-              // dele (Task 22).
+              // The console settings panel is the door to the builtin catalog.
+              // A third-party addon's account is edited in its detail screen (Task 22).
               child: ConsoleAuthSetting(console: selectedConsole!, addonId: kBuiltinAddonId),
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-- [ ] **Step 4b: Os outros dois chamadores, ou nada compila**
+- [ ] **Step 4b: The other two callers, or nothing compiles**
 
-`ConsoleAuthSetting` tem **três** chamadores em `lib/`, não um. O Step 4 conserta só o das settings. Como o Step 3 declara `required this.addonId`, os outros dois param de compilar na hora, com `The named parameter 'addonId' is required`. Isso não é lint: é erro, então o Step 6 falha, o `flutter analyze` do Step 7 sai de 22 para 24 **com dois erros**, e o `flutter build linux --debug` nem termina. Uma versão anterior desta Task listava só `settings_content.dart` em **Files** e omitia os dois.
+`ConsoleAuthSetting` has **three** callers in `lib/`, not one. Step 4 fixes only the settings one. Since Step 3 declares `required this.addonId`, the other two immediately stop compiling with `The named parameter 'addonId' is required`. This is not a lint: it is an error, so Step 6 fails, `flutter analyze` in Step 7 goes from 22 to 24 **with two errors**, and `flutter build linux --debug` does not even finish. An earlier version of this Task listed only `settings_content.dart` in **Files** and omitted the two.
 
-Os três são `lib/widgets/settings/settings_content.dart:158`, `lib/screens/tinfoil_server_screen.dart:106` e `lib/screens/setup_wizard_screen.dart:435` (medido com `grep -rn "ConsoleAuthSetting" lib/`, que também acha as quatro linhas da própria declaração). Nos dois novos o addon é o embutido, pelo mesmo motivo do Step 4 e pelo que a Task 19 já decidiu: o caminho de LAN e o do wizard leem o espelho síncrono, que é do embutido e de mais ninguém.
+The three are `lib/widgets/settings/settings_content.dart:158`, `lib/screens/tinfoil_server_screen.dart:106`, and `lib/screens/setup_wizard_screen.dart:435` (measured with `grep -rn "ConsoleAuthSetting" lib/`, which also finds the four lines of the declaration itself). In the two new ones the addon is the builtin, for the same reason as Step 4 and because Task 19 already decided: the LAN path and the wizard path read the synchronous mirror, which belongs to the builtin and nobody else.
 
-Em `lib/screens/tinfoil_server_screen.dart`, linha 106:
+In `lib/screens/tinfoil_server_screen.dart`, line 106:
 
 ```dart
             children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
 ```
 
-Este arquivo **não** importa `addon_model.dart` hoje (medido), então ganha o import junto:
+This file does **not** import `addon_model.dart` today (measured), so it gets the import too:
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 ```
 
-Em `lib/screens/setup_wizard_screen.dart`, linha 435:
+In `lib/screens/setup_wizard_screen.dart`, line 435:
 
 ```dart
                 children: [ConsoleAuthSetting(console: c, addonId: kBuiltinAddonId)],
 ```
 
-Aqui o import **já existe**, na linha 7, posto pela Task 9: o arquivo já escreve `kBuiltinAddonId` três vezes, nas linhas 100, 112 e 124. Não duplique.
+Here the import **already exists**, at line 7, placed by Task 9: the file already writes `kBuiltinAddonId` three times, at lines 100, 112, and 124. Do not duplicate it.
 
-- [ ] **Step 4c: Dois métodos do notifier ficam sem leitor, e um comentário fica mentindo**
+- [ ] **Step 4c: Two notifier methods are left without a reader, and a comment starts lying**
 
-Esta Task é a que esvazia os dois, então é aqui que o texto se acerta. Nada disso quebra build nem lint: os dois são públicos, e `unused_element` só pega declaração privada. É higiene de texto, e o motivo de fazer agora é que daqui a seis meses ninguém mais sabe.
+This Task is the one that empties both, so this is where the text gets corrected. None of this breaks the build or lint: both are public, and `unused_element` only catches private declarations. It is text hygiene, and the reason to do it now is that six months from now nobody will remember.
 
-`setConsoleAuthToken` (`settings_provider.dart:170`) carrega o doc que a Task 19 escreveu: *"Continua existindo com este nome porque quatro telas o chamam."* **Isso nunca foi verdade.** Medido em `ef5ee57`, antes da fatia começar: são três chamadas, e as três no mesmo arquivo, `console_auth_setting.dart:52`, `:72` e `:86`. Um widget, não quatro telas. O Step 3 troca as três por `_guardar`, então depois desta Task sobram **zero** chamadas em `lib/`, e só a da Task 19 em `test/addon_token_test.dart:124`.
+`setConsoleAuthToken` (`settings_provider.dart:170`) carries the doc that Task 19 wrote: *"Keeps this name because four screens call it."* **That was never true.** Measured in `ef5ee57`, before the slice started: there are three calls, and all three in the same file, `console_auth_setting.dart:52`, `:72`, and `:86`. One widget, not four screens. Step 3 replaces all three with `_store`, so after this Task **zero** calls remain in `lib/`, and only the one from Task 19 in `test/addon_token_test.dart:124`.
 
-O método fica, porque aquele caso de teste é o contrato do embutido e quem vier depois vai precisar dele. O que sai é a justificativa falsa:
+The method stays, because that test case is the builtin contract and whoever comes next will need it. What goes is the false justification:
 
 ```dart
-  /// O caso particular do addon embutido: escreve no par (embutido, console).
-  /// Depois da Task 20 nenhum sítio de `lib/` chama, e o que o segura é o caso
-  /// `'setConsoleAuthToken é o caso particular do embutido'`, que trava a
-  /// equivalência com `setAddonToken(kBuiltinAddonId, ...)`.
+  /// The builtin addon special case: writes to the (builtin, console) pair.
+  /// After Task 20 no site in `lib/` calls it, and what keeps it is the case
+  /// `'setConsoleAuthToken is the builtin special case'`, which locks the
+  /// equivalence with `setAddonToken(kBuiltinAddonId, ...)`.
   Future<void> setConsoleAuthToken(String consoleId, String token) => setAddonToken(kBuiltinAddonId, consoleId, token);
 ```
 
-`getConsoleAuthToken`, logo abaixo, é o outro: `console_auth_setting.dart:29` era o **único** leitor dele no repositório inteiro (medido em `lib/` e `test/`), e o Step 3 apaga essa linha. Ele lê o espelho síncrono, que agora é só do embutido, e é exatamente a armadilha que o **Tropeço** do Step 3 descreve, com a diferença de que é um método público e não uma linha de `build`. Não apague nesta Task, que não é escopo, e some um método público sem teste que o cubra. Marque:
+`getConsoleAuthToken`, right below, is the other one: `console_auth_setting.dart:29` was its **only** reader in the entire repository (measured in `lib/` and `test/`), and Step 3 deletes that line. It reads the synchronous mirror, which is now only the builtin's, and is exactly the trap that the **Pitfall** in Step 3 describes, except it is a public method rather than a line in `build`. Do not delete it in this Task, which is out of scope, and note that it is a public method with no test covering it. Mark:
 
 ```dart
-  /// O espelho síncrono do embutido, e só dele. Sem leitor desde a Task 20:
-  /// para addon de terceiro devolve `null` mesmo havendo token no cofre, então
-  /// quem for usar isto provavelmente quer `readAddonToken`.
+  /// The synchronous mirror of the builtin, and only it. No reader since Task 20:
+  /// for a third-party addon it returns `null` even when there is a token in the
+  /// vault, so whoever uses this probably wants `readAddonToken`.
   String? getConsoleAuthToken(String consoleId) {
 ```
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/console_auth_setting_test.dart
 ```
 
-Esperado: `+6`, zero falha.
+Expected: `+6`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+540`, zero falha.
+Expected: `+540`, zero failures.
 
-- [ ] **Step 7: Analise e compile**
+- [ ] **Step 7: Analyze and build**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 8: Commit**
 
@@ -7228,24 +7023,24 @@ git commit -m "feat(addon): formulario de conta passa a ser do par addon e conso
 
 ---
 
-### Task 21: instalar um addon a partir de uma URL
+### Task 21: install an addon from a URL
 
 **Files:**
 - Create: `lib/services/addon_install.dart`
-- Modify: `lib/services/catalog_service.dart` (`_parseConsoles` vira público; sem número de linha de propósito, pela mesma razão da Task 22: a Task 13 reescreve este arquivo)
+- Modify: `lib/services/catalog_service.dart` (`_parseConsoles` becomes public; no line number on purpose, for the same reason as Task 22: Task 13 rewrites this file)
 - Test: `test/addon_install_test.dart`
 
-Esta é a porta de entrada da seção 9: "**Adicionar addon**: um campo de URL e um botão". Tudo que ela precisa já existe em pedaços, e nenhum pedaço sabe dos outros. `Addon.idFromUrl` (Task 9) dá a chave estável, `CatalogService.harvestAuthTokens` (Task 8) tira o token do arquivo e põe no cofre, e `AddonNotifier.install` (Task 14) grava o catálogo e a lista. Esta Task é a costura, e ela mora em arquivo próprio porque não é de nenhum dos três: `CatalogService` não conhece `AddonNotifier`, e é bom que continue assim.
+This is the entry point for section 9: "**Add addon**: a URL field and a button". Everything it needs already exists in pieces, and no piece knows about the others. `Addon.idFromUrl` (Task 9) gives the stable key, `CatalogService.harvestAuthTokens` (Task 8) pulls the token from the file and puts it in the vault, and `AddonNotifier.install` (Task 14) writes the catalog and the list. This Task is the glue, and it lives in its own file because it belongs to none of the three: `CatalogService` does not know about `AddonNotifier`, and that is a good thing.
 
-A ordem das três chamadas não é gosto, é a metade incondicional da 6.3: **colher antes de validar e antes de instalar**. Se a validação viesse primeiro, um catálogo que falhasse por outro motivo teria passado pelo disco com o token dentro. Como está, nada é escrito enquanto a colheita não devolveu o JSON limpo.
+The order of the three calls is not a preference, it is the unconditional half of 6.3: **harvest before validating and before installing**. If validation came first, a catalog that failed for another reason would have gone to disk with the token inside. As it is, nothing is written until the harvest has returned the clean JSON.
 
-Consequência que vale dizer em voz alta: quando a validação falha **depois** da colheita, o token fica no cofre e o addon não é instalado. Isso é de propósito. O segredo veio do arquivo que o próprio usuário mandou instalar, guardá-lo faz a segunda tentativa não perguntar de novo, e uma entrada de cofre sob um id que não está na lista não é lida por ninguém: quem lê é `SecretRef.addonToken(addonId, consoleId)` a partir de um addon instalado.
+A consequence worth saying aloud: when validation fails **after** harvesting, the token stays in the vault and the addon is not installed. That is intentional. The secret came from the file the user themselves sent for installation, storing it means a second attempt will not ask again, and a vault entry under an id that is not in the list is read by nobody: the reader is `SecretRef.addonToken(addonId, consoleId)` from an installed addon.
 
-A rede entra por parâmetro. `http` não é dependência deste projeto (`grep '^  http:' pubspec.yaml` não acha nada), então `MockClient` não existe aqui e o teste não tem como interceptar um `HttpClient` real. O `CatalogFetcher` injetável é o que torna esta função testável sem subir servidor.
+The network comes in as a parameter. `http` is not a dependency of this project (`grep '^  http:' pubspec.yaml` finds nothing), so `MockClient` does not exist here and the test has no way to intercept a real `HttpClient`. The injectable `CatalogFetcher` is what makes this function testable without a running server.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/addon_install_test.dart`:
+Create `test/addon_install_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -7259,24 +7054,24 @@ import 'package:roms_downloader/services/addon_install.dart';
 import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-const _catalogoComToken = '''
-[{"name": "SNES", "urls": ["https://exemplo.org/snes/"], "auth": {"token": "segredo-do-arquivo"}}]
+const _catalogWithToken = '''
+[{"name": "SNES", "urls": ["https://example.org/snes/"], "auth": {"token": "file-secret"}}]
 ''';
 
-const _catalogoSemConsole = '[]';
+const _catalogWithoutConsole = '[]';
 
-/// Um notifier com store em diretório temporário e sem `path_provider`.
+/// A notifier with a store in a temp directory and no `path_provider`.
 ///
-/// `invalidarCache` é trocado porque o padrão passa por
-/// `getApplicationCacheDirectory`, que num teste sem plataforma lança.
+/// `invalidateCache` is replaced because the default goes through
+/// `getApplicationCacheDirectory`, which throws in a test with no platform.
 Future<AddonNotifier> _notifier() async {
   SharedPreferences.setMockInitialValues({});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('addon_install_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
+  final root = await Directory.systemTemp.createTemp('addon_install_test');
+  addTearDown(() => root.delete(recursive: true));
+  final store = AddonStore(await SharedPreferences.getInstance(), root);
   await store.save(const []);
-  final notifier = AddonNotifier(Future.value(store), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(store), invalidateCache: () async {});
   addTearDown(notifier.dispose);
   await notifier.ready;
   return notifier;
@@ -7285,78 +7080,77 @@ Future<AddonNotifier> _notifier() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('baixa, colhe o token e instala o catálogo limpo', () async {
+  test('downloads, harvests the token and installs the clean catalog', () async {
     final notifier = await _notifier();
     final vault = MemoryVault();
 
     final addon = await installAddonFromUrl(
-      'https://exemplo.org/catalogo.json',
+      'https://example.org/catalog.json',
       notifier: notifier,
       vault: vault,
-      fetch: (_) async => _catalogoComToken,
+      fetch: (_) async => _catalogWithToken,
     );
 
     expect(notifier.state.map((a) => a.id), [addon.id]);
-    // O token saiu do arquivo e está no cofre sob o par (addon, console). Quem
-    // prova que ele saiu do JSON é `catalog_service_test.dart` (Task 8); o que
-    // este caso afirma é que a instalação por URL passa pela colheita.
-    expect(await vault.read(SecretRef.addonToken(addon.id, 'snes')), 'segredo-do-arquivo');
+    // The token left the file and is in the vault under the (addon, console)
+    // pair. This case asserts that URL install goes through the harvest.
+    expect(await vault.read(SecretRef.addonToken(addon.id, 'snes')), 'file-secret');
   });
 
-  test('o id vem de Addon.idFromUrl e o nome vem do host', () async {
+  test('the id comes from Addon.idFromUrl and the name from the host', () async {
     final notifier = await _notifier();
 
     final addon = await installAddonFromUrl(
-      'https://WWW.Exemplo.org/catalogo.json?v=2',
+      'https://WWW.Example.org/catalog.json?v=2',
       notifier: notifier,
       vault: MemoryVault(),
-      fetch: (_) async => _catalogoComToken,
+      fetch: (_) async => _catalogWithToken,
     );
 
-    expect(addon.id, Addon.idFromUrl('https://exemplo.org/catalogo.json'));
-    expect(addon.name, 'exemplo.org');
-    expect(addon.url, 'https://WWW.Exemplo.org/catalogo.json?v=2');
+    expect(addon.id, Addon.idFromUrl('https://example.org/catalog.json'));
+    expect(addon.name, 'example.org');
+    expect(addon.url, 'https://WWW.Example.org/catalog.json?v=2');
   });
 
-  test('reinstalar a mesma fonte por outra forma da url não duplica', () async {
+  test('reinstalling the same source via another url form does not duplicate', () async {
     final notifier = await _notifier();
     final vault = MemoryVault();
 
-    await installAddonFromUrl('http://www.exemplo.org/catalogo.json/',
-        notifier: notifier, vault: vault, fetch: (_) async => _catalogoComToken);
-    await installAddonFromUrl('https://exemplo.org/catalogo.json',
-        notifier: notifier, vault: vault, fetch: (_) async => _catalogoComToken);
+    await installAddonFromUrl('http://www.example.org/catalog.json/',
+        notifier: notifier, vault: vault, fetch: (_) async => _catalogWithToken);
+    await installAddonFromUrl('https://example.org/catalog.json',
+        notifier: notifier, vault: vault, fetch: (_) async => _catalogWithToken);
 
     expect(notifier.state.length, 1);
   });
 
-  test('corpo que não é JSON não instala nada', () async {
+  test('a non-JSON body installs nothing', () async {
     final notifier = await _notifier();
 
     await expectLater(
-      installAddonFromUrl('https://exemplo.org/catalogo.json',
+      installAddonFromUrl('https://example.org/catalog.json',
           notifier: notifier, vault: MemoryVault(), fetch: (_) async => '<html>login</html>'),
       throwsA(isA<FormatException>()),
     );
     expect(notifier.state, isEmpty);
   });
 
-  test('JSON válido sem nenhum console não instala nada', () async {
+  test('valid JSON with no console installs nothing', () async {
     final notifier = await _notifier();
 
     await expectLater(
-      installAddonFromUrl('https://exemplo.org/catalogo.json',
-          notifier: notifier, vault: MemoryVault(), fetch: (_) async => _catalogoSemConsole),
+      installAddonFromUrl('https://example.org/catalog.json',
+          notifier: notifier, vault: MemoryVault(), fetch: (_) async => _catalogWithoutConsole),
       throwsA(isA<FormatException>()),
     );
     expect(notifier.state, isEmpty);
   });
 
-  test('erro de rede sobe e não instala nada', () async {
+  test('a network error propagates and installs nothing', () async {
     final notifier = await _notifier();
 
     await expectLater(
-      installAddonFromUrl('https://exemplo.org/catalogo.json',
+      installAddonFromUrl('https://example.org/catalog.json',
           notifier: notifier, vault: MemoryVault(), fetch: (_) async => throw const HttpException('HTTP 404 fetching catalog')),
       throwsA(isA<HttpException>()),
     );
@@ -7365,45 +7159,45 @@ void main() {
 }
 ```
 
-Repare que o caso do `MemoryVault` não confere o arquivo gravado. Quem prende o formato do JSON limpo é `catalog_service_test.dart`, na Task 8, com nove casos só para isso; repetir a asserção aqui daria a mesma cobertura duas vezes e quebraria nos dois lugares na próxima mudança de formato. O que este arquivo prende é a costura: que a instalação por URL **passa** pela colheita.
+Note that the `MemoryVault` case does not check the written file. What locks the clean JSON format is `catalog_service_test.dart`, in Task 8, with nine cases just for that; repeating the assertion here would give the same coverage twice and break in two places on the next format change. What this file locks is the glue: that URL installation **goes through** the harvest.
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 flutter test test/addon_install_test.dart
 ```
 
-Esperado: falha de compilação, `Error: Couldn't resolve the package 'roms_downloader/services/addon_install.dart'`.
+Expected: compile failure, `Error: Couldn't resolve the package 'roms_downloader/services/addon_install.dart'`.
 
-- [ ] **Step 3: Abra o parser do catálogo**
+- [ ] **Step 3: Open the catalog parser**
 
-Em `lib/services/catalog_service.dart`, na declaração de `_parseConsoles`, tire o underscore:
+In `lib/services/catalog_service.dart`, in the declaration of `_parseConsoles`, remove the underscore:
 
 ```dart
   static Map<String, Console> parseConsoles(String jsonStr) {
 ```
 
-**A declaração está na linha 112, e não na 79.** O 79 era a posição contra `ef5ee57`, e a Task 13 reescreveu este arquivo, que é exatamente o motivo pelo qual a lista de **Files** desta Task não dá número de linha. Confira com o grep abaixo antes de editar, em vez de confiar no 112.
+**The declaration is at line 112, not 79.** 79 was the position against `ef5ee57`, and Task 13 rewrote this file, which is exactly why this Task's **Files** list gives no line number. Verify with the grep below before editing, rather than trusting 112.
 
-E troque as **duas** chamadas internas de `_parseConsoles(` para `parseConsoles(`:
+And replace the **two** internal calls from `_parseConsoles(` to `parseConsoles(`:
 
 ```bash
 grep -n "_parseConsoles(" lib/services/catalog_service.dart
 ```
 
-Medido agora: linha 61, dentro de `buildCatalog`, que é a chamada que a Task 13 criou, e linha 203, dentro de `setCatalogFromJson`. São duas, e não três: a versão anterior deste Step dizia "as duas que o grep acha fora da declaração, mais a que a Task 13 criou", e contava a da Task 13 duas vezes, porque ela é uma das que o grep acha.
+Measured now: line 61, inside `buildCatalog`, which is the call Task 13 created, and line 203, inside `setCatalogFromJson`. Two, not three: an earlier version of this Step said "the two the grep finds outside the declaration, plus the one Task 13 created", and counted the Task 13 one twice, because it is one of the ones the grep finds.
 
-Público de propósito e não copiado: validar um catálogo baixado com um parser diferente do que vai lê-lo depois é como o app aceita na instalação um arquivo que ele não consegue abrir no boot. É o mesmo código ou não vale nada.
+Made public intentionally, not copied: validating a downloaded catalog with a different parser from the one that will read it later is like the app accepting at install time a file it cannot open at boot. It must be the same code or it means nothing.
 
 ```bash
 grep -n "_parseConsoles" lib/services/catalog_service.dart
 ```
 
-Esperado: nenhuma linha.
+Expected: no lines.
 
-- [ ] **Step 4: Escreva a instalação**
+- [ ] **Step 4: Write the installer**
 
-Crie `lib/services/addon_install.dart`:
+Create `lib/services/addon_install.dart`:
 
 ```dart
 import 'dart:convert';
@@ -7414,27 +7208,27 @@ import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// Como o catálogo chega da rede.
+/// How the catalog arrives from the network.
 ///
-/// Entra por parâmetro porque `http` não é dependência deste projeto, então
-/// não existe `MockClient` aqui: sem a injeção, testar esta função pediria um
-/// servidor de verdade.
+/// Passed as a parameter because `http` is not a dependency of this project,
+/// so `MockClient` does not exist here: without injection, testing this function
+/// would require a real server.
 typedef CatalogFetcher = Future<String> Function(String url);
 
-/// Baixa o catálogo de [url], guarda os tokens que vierem nele e instala a
-/// fonte como um addon.
+/// Downloads the catalog from [url], stores any tokens in it, and installs the
+/// source as an addon.
 ///
-/// A ordem é a metade incondicional da seção 6.3 do spec: colher antes de
-/// validar e antes de gravar. Nada toca o disco enquanto
-/// [CatalogService.harvestAuthTokens] não devolveu o JSON sem os tokens.
+/// The order is the unconditional half of spec section 6.3: harvest before
+/// validating and before writing. Nothing touches disk until
+/// [CatalogService.harvestAuthTokens] has returned the JSON without the tokens.
 ///
-/// Quando a validação falha depois da colheita, o segredo fica no cofre e o
-/// addon não entra na lista. É de propósito: o token veio do arquivo que o
-/// usuário mandou instalar, e uma entrada de cofre sob um id que não está na
-/// lista não é lida por ninguém.
+/// When validation fails after harvesting, the secret stays in the vault and the
+/// addon is not added to the list. That is intentional: the token came from the
+/// file the user themselves sent for installation, and a vault entry under an id
+/// that is not in the list is read by nobody.
 ///
-/// Levanta [FormatException] se o corpo não for um catálogo com pelo menos um
-/// console, e o que [fetch] levantar se a rede falhar.
+/// Throws [FormatException] if the body is not a catalog with at least one
+/// console, and whatever [fetch] throws if the network fails.
 Future<Addon> installAddonFromUrl(
   String url, {
   required AddonNotifier notifier,
@@ -7444,30 +7238,31 @@ Future<Addon> installAddonFromUrl(
   final body = await (fetch ?? fetchCatalogByHttp)(url);
   final id = Addon.idFromUrl(url);
 
-  final limpo = await CatalogService.harvestAuthTokens(body, vault: vault, addonId: id);
-  if (CatalogService.parseConsoles(limpo).isEmpty) {
+  final cleaned = await CatalogService.harvestAuthTokens(body, vault: vault, addonId: id);
+  if (CatalogService.parseConsoles(cleaned).isEmpty) {
     throw const FormatException('No consoles found in the provided catalog.');
   }
 
-  final addon = Addon(id: id, name: _nomeDe(url, id), url: url);
-  await notifier.install(addon, limpo);
+  final addon = Addon(id: id, name: _nameOf(url, id), url: url);
+  await notifier.install(addon, cleaned);
   return addon;
 }
 
-/// O nome que aparece na lista de addons: o host, sem `www.`.
+/// The name shown in the addon list: the host, without `www.`.
 ///
-/// Host e não id porque o id é chave de cofre e nome de arquivo
-/// (`myrient_erista_me_files`), e chave é para máquina. Uma url sem host, que
-/// `Addon.idFromUrl` aceita, cai no id, que é feio e é melhor que vazio.
-String _nomeDe(String url, String id) {
+/// Host and not id because the id is a vault key and a file name
+/// (`myrient_erista_me_files`), and keys are for machines. A URL without a host,
+/// which `Addon.idFromUrl` accepts, falls back to the id, which is ugly but
+/// better than empty.
+String _nameOf(String url, String id) {
   final host = Uri.tryParse(url.trim())?.host ?? '';
   if (host.isEmpty) return id;
   return host.replaceFirst(RegExp(r'^www\.', caseSensitive: false), '');
 }
 
-/// A rede de verdade, igual à de `CatalogService.setCatalogFromUrl`
-/// (o corpo de `setCatalogFromUrl`): mesmo teto de 30 segundos para conectar e
-/// mesma recusa de qualquer status que não seja 200.
+/// The real network, same as `CatalogService.setCatalogFromUrl`
+/// (the body of `setCatalogFromUrl`): same 30-second timeout to connect and the
+/// same rejection of any status other than 200.
 Future<String> fetchCatalogByHttp(String url) async {
   final client = HttpClient();
   client.connectionTimeout = const Duration(seconds: 30);
@@ -7484,31 +7279,31 @@ Future<String> fetchCatalogByHttp(String url) async {
 }
 ```
 
-**Tropeço provável:** passar `body` para `notifier.install` em vez de `limpo`. Os dois compilam, os cinco outros casos passam, e o token volta para o disco, agora num arquivo novo em `config/addons/<id>.json`. O caso que pega isso é o primeiro, e só porque ele lê o cofre depois de instalar; é por isso que ele existe.
+**Likely pitfall:** passing `body` to `notifier.install` instead of `cleaned`. Both compile, the other five cases pass, and the token goes back to disk, now in a new file at `config/addons/<id>.json`. The case that catches this is the first one, and only because it reads the vault after installing; that is why it exists.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_install_test.dart
 ```
 
-Esperado: `+6`, zero falha.
+Expected: `+6`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+546`, zero falha.
+Expected: `+546`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, e nenhum deles em `addon_install.dart`, `addon_install_test.dart` ou `catalog_service.dart`.
+Expected: `22 issues found`, and none of them in `addon_install.dart`, `addon_install_test.dart`, or `catalog_service.dart`.
 
 - [ ] **Step 8: Commit**
 
@@ -7521,56 +7316,56 @@ git commit -m "feat(addon): instalar addon a partir de uma url"
 
 ---
 
-### Task 22: a tela de detalhe do addon
+### Task 22: the addon detail screen
 
 **Files:**
 - Create: `lib/screens/addon_detail_screen.dart`
-- Modify: `lib/providers/addon_provider.dart` (ganha `mergedCatalogProvider`, e `addonCoverageProvider` passa a derivar dele)
+- Modify: `lib/providers/addon_provider.dart` (gains `mergedCatalogProvider`, and `addonCoverageProvider` starts deriving from it)
 - Test: `test/addon_detail_screen_test.dart`
-- Test: `test/support/fake_addon_store.dart` (novo, ajuda compartilhada, sem `main`; as Tasks 23, 24 e 25 reusam)
+- Test: `test/support/fake_addon_store.dart` (new, shared helper, no `main`; Tasks 23, 24 and 25 reuse it)
 
-A seção 9 pede cinco blocos nesta tela, nesta ordem: identificação, conta, cobertura, prioridade e remover. Quatro deles já têm a resposta pronta em provider: `addonProvider` dá nome, url e posição, `MergedCatalog.coverage()` dá os consoles e quais pedem conta (Task 18), e `ConsoleAuthSetting(console:, addonId:)` é o formulário de conta (Task 20). Esta Task só monta.
+Section 9 asks for five blocks on this screen, in this order: identity, account, coverage, priority, and remove. Four of them already have a ready answer in providers: `addonProvider` gives name, URL, and position; `MergedCatalog.coverage()` gives the consoles and which ones need an account (Task 18); and `ConsoleAuthSetting(console:, addonId:)` is the account form (Task 20). This Task just assembles.
 
-**Uma exigência da seção 9 fica de fora, e é melhor dizer isso agora do que descobrir na revisão.** O spec pede "**Cobertura**: quais consoles ele atende **e quantos itens em cada**". A primeira metade entra; a segunda, não. Contar itens de um console é buscar a listagem dele (`_fetchCatalog`, em `lib/services/catalog_service.dart`; aqui não vai número de linha de propósito, porque a Task 13 reescreve esse arquivo e qualquer número que eu escrevesse agora estaria velho quando esta Task rodar. Este trecho já citou `catalog_service.dart:4016`, que é linha de nenhum arquivo: o arquivo tem 651 linhas), uma requisição por console, e o app carrega listagem sob demanda justamente porque ela é cara. Um addon com 25 consoles pagaria 25 requisições ao abrir uma tela de leitura. O que a tela mostra é `"3 consoles"` e a lista deles. A contagem por console fica para quando houver contagem barata, e isso é dívida declarada, não esquecimento.
+**One requirement from section 9 is left out, and it is better to say so now than to find out during review.** The spec asks for "**Coverage**: which consoles it serves **and how many items in each**". The first half goes in; the second does not. Counting items on a console means fetching its listing (`_fetchCatalog`, in `lib/services/catalog_service.dart`; no line number here on purpose, because Task 13 rewrites that file and any number written now would be stale by the time this Task runs. This section has already cited `catalog_service.dart:4016`, which is a line in no file: the file has 651 lines), one request per console, and the app loads listings on demand precisely because they are expensive. An addon with 25 consoles would pay 25 requests just to open a read-only screen. What the screen shows is `"3 consoles"` and the list of them. Per-console counting waits until there is a cheap way to count, and that is declared debt, not an oversight.
 
-A mudança em `addon_provider.dart` é para a tela não ler o disco duas vezes. Hoje `addonCoverageProvider` monta o `MergedCatalog` inteiro e devolve só a cobertura, e esta tela também precisa dos `Console` em si, para dar o nome de tela do console e para passar ao formulário de conta. Em vez de um segundo provider que refaz o mesmo trabalho, o fundido vira o provider e a cobertura passa a derivar dele.
+The change in `addon_provider.dart` is to keep the screen from reading disk twice. Today `addonCoverageProvider` builds the entire `MergedCatalog` and returns only the coverage, but this screen also needs the `Console` objects themselves, to get the console's display name and to pass to the account form. Rather than a second provider that redoes the same work, the merged catalog becomes the provider and the coverage starts deriving from it.
 
-**Disco de verdade não serve aqui, e o motivo é medido.** O corpo de um `testWidgets` roda dentro de um `FakeAsync`: os temporizadores são falsos e o laço de eventos real não avança ali. Qualquer resposta que venha do sistema de arquivos, portanto, nunca chega, e o `await` fica pendurado para sempre. Medido neste repositório, com quatro sondas:
+**Real disk does not work here, and the reason is measured.** The body of a `testWidgets` runs inside a `FakeAsync`: the timers are fake and the real event loop does not advance there. Any response that comes from the file system therefore never arrives, and the `await` hangs forever. Measured in this repository, with four probes:
 
-| dentro de `testWidgets` | resultado |
+| inside `testWidgets` | result |
 | --- | --- |
-| `await Directory.systemTemp.createTemp(...)` | **trava** |
-| `await File('/tmp/nao_existe').exists()` | **trava** |
-| `await SharedPreferences.getInstance()` e `setString`, com `setMockInitialValues` | passa |
-| `await tester.runAsync(() => createTemp(...))` | passa |
+| `await Directory.systemTemp.createTemp(...)` | **hangs** |
+| `await File('/tmp/does_not_exist').exists()` | **hangs** |
+| `await SharedPreferences.getInstance()` and `setString`, with `setMockInitialValues` | passes |
+| `await tester.runAsync(() => createTemp(...))` | passes |
 
-Não é o `createTemp`: é IO de disco de qualquer tipo. O `shared_preferences` mockado passa porque é memória, e é por isso que `console_auth_setting_test` nunca esbarrou nisso. Os testes de serviço que montam `AddonStore` em `Directory.systemTemp` (`addon_store_test`, `addon_provider_test`, `catalog_addons_test`, `addon_install_test`) continuam certos e não mudam: eles são `test()` comum, onde o laço real roda, e exercitar disco de verdade é exatamente o que se quer deles.
+It is not `createTemp`: it is any kind of disk IO. Mocked `shared_preferences` passes because it is in memory, which is why `console_auth_setting_test` never ran into this. The service tests that build `AddonStore` in `Directory.systemTemp` (`addon_store_test`, `addon_provider_test`, `catalog_addons_test`, `addon_install_test`) remain correct and do not change: they are ordinary `test()` calls, where the real loop runs, and exercising real disk is exactly what you want from them.
 
-**E `tester.runAsync` não resolve este caso.** Ele salvaria a montagem do store, mas o caminho do "Remover" chama `AddonNotifier.remove` → `AddonStore.deleteCatalog` → `File.exists()` de dentro do `pumpAndSettle`, disparado por um `onPressed`. Ali não existe ponto onde embrulhar nada. Por isso a saída é um store de memória, e não um embrulho.
+**And `tester.runAsync` does not solve this case.** It would save the store setup, but the "Remove" path calls `AddonNotifier.remove` -> `AddonStore.deleteCatalog` -> `File.exists()` from inside `pumpAndSettle`, triggered by an `onPressed`. There is no point where anything can be wrapped there. That is why the solution is an in-memory store, not a wrapper.
 
-Crie primeiro `test/support/fake_addon_store.dart`. Ele não termina em `_test.dart` de propósito: é ajuda compartilhada, sem `main`, e as Tasks 23, 24 e 25 importam este mesmo arquivo em vez de cada uma escrever o seu.
+Create `test/support/fake_addon_store.dart` first. It does not end in `_test.dart` on purpose: it is a shared helper, has no `main`, and Tasks 23, 24, and 25 import this same file instead of each one writing its own.
 
 ```dart
 import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/services/addon_store.dart';
 
-/// Um `AddonStore` inteiro em memória, para os testes de widget.
+/// A complete in-memory `AddonStore`, for widget tests.
 ///
-/// Existe porque IO de disco **trava** dentro de um corpo `testWidgets`: o
-/// corpo roda num `FakeAsync` e a resposta do sistema de arquivos chega pelo
-/// laço de eventos real, que não avança ali. Quem exercita disco de verdade é
-/// `addon_store_test`, em `test()` comum, e é lá que isso tem que ser provado.
+/// Exists because disk IO **hangs** inside a `testWidgets` body: the body runs
+/// in a `FakeAsync` and the file system response arrives via the real event loop,
+/// which does not advance there. What exercises real disk is `addon_store_test`,
+/// in ordinary `test()` calls, and that is where it must be proven.
 ///
-/// `noSuchMethod` com `implements` evita reescrever `catalogFile`, o único
-/// membro que sobra, e o `throw` é o que diferencia este duplo de um mock
-/// permissivo: se um caso futuro chamar o que não existe aqui, ele morre
-/// dizendo qual método foi, em vez de passar em silêncio.
+/// `noSuchMethod` with `implements` avoids reimplementing `catalogFile`, the
+/// only remaining member, and the `throw` is what distinguishes this fake from
+/// a permissive mock: if a future case calls something that does not exist here,
+/// it dies saying which method it was, instead of passing silently.
 class FakeAddonStore implements AddonStore {
   List<Addon> _addons;
 
-  /// O que `writeCatalog` gravou, por addon. Público para um caso poder afirmar
-  /// que a instalação escreveu o catálogo, e não só que mexeu na lista.
-  final Map<String, String> catalogos = {};
+  /// What `writeCatalog` stored, per addon. Public so a case can assert the
+  /// install wrote the catalog, not only that it touched the list.
+  final Map<String, String> catalogs = {};
 
   FakeAddonStore(List<Addon> addons) : _addons = List.of(addons);
 
@@ -7578,33 +7373,33 @@ class FakeAddonStore implements AddonStore {
   List<Addon> load() => List.of(_addons);
 
   @override
-  Future<void> save(List<Addon> lista) async {
-    _addons = List.of(lista);
+  Future<void> save(List<Addon> list) async {
+    _addons = List.of(list);
   }
 
   @override
-  Future<String?> readCatalog(String addonId) async => catalogos[addonId];
+  Future<String?> readCatalog(String addonId) async => catalogs[addonId];
 
   @override
   Future<void> writeCatalog(String addonId, String jsonStr) async {
-    catalogos[addonId] = jsonStr;
+    catalogs[addonId] = jsonStr;
   }
 
   @override
   Future<void> deleteCatalog(String addonId) async {
-    catalogos.remove(addonId);
+    catalogs.remove(addonId);
   }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnsupportedError(
-        'FakeAddonStore não responde ${invocation.memberName}.',
+        'FakeAddonStore does not respond to ${invocation.memberName}.',
       );
 }
 ```
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/addon_detail_screen_test.dart`. Repare que **não** há `import 'dart:io'` nem `import '.../services/addon_store.dart'`: nos dois casos a única razão para eles era o store de disco que saiu, e import órfão é `unused_import`, que é **warning**, não `info`. Deixar os dois levaria o Step 7 de 22 para 24.
+Create `test/addon_detail_screen_test.dart`. Note that there is **no** `import 'dart:io'` and no `import '.../services/addon_store.dart'`: in both cases the only reason for them was the disk store that left, and an orphan import is `unused_import`, which is a **warning**, not an `info`. Leaving both would push Step 7 from 22 to 24.
 
 ```dart
 import 'dart:convert';
@@ -7626,65 +7421,49 @@ import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
-const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://outro/ps2/']);
+const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://other/ps2/']);
 
-/// Dois addons servindo três consoles: `myrient` serve Switch (com conta) e
-/// SNES, `outro` serve PS2. A tela do `myrient` não pode mostrar PS2.
-MergedCatalog _catalogo() => const MergedCatalog(
+/// Two addons serving three consoles: `myrient` serves Switch (with account)
+/// and SNES, `other` serves PS2. The `myrient` screen must not show PS2.
+MergedCatalog _catalog() => const MergedCatalog(
       consoles: {'switch': _switch, 'snes': _snes, 'ps2': _ps2},
       sources: {
         'switch': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/switch/', auth: {'requires_token': true})],
         'snes': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/snes/')],
-        'ps2': [ConsoleSource(addonId: 'outro', url: 'https://outro/ps2/')],
+        'ps2': [ConsoleSource(addonId: 'other', url: 'https://other/ps2/')],
       },
     );
 
-/// Um `AddonNotifier` de verdade sobre um store de memória.
+/// A real `AddonNotifier` over an in-memory store: the Remove case needs the
+/// removal to pass through `AddonNotifier.remove`. Only disk is fake, because
+/// disk IO hangs inside `testWidgets`.
 ///
-/// O notifier é o real de propósito: o caso do "Remover" precisa que a remoção
-/// atravesse `AddonNotifier.remove` e volte pela lista. O que é falso é só o
-/// disco, porque IO de disco trava dentro de `testWidgets`, e `remove` chama
-/// `deleteCatalog` de dentro do `pumpAndSettle`.
-///
-/// **Sem `addTearDown(notifier.dispose)`, e isso é deliberado.** Quem descarta
-/// é o Riverpod: `addonProvider` é um `StateNotifierProvider`, e um
-/// `StateNotifierProvider` assume o ciclo de vida do notifier que o `create`
-/// devolve, inclusive quando o `create` só repassa um que veio de fora. Ao fim
-/// de um `testWidgets` o `flutter_test` desmonta a árvore, o `ProviderScope`
-/// do `_abrir` cai junto e o `dispose` acontece ali. Um `addTearDown` seria o
-/// segundo, e os oito casos morrem com `Bad state: Tried to use AddonNotifier
-/// after dispose was called`.
-///
-/// `addon_install_test._notifier` **tem** essa linha e está certo, porque lá o
-/// notifier não passa por provider nenhum. Este helper nasceu de uma cópia
-/// daquele, e a linha é o que sobrou da cópia.
-///
-/// O `app_settings` semeado com `{}` é pelo mesmo motivo do
-/// `console_auth_setting_test`: sem a chave, a carga das settings cai no ramo
-/// que pergunta diretório por plugin.
+/// No `addTearDown(notifier.dispose)`: the `StateNotifierProvider` disposes it
+/// when the tree falls, and a second dispose kills every case. `app_settings`
+/// seeded with `{}` so settings load does not fall into the plugin directory
+/// branch.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidateCache: () async {});
   await notifier.ready;
   return notifier;
 }
 
-/// Empilha a tela sobre uma home vazia.
-///
-/// Empilhada e não como `home` porque `Navigator.pop` na rota raiz é no-op: o
-/// caso do "Remover" passaria sem provar que a tela fecha.
-Future<void> _abrir(
+/// Pushes the screen over an empty home. Pushed, not as `home`, because
+/// `Navigator.pop` on the root route is a no-op: the Remove case would pass
+/// without proving the screen closes.
+Future<void> _open(
   WidgetTester tester, {
   required AddonNotifier notifier,
-  MergedCatalog? catalogo,
+  MergedCatalog? catalog,
   String addonId = 'myrient',
   SecretVault? vault,
 }) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
       addonProvider.overrideWith((ref) => notifier),
-      mergedCatalogProvider.overrideWith((ref) async => catalogo ?? _catalogo()),
+      mergedCatalogProvider.overrideWith((ref) async => catalog ?? _catalog()),
       vaultProvider.overrideWith((ref) async => VaultChoice(vault ?? MemoryVault(), encryptedAtRest: true)),
     ],
     child: MaterialApp(
@@ -7694,41 +7473,41 @@ Future<void> _abrir(
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => AddonDetailScreen(addonId: addonId)),
             ),
-            child: const Text('abrir'),
+            child: const Text('open'),
           ),
         ),
       ),
     ),
   ));
-  await tester.tap(find.text('abrir'));
+  await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('mostra o nome e a url de origem', (tester) async {
-    final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient.erista.me/catalogo.json')]);
+  testWidgets('shows the name and source url', (tester) async {
+    final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient.erista.me/catalog.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
     expect(find.text('myrient.erista.me'), findsWidgets);
-    expect(find.text('https://myrient.erista.me/catalogo.json'), findsOneWidget);
+    expect(find.text('https://myrient.erista.me/catalog.json'), findsOneWidget);
   });
 
-  testWidgets('addon sem url mostra a origem por extenso', (tester) async {
-    // O embutido e o catálogo aberto de arquivo não têm endereço. Um campo de
-    // url vazio faria a tela parecer quebrada num caso que é normal.
-    final notifier = await _notifier(const [Addon(id: kBuiltinAddonId, name: 'Catálogo embutido')]);
+  testWidgets('addon without url shows the source in words', (tester) async {
+    // The built-in and file-opened catalogs have no address; an empty url field
+    // would make a normal case look broken.
+    final notifier = await _notifier(const [Addon(id: kBuiltinAddonId, name: 'Built-in catalog')]);
 
-    await _abrir(tester, notifier: notifier, addonId: kBuiltinAddonId);
+    await _open(tester, notifier: notifier, addonId: kBuiltinAddonId);
 
-    expect(find.text('Catálogo embutido'), findsWidgets);
-    expect(find.text('Instalado com o app'), findsOneWidget);
+    expect(find.text('Built-in catalog'), findsWidgets);
+    expect(find.text('Installed with the app'), findsOneWidget);
   });
 
-  testWidgets('a cobertura lista só os consoles deste addon', (tester) async {
+  testWidgets('coverage lists only this addon\'s consoles', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
     expect(find.text('2 consoles'), findsOneWidget);
     expect(find.text('Switch'), findsWidgets);
@@ -7736,67 +7515,66 @@ void main() {
     expect(find.text('PS2'), findsNothing);
   });
 
-  testWidgets('addon que ainda não cobre nada mostra zero e não quebra', (tester) async {
-    // `MergedCatalog.coverage()` **omite** o addon sem console (Task 18), então
-    // este é o caminho do mapa sem a chave, não o da lista vazia. É o estado
-    // real de um addon recém instalado cujo catálogo ainda não foi lido.
-    final notifier = await _notifier(const [Addon(id: 'novo', name: 'novo.org', url: 'https://novo.org/c.json')]);
+  testWidgets('addon covering nothing yet shows zero and does not crash', (tester) async {
+    // `coverage()` omits an addon with no console, so this is the missing-key
+    // path, not the empty-list one: the state of a freshly installed addon
+    // whose catalog is not read yet.
+    final notifier = await _notifier(const [Addon(id: 'incoming', name: 'incoming.org', url: 'https://incoming.org/c.json')]);
 
-    await _abrir(tester, notifier: notifier, addonId: 'novo');
+    await _open(tester, notifier: notifier, addonId: 'incoming');
 
-    expect(find.text('Nenhum console'), findsOneWidget);
+    expect(find.text('No console'), findsOneWidget);
     expect(find.byType(ConsoleAuthSetting), findsNothing);
   });
 
-  testWidgets('só o console que pede conta ganha formulário', (tester) async {
+  testWidgets('only the console that needs an account gets a form', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    final formularios = tester.widgetList<ConsoleAuthSetting>(find.byType(ConsoleAuthSetting)).toList();
-    expect(formularios.length, 1);
-    expect(formularios.single.console.id, 'switch');
-    // O `addonId` é o que faz o token ser guardado sob o par certo. Passar o
-    // embutido aqui compila, a tela funciona, e o token do Myrient vai para a
-    // gaveta do catálogo embutido.
-    expect(formularios.single.addonId, 'myrient');
+    final forms = tester.widgetList<ConsoleAuthSetting>(find.byType(ConsoleAuthSetting)).toList();
+    expect(forms.length, 1);
+    expect(forms.single.console.id, 'switch');
+    // The `addonId` is what makes the token be stored under the right pair.
+    // Passing the builtin here compiles, the screen works, and the Myrient token
+    // goes into the builtin catalog's drawer.
+    expect(forms.single.addonId, 'myrient');
   });
 
-  testWidgets('a prioridade mostra a posição na lista', (tester) async {
+  testWidgets('priority shows the position in the list', (tester) async {
     final notifier = await _notifier(const [
-      Addon(id: kBuiltinAddonId, name: 'Catálogo embutido'),
+      Addon(id: kBuiltinAddonId, name: 'Built-in catalog'),
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('2ª de 3'), findsOneWidget);
+    expect(find.text('2 of 3'), findsOneWidget);
   });
 
-  testWidgets('cancelar a remoção não remove', (tester) async {
+  testWidgets('cancelling removal does not remove', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
-    await tester.tap(find.text('Remover'));
+    await _open(tester, notifier: notifier);
+    await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cancelar'));
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     expect(notifier.state.length, 1);
     expect(find.byType(AddonDetailScreen), findsOneWidget);
   });
 
-  testWidgets('confirmar remove e fecha a tela', (tester) async {
+  testWidgets('confirming removes and closes the screen', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
-    await tester.tap(find.text('Remover'));
+    await _open(tester, notifier: notifier);
+    await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
-    // O rótulo do botão do diálogo é diferente do da tela de propósito: com os
-    // dois escritos "Remover", este `tap` acharia dois widgets e o teste
-    // morreria em ambiguidade em vez de provar alguma coisa.
-    await tester.tap(find.text('Remover addon'));
+    // The dialog button label differs from the screen's on purpose: with both
+    // reading "Remove", this tap would match two widgets and die ambiguous.
+    await tester.tap(find.text('Remove addon'));
     await tester.pumpAndSettle();
 
     expect(notifier.state, isEmpty);
@@ -7805,46 +7583,46 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/addon_detail_screen_test.dart
 ```
 
-Esperado: falha de compilação, `Error: Couldn't resolve the package 'roms_downloader/screens/addon_detail_screen.dart'`.
+Expected: compile failure, `Error: Couldn't resolve the package 'roms_downloader/screens/addon_detail_screen.dart'`.
 
-- [ ] **Step 3: O fundido vira provider**
+- [ ] **Step 3: The merged catalog becomes a provider**
 
-Em `lib/providers/addon_provider.dart`, troque o `addonCoverageProvider` inteiro (o que a Task 18 criou) por dois providers:
+In `lib/providers/addon_provider.dart`, replace the entire `addonCoverageProvider` (the one Task 18 created) with two providers:
 
 ```dart
-/// O catálogo fundido de todos os addons instalados, na ordem deles.
+/// The merged catalog of all installed addons, in their order.
 ///
-/// **Sem teste, e de propósito.** `mergedCatalog()` chega em disco por
-/// `path_provider`, que num teste sem plataforma não falha: devolve vazio em
-/// silêncio. Um teste aqui afirmaria catálogo vazio e passaria para sempre,
-/// inclusive depois de a regra quebrar. O que tem teste é `mergeCatalogs` e
-/// `MergedCatalog.coverage()`, que é onde a regra mora. As telas das Tasks 22,
-/// 23 e 25 sobrescrevem este provider.
+/// **No test, and intentionally so.** `mergedCatalog()` reaches disk via
+/// `path_provider`, which in a platformless test does not fail: it silently
+/// returns empty. A test here would assert an empty catalog and pass forever,
+/// including after the rule breaks. What has tests is `mergeCatalogs` and
+/// `MergedCatalog.coverage()`, which is where the rule lives. The Task 22,
+/// 23, and 25 screens override this provider.
 final mergedCatalogProvider = FutureProvider<MergedCatalog>((ref) async {
   ref.watch(addonProvider);
   return CatalogService().mergedCatalog();
 });
 
-/// De cada addon para o que ele cobre.
+/// From each addon to what it covers.
 ///
-/// Deriva do fundido em vez de montá-lo de novo: a tela de detalhe precisa dos
-/// dois, e duas leituras de disco para a mesma resposta é o tipo de custo que
-/// ninguém vê até a lista de addons ficar grande.
+/// Derives from the merged catalog instead of rebuilding it: the detail screen
+/// needs both, and two disk reads for the same answer is the kind of cost
+/// nobody notices until the addon list gets large.
 final addonCoverageProvider = FutureProvider<Map<String, AddonCoverage>>((ref) async {
   return (await ref.watch(mergedCatalogProvider.future)).coverage();
 });
 ```
 
-- [ ] **Step 4: Escreva a tela**
+- [ ] **Step 4: Write the screen**
 
-Crie `lib/screens/addon_detail_screen.dart`:
+Create `lib/screens/addon_detail_screen.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -7853,14 +7631,14 @@ import 'package:roms_downloader/models/addon_model.dart';
 import 'package:roms_downloader/providers/addon_provider.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 
-/// Os cinco blocos que a seção 9 do spec de UI pede para um addon:
-/// identificação, conta, cobertura, prioridade e remover.
+/// The five blocks that UI spec section 9 asks for an addon:
+/// identity, account, coverage, priority, and remove.
 ///
-/// A cobertura mostra quais consoles o addon atende, e **não** quantos itens
-/// em cada. A contagem por console é uma requisição de listagem por console
-/// (`CatalogService._fetchCatalog`), e o app carrega listagem sob demanda
-/// justamente porque ela é cara: um addon com 25 consoles pagaria 25
-/// requisições ao abrir uma tela de leitura.
+/// Coverage shows which consoles the addon serves, **not** how many items in
+/// each. Per-console counting is one listing request per console
+/// (`CatalogService._fetchCatalog`), and the app loads listings on demand
+/// precisely because they are expensive: an addon with 25 consoles would pay
+/// 25 requests just to open a read-only screen.
 class AddonDetailScreen extends ConsumerWidget {
   final String addonId;
 
@@ -7869,56 +7647,57 @@ class AddonDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final addons = ref.watch(addonProvider);
-    final indice = addons.indexWhere((a) => a.id == addonId);
+    final index = addons.indexWhere((a) => a.id == addonId);
 
-    // A remoção muda a lista antes de o `pop` completar, então este quadro
-    // existe de verdade. Sem a guarda, o `addons[indice]` abaixo estoura com
-    // índice -1 no caminho feliz do botão Remover.
-    if (indice < 0) return const Scaffold(body: SizedBox.shrink());
+    // Removal changes the list before the `pop` completes, so this frame really
+    // exists. Without the guard, `addons[index]` below blows up with index -1
+    // on the happy path of the Remove button.
+    if (index < 0) return const Scaffold(body: SizedBox.shrink());
 
-    final addon = addons[indice];
-    final catalogo = ref.watch(mergedCatalogProvider);
+    final addon = addons[index];
+    final catalog = ref.watch(mergedCatalogProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(addon.name)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _Secao(
-            titulo: 'Origem',
-            child: Text(addon.url ?? (addon.isBuiltin ? 'Instalado com o app' : 'Instalado de arquivo')),
+          _Section(
+            title: 'Source',
+            child: Text(addon.url ?? (addon.isBuiltin ? 'Installed with the app' : 'Installed from file')),
           ),
-          catalogo.when(
+          catalog.when(
             loading: () => const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()),
-            error: (e, _) => _Secao(titulo: 'Cobertura', child: Text('Catálogo ilegível: $e')),
-            data: (fundido) {
-              final cobertura = fundido.coverage()[addonId] ?? (consoles: const <String>[], authConsoles: const <String>[]);
-              // Declaração e não `final nome = (String id) => ...`: o
-              // `prefer_function_declarations_over_variables` vem ligado no
-              // `flutter_lints` e a variável empurraria o analyze para 23.
-              String nome(String id) => fundido.consoles[id]?.name ?? id;
+            error: (e, _) => _Section(title: 'Coverage', child: Text('Unreadable catalog: $e')),
+            data: (merged) {
+              final coverage = merged.coverage()[addonId] ?? (consoles: const <String>[], authConsoles: const <String>[]);
+              // A declaration, not `final name = (String id) => ...`:
+              // `prefer_function_declarations_over_variables` is on and the
+              // variable form would trip the lint.
+              String name(String id) => merged.consoles[id]?.name ?? id;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final consoleId in cobertura.authConsoles)
-                    if (fundido.consoles[consoleId] != null)
-                      _Secao(
-                        titulo: 'Conta: ${nome(consoleId)}',
-                        child: ConsoleAuthSetting(console: fundido.consoles[consoleId]!, addonId: addonId),
+                  if (coverage.authConsoles.isNotEmpty) const VaultWarning(),
+                  for (final consoleId in coverage.authConsoles)
+                    if (merged.consoles[consoleId] != null)
+                      _Section(
+                        title: 'Account: ${name(consoleId)}',
+                        child: ConsoleAuthSetting(console: merged.consoles[consoleId]!, addonId: addonId),
                       ),
-                  _Secao(
-                    titulo: 'Cobertura',
+                  _Section(
+                    title: 'Coverage',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(cobertura.consoles.isEmpty
-                            ? 'Nenhum console'
-                            : '${cobertura.consoles.length} console${cobertura.consoles.length == 1 ? '' : 's'}'),
+                        Text(coverage.consoles.isEmpty
+                            ? 'No console'
+                            : '${coverage.consoles.length} console${coverage.consoles.length == 1 ? '' : 's'}'),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: [for (final id in cobertura.consoles) Chip(label: Text(nome(id)))],
+                          children: [for (final id in coverage.consoles) Chip(label: Text(name(id)))],
                         ),
                       ],
                     ),
@@ -7927,15 +7706,15 @@ class AddonDetailScreen extends ConsumerWidget {
               );
             },
           ),
-          _Secao(
-            titulo: 'Prioridade',
+          _Section(
+            title: 'Priority',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${indice + 1}ª de ${addons.length}'),
+                Text('${index + 1} of ${addons.length}'),
                 const SizedBox(height: 4),
                 Text(
-                  'Arraste na lista de addons para mudar a ordem. A primeira fonte que tem o arquivo é a que baixa.',
+                  'Drag in the addons list to change the order. The first source that has the file is the one that downloads.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -7943,42 +7722,42 @@ class AddonDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () => _confirmarRemocao(context, ref, addon),
+            onPressed: () => _confirmRemoval(context, ref, addon),
             icon: const Icon(Icons.delete_outline),
-            label: const Text('Remover'),
+            label: const Text('Remove'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _confirmarRemocao(BuildContext context, WidgetRef ref, Addon addon) async {
+  Future<void> _confirmRemoval(BuildContext context, WidgetRef ref, Addon addon) async {
     final navigator = Navigator.of(context);
-    final confirmou = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Remover ${addon.name}?'),
-        // O token fica no cofre de propósito (`AddonNotifier.remove`), e dizer
-        // isso aqui é o que impede o usuário de achar que vai ter que
-        // redescobrir a credencial para reinstalar.
-        content: const Text('O catálogo sai do app. A credencial fica guardada, e reinstalar a mesma fonte volta a encontrá-la.'),
+        title: Text('Remove ${addon.name}?'),
+        // The token stays in the vault on purpose (`AddonNotifier.remove`);
+        // saying so here stops the user from thinking they must rediscover the
+        // credential to reinstall.
+        content: const Text('The catalog leaves the app. The credential stays saved, and reinstalling the same source finds it again.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remover addon')),
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove addon')),
         ],
       ),
     );
-    if (confirmou != true) return;
+    if (confirmed != true) return;
     await ref.read(addonProvider.notifier).remove(addon.id);
     navigator.pop();
   }
 }
 
-class _Secao extends StatelessWidget {
-  final String titulo;
+class _Section extends StatelessWidget {
+  final String title;
   final Widget child;
 
-  const _Secao({required this.titulo, required this.child});
+  const _Section({required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -7987,7 +7766,7 @@ class _Secao extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(titulo, style: Theme.of(context).textTheme.titleSmall),
+          Text(title, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           child,
         ],
@@ -7997,33 +7776,33 @@ class _Secao extends StatelessWidget {
 }
 ```
 
-**Tropeço provável:** guardar o `Navigator.of(context)` **depois** do `await`. O `use_build_context_synchronously` do `flutter_lints` é `info`, então ele não quebra o build, ele empurra o analyze para 23 e a Task falha no Step 7 por um motivo que parece cosmético. A linha `final navigator = Navigator.of(context);` antes do diálogo é o que evita isso.
+**Likely pitfall:** storing `Navigator.of(context)` **after** the `await`. The `use_build_context_synchronously` from `flutter_lints` is `info`, so it does not break the build, but it pushes analyze to 23 and the Task fails at Step 7 for a reason that looks cosmetic. The line `final navigator = Navigator.of(context);` before the dialog is what prevents this.
 
-**Segundo tropeço:** montar o bloco de conta a partir de `cobertura.consoles` filtrando por `hasTokenAuth` do `Console`. Funciona na maioria dos casos e erra exatamente no que a Grupo 3 consertou: com dois addons servindo o mesmo console, `Console.auth` é a do **primeiro** que o declarou, então a tela do segundo addon mostraria o formulário do primeiro. `authConsoles` vem de `coverage()`, que percorre as fontes, e é por isso que ele existe.
+**Second pitfall:** building the account block from `coverage.consoles` filtered by `Console.hasTokenAuth`. This works in most cases and fails exactly in the case that Group 3 fixed: with two addons serving the same console, `Console.auth` belongs to the **first** one that declared it, so the second addon's screen would show the first one's form. `authConsoles` comes from `coverage()`, which iterates sources, and that is why it exists.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addon_detail_screen_test.dart
 ```
 
-Esperado: `+8`, zero falha.
+Expected: `+8`, zero failures.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+554`, zero falha.
+Expected: `+554`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, e nenhum deles em `addon_detail_screen.dart`, `addon_detail_screen_test.dart` ou `addon_provider.dart`.
+Expected: `22 issues found`, and none of them in `addon_detail_screen.dart`, `addon_detail_screen_test.dart`, or `addon_provider.dart`.
 
 - [ ] **Step 8: Commit**
 
@@ -8036,31 +7815,31 @@ git commit -m "feat(addon): tela de detalhe com origem, conta, cobertura e prior
 
 ---
 
-### Task 23: a lista de addons, com arrasto e instalação por URL
+### Task 23: the addon list, with drag-to-reorder and URL installation
 
 **Files:**
 - Create: `lib/screens/addons_screen.dart`
-- Modify: `lib/providers/addon_provider.dart` (ganha `catalogFetcherProvider`)
+- Modify: `lib/providers/addon_provider.dart` (gains `catalogFetcherProvider`)
 - Test: `test/addons_screen_test.dart`
 
-A linha que a seção 9 pede: "ícone, nome, cobertura resumida ("25 consoles"), chip de "conta" quando exige credencial, alça de arrasto e seta. No fim, "+ Instalar de URL"". Esta Task é a última peça de UI da fatia, e é onde a prioridade deixa de ser um conceito e vira uma alça que o usuário arrasta.
+The line that section 9 asks for: "icon, name, short coverage summary ("25 consoles"), "account" chip when it requires credentials, drag handle, and arrow. At the end, "+ Install from URL"". This Task is the last UI piece of the slice, and is where priority stops being a concept and becomes a handle the user drags.
 
-O arrasto é o ponto. `sourcePriorityProvider` (Task 14) já é a ordem desta lista, e `planFromEntries` (fatia 3) já usa `sourcePriority` como último desempate da seção 6. Nada disso é observável hoje porque a ordem nunca muda. Depois desta Task, arrastar uma linha muda qual fonte baixa o arquivo.
+The drag is the point. `sourcePriorityProvider` (Task 14) is already the order of this list, and `planFromEntries` (slice 3) already uses `sourcePriority` as the last tiebreaker from section 6. None of that is observable today because the order never changes. After this Task, dragging a row changes which source downloads the file.
 
-O `catalogFetcherProvider` existe por um motivo de teste e um de produção. De teste: `installAddonFromUrl` só é injetável por parâmetro, e um widget não tem como receber parâmetro de dentro do `onPressed`. De produção: é o único lugar onde a tela toca a rede, então é o único lugar que precisa ser trocado se um dia houver proxy ou cabeçalho próprio.
+`catalogFetcherProvider` exists for one test reason and one production reason. For testing: `installAddonFromUrl` is only injectable as a parameter, and a widget has no way to receive a parameter from inside an `onPressed`. For production: it is the only place where the screen touches the network, so it is the only place that needs to change if there is ever a proxy or a custom header.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/addons_screen_test.dart`. O `FakeAddonStore` é o da Task 22 (`test/support/fake_addon_store.dart`), já commitado; aqui só se importa. O import é relativo e não `package:`, que é a convenção dos arquivos que já usam `test/support/`. E não há `import 'dart:io'` nem `import '.../services/addon_store.dart'`: a única razão para os dois era o store de disco, e import órfão é `unused_import`, que é **warning** e levaria o Step 7 de 22 para 24.
+Create `test/addons_screen_test.dart`. `FakeAddonStore` is the one from Task 22 (`test/support/fake_addon_store.dart`), already committed; only an import is needed here. The import is relative and not `package:`, which is the convention of the files that already use `test/support/`. And there is no `import 'dart:io'` and no `import '.../services/addon_store.dart'`: the only reason for both was the disk store, and an orphan import is `unused_import`, which is a **warning** and would push Step 7 from 22 to 24.
 
-**Dois imports desta lista não são óbvios, e sem eles o bloco não compila.** A primeira versão deste bloco não os tinha, e o `flutter test` parou antes de rodar caso nenhum, com `Type 'CatalogFetcher' not found` e `Undefined name 'kLongPressTimeout'`:
+**Two imports from this list are not obvious, and without them the block does not compile.** The first version of this block did not have them, and `flutter test` stopped before running any case, with `Type 'CatalogFetcher' not found` and `Undefined name 'kLongPressTimeout'`:
 
-- `package:roms_downloader/services/addon_install.dart` é onde vive `typedef CatalogFetcher` (`addon_install.dart:14`), usado no parâmetro `CatalogFetcher? fetch` de `_abrir`. Não existe `export` em lugar nenhum de `lib/` (medido: `grep -rn '^export ' lib/` não acha nada), então typedef só enxerga quem importa o arquivo dele. Este import ficou de fora junto com o corte do `addon_store.dart`, e o corte passou um a mais.
-- `package:flutter/gestures.dart` é onde vive `kLongPressTimeout` (`gestures/constants.dart:29`), usado no teste do arrasto. `material.dart` **não** reexporta `gestures.dart`, e `widgets.dart` e `flutter_test.dart` também não (medido nos três). É o primeiro arquivo do repo a importar `gestures.dart`, então não há precedente para copiar.
+- `package:roms_downloader/services/addon_install.dart` is where `typedef CatalogFetcher` lives (`addon_install.dart:14`), used in the `CatalogFetcher? fetch` parameter of `_open`. There is no `export` anywhere in `lib/` (measured: `grep -rn '^export ' lib/` finds nothing), so the typedef is only visible to whoever imports its file. This import was cut out along with `addon_store.dart`, and the cut removed one too many.
+- `package:flutter/gestures.dart` is where `kLongPressTimeout` lives (`gestures/constants.dart:29`), used in the drag test. `material.dart` does **not** re-export `gestures.dart`, and neither do `widgets.dart` or `flutter_test.dart` (measured in all three). It is the first file in the repo to import `gestures.dart`, so there is no precedent to copy from.
 
-Nenhum dos dois vira `unused_import`: os dois símbolos são usados no próprio bloco, e o alvo de 22 do Step 7 não muda.
+Neither becomes `unused_import`: both symbols are used in the block itself, and the target of 22 for Step 7 does not change.
 
-**O `moveBy(Offset(0, 300))` do caso do arrasto é medido, não escolhido a olho.** A primeira versão deste bloco movia 100 px e o caso falhava sem erro nenhum, só com a lista na ordem original, que é o defeito mais caro de diagnosticar aqui: parece bug de produção e é gesto curto. Medido nesta tela, com as linhas de 74 e 72 px: 100, 120 e 137 px não trocam nada, 150 px troca. O valor ficou folgado de propósito, e com duas linhas passar do fim dá no mesmo que trocar. Quem encurtar isso não vai ver um erro, vai ver a asserção da ordem.
+**The `moveBy(Offset(0, 300))` in the drag case is measured, not chosen by eye.** The first version of this block moved 100 px and the case failed with no error at all, just the list in the original order, which is the most expensive defect to diagnose here: it looks like a production bug and it is a short gesture. Measured on this screen, with rows of 74 and 72 px: 100, 120, and 137 px swap nothing, 150 px swaps. The value was left generous on purpose, and with two rows going past the end is the same as swapping. Whoever shortens this will not see an error, they will see the order assertion.
 
 ```dart
 import 'dart:convert';
@@ -8084,55 +7863,50 @@ import 'support/fake_addon_store.dart';
 
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
-const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://outro/ps2/']);
+const _ps2 = Console(id: 'ps2', name: 'PS2', urls: ['https://other/ps2/']);
 
-const _catalogoBaixado = '''
-[{"name": "PS2", "urls": ["https://novo.org/ps2/"]}]
+const _catalogFetched = '''
+[{"name": "PS2", "urls": ["https://incoming.org/ps2/"]}]
 ''';
 
-/// `myrient` cobre dois consoles e um deles pede conta; `outro` cobre um e
-/// nenhum pede.
-MergedCatalog _catalogo() => const MergedCatalog(
+/// `myrient` covers two consoles and one of them requires an account; `other` covers one and
+/// none require an account.
+MergedCatalog _catalog() => const MergedCatalog(
       consoles: {'switch': _switch, 'snes': _snes, 'ps2': _ps2},
       sources: {
         'switch': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/switch/', auth: {'requires_token': true})],
         'snes': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/snes/')],
-        'ps2': [ConsoleSource(addonId: 'outro', url: 'https://outro/ps2/')],
+        'ps2': [ConsoleSource(addonId: 'other', url: 'https://other/ps2/')],
       },
     );
 
-/// O fetcher que os casos que não falam de rede usam.
-///
-/// Função de topo e não literal no `??`: `fetch ?? (_) async => ...` não
-/// parseia como se lê, porque o `=>` come o resto da expressão.
-Future<String> _fetchPadrao(String url) async => _catalogoBaixado;
+/// Top-level function, not a literal in the `??`, because `fetch ?? (_) async => ...` does
+/// not parse as it reads.
+Future<String> _fetchDefault(String url) async => _catalogFetched;
 
-/// O notifier é o de verdade, sobre um store de memória: o arrasto e a
-/// instalação têm que atravessar `reorder` e `install`, que chamam `save` e
-/// `writeCatalog`. Falso é só o disco, que trava dentro de `testWidgets`.
-///
-/// Sem `addTearDown(notifier.dispose)` pelo mesmo motivo da Task 22: quem
-/// descarta é o `StateNotifierProvider` quando a árvore cai, e um segundo
-/// `dispose` mata todos os casos.
+/// A real notifier over an in-memory store: drag and install must pass through
+/// `reorder` and `install`. Only disk is fake, since it hangs inside
+/// `testWidgets`. No `addTearDown(notifier.dispose)`: the provider disposes it
+/// when the tree falls, and a second dispose kills every case.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidateCache: () async {});
   await notifier.ready;
   return notifier;
 }
 
-Future<void> _abrir(
+Future<void> _open(
   WidgetTester tester, {
   required AddonNotifier notifier,
-  MergedCatalog? catalogo,
+  MergedCatalog? catalog,
   CatalogFetcher? fetch,
 }) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
       addonProvider.overrideWith((ref) => notifier),
-      mergedCatalogProvider.overrideWith((ref) async => catalogo ?? _catalogo()),
-      catalogFetcherProvider.overrideWithValue(fetch ?? _fetchPadrao),
+      mergedCatalogProvider.overrideWith((ref) async => catalog ?? _catalog()),
+      catalogFetcherProvider.overrideWithValue(fetch ?? _fetchDefault),
       vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: true)),
     ],
     child: const MaterialApp(home: AddonsScreen()),
@@ -8140,168 +7914,169 @@ Future<void> _abrir(
   await tester.pumpAndSettle();
 }
 
-/// Preenche o campo do diálogo de instalação e confirma.
-Future<void> _instalar(WidgetTester tester, String url) async {
-  await tester.tap(find.text('Instalar de URL'));
+/// Fills the install dialog field and confirms.
+Future<void> _install(WidgetTester tester, String url) async {
+  await tester.tap(find.text('Install from URL'));
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextField), url);
-  await tester.tap(find.text('Instalar'));
+  await tester.tap(find.text('Install'));
   await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('lista os addons na ordem da prioridade', (tester) async {
+  testWidgets('lists addons in priority order', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    final nomes = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList();
-    expect(nomes.indexOf('myrient.erista.me'), lessThan(nomes.indexOf('outro.org')));
+    final names = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList();
+    expect(names.indexOf('myrient.erista.me'), lessThan(names.indexOf('other.org')));
   });
 
-  testWidgets('cada linha resume a cobertura', (tester) async {
+  testWidgets('each row summarizes coverage', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
     expect(find.text('2 consoles'), findsOneWidget);
     expect(find.text('1 console'), findsOneWidget);
   });
 
-  testWidgets('o chip de conta só aparece em quem exige credencial', (tester) async {
+  testWidgets('the account chip only shows on addons needing a credential', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('conta'), findsOneWidget);
+    expect(find.text('account'), findsOneWidget);
   });
 
-  testWidgets('addon sem cobertura não some da lista', (tester) async {
-    // `coverage()` omite o addon sem console, e omitir na tela seria pior que
-    // mostrar zero: o usuário acabou de instalar uma fonte e ela não aparece,
-    // então ele instala de novo.
-    final notifier = await _notifier(const [Addon(id: 'novo', name: 'novo.org', url: 'https://novo.org/c.json')]);
+  testWidgets('addon with no coverage stays in the list', (tester) async {
+    // `coverage()` omits an addon with no console; omitting it on screen would
+    // be worse than showing zero: the user just installed a source and, not
+    // seeing it, installs again.
+    final notifier = await _notifier(const [Addon(id: 'incoming', name: 'incoming.org', url: 'https://incoming.org/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('novo.org'), findsOneWidget);
-    expect(find.text('Nenhum console'), findsOneWidget);
+    expect(find.text('incoming.org'), findsOneWidget);
+    expect(find.text('No console'), findsOneWidget);
   });
 
-  testWidgets('lista vazia convida a instalar', (tester) async {
+  testWidgets('empty list invites installing', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    expect(find.text('Nenhum addon instalado.'), findsOneWidget);
-    expect(find.text('Instalar de URL'), findsOneWidget);
+    expect(find.text('No addons installed.'), findsOneWidget);
+    expect(find.text('Install from URL'), findsOneWidget);
   });
 
-  testWidgets('tocar na linha abre o detalhe', (tester) async {
+  testWidgets('tapping a row opens the detail', (tester) async {
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
     await tester.tap(find.text('myrient.erista.me'));
     await tester.pumpAndSettle();
 
     expect(find.byType(AddonDetailScreen), findsOneWidget);
   });
 
-  testWidgets('arrastar reordena e a nova ordem persiste', (tester) async {
+  testWidgets('dragging reorders and the new order persists', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro.org/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other.org/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    // Na alça e não na linha: a linha inteira é um `ListTile` com `onTap` que
-    // abre o detalhe, e arrastar por ela abriria a tela em vez de reordenar.
+    // On the handle, not the row: the whole row is a `ListTile` with `onTap`
+    // that opens the detail, and dragging the row would open the screen instead
+    // of reordering.
     //
-    // Gesto na mão e não `tester.drag`: o `ReorderableDragStartListener` usa
-    // `ImmediateMultiDragGestureRecognizer`, que precisa do `moveBy` em um
-    // quadro próprio para o reorder começar. Com `drag` o teste passa ou falha
-    // conforme o tamanho da linha, que é a pior espécie de teste.
+    // Manual gesture, not `tester.drag`: `ReorderableDragStartListener` uses
+    // `ImmediateMultiDragGestureRecognizer`, which needs the `moveBy` in its own
+    // frame for the reorder to start. With `drag` the test passes or fails
+    // depending on the row height, which is the worst kind of test.
     //
-    // A distância é folgada de propósito. Medido nesta tela: 100, 120 e 137 px
-    // não trocam nada e 150 px troca, porque o `ReorderableListView` só
-    // remaneja quando o item arrastado ultrapassa o vizinho inteiro, e as duas
-    // linhas têm 74 e 72 px. Um gesto curto falha sem erro nenhum: a lista fica
-    // intacta e a asserção acusa a ordem original, sem dizer que o gesto é que
-    // foi curto. Com duas linhas, passar do fim dá no mesmo que trocar, então a
-    // folga não custa precisão.
-    final alca = find.byIcon(Icons.drag_handle).first;
-    final gesto = await tester.startGesture(tester.getCenter(alca));
+    // The distance is generous on purpose. Measured on this screen: 100, 120 and
+    // 137 px swap nothing, 150 px swaps, because `ReorderableListView` only
+    // rearranges when the dragged item goes past the full neighbor, and the two
+    // rows are 74 and 72 px. A short gesture fails with no error: the list stays
+    // intact and the assertion blames the original order, without saying the
+    // gesture was too short. With two rows, going past the end is the same as
+    // swapping, so the generous distance costs no precision.
+    final handle = find.byIcon(Icons.drag_handle).first;
+    final gesture = await tester.startGesture(tester.getCenter(handle));
     await tester.pump(kLongPressTimeout);
-    await gesto.moveBy(const Offset(0, 300));
+    await gesture.moveBy(const Offset(0, 300));
     await tester.pump();
-    await gesto.up();
+    await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(notifier.state.map((a) => a.id), ['outro', 'myrient']);
+    expect(notifier.state.map((a) => a.id), ['other', 'myrient']);
   });
 
-  testWidgets('instalar de URL acrescenta o addon', (tester) async {
+  testWidgets('installing from URL appends the addon', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier);
-    await _instalar(tester, 'https://novo.org/catalogo.json');
+    await _open(tester, notifier: notifier);
+    await _install(tester, 'https://incoming.org/catalog.json');
 
-    expect(notifier.state.map((a) => a.id), [Addon.idFromUrl('https://novo.org/catalogo.json')]);
+    expect(notifier.state.map((a) => a.id), [Addon.idFromUrl('https://incoming.org/catalog.json')]);
   });
 
-  testWidgets('url que não devolve catálogo mostra o erro e não instala', (tester) async {
+  testWidgets('a url returning no catalog shows the error and does not install', (tester) async {
     final notifier = await _notifier(const []);
 
-    await _abrir(tester, notifier: notifier, fetch: (_) async => '<html>login</html>');
-    await _instalar(tester, 'https://novo.org/catalogo.json');
+    await _open(tester, notifier: notifier, fetch: (_) async => '<html>login</html>');
+    await _install(tester, 'https://incoming.org/catalog.json');
 
     expect(notifier.state, isEmpty);
-    expect(find.textContaining('Não deu para instalar'), findsOneWidget);
+    expect(find.textContaining('Could not install'), findsOneWidget);
   });
 }
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/addons_screen_test.dart
 ```
 
-Esperado: falha de compilação, `Error: Couldn't resolve the package 'roms_downloader/screens/addons_screen.dart'`.
+Expected: compile failure, `Error: Couldn't resolve the package 'roms_downloader/screens/addons_screen.dart'`.
 
-- [ ] **Step 3: A rede vira provider**
+- [ ] **Step 3: The network becomes a provider**
 
-Em `lib/providers/addon_provider.dart`, acrescente, depois do `mergedCatalogProvider`:
+In `lib/providers/addon_provider.dart`, add, after `mergedCatalogProvider`:
 
 ```dart
-/// Como a tela de addons baixa um catálogo.
+/// How the addon screen downloads a catalog.
 ///
-/// Existe porque `installAddonFromUrl` só é injetável por parâmetro e um
-/// `onPressed` não recebe parâmetro. Em produção é sempre
-/// `fetchCatalogByHttp`; em teste, uma função que devolve uma string.
+/// Exists because `installAddonFromUrl` is only injectable as a parameter and
+/// an `onPressed` does not receive a parameter. In production it is always
+/// `fetchCatalogByHttp`; in tests, a function that returns a string.
 final catalogFetcherProvider = Provider<CatalogFetcher>((ref) => fetchCatalogByHttp);
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/services/addon_install.dart';
 ```
 
-- [ ] **Step 4: Escreva a tela**
+- [ ] **Step 4: Write the screen**
 
-Crie `lib/screens/addons_screen.dart`:
+Create `lib/screens/addons_screen.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -8313,18 +8088,16 @@ import 'package:roms_downloader/screens/addon_detail_screen.dart';
 import 'package:roms_downloader/services/addon_install.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 
-/// A lista ordenada de fontes, como a seção 9 do spec de UI pede.
-///
-/// A ordem **é** a prioridade: ela alimenta `sourcePriorityProvider`, que
-/// alimenta o `sourcePriority` de `planFromEntries`. Arrastar uma linha aqui
-/// muda qual fonte baixa o arquivo.
+/// The ordered list of sources. The order is the priority: it feeds
+/// `sourcePriorityProvider`, so dragging a row here changes which source
+/// downloads the file.
 class AddonsScreen extends ConsumerWidget {
   const AddonsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final addons = ref.watch(addonProvider);
-    final cobertura = ref.watch(addonCoverageProvider).valueOrNull ?? const <String, AddonCoverage>{};
+    final coverage = ref.watch(addonCoverageProvider).valueOrNull ?? const <String, AddonCoverage>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Addons')),
@@ -8332,20 +8105,20 @@ class AddonsScreen extends ConsumerWidget {
         children: [
           Expanded(
             child: addons.isEmpty
-                ? const Center(child: Text('Nenhum addon instalado.'))
+                ? const Center(child: Text('No addons installed.'))
                 : ReorderableListView.builder(
                     buildDefaultDragHandles: false,
                     itemCount: addons.length,
                     onReorder: (from, to) => ref.read(addonProvider.notifier).reorder(from, to),
                     itemBuilder: (context, i) {
                       final addon = addons[i];
-                      return _Linha(
+                      return _Row(
                         key: ValueKey(addon.id),
-                        indice: i,
+                        index: i,
                         addon: addon,
-                        // Ausente é cobertura zero, não erro: é o estado de um
-                        // addon recém instalado cujo catálogo ainda não foi lido.
-                        cobertura: cobertura[addon.id] ?? (consoles: const <String>[], authConsoles: const <String>[]),
+                        // Absent means zero coverage, not error: the state of a
+                        // freshly installed addon whose catalog is not read yet.
+                        coverage: coverage[addon.id] ?? (consoles: const <String>[], authConsoles: const <String>[]),
                       );
                     },
                   ),
@@ -8356,9 +8129,9 @@ class AddonsScreen extends ConsumerWidget {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _dialogoDeInstalacao(context, ref),
+                onPressed: () => _installDialog(context, ref),
                 icon: const Icon(Icons.add),
-                label: const Text('Instalar de URL'),
+                label: const Text('Install from URL'),
               ),
             ),
           ),
@@ -8367,8 +8140,8 @@ class AddonsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _dialogoDeInstalacao(BuildContext context, WidgetRef ref) async {
-    final url = await showDialog<String>(context: context, builder: (_) => const _DialogoDeUrl());
+  Future<void> _installDialog(BuildContext context, WidgetRef ref) async {
+    final url = await showDialog<String>(context: context, builder: (_) => const _UrlDialog());
     if (url == null || url.isEmpty || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -8381,29 +8154,25 @@ class AddonsScreen extends ConsumerWidget {
         fetch: ref.read(catalogFetcherProvider),
       );
     } catch (e) {
-      // Mensagem em vez de stack trace: os dois erros prováveis são url errada
-      // e servidor que devolve página de login, e nenhum dos dois é bug.
-      messenger.showSnackBar(SnackBar(content: Text('Não deu para instalar: $e')));
+      // A message instead of a stack trace: the two likely errors are a wrong
+      // URL and a server that returns a login page, neither of which is a bug.
+      messenger.showSnackBar(SnackBar(content: Text('Could not install: $e')));
     }
   }
 }
 
-/// O diálogo do "Instalar de URL". Tem estado só por causa do `dispose`.
-///
-/// O `TextEditingController` precisa viver enquanto o `TextField` viver, e o
-/// `showDialog` devolve assim que a rota é desempilhada, com a animação de
-/// saída ainda rodando. Descartar o controller ali é descartá-lo num quadro em
-/// que o `TextField` ainda está na árvore, e a transição reinscreve nele:
-/// `A TextEditingController was used after being disposed`. Com o controller no
-/// `State`, quem escolhe a hora é o framework, depois que a rota sai de fato.
-class _DialogoDeUrl extends StatefulWidget {
-  const _DialogoDeUrl();
+/// The "Install from URL" dialog. Stateful only for the sake of `dispose`: the
+/// controller must outlive the `TextField`, and disposing it inline would kill
+/// it mid-transition. With it in `State`, the framework disposes it after the
+/// route is actually gone.
+class _UrlDialog extends StatefulWidget {
+  const _UrlDialog();
 
   @override
-  State<_DialogoDeUrl> createState() => _DialogoDeUrlState();
+  State<_UrlDialog> createState() => _UrlDialogState();
 }
 
-class _DialogoDeUrlState extends State<_DialogoDeUrl> {
+class _UrlDialogState extends State<_UrlDialog> {
   final _controller = TextEditingController();
 
   @override
@@ -8415,40 +8184,40 @@ class _DialogoDeUrlState extends State<_DialogoDeUrl> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Instalar de URL'),
+      title: const Text('Install from URL'),
       content: TextField(
         controller: _controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: 'Endereço do catálogo', hintText: 'https://exemplo.org/catalogo.json'),
+        decoration: const InputDecoration(labelText: 'Catalog address', hintText: 'https://example.org/catalog.json'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: const Text('Instalar')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: const Text('Install')),
       ],
     );
   }
 }
 
-class _Linha extends StatelessWidget {
-  final int indice;
+class _Row extends StatelessWidget {
+  final int index;
   final Addon addon;
-  final AddonCoverage cobertura;
+  final AddonCoverage coverage;
 
-  const _Linha({super.key, required this.indice, required this.addon, required this.cobertura});
+  const _Row({super.key, required this.index, required this.addon, required this.coverage});
 
   @override
   Widget build(BuildContext context) {
-    final n = cobertura.consoles.length;
+    final n = coverage.consoles.length;
     return ListTile(
       leading: const Icon(Icons.extension_outlined),
       title: Text(addon.name),
       subtitle: Row(
         children: [
-          Text(n == 0 ? 'Nenhum console' : '$n console${n == 1 ? '' : 's'}'),
-          if (cobertura.authConsoles.isNotEmpty) ...[
+          Text(n == 0 ? 'No console' : '$n console${n == 1 ? '' : 's'}'),
+          if (coverage.authConsoles.isNotEmpty) ...[
             const SizedBox(width: 8),
             const Chip(
-              label: Text('conta'),
+              label: Text('account'),
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -8458,11 +8227,10 @@ class _Linha extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // A alça é o único ponto que arrasta, e por isso
-          // `buildDefaultDragHandles` é falso lá em cima: com ele ligado, a
-          // linha inteira arrasta e o toque que abre o detalhe vira um arrasto
-          // de um pixel.
-          ReorderableDragStartListener(index: indice, child: const Icon(Icons.drag_handle)),
+          // The handle is the only drag point, which is why
+          // `buildDefaultDragHandles` is false above: with it on, the whole row
+          // drags and the tap that opens the detail becomes a one-pixel drag.
+          ReorderableDragStartListener(index: index, child: const Icon(Icons.drag_handle)),
           const SizedBox(width: 8),
           const Icon(Icons.chevron_right),
         ],
@@ -8475,11 +8243,11 @@ class _Linha extends StatelessWidget {
 }
 ```
 
-**Tropeço provável:** deixar `buildDefaultDragHandles` no padrão, que é `true`. A tela fica funcionando e o teste do toque passa, porque em desktop o `ReorderableListView` só põe alça própria em mobile. O que quebra é no celular, onde a linha inteira vira arrastável e o toque que abre o detalhe compete com o arrasto. O par `buildDefaultDragHandles: false` mais `ReorderableDragStartListener` é o que dá as duas coisas em toda plataforma.
+**Likely pitfall:** leaving `buildDefaultDragHandles` at its default of `true`. The screen still works and the tap test passes, because on desktop `ReorderableListView` only adds its own handle on mobile. What breaks is on mobile, where the whole row becomes draggable and the tap that opens the detail competes with the drag. The pair `buildDefaultDragHandles: false` plus `ReorderableDragStartListener` is what gives both behaviors on every platform.
 
-**Segundo tropeço:** `ValueKey(i)` em vez de `ValueKey(addon.id)`. O `ReorderableListView` exige chave e o índice satisfaz o requisito, então nada reclama. Só que a chave passa a mudar exatamente quando a lista reordena, que é quando ela precisava ser estável, e a animação troca o conteúdo das linhas erradas.
+**Second pitfall:** `ValueKey(i)` instead of `ValueKey(addon.id)`. `ReorderableListView` requires a key and the index satisfies that requirement, so nothing complains. But the key then changes exactly when the list reorders, which is when it needed to be stable, and the animation swaps the contents of the wrong rows.
 
-**Terceiro tropeço, e este já aconteceu:** montar o `TextEditingController` dentro de `_dialogoDeInstalacao` e descartá-lo na linha seguinte ao `await showDialog(...)`. É o que a primeira versão deste bloco fazia, e os dois casos de diálogo do Step 5 caíam com
+**Third pitfall, and this one already happened:** building the `TextEditingController` inside `_installDialog` and disposing it on the line right after `await showDialog(...)`. That is what the first version of this block did, and both dialog cases in Step 5 failed with
 
 ```
 A TextEditingController was used after being disposed.
@@ -8487,33 +8255,33 @@ A TextEditingController was used after being disposed.
     TextField TextField:.../lib/screens/addons_screen.dart:70:18
 ```
 
-O `showDialog` devolve quando a rota é desempilhada, e a animação de saída ainda roda depois disso: no quadro seguinte a transição reinscreve no `TextField`, que ainda está na árvore, e acha um controller morto. A cascata de assertions impede a instalação de completar, então o `SnackBar` do caso de erro também nunca aparece e os **dois** casos falham pela mesma causa. Por isso o diálogo é um `_DialogoDeUrl extends StatefulWidget` com o controller no `State`: quem escolhe a hora do `dispose` passa a ser o framework, depois que a rota sai de fato.
+`showDialog` returns when the route is popped, and the exit animation still runs after that: on the next frame the transition re-subscribes to the `TextField`, which is still in the tree, and finds a dead controller. The assertion cascade prevents the installation from completing, so the `SnackBar` in the error case also never appears and **both** cases fail for the same cause. That is why the dialog is a `_UrlDialog extends StatefulWidget` with the controller in the `State`: the framework then decides when to `dispose`, after the route has actually left.
 
-- [ ] **Step 5: Rode para ver passar**
+- [ ] **Step 5: Run to see it pass**
 
 ```bash
 flutter test test/addons_screen_test.dart
 ```
 
-Esperado: `+9`, zero falha. O arquivo é novo e tem nove `testWidgets`, então o número isolado e o que a Task acrescenta à suíte são o mesmo. Este número já esteve escrito como `+11`, e estava errado: contei os casos do bloco do Step 1 e são nove. A cadeia de totais do Step 6 sempre esteve certa: `554 + 9 = 563`.
+Expected: `+9`, zero failures. The file is new and has nine `testWidgets`, so the standalone count and what the Task adds to the suite are the same. This number was once written as `+11`, and that was wrong: counting the cases in the Step 1 block gives nine. The running total chain in Step 6 was always correct: `554 + 9 = 563`.
 
-**A frase acima já citou `551 + 9 = 560`**, que era a cadeia de antes das Tasks 8b, 11b e 12b. Ela não bate mais com base nenhuma: o total depois da Task 22 é 554, não 551, e o desta Task é 563, não 560. Os `+9` e `+563` dos Steps 5 e 6 são os números medidos; era só a aritmética explicativa que estava velha.
+**The sentence above once cited `551 + 9 = 560`**, which was the chain from before Tasks 8b, 11b, and 12b. It no longer matches any baseline: the total after Task 22 is 554, not 551, and this Task's total is 563, not 560. The `+9` and `+563` in Steps 5 and 6 are the measured numbers; only the explanatory arithmetic was stale.
 
-- [ ] **Step 6: Rode a suíte inteira**
+- [ ] **Step 6: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+563`, zero falha.
+Expected: `+563`, zero failures.
 
-- [ ] **Step 7: Analise**
+- [ ] **Step 7: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, e nenhum deles em `addons_screen.dart`, `addons_screen_test.dart` ou `addon_provider.dart`.
+Expected: `22 issues found`, and none of them in `addons_screen.dart`, `addons_screen_test.dart`, or `addon_provider.dart`.
 
 - [ ] **Step 8: Commit**
 
@@ -8526,27 +8294,27 @@ git commit -m "feat(addon): lista de addons com prioridade arrastavel"
 
 ---
 
-### Task 24: as portas para a tela, e o aviso de que o cofre não cifra
+### Task 24: the entry points for the screen, and the warning that the vault does not encrypt
 
 **Files:**
 - Create: `lib/widgets/settings/vault_warning.dart`
-- Modify: `lib/screens/addon_detail_screen.dart` (o aviso entra acima do bloco de conta)
-- Modify: `lib/widgets/settings/accounts_setting.dart` (o aviso entra no topo)
-- Modify: `lib/screens/menu_screen.dart` (as tiles de Tools viram função de topo e ganham "Addons")
-- Test: `test/vault_warning_test.dart` (novo, 5 casos)
-- Test: `test/menu_grid_test.dart` (existente, +1 caso)
+- Modify: `lib/screens/addon_detail_screen.dart` (the warning goes above the account block)
+- Modify: `lib/widgets/settings/accounts_setting.dart` (the warning goes at the top)
+- Modify: `lib/screens/menu_screen.dart` (the Tools tiles become a top-level function and gain "Addons")
+- Test: `test/vault_warning_test.dart` (new, 5 cases)
+- Test: `test/menu_grid_test.dart` (existing, +1 case)
 
-`test/support/fake_addon_store.dart` **não** entra aqui: ele foi criado e commitado na Task 22, e esta Task só o importa.
+`test/support/fake_addon_store.dart` does **not** go here: it was created and committed in Task 22, and this Task only imports it.
 
-Duas coisas pequenas que fecham o Grupo 5: a tela de addons ainda não é alcançável por ninguém, e a decisão travada do cofre ainda não apareceu em pixel nenhum.
+Two small things that close Group 5: the addon screen is still unreachable by anyone, and the locked vault decision has not appeared in any pixel yet.
 
-**O aviso é a segunda metade da decisão travada, e é o que impede a fatia de virar maquiagem.** A 6.3 tem dois objetivos e só um é incondicional. Tirar o token do JSON compartilhável fecha em toda plataforma, porque é o arquivo que o usuário manda para outra pessoa, e quem fecha isso é `harvestAuthTokens` (Task 8). Cifrar o segredo **em repouso** é melhor-esforço: num Linux de servidor, sem `gnome-keyring` nem KWallet no D-Bus, `flutter_secure_storage` não abre e `chooseVault` cai no `PrefsVault`, que é texto puro. Nessa máquina o segredo continua onde sempre esteve. O usuário tem que saber disso na tela onde ele digita o segredo, e não num CHANGELOG.
+**The warning is the second half of the locked decision, and it is what keeps the slice from being window-dressing.** Section 6.3 has two goals and only one is unconditional. Removing the token from the shareable JSON closes on every platform, because that is the file the user sends to someone else, and what closes it is `harvestAuthTokens` (Task 8). Encrypting the secret **at rest** is best-effort: on a server Linux, without `gnome-keyring` or KWallet on D-Bus, `flutter_secure_storage` does not open and `chooseVault` falls back to `PrefsVault`, which is plain text. On that machine the secret stays where it always was. The user must know this on the screen where they type the secret, not in a CHANGELOG.
 
-`AsyncLoading` não avisa de propósito. Enquanto a sondagem do chaveiro não voltou, o app não sabe se cifra, e um aviso que pisca em todo boot de máquina que **tem** chaveiro é um aviso que o usuário aprende a ignorar. `AsyncError` avisa: chaveiro que não abriu é exatamente o caso que o aviso existe para contar.
+`AsyncLoading` does not warn on purpose. While the keyring probe has not returned, the app does not know whether it encrypts, and a warning that flashes on every boot of a machine that **does** have a keyring is a warning the user learns to ignore. `AsyncError` warns: a keyring that did not open is exactly the case the warning exists to report.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/vault_warning_test.dart`:
+Create `test/vault_warning_test.dart`:
 
 ```dart
 import 'dart:async';
@@ -8567,89 +8335,74 @@ import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 
 import 'support/fake_addon_store.dart';
 
-const _aviso = 'As credenciais ficam em texto puro neste aparelho.';
+const _warning = 'Credentials are stored in plain text on this device.';
 
-/// Semeia as prefs antes de montar qualquer coisa que leia `settingsProvider`.
+/// Seeds the prefs before mounting anything that reads `settingsProvider`.
 ///
-/// Função de topo e não duas linhas dentro do `_host` porque o último caso não
-/// usa o `_host` e precisa disto do mesmo jeito: ele monta a
-/// `AddonDetailScreen`, que monta `ConsoleAuthSetting`, que lê
-/// `settingsProvider` no `_carregarToken` de `console_auth_setting.dart`. Sem
-/// número de linha de propósito: a Task 25 inseriu o campo `onSaved` acima dele
-/// e o `48` que estava escrito aqui virou `58` num commit que não tocou neste
-/// arquivo. Sem semear, aquele caso
-/// só passa porque os quatro anteriores rodaram antes e deixaram o mock de pé,
-/// e quebra quando alguém o roda sozinho com `--plain-name`.
-void _semearPrefs() {
+/// Top-level function and not two lines inside `_host` because the last case
+/// does not use `_host` and needs this anyway: it mounts `AddonDetailScreen`,
+/// which mounts `ConsoleAuthSetting`, which reads `settingsProvider` in
+/// `_loadToken` of `console_auth_setting.dart`. No line number on purpose:
+/// Task 25 inserted the `onSaved` field above it and the `48` that was written
+/// here became `58` in a commit that did not touch this file. Without seeding,
+/// that case only passes because the four before it ran first and left the mock
+/// in place, and breaks when someone runs it alone with `--plain-name`.
+void _seedPrefs() {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
 }
 
-Widget _host(Override cofre, {Widget child = const VaultWarning()}) {
-  _semearPrefs();
+Widget _host(Override vault, {Widget child = const VaultWarning()}) {
+  _seedPrefs();
   return ProviderScope(
-    overrides: [cofre],
+    overrides: [vault],
     child: MaterialApp(home: Scaffold(body: child)),
   );
 }
 
-Override _cofre({required bool cifra}) =>
-    vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: cifra));
+Override _vault({required bool encrypted}) =>
+    vaultProvider.overrideWith((ref) async => VaultChoice(MemoryVault(), encryptedAtRest: encrypted));
 
 void main() {
-  testWidgets('cofre que não cifra avisa', (tester) async {
-    await tester.pumpWidget(_host(_cofre(cifra: false)));
+  testWidgets('non-encrypting vault warns', (tester) async {
+    await tester.pumpWidget(_host(_vault(encrypted: false)));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsOneWidget);
+    expect(find.text(_warning), findsOneWidget);
   });
 
-  testWidgets('cofre que cifra não avisa nada', (tester) async {
-    await tester.pumpWidget(_host(_cofre(cifra: true)));
+  testWidgets('encrypting vault warns nothing and takes no space', (tester) async {
+    await tester.pumpWidget(_host(_vault(encrypted: true)));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsNothing);
-    // Nem um espaço: o aviso ausente não pode deixar buraco no layout da tela
-    // de contas, que é onde ele mais aparece.
+    expect(find.text(_warning), findsNothing);
     expect(tester.getSize(find.byType(VaultWarning)), Size.zero);
   });
 
-  testWidgets('enquanto sonda o chaveiro, não avisa', (tester) async {
-    // Um aviso que pisca em todo boot de máquina que tem chaveiro é um aviso
-    // que o usuário aprende a ignorar.
-    final travado = Completer<VaultChoice>();
-    // Sem `const`: `MemoryVault` guarda um mapa mutável e não tem construtor
-    // const. E o `complete` no teardown existe para o `Completer` pendurado
-    // não deixar o teste vazando um future para sempre.
-    addTearDown(() => travado.complete(VaultChoice(MemoryVault(), encryptedAtRest: true)));
+  testWidgets('does not warn while the keyring is being probed', (tester) async {
+    final pending = Completer<VaultChoice>();
+    // Complete in teardown so the pending Completer does not leak a future.
+    addTearDown(() => pending.complete(VaultChoice(MemoryVault(), encryptedAtRest: true)));
 
-    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) => travado.future)));
+    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) => pending.future)));
     await tester.pump();
 
-    expect(find.text(_aviso), findsNothing);
+    expect(find.text(_warning), findsNothing);
   });
 
-  testWidgets('cofre nenhum abriu avisa, e avisa pior', (tester) async {
-    // O ramo de `error` **não** é o chaveiro falhando. Chaveiro que não abre é
-    // o caminho previsto: a sonda engole a exceção, devolve `false`, e a
-    // escolha cai para a reserva, o que chega aqui como `data` com
-    // `encryptedAtRest: false`, que é o primeiro caso deste arquivo. Para o
-    // `error` acontecer é preciso a **reserva** levantar, ou seja
-    // `PrefsVault.open()` (`vault_provider.dart:33`, fora de qualquer `try`).
-    // Por isso o que se espera fala em cofre e não em chaveiro, e por isso o
-    // erro levantado aqui não é "sem D-Bus": sem D-Bus não chega neste ramo.
-    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('nem a reserva abriu'))));
+  testWidgets('no vault opened warns harder', (tester) async {
+    // The `error` branch needs the fallback itself to throw; a missing keyring
+    // is swallowed and arrives as `data` with `encryptedAtRest: false`.
+    await tester.pumpWidget(_host(vaultProvider.overrideWith((ref) async => throw StateError('not even the fallback opened'))));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Não deu para abrir cofre nenhum'), findsOneWidget);
+    expect(find.textContaining('Could not open any vault'), findsOneWidget);
   });
 
-  testWidgets('o detalhe do addon avisa junto do formulário de conta', (tester) async {
-    // O aviso tem que estar onde o segredo é digitado. Só em Accounts, ele não
-    // alcança quem configura o token pela tela do addon, que é o caminho novo.
-    _semearPrefs();
+  testWidgets('the addon detail warns next to the account form', (tester) async {
+    _seedPrefs();
     const console = Console(id: 'switch', name: 'Switch', urls: ['https://m/switch/'], auth: {'requires_token': true});
-    const fundido = MergedCatalog(
+    const merged = MergedCatalog(
       consoles: {'switch': console},
       sources: {
         'switch': [ConsoleSource(addonId: 'myrient', url: 'https://m/switch/', auth: {'requires_token': true})],
@@ -8658,129 +8411,131 @@ void main() {
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
-        _cofre(cifra: false),
+        _vault(encrypted: false),
         addonProvider.overrideWith((ref) => AddonNotifier(
               Future.value(FakeAddonStore(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://m/c.json')])),
-              invalidarCache: () async {},
+              invalidateCache: () async {},
             )),
-        mergedCatalogProvider.overrideWith((ref) async => fundido),
+        mergedCatalogProvider.overrideWith((ref) async => merged),
       ],
       child: const MaterialApp(home: AddonDetailScreen(addonId: 'myrient')),
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text(_aviso), findsOneWidget);
+    expect(find.text(_warning), findsOneWidget);
   });
 }
 ```
 
-Repare na linha `import 'support/fake_addon_store.dart';` do bloco do Step 1, separada das outras por uma linha em branco. Ela é relativa e não `package:`, que é a convenção que os sete arquivos de teste que já usam `test/support/` seguem (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, e os outros). Uma versão anterior deste Step **não trazia essa linha**, e o bloco usa `FakeAddonStore` no quinto caso: sem ela o Step 2 falha por `Undefined name 'FakeAddonStore'` em vez de falhar pelo `vault_warning.dart` que ainda não existe, e o Step 6 não compila de jeito nenhum. É erro de compilação, não de lint.
+Note the line `import 'support/fake_addon_store.dart';` in the Step 1 block, separated from the others by a blank line. It is relative and not `package:`, which is the convention the seven test files that already use `test/support/` follow (`crc_confirm_service_test.dart:8`, `pack_matcher_test.dart:5`, and the others). An earlier version of this Step **did not include that line**, and the block uses `FakeAddonStore` in the fifth case: without it, Step 2 fails with `Undefined name 'FakeAddonStore'` instead of failing for the `vault_warning.dart` that does not yet exist, and Step 6 does not compile at all. It is a compile error, not a lint.
 
-O arquivo em si não se escreve aqui: ele já está no repositório desde a Task 22, que o criou porque IO de disco de verdade trava dentro de um corpo `testWidgets`. Este Step só chama `load()` dele.
+The file itself is not written here: it has been in the repository since Task 22, which created it because real disk IO hangs inside a `testWidgets` body. This Step only calls `load()` on it.
 
-**O quarto caso já esteve escrito contra o widget errado, em duas camadas.** A asserção procurava `'Não deu para abrir o chaveiro'` e o widget do Step 3 emite `'Não deu para abrir cofre nenhum, nem o do sistema nem a reserva: $e'`. Uma não é substring da outra, então o caso caía com `Found 0 widgets`, e caía **só ele**: os outros quatro passavam, o que faz o defeito parecer bug de produção. Quem tem razão é o widget, e o próprio doc comment dele, três blocos abaixo, argumenta por quê: "culpar o chaveiro aqui mandaria o usuário procurar o problema no lugar errado".
+**The fourth case was once written against the wrong widget, on two levels.** The assertion looked for `'Could not open the keyring'` and the Step 3 widget emits `'Could not open any vault, neither the system one nor the fallback: $e'`. One is not a substring of the other, so the case fell with `Found 0 widgets`, and only **that one**: the other four passed, which makes the defect look like a production bug. The widget is right, and its own doc comment, three blocks below, argues why: "blaming the keyring here would send the user looking for the problem in the wrong place".
 
-A camada de baixo é pior que a string, e é a razão de o nome do caso ter mudado junto: ele se chamava "chaveiro que não abriu avisa" e **não é isso que ele monta**. Chaveiro que não abre não produz `error` nenhum, produz `data` com `encryptedAtRest: false`, que é o primeiro caso do arquivo. O quarto caso é o da reserva levantando, e o `StateError('sem D-Bus')` que ele lançava descrevia justamente a situação que não passa por ali. Consertar só a string deixaria de pé um teste cujo nome contradiz o doc comment do widget que ele testa, e um dia alguém iria acreditar no nome.
+The second level is worse than the string, and is why the case name changed too: it was called "keyring that did not open warns" and **that is not what it mounts**. A keyring that does not open produces no `error`, it produces `data` with `encryptedAtRest: false`, which is the first case in the file. The fourth case is the one where the fallback throws, and the `StateError('sem D-Bus')` it used to throw described exactly the situation that does not pass through there. Fixing only the string would leave a test whose name contradicts the doc comment of the widget it tests, and someday someone would believe the name.
 
-**O `_semearPrefs()` do quinto caso não é redundância.** Os quatro primeiros casos semeiam pelo `_host`, e o quinto monta o próprio `ProviderScope`, sem passar por ele. Como `setMockInitialValues` instala um mock **global** que sobrevive de um caso para o outro, o quinto passaria de graça na ordem do arquivo e falharia sozinho num `--plain-name`, que é a pior forma de teste verde. Ele precisa disso porque a `AddonDetailScreen` monta `ConsoleAuthSetting`, que lê `settingsProvider` no `_carregarToken`. O Step 6 ganhou uma verificação a mais por causa disso.
+**The `_seedPrefs()` in the fifth case is not redundancy.** The first four cases seed through `_host`, and the fifth builds its own `ProviderScope` without going through it. Since `setMockInitialValues` installs a **global** mock that survives from one case to the next, the fifth would pass for free in file order and fail alone with `--plain-name`, which is the worst kind of green test. It needs this because `AddonDetailScreen` mounts `ConsoleAuthSetting`, which reads `settingsProvider` in `_loadToken`. Step 6 gained an extra check because of this.
 
-O doc comment do `_semearPrefs` citava `console_auth_setting.dart:48` e a citação estava **certa** quando foi escrita. A Task 25, três Tasks depois, inseriu o campo `onSaved` acima daquela linha, e ela virou a `58` sem que ninguém tocasse em `test/vault_warning_test.dart`. Foi medido, não previsto: `grep -n readAddonToken` depois de `c61cf99`. A correção troca o número pelo nome do método, que é único no arquivo e não anda, e o bloco acima já sai assim. Vale como regra para o resto do plano: **quando a citação aponta para um arquivo que outra Task da mesma fatia vai editar acima do ponto citado, cite o símbolo.** O número só se defende quando o alvo está estável.
+The doc comment for `_seedPrefs` used to cite `console_auth_setting.dart:48` and the citation was **correct** when it was written. Task 25, three Tasks later, inserted the `onSaved` field above that line and it became `58` without anyone touching `test/vault_warning_test.dart`. Measured, not predicted: `grep -n readAddonToken` after `c61cf99`. The fix replaces the number with the method name, which is unique in the file and does not move, and the block above already reflects that. It is a rule for the rest of the plan: **when the citation points to a file that another Task in the same slice will edit above the cited point, cite the symbol.** A line number only holds when the target is stable.
 
-E acrescente um caso a `test/menu_grid_test.dart`, dentro do `main` existente:
+And add a case to `test/menu_grid_test.dart`, inside the existing `main`:
 
 ```dart
-  testWidgets('as tiles de Tools levam para os Addons', (tester) async {
-    final abertas = <Type>[];
-    final tiles = toolsTiles((tela) => abertas.add(tela.runtimeType));
+  testWidgets('the Tools tiles open the Addons screen', (tester) async {
+    final opened = <Type>[];
+    final tiles = toolsTiles((screen) => opened.add(screen.runtimeType));
 
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MenuGrid(tiles: tiles))));
     await tester.tap(find.text('Addons'));
     await tester.pump();
 
-    expect(abertas, [AddonsScreen]);
+    expect(opened, [AddonsScreen]);
   });
 ```
 
-com os imports novos no topo do arquivo:
+with the new imports at the top of the file:
 
 ```dart
 import 'package:roms_downloader/screens/addons_screen.dart';
 import 'package:roms_downloader/screens/menu_screen.dart';
 ```
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/vault_warning_test.dart test/menu_grid_test.dart
 ```
 
-Esperado: falha de compilação nos dois, `Couldn't resolve the package 'roms_downloader/widgets/settings/vault_warning.dart'` e `Undefined name 'toolsTiles'`.
+Expected: compile failure in both, `Couldn't resolve the package 'roms_downloader/widgets/settings/vault_warning.dart'` and `Undefined name 'toolsTiles'`.
 
-- [ ] **Step 3: Escreva o aviso**
+- [ ] **Step 3: Write the warning**
 
-Crie `lib/widgets/settings/vault_warning.dart`:
+Create `lib/widgets/settings/vault_warning.dart`:
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:roms_downloader/providers/vault_provider.dart';
 
-/// Avisa, onde o segredo é digitado, que este aparelho não tem chaveiro.
+/// Warns, where the secret is typed, that this machine has no keyring.
 ///
-/// É a segunda metade da seção 6.3 do spec de arquitetura, e a metade que
-/// **não** é incondicional. Tirar o token do JSON compartilhável fecha em toda
-/// plataforma (`CatalogService.harvestAuthTokens`); cifrar em repouso depende
-/// de haver `gnome-keyring` ou KWallet no D-Bus, e num Linux de servidor não
-/// há. Nessa máquina o segredo continua em texto puro, e quem digita tem que
-/// saber disso na hora de digitar.
+/// It is the second half of architecture spec section 6.3, and the half that
+/// is **not** unconditional. Removing the token from the shareable JSON closes
+/// on every platform (`CatalogService.harvestAuthTokens`); encrypting at rest
+/// depends on `gnome-keyring` or KWallet being on D-Bus, and on a server Linux
+/// there is none. On that machine the secret stays in plain text, and whoever
+/// types it must know that at the time they type it.
 ///
-/// Carregando não avisa: enquanto a sondagem não voltou, o app não sabe se
-/// cifra, e um aviso que pisca em todo boot de máquina que tem chaveiro é um
-/// aviso que o usuário aprende a ignorar. Erro avisa, e avisa pior que o caso
-/// normal, porque aí não há cofre nenhum.
+/// Loading does not warn: while the probe has not returned, the app does not
+/// know whether it encrypts, and a warning that flashes on every boot of a
+/// machine that has a keyring is a warning the user learns to ignore. Error
+/// warns, and warns worse than the normal case, because then there is no vault
+/// at all.
 ///
-/// **O ramo de erro não é o chaveiro falhando.** Chaveiro que não abre é o
-/// caminho previsto: a sonda engole a exceção, devolve `false` e a escolha cai
-/// para a reserva, o que chega aqui como `data` com `encryptedAtRest: false`. O
-/// único jeito de o `error` acontecer é a **reserva** levantar, ou seja
-/// `PrefsVault.open()` (`vault_provider.dart:33`, fora de qualquer `try`). Por
-/// isso a mensagem fala em cofre e não em chaveiro: culpar o chaveiro aqui
-/// mandaria o usuário procurar o problema no lugar errado.
+/// **The error branch is not the keyring failing.** A keyring that does not
+/// open is the expected path: the probe swallows the exception, returns `false`
+/// and the choice falls to the fallback, which arrives here as `data` with
+/// `encryptedAtRest: false`. The only way for `error` to happen is for the
+/// **fallback** to throw, i.e., `PrefsVault.open()` (`vault_provider.dart:33`,
+/// outside any `try`). That is why the message speaks of vault and not keyring:
+/// blaming the keyring here would send the user looking for the problem in the
+/// wrong place.
 class VaultWarning extends ConsumerWidget {
   const VaultWarning({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final texto = ref.watch(vaultProvider).when(
+    final text = ref.watch(vaultProvider).when(
           loading: () => null,
-          error: (e, _) => 'Não deu para abrir cofre nenhum, nem o do sistema nem a reserva: $e',
-          data: (escolha) => escolha.encryptedAtRest ? null : 'As credenciais ficam em texto puro neste aparelho.',
+          error: (e, _) => 'Could not open any vault, neither the system one nor the fallback: $e',
+          data: (choice) => choice.encryptedAtRest ? null : 'Credentials are stored in plain text on this device.',
         );
-    if (texto == null) return const SizedBox.shrink();
+    if (text == null) return const SizedBox.shrink();
 
-    final cores = Theme.of(context).colorScheme;
+    final colors = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: cores.errorContainer,
+        color: colors.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lock_open, size: 20, color: cores.onErrorContainer),
+          Icon(Icons.lock_open, size: 20, color: colors.onErrorContainer),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(texto, style: TextStyle(color: cores.onErrorContainer)),
+                Text(text, style: TextStyle(color: colors.onErrorContainer)),
                 const SizedBox(height: 4),
                 Text(
-                  'Sem gnome-keyring nem KWallet, o app guarda o segredo como antes. O catálogo que você compartilha continua sem token.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: cores.onErrorContainer),
+                  'Without gnome-keyring or KWallet, the app stores the secret as before. The catalog you share stays free of tokens.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
                 ),
               ],
             ),
@@ -8792,27 +8547,27 @@ class VaultWarning extends ConsumerWidget {
 }
 ```
 
-A segunda linha do aviso não é enfeite: sem ela, o usuário lê "texto puro" e conclui que o arquivo que ele manda para um amigo tem o token dele dentro. Tem exatamente o contrário, e é a metade que fechou.
+The second line of the warning is not decoration: without it, the user reads "plain text" and concludes that the file they send to a friend has their token inside. It is exactly the opposite, and that is the half that was closed.
 
-- [ ] **Step 4: Ponha o aviso nas duas telas**
+- [ ] **Step 4: Place the warning in both screens**
 
-Em `lib/screens/addon_detail_screen.dart`, dentro do `data:` do `catalogo.when`, troque o `for` do bloco de conta por um bloco que começa com o aviso:
+In `lib/screens/addon_detail_screen.dart`, inside the `data:` of `catalog.when`, replace the `for` in the account block with a block that starts with the warning:
 
 ```dart
-                  if (cobertura.authConsoles.isNotEmpty) const VaultWarning(),
-                  for (final consoleId in cobertura.authConsoles)
-                    if (fundido.consoles[consoleId] != null)
+                  if (coverage.authConsoles.isNotEmpty) const VaultWarning(),
+                  for (final consoleId in coverage.authConsoles)
+                    if (merged.consoles[consoleId] != null)
 ```
 
-O `if` na frente é para o addon que não pede conta nenhuma não ganhar um aviso sobre um segredo que ele não guarda.
+The `if` in front prevents an addon that requires no account from gaining a warning about a secret it does not store.
 
-E o import:
+And the import:
 
 ```dart
 import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 ```
 
-Em `lib/widgets/settings/accounts_setting.dart`, troque o `return ExpansionTile(` por uma coluna com o aviso em cima:
+In `lib/widgets/settings/accounts_setting.dart`, replace the `return ExpansionTile(` with a column with the warning at the top:
 
 ```dart
     return Column(
@@ -8822,7 +8577,7 @@ Em `lib/widgets/settings/accounts_setting.dart`, troque o `return ExpansionTile(
         ExpansionTile(
 ```
 
-fechando a coluna depois do `children: const [IaCredentialsSetting()],` do `ExpansionTile`:
+closing the column after the `children: const [IaCredentialsSetting()],` of the `ExpansionTile`:
 
 ```dart
           children: const [IaCredentialsSetting()],
@@ -8831,19 +8586,19 @@ fechando a coluna depois do `children: const [IaCredentialsSetting()],` do `Expa
     );
 ```
 
-com o mesmo import.
+with the same import.
 
-- [ ] **Step 5: A porta para a tela**
+- [ ] **Step 5: The entry point for the screen**
 
-Em `lib/screens/menu_screen.dart`, tire a lista de tiles de Tools de dentro do `build` e ponha como função de topo, acima da classe:
+In `lib/screens/menu_screen.dart`, move the Tools tile list out of `build` and make it a top-level function, above the class:
 
 ```dart
-/// As tiles de Tools, fora do `build` para terem teste.
+/// The Tools tiles, outside `build` so they can have a test.
 ///
-/// [push] entra por parâmetro porque a navegação de dentro do `MenuScreen`
-/// depende do `context` dele, e um teste que precisasse desse context teria
-/// que montar a tela inteira, com fila de tarefas e tudo.
-List<MenuTile> toolsTiles(void Function(Widget tela) push) => [
+/// [push] comes in as a parameter because navigation from inside `MenuScreen`
+/// depends on its `context`, and a test that needed that context would have
+/// to mount the whole screen, with the task queue and everything.
+List<MenuTile> toolsTiles(void Function(Widget screen) push) => [
       MenuTile(label: 'Addons', icon: Icons.extension, accentColor: const Color(0xFF2E7D5B), onTap: () => push(const AddonsScreen())),
       MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => push(const NszDecompressScreen())),
       MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => push(SteamShortcutScreen())),
@@ -8856,7 +8611,7 @@ List<MenuTile> toolsTiles(void Function(Widget tela) push) => [
     ];
 ```
 
-e no `build`, a tile de Tools passa a ser:
+and in `build`, the Tools tile becomes:
 
 ```dart
       MenuTile(
@@ -8867,48 +8622,48 @@ e no `build`, a tile de Tools passa a ser:
       ),
 ```
 
-com o import novo:
+with the new import:
 
 ```dart
 import 'package:roms_downloader/screens/addons_screen.dart';
 ```
 
-"Addons" em primeiro na lista, e não no fim junto do "New Catalog Source", porque a seção 9 abre dizendo que "instalar addon é a primeira coisa que o usuário faz". As duas portas coexistem, e o spec já aceitou esse custo: a tool monta um console à mão, o "+ Instalar de URL" instala um catálogo pronto.
+"Addons" is first in the list, and not at the end next to "New Catalog Source", because section 9 opens by saying "installing an addon is the first thing the user does". The two entry points coexist, and the spec already accepted that cost: the tool mounts a console by hand, and "+ Install from URL" installs a ready-made catalog.
 
-`_push` tem assinatura `void Function(Widget)`, que é exatamente o que `toolsTiles` pede, então não há adaptador no meio.
+`_push` has signature `void Function(Widget)`, which is exactly what `toolsTiles` expects, so there is no adapter in between.
 
-- [ ] **Step 6: Rode para ver passar**
+- [ ] **Step 6: Run to see it pass**
 
 ```bash
 flutter test test/vault_warning_test.dart test/menu_grid_test.dart
 ```
 
-Esperado: `+7`, zero falha, sendo 5 do arquivo novo e 2 do `menu_grid_test`, que já tinha um.
+Expected: `+7`, zero failures, with 5 from the new file and 2 from `menu_grid_test`, which already had one.
 
-E rode o quinto caso **sozinho**, que é a verificação que o `_semearPrefs()` existe para passar:
+And run the fifth case **alone**, which is the check that `_seedPrefs()` exists to pass:
 
 ```bash
-flutter test test/vault_warning_test.dart --plain-name "o detalhe do addon avisa junto do formulário de conta"
+flutter test test/vault_warning_test.dart --plain-name "the addon detail warns next to the account form"
 ```
 
-Esperado: `+1`, zero falha. Se este comando falhar enquanto o de cima passa, o caso está vivendo do mock que outro caso deixou, e o conserto é onde o `_semearPrefs()` é chamado, não no caso.
+Expected: `+1`, zero failures. If this command fails while the one above passes, the case is living off the mock another case left behind, and the fix is where `_seedPrefs()` is called, not in the case.
 
-- [ ] **Step 7: Rode a suíte inteira**
+- [ ] **Step 7: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+569`, zero falha.
+Expected: `+569`, zero failures.
 
-- [ ] **Step 8: Analise**
+- [ ] **Step 8: Analyze**
 
 ```bash
 flutter analyze
 flutter build linux --debug
 ```
 
-Esperado: `22 issues found`, build ok.
+Expected: `22 issues found`, build ok.
 
 - [ ] **Step 9: Commit**
 
@@ -8919,28 +8674,28 @@ git add lib/widgets/settings/vault_warning.dart lib/screens/addon_detail_screen.
 git commit -m "feat(cofre): avisar quando o segredo fica em texto puro"
 ```
 
-### Task 25: Accounts vira a visão consolidada
+### Task 25: Accounts becomes the consolidated view
 
 **Files:**
-- Modify: `lib/providers/addon_provider.dart` (ganha `addonAccountsProvider`)
-- Modify: `lib/widgets/settings/console_auth_setting.dart` (ganha `onSaved`)
+- Modify: `lib/providers/addon_provider.dart` (gains `addonAccountsProvider`)
+- Modify: `lib/widgets/settings/console_auth_setting.dart` (gains `onSaved`)
 - Modify: `lib/widgets/settings/accounts_setting.dart`
-- Modify: `lib/widgets/settings/settings_content.dart` (só um comentário)
+- Modify: `lib/widgets/settings/settings_content.dart` (one comment only)
 - Test: `test/accounts_setting_test.dart`
 
-A seção 9 pede isto em letras: "**Accounts** (`accounts_setting.dart`) continua sendo o cofre único e vira a visão consolidada: todas as contas em um lugar, de addon ou não, com o estado de conexão. A mesma credencial é editável pelos dois caminhos, e isso é o custo aceito da decisão."
+Section 9 says this in writing: "**Accounts** (`accounts_setting.dart`) remains the single vault and becomes the consolidated view: all accounts in one place, from addons or not, with the connection status. The same credential is editable through both paths, and that is the accepted cost of the decision."
 
-Sem esta Task, o que a fatia entrega é o contrário: a conta de um addon de terceiro só existe dentro do detalhe daquele addon, e a tela chamada "Accounts" continua mostrando um provedor só, o Internet Archive. O usuário que tem três contas tem que abrir três telas para saber quais estão conectadas.
+Without this Task, what the slice delivers is the opposite: a third-party addon's account only exists inside that addon's detail, and the screen called "Accounts" continues showing only one provider, Internet Archive. A user with three accounts has to open three screens to know which ones are connected.
 
-As três peças já existem. `MergedCatalog.coverage()` diz, por addon, quais consoles pedem conta (Task 18). `addonProvider` dá a ordem e o nome (Task 14). `ConsoleAuthSetting(console:, addonId:)` é o formulário do par (Task 20). Esta Task lista os pares e empilha os formulários.
+The three pieces already exist. `MergedCatalog.coverage()` says, per addon, which consoles require an account (Task 18). `addonProvider` gives the order and name (Task 14). `ConsoleAuthSetting(console:, addonId:)` is the pair's form (Task 20). This Task lists the pairs and stacks the forms.
 
-**O par é a unidade, não o console.** Dois addons servindo o mesmo console aparecem como duas linhas, com o mesmo nome de console e nomes de addon diferentes. É feio de olhar e é o único jeito honesto: são dois segredos, em duas gavetas, e uma linha só faria o usuário logar num e achar que logou nos dois. Um caso de teste prende isso.
+**The pair is the unit, not the console.** Two addons serving the same console appear as two rows, with the same console name and different addon names. It is ugly to look at and it is the only honest way: they are two secrets, in two drawers, and a single row would make the user log in to one and think they logged in to both. A test case locks this.
 
-**O estado de conexão custa um retorno de chamada, e é por isso que ele existe.** O subtítulo precisa dizer "Conectado" ou "Não conectado", e a única fonte dessa resposta é o cofre, que é assíncrono e que `SecretVault` não enumera de propósito (Task 2). Ler uma vez ao montar resolve a abertura da tela e erra logo depois: o usuário digita o token no formulário de dentro, o formulário grava no cofre, e o subtítulo de fora continua dizendo "Não conectado" em cima de um campo preenchido. Para addon de terceiro nem adianta observar `settingsProvider`, porque `setAddonToken` sai antes de mexer no espelho quando o addon não é o embutido (Task 19). Então `ConsoleAuthSetting` ganha um `onSaved`, e quem desenha o subtítulo relê.
+**The connection status costs a callback, and that is why it exists.** The subtitle needs to say "Connected" or "Not connected", and the only source of that answer is the vault, which is async and which `SecretVault` does not enumerate on purpose (Task 2). Reading once at mount resolves the screen opening and fails right after: the user types the token in the inner form, the form writes to the vault, and the outer subtitle keeps saying "Not connected" above a filled field. For a third-party addon, watching `settingsProvider` does not even help, because `setAddonToken` returns before touching the mirror when the addon is not the builtin (Task 19). So `ConsoleAuthSetting` gains an `onSaved`, and whoever draws the subtitle re-reads.
 
-- [ ] **Step 1: Escreva o teste que falha**
+- [ ] **Step 1: Write the failing test**
 
-Crie `test/accounts_setting_test.dart`. O `FakeAddonStore` é o da Task 22, já commitado, e entra por import relativo. Sem `dart:io` e sem `services/addon_store.dart` pelo mesmo motivo das Tasks 22 e 23: os dois só existiam para o store de disco, e import órfão é `unused_import`, que é **warning**.
+Create `test/accounts_setting_test.dart`. The `FakeAddonStore` is the one from Task 22, already committed, and comes in via a relative import. No `dart:io` and no `services/addon_store.dart` for the same reason as Tasks 22 and 23: both only existed for the disk store, and an orphan import is `unused_import`, which is a **warning**.
 
 ```dart
 import 'dart:convert';
@@ -8965,50 +8720,50 @@ import 'support/fake_addon_store.dart';
 const _switch = Console(id: 'switch', name: 'Switch', urls: ['https://myrient/switch/'], auth: {'requires_token': true});
 const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://myrient/snes/']);
 
-/// Dois addons no **mesmo** console de conta, mais um console sem conta. É o
-/// caso que a tela tem que desenhar como duas linhas, e é o caso que uma
-/// implementação chaveada por console desenharia como uma.
-MergedCatalog _doisNoMesmo() => const MergedCatalog(
+/// Two addons on the **same** account console, plus a console with no account. It is
+/// the case the screen must draw as two rows, and the case a console-keyed
+/// implementation would draw as one.
+MergedCatalog _twoInSame() => const MergedCatalog(
       consoles: {'switch': _switch, 'snes': _snes},
       sources: {
         'switch': [
           ConsoleSource(addonId: 'myrient', url: 'https://myrient/switch/', auth: {'requires_token': true}),
-          ConsoleSource(addonId: 'outro', url: 'https://outro/switch/', auth: {'requires_token': true}),
+          ConsoleSource(addonId: 'other', url: 'https://other/switch/', auth: {'requires_token': true}),
         ],
         'snes': [ConsoleSource(addonId: 'myrient', url: 'https://myrient/snes/')],
       },
     );
 
-/// Só o addon embutido, servindo um console que não pede conta.
-MergedCatalog _semConta() => const MergedCatalog(
+/// Only the builtin addon, serving a console that requires no account.
+MergedCatalog _noAccount() => const MergedCatalog(
       consoles: {'snes': _snes},
       sources: {
         'snes': [ConsoleSource(addonId: kBuiltinAddonId, url: 'https://myrient/snes/')],
       },
     );
 
-/// Store de memória, e não `AddonStore` em `Directory.systemTemp`: IO de disco
-/// trava dentro de `testWidgets`. E sem `addTearDown(notifier.dispose)`, que
-/// seria o segundo descarte depois do que o `StateNotifierProvider` já faz
-/// quando a árvore cai. Ver a Task 22 para os dois.
+/// In-memory store, not an `AddonStore` in `Directory.systemTemp`: disk IO
+/// hangs inside `testWidgets`. And no `addTearDown(notifier.dispose)`, which
+/// would be a second dispose after the one `StateNotifierProvider` already does
+/// when the tree falls. See Task 22 for both.
 Future<AddonNotifier> _notifier(List<Addon> addons) async {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
-  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidarCache: () async {});
+  final notifier = AddonNotifier(Future.value(FakeAddonStore(addons)), invalidateCache: () async {});
   await notifier.ready;
   return notifier;
 }
 
-Future<void> _abrir(
+Future<void> _open(
   WidgetTester tester, {
   required AddonNotifier notifier,
-  MergedCatalog? catalogo,
+  MergedCatalog? catalog,
   SecretVault? vault,
 }) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
       addonProvider.overrideWith((ref) => notifier),
-      mergedCatalogProvider.overrideWith((ref) async => catalogo ?? _doisNoMesmo()),
+      mergedCatalogProvider.overrideWith((ref) async => catalog ?? _twoInSame()),
       vaultProvider.overrideWith((ref) async => VaultChoice(vault ?? MemoryVault(), encryptedAtRest: true)),
     ],
     child: const MaterialApp(
@@ -9019,207 +8774,197 @@ Future<void> _abrir(
 }
 
 void main() {
-  testWidgets('sem addon que peça conta, sobra só o Internet Archive', (tester) async {
-    final notifier = await _notifier(const [Addon(id: kBuiltinAddonId, name: 'Catálogo embutido')]);
+  testWidgets('with no addon requiring an account, only Internet Archive remains', (tester) async {
+    final notifier = await _notifier(const [Addon(id: kBuiltinAddonId, name: 'Built-in catalog')]);
 
-    await _abrir(tester, notifier: notifier, catalogo: _semConta());
+    await _open(tester, notifier: notifier, catalog: _noAccount());
 
     expect(find.text('Internet Archive'), findsOneWidget);
     expect(find.byType(ConsoleAuthSetting), findsNothing);
   });
 
-  testWidgets('cada par (addon, console) que pede conta vira um bloco', (tester) async {
+  testWidgets('each (addon, console) pair that requires an account becomes a block', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    // Dois blocos, não um: o console é o mesmo e os segredos são dois.
+    // Two blocks, not one: the console is the same and the secrets are two.
     expect(find.text('myrient.erista.me'), findsOneWidget);
-    expect(find.text('outro.org'), findsOneWidget);
+    expect(find.text('other.org'), findsOneWidget);
     expect(find.textContaining('Switch'), findsNWidgets(2));
-    // O SNES não pede conta e não aparece.
+    // SNES does not require an account and does not appear.
     expect(find.textContaining('SNES'), findsNothing);
   });
 
-  testWidgets('a ordem dos blocos é a ordem de prioridade dos addons', (tester) async {
+  testWidgets('the block order is the addon priority order', (tester) async {
     final notifier = await _notifier(const [
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other/c.json'),
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
 
-    final titulos = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).whereType<String>().toList();
-    final primeiro = titulos.indexOf('outro.org');
-    final segundo = titulos.indexOf('myrient.erista.me');
-    // Os dois `isNonNegative` não são zelo: `indexOf` devolve `-1` para ausente,
-    // e `-1` é menor que qualquer índice válido. Sem eles, comparar os dois
-    // direto faz o caso **passar justamente quando o bloco que deveria vir
-    // primeiro sumiu da árvore**, que é metade do defeito que ele existe para
-    // pegar. Quem tranca a presença é o caso anterior, mas ele é outro caso: um
-    // `--plain-name` neste aqui o roda sozinho.
-    expect(primeiro, isNonNegative);
-    expect(segundo, isNonNegative);
-    expect(primeiro < segundo, isTrue);
+    final titles = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).whereType<String>().toList();
+    final first = titles.indexOf('other.org');
+    final second = titles.indexOf('myrient.erista.me');
+    // The two `isNonNegative` checks are not excess caution: `indexOf` returns
+    // `-1` for absent, and `-1` is less than any valid index. Without them,
+    // comparing the two directly makes the case **pass exactly when the block
+    // that should come first has vanished from the tree**, which is half the
+    // defect it exists to catch. The previous case locks presence, but it is a
+    // different case: a `--plain-name` on this one runs it alone.
+    expect(first, isNonNegative);
+    expect(second, isNonNegative);
+    expect(first < second, isTrue);
   });
 
-  testWidgets('o formulário de dentro recebe o par certo', (tester) async {
+  testWidgets('the inner form receives the correct pair', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
+    await _open(tester, notifier: notifier);
     await tester.tap(find.text('myrient.erista.me'));
     await tester.pumpAndSettle();
 
-    final formularios = tester.widgetList<ConsoleAuthSetting>(find.byType(ConsoleAuthSetting)).toList();
-    expect(formularios.length, 1);
-    expect(formularios.single.addonId, 'myrient');
-    expect(formularios.single.console.id, 'switch');
+    final forms = tester.widgetList<ConsoleAuthSetting>(find.byType(ConsoleAuthSetting)).toList();
+    expect(forms.length, 1);
+    expect(forms.single.addonId, 'myrient');
+    expect(forms.single.console.id, 'switch');
   });
 
-  testWidgets('o cofre vazio diz não conectado e o cofre cheio diz conectado', (tester) async {
+  testWidgets('empty vault says not connected and full vault says connected', (tester) async {
     final vault = MemoryVault();
-    await vault.write(SecretRef.addonToken('outro', 'switch'), 'tok');
+    await vault.write(SecretRef.addonToken('other', 'switch'), 'tok');
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier, vault: vault);
+    await _open(tester, notifier: notifier, vault: vault);
 
     expect(find.text('Switch: Not connected'), findsOneWidget);
     expect(find.text('Switch: Connected'), findsOneWidget);
   });
 
-  testWidgets('salvar no formulário atualiza o subtítulo sem recarregar a tela', (tester) async {
+  testWidgets('saving in the form updates the subtitle without reloading the screen', (tester) async {
     final vault = MemoryVault();
     final notifier = await _notifier(const [Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json')]);
 
-    await _abrir(tester, notifier: notifier, vault: vault);
+    await _open(tester, notifier: notifier, vault: vault);
     expect(find.text('Switch: Not connected'), findsOneWidget);
 
     await tester.tap(find.text('myrient.erista.me'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, 'tok-novo');
-    // Este quadro é obrigatório, e não é estilo. `enterText` não constrói
-    // quadro nenhum: ele chama `showKeyboard`, manda o texto e termina em
-    // `idle()`, que só completa um `Timer.run`. Quem marca `_dirty` é o
-    // `onChanged` do campo, por `setState`, e o botão de Save é
-    // `onPressed: _dirty ? _save : null`. Sem este `pump`, a árvore que o
-    // `tap` encontra ainda foi construída com `_dirty` falso, o botão está
-    // desabilitado, e **`tap` em botão desabilitado não levanta: não faz
-    // nada**. O cofre ficaria vazio e a asserção de baixo acusaria a produção
-    // por um defeito do teste.
+    await tester.enterText(find.byType(TextField).first, 'tok-new');
+    // Required: `enterText` builds no frame, so without this pump the Save
+    // button is still disabled (built with `_dirty` false) and the tap below
+    // is a silent no-op.
     await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(await vault.read(SecretRef.addonToken('myrient', 'switch')), 'tok-novo');
+    expect(await vault.read(SecretRef.addonToken('myrient', 'switch')), 'tok-new');
     expect(find.text('Switch: Connected'), findsOneWidget);
     expect(find.text('Switch: Not connected'), findsNothing);
   });
 
-  testWidgets('remover o addon tira a conta dele da lista', (tester) async {
+  testWidgets('removing an addon removes its account from the list', (tester) async {
     final notifier = await _notifier(const [
       Addon(id: 'myrient', name: 'myrient.erista.me', url: 'https://myrient/c.json'),
-      Addon(id: 'outro', name: 'outro.org', url: 'https://outro/c.json'),
+      Addon(id: 'other', name: 'other.org', url: 'https://other/c.json'),
     ]);
 
-    await _abrir(tester, notifier: notifier);
-    expect(find.text('outro.org'), findsOneWidget);
+    await _open(tester, notifier: notifier);
+    expect(find.text('other.org'), findsOneWidget);
 
-    await notifier.remove('outro');
+    await notifier.remove('other');
     await tester.pumpAndSettle();
 
-    expect(find.text('outro.org'), findsNothing);
+    expect(find.text('other.org'), findsNothing);
     expect(find.text('myrient.erista.me'), findsOneWidget);
   });
 }
 ```
 
-O último caso é o que justifica a lista ser derivada e não guardada. `mergedCatalogProvider` já observa `addonProvider` (Task 22), então remover o addon reconstrói a fusão, a fusão reconstrói os pares, e a linha some sozinha. Se alguém trocar o `ref.watch` por um `ref.read`, é este caso que cai.
+The last case is what justifies the list being derived and not stored. `mergedCatalogProvider` already watches `addonProvider` (Task 22), so removing the addon rebuilds the merge, the merge rebuilds the pairs, and the row disappears on its own. If someone swaps the `ref.watch` for a `ref.read`, this is the case that falls.
 
-`'Save'` e `'Not connected'` ficam em inglês porque são os textos que já existem nos widgets (`console_auth_setting.dart` e `accounts_setting.dart`). Esta Task não traduz tela.
+`'Save'` and `'Not connected'` stay in English because those are the strings that already exist in the widgets (`console_auth_setting.dart` and `accounts_setting.dart`). This Task does not translate screens.
 
-Os dois `isNonNegative` do caso de ordem chegaram depois, por revisão de qualidade, e a versão anterior mostra um jeito de um caso verde não provar nada. Ela era uma linha: `expect(titulos.indexOf('outro.org') < titulos.indexOf('myrient.erista.me'), isTrue)`. O nome do caso fala de **ordem**, mas `indexOf` responde `-1` para ausente, e `-1` é menor que zero, então o caso também ficava verde no cenário em que o primeiro bloco simplesmente não estava na árvore. Ou seja, ele passava tanto na ordem certa quanto numa das duas quebras que deveria pegar. A defesa que existia era acidental e de fora: o caso anterior tranca a presença dos dois nomes com `findsOneWidget`, então a **suíte** acusaria o sumiço. Mas caso é unidade, e `--plain-name` roda um sozinho; um caso que só está são por causa do vizinho está são por sorte. A lição vale além deste arquivo: **toda comparação sobre o retorno de uma busca que sinaliza ausência por valor especial precisa afirmar a presença antes de comparar**, porque o valor de ausência quase sempre satisfaz metade das comparações que você ia escrever.
+The two `isNonNegative` checks in the order case came later, from a quality review, and the earlier version shows how a green case can prove nothing. It was one line: `expect(titles.indexOf('other.org') < titles.indexOf('myrient.erista.me'), isTrue)`. The case name talks about **order**, but `indexOf` returns `-1` for absent, and `-1` is less than zero, so the case also passed in the scenario where the first block simply was not in the tree. In other words, it passed both when the order was right and in one of the two breaks it existed to catch. The protection that existed was accidental and external: the previous case locks the presence of both names with `findsOneWidget`, so the **suite** would catch the disappearance. But a case is a unit, and `--plain-name` runs one alone; a case that is only healthy because of its neighbor is healthy by luck. The lesson applies beyond this file: **every comparison on the return of a search that signals absence by a sentinel value must assert presence before comparing**, because the absence value almost always satisfies half the comparisons you were about to write.
 
-O `await tester.pump()` do sexto caso já esteve faltando aqui, e o modo como o caso caía é a razão de o comentário ser tão comprido. O sintoma era `Expected: 'tok-novo' / Actual: <null>` na leitura do cofre, ou seja, **o teste apontava para a produção**: parecia que `_guardar` não gravava, ou que o `onSaved` da Task 19 não chegava. Não era nada disso. O `tap` caía num botão desabilitado e virava no-op silencioso, então nenhuma linha de produção chegou a rodar, e é por isso que o erro não tinha stack de produção nenhuma: só a asserção. Um `tap` que não levanta e não faz nada é o pior vizinho de um `expect` que lê `null`.
+The `await tester.pump()` in the sixth case was once missing here, and the way the case fell is the reason the comment is so long. The symptom was `Expected: 'tok-new' / Actual: <null>` reading the vault, meaning **the test pointed at production**: it looked like `_store` was not writing, or that the Task 19 `onSaved` was not arriving. It was neither. The `tap` landed on a disabled button and became a silent no-op, so no production line ran at all, and that is why the error had no production stack: only the assertion. A `tap` that does nothing silently is the worst neighbor of an `expect` that reads `null`.
 
-A convenção já existia no próprio repositório, e é onde conferir se a dúvida voltar: `test/console_auth_setting_test.dart`, no caso `'salvar grava na chave do par (addon, console)'`, faz exatamente `enterText` → `pump()` → `tap('Save')`, e passa desde a Task 19. Um caso novo que mexe no mesmo formulário e larga o `pump` não está simplificando: está saindo da convenção que faz o formulário ser testável.
+The convention already existed in the repository, and that is where to check if the doubt comes back: `test/console_auth_setting_test.dart`, in the case `'saving writes under the (addon, console) pair key'`, does exactly `enterText` → `pump()` → `tap('Save')`, and has passed since Task 19. A new case that touches the same form and drops the `pump` is not simplifying: it is departing from the convention that makes the form testable.
 
-O comentário cita `onChanged` e `onPressed` **pelo nome e sem número de linha**, de propósito. O Step 4 desta mesma Task insere um bloco de campo novo acima dos dois, então qualquer `console_auth_setting.dart:NNN` escrito aqui nasceria apontando para a linha errada: para quem escreve o teste o arquivo ainda é o de antes do Step 4, e para quem o lê depois já é o de depois. Nome de símbolo não tem esse problema, e `onChanged` e o `onPressed` do Save são únicos naquele arquivo.
+The comment cites `onChanged` and `onPressed` **by name and without a line number**, on purpose. Step 4 of this same Task inserts a new field block above both, so any `console_auth_setting.dart:NNN` written here would be born pointing at the wrong line: for whoever writes the test the file is still the one before Step 4, and for whoever reads it later it is already after. A symbol name does not have that problem, and `onChanged` and the Save `onPressed` are unique in that file.
 
-- [ ] **Step 2: Rode para ver falhar**
+- [ ] **Step 2: Run to see it fail**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/accounts_setting_test.dart
 ```
 
-Esperado: compila e falha em seis dos sete casos, com `Expected: exactly one matching candidate / Actual: _TextFinder:<zero widgets>` em cima de `find.text('myrient.erista.me')` e das variações de subtítulo. O teste não cita `addonAccountsProvider` nem `onSaved` de propósito: ele afirma o que a tela mostra, e por isso não precisa esperar a produção existir para compilar.
+Expected: compiles and fails in six of the seven cases, with `Expected: exactly one matching candidate / Actual: _TextFinder:<zero widgets>` on `find.text('myrient.erista.me')` and the subtitle variations. The test does not cite `addonAccountsProvider` or `onSaved` on purpose: it asserts what the screen shows, so it does not need to wait for production to exist before compiling.
 
-O **primeiro** caso passa desde já, porque a tela de hoje já mostra só o Internet Archive. Isso é esperado e não é motivo para reescrevê-lo: ele é o caso que garante que a Task não acrescentou bloco onde não há conta, e ele passa antes e depois.
+The **first** case passes from the start, because today's screen already shows only Internet Archive. That is expected and is not a reason to rewrite it: it is the case that ensures the Task did not add a block where there is no account, and it passes before and after.
 
-- [ ] **Step 3: Os pares que pedem conta**
+- [ ] **Step 3: The pairs that require an account**
 
-Em `lib/providers/addon_provider.dart`, logo depois de `addonCoverageProvider`:
+In `lib/providers/addon_provider.dart`, right after `addonCoverageProvider`:
 
 ```dart
-/// Um par (addon, console) que pede credencial.
+/// An (addon, console) pair that requires a credential.
 ///
-/// O par é a unidade e não o console: dois addons servindo o mesmo console têm
-/// dois segredos, em duas chaves de cofre, e quem desenha uma linha só faz o
-/// usuário logar num e achar que logou nos dois.
+/// The pair is the unit, not the console: two addons serving the same console
+/// have two secrets, in two vault keys, and drawing a single row makes the user
+/// log in to one and think they logged in to both.
 typedef AddonAccount = ({Addon addon, Console console});
 
-/// Todas as contas de addon, na ordem de prioridade dos addons.
-///
-/// Derivado, e não guardado: instalar addon, remover addon ou arrastar a lista
-/// muda esta resposta, e o `ref.watch` é o que faz a tela de Accounts
-/// acompanhar sem ninguém avisar.
+/// Every addon account, in addon priority order.
 final addonAccountsProvider = FutureProvider<List<AddonAccount>>((ref) async {
   final addons = ref.watch(addonProvider);
-  final fundido = await ref.watch(mergedCatalogProvider.future);
-  final cobertura = fundido.coverage();
+  final merged = await ref.watch(mergedCatalogProvider.future);
+  final coverage = merged.coverage();
   return [
     for (final addon in addons)
-      for (final consoleId in cobertura[addon.id]?.authConsoles ?? const <String>[])
-        if (fundido.consoles[consoleId] != null) (addon: addon, console: fundido.consoles[consoleId]!),
+      for (final consoleId in coverage[addon.id]?.authConsoles ?? const <String>[])
+        if (merged.consoles[consoleId] != null) (addon: addon, console: merged.consoles[consoleId]!),
   ];
 });
 ```
 
-com o import de `console_model.dart`, se ele ainda não estiver no arquivo.
+with the import for `console_model.dart`, if it is not already in the file.
 
-O `if (fundido.consoles[consoleId] != null)` não é paranoia gratuita: `coverage()` monta `authConsoles` a partir de `sources`, e o invariante que amarra `sources` a `consoles` (Task 10) é fixado por teste, não pelo compilador. Um `!` aqui trocaria um bug de fusão por um crash na tela de settings.
+The `if (merged.consoles[consoleId] != null)` is not gratuitous paranoia: `coverage()` builds `authConsoles` from `sources`, and the invariant that ties `sources` to `consoles` (Task 10) is fixed by test, not by the compiler. A `!` there would swap a merge bug for a crash on the settings screen.
 
-- [ ] **Step 4: O formulário avisa quando grava**
+- [ ] **Step 4: The form notifies when it writes**
 
-Em `lib/widgets/settings/console_auth_setting.dart`, o cabeçalho ganha um campo:
+In `lib/widgets/settings/console_auth_setting.dart`, the header gains a field:
 
 ```dart
-  /// Chamado depois de o token ir para o cofre, com o valor novo (vazio quando
-  /// o usuário deslogou).
+  /// Called after the token reaches the vault, with the new value (empty when
+  /// the user logged out).
   ///
-  /// Existe porque quem desenha o estado de conexão **fora** deste formulário
-  /// não tem como saber que ele gravou: o cofre não notifica, e para addon de
-  /// terceiro `setAddonToken` nem chega a mexer em `settingsProvider`
-  /// (Task 19). Opcional, porque os dois outros chamadores desenham o estado
-  /// aqui dentro.
+  /// Exists because whoever draws the connection status **outside** this form
+  /// has no way of knowing it wrote: the vault does not notify, and for a
+  /// third-party addon `setAddonToken` returns before touching `settingsProvider`
+  /// (Task 19). Optional, because the other two callers draw the status inside
+  /// here.
   final void Function(String token)? onSaved;
 
   const ConsoleAuthSetting({super.key, required this.console, required this.addonId, this.onSaved});
 ```
 
-e `_guardar` avisa no fim, depois do `setState`:
+and `_store` notifies at the end, after `setState`:
 
 ```dart
-  Future<void> _guardar(String token) async {
+  Future<void> _store(String token) async {
     await ref.read(settingsProvider.notifier).setAddonToken(widget.addonId, widget.console.id, token);
     if (!mounted) return;
     setState(() {
@@ -9230,11 +8975,11 @@ e `_guardar` avisa no fim, depois do `setState`:
   }
 ```
 
-Os três caminhos que gravam (`_save`, `_signin`, `_clear`) passam por `_guardar`, então um aviso só cobre os três. Pôr o aviso em `_save` daria um subtítulo que acerta no token colado e erra no login por usuário e senha.
+The three paths that write (`_save`, `_signin`, `_clear`) all go through `_store`, so a single notification covers all three. Putting the notification in `_save` alone would give a subtitle that gets it right for a pasted token and wrong for a username-and-password login.
 
-- [ ] **Step 5: A tela empilha as contas**
+- [ ] **Step 5: The screen stacks the accounts**
 
-Em `lib/widgets/settings/accounts_setting.dart`, o arquivo inteiro:
+In `lib/widgets/settings/accounts_setting.dart`, the entire file:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -9248,17 +8993,17 @@ import 'package:roms_downloader/widgets/settings/vault_warning.dart';
 /// Connected accounts, one accordion per provider. Collapsed once connected so
 /// it stays out of the way; opens when the user still needs to log in.
 ///
-/// A visão consolidada da seção 9 do spec de UI: as contas que não são de
-/// addon (hoje, o Internet Archive) e uma por par (addon, console) que pede
-/// credencial. A mesma credencial é editável aqui e no detalhe do addon, e
-/// isso é custo aceito e não descuido.
+/// The consolidated view from UI spec section 9: accounts that are not from
+/// an addon (today, Internet Archive) and one per (addon, console) pair that
+/// requires a credential. The same credential is editable here and in the
+/// addon detail, and that is an accepted cost, not an oversight.
 class AccountsSetting extends ConsumerWidget {
   const AccountsSetting({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final loggedIn = ref.watch(settingsProvider).hasIaCredentials;
-    final contas = ref.watch(addonAccountsProvider);
+    final accounts = ref.watch(addonAccountsProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -9278,11 +9023,11 @@ class AccountsSetting extends ConsumerWidget {
           childrenPadding: const EdgeInsets.only(bottom: 8),
           children: const [IaCredentialsSetting()],
         ),
-        // Carga e erro não desenham nada: esta é uma seção dentro da tela de
-        // settings, e uma barra de progresso piscando aqui a cada abertura
-        // custa mais do que a espera de um quadro.
-        ...contas.maybeWhen(
-          data: (lista) => [for (final conta in lista) _ContaDeAddon(conta: conta)],
+        // Loading and error draw nothing: this is a section inside the settings
+        // screen, and a progress bar flashing here on every open costs more
+        // than waiting one frame.
+        ...accounts.maybeWhen(
+          data: (list) => [for (final account in list) _AddonAccount(account: account)],
           orElse: () => const <Widget>[],
         ),
       ],
@@ -9290,32 +9035,29 @@ class AccountsSetting extends ConsumerWidget {
   }
 }
 
-/// Uma conta de addon, com o estado de conexão no subtítulo.
-///
-/// Tem estado porque o token vem do cofre, que é assíncrono, e porque o
-/// formulário de dentro pode gravar enquanto esta linha está montada.
-class _ContaDeAddon extends ConsumerStatefulWidget {
-  final AddonAccount conta;
+/// An addon account, with the connection state in the subtitle.
+class _AddonAccount extends ConsumerStatefulWidget {
+  final AddonAccount account;
 
-  const _ContaDeAddon({required this.conta});
+  const _AddonAccount({required this.account});
 
   @override
-  ConsumerState<_ContaDeAddon> createState() => _ContaDeAddonState();
+  ConsumerState<_AddonAccount> createState() => _AddonAccountState();
 }
 
-class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
+class _AddonAccountState extends ConsumerState<_AddonAccount> {
   String? _token;
 
   @override
   void initState() {
     super.initState();
-    _ler();
+    _read();
   }
 
-  Future<void> _ler() async {
+  Future<void> _read() async {
     final token = await ref.read(settingsProvider.notifier).readAddonToken(
-          widget.conta.addon.id,
-          widget.conta.console.id,
+          widget.account.addon.id,
+          widget.account.console.id,
         );
     if (!mounted) return;
     setState(() => _token = token);
@@ -9323,11 +9065,11 @@ class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
 
   @override
   Widget build(BuildContext context) {
-    final console = widget.conta.console;
-    // Enquanto o cofre não respondeu, o subtítulo é só o nome do console. Não
-    // é "Not connected": dizer que não tem conta para quem tem, durante um
-    // quadro, é a única das três respostas que é mentira.
-    final estado = _token == null ? console.name : '${console.name}: ${_token!.isEmpty ? 'Not connected' : 'Connected'}';
+    final console = widget.account.console;
+    // Until the vault responds the subtitle is just the console name, never
+    // "Not connected": telling a connected user they are not, for one frame, is
+    // the only one of the three answers that is a lie.
+    final state = _token == null ? console.name : '${console.name}: ${_token!.isEmpty ? 'Not connected' : 'Connected'}';
 
     return ExpansionTile(
       initiallyExpanded: false,
@@ -9335,13 +9077,13 @@ class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
       collapsedShape: const Border(),
       tilePadding: EdgeInsets.zero,
       leading: const Icon(Icons.extension_outlined),
-      title: Text(widget.conta.addon.name),
-      subtitle: Text(estado),
+      title: Text(widget.account.addon.name),
+      subtitle: Text(state),
       childrenPadding: const EdgeInsets.only(bottom: 8),
       children: [
         ConsoleAuthSetting(
           console: console,
-          addonId: widget.conta.addon.id,
+          addonId: widget.account.addon.id,
           onSaved: (token) {
             if (mounted) setState(() => _token = token);
           },
@@ -9352,43 +9094,41 @@ class _ContaDeAddonState extends ConsumerState<_ContaDeAddon> {
 }
 ```
 
-**Tropeço provável:** dar `key: ValueKey(...)` com o token dentro, imitando a linha do Internet Archive. Lá a chave existe para forçar reconstrução quando o `settingsProvider` muda; aqui o `setState` já reconstrói, e uma chave que muda com o token **destrói e remonta** o `ConsoleAuthSetting` no instante em que ele grava, apagando o campo de texto debaixo do dedo do usuário.
+**Likely pitfall:** giving `key: ValueKey(...)` with the token inside, copying the Internet Archive row. There the key exists to force rebuilding when `settingsProvider` changes; here `setState` already rebuilds, and a key that changes with the token **destroys and remounts** `ConsoleAuthSetting` the instant it writes, erasing the text field under the user's finger.
 
-- [ ] **Step 6: Ajuste o comentário da tela de settings**
+- [ ] **Step 6: Adjust the settings screen comment**
 
-Em `lib/widgets/settings/settings_content.dart`, o comentário da Task 20 ficou incompleto. Troque
-
-```dart
-              // O painel de settings de um console é a porta do catálogo
-              // embutido. A conta de um addon de terceiro se edita no detalhe
-              // dele (Task 22).
-```
-
-por
+In `lib/widgets/settings/settings_content.dart`, the Task 20 comment was left incomplete. Replace
 
 ```dart
-              // O painel de settings de um console é a porta do catálogo
-              // embutido. A conta de um addon de terceiro se edita em Accounts
-              // (Task 25) ou no detalhe do addon (Task 22), e as duas gravam na
-              // mesma chave de cofre.
+              // The console settings panel is the door to the builtin catalog.
+              // A third-party addon's account is edited in its detail screen (Task 22).
 ```
 
-- [ ] **Step 7: Rode para ver passar**
+with
+
+```dart
+              // The console settings panel is the door to the builtin catalog.
+              // A third-party addon's account is edited in Accounts (Task 25)
+              // or in the addon detail (Task 22), and both write to the same vault key.
+```
+
+- [ ] **Step 7: Run to see it pass**
 
 ```bash
 flutter test test/accounts_setting_test.dart test/console_auth_setting_test.dart test/addon_detail_screen_test.dart
 ```
 
-Esperado: `+21`, zero falha, sendo 7 do arquivo novo, 6 do `console_auth_setting_test` e 8 do `addon_detail_screen_test`. Os dois antigos entram na conta porque são os outros dois chamadores de `ConsoleAuthSetting`, e o `onSaved` é opcional justamente para que nenhum dos dois mude: se um deles cair aqui, o parâmetro novo não ficou opcional de verdade.
+Expected: `+21`, zero failures, with 7 from the new file, 6 from `console_auth_setting_test`, and 8 from `addon_detail_screen_test`. The two existing files enter the count because they are the other two callers of `ConsoleAuthSetting`, and `onSaved` is optional precisely so that neither of them changes: if one falls here, the new parameter was not truly optional.
 
-- [ ] **Step 8: Rode a suíte inteira**
+- [ ] **Step 8: Run the full suite**
 
 ```bash
 flutter test
 flutter analyze
 ```
 
-Esperado: `+576`, zero falha, `22 issues found`.
+Expected: `+576`, zero failures, `22 issues found`.
 
 - [ ] **Step 9: Commit**
 
@@ -9401,9 +9141,9 @@ git commit -m "feat(accounts): reunir as contas de addon na tela de Accounts"
 
 ---
 
-Fecha o Grupo 5. Oito Tasks, 72 casos novos, e a suíte sai de `+504` para `+576`. Os dois extremos já estiveram escritos como `+492` e `+564`. Hoje a diferença é de doze, e não de nove: nove eram a defasagem original, dois vieram da Task 11b e um da Task 12b, as duas nascidas da revisão por mutação das Tasks 9 e 10. Os 72 e a tabela abaixo sempre estiveram certos, e é isso que localiza o defeito: eles medem o que o grupo acrescenta, e só os extremos dependem de onde o grupo começa, então o erro está inteiro antes da Task 18. Foram correções feitas depois deste parágrafo e não propagadas até ele. Uma delas eu sei qual é, porque fui eu: `803669b`, que achou 14 casos onde a Task 11 dizia 13, vale um dos nove. Os outros oito eu não rastreei, e prefiro escrever isso a inventar a origem. Os números certos são os de agora, conferidos passo a passo contra a cadeia: a Task 17 fecha em `+504` e a linha da Task 25 na tabela fecha em `+576`.
+Group 5 closes. Eight Tasks, 72 new cases, and the suite goes from `+504` to `+576`. Both endpoints were once written as `+492` and `+564`. Today the difference is twelve, not nine: nine was the original gap, two came from Task 11b and one from Task 12b, both born from the mutation review of Tasks 9 and 10. The 72 and the table below were always correct, and that is what locates the defect: they measure what the group adds, and only the endpoints depend on where the group starts, so the error is entirely before Task 18. These were corrections made after this paragraph and not propagated back to it. One of them I know which is, because it was me: `803669b`, which found 14 cases where Task 11 said 13, accounts for one of the nine. The other eight I did not trace, and I prefer to write that rather than invent the origin. The correct numbers are the current ones, checked step by step against the chain: Task 17 closes at `+504` and the Task 25 row in the table closes at `+576`.
 
-O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com alça de arrasto, o detalhe por addon com origem, conta, cobertura, prioridade e remoção, a instalação por URL, o Accounts consolidado com uma linha por par (addon, console) e o estado de conexão, e o token deixando de ser do console para ser do par. O que ele não entregou, e está declarado na Task 22: a contagem de itens por console na cobertura, que custaria uma requisição de listagem por console ao abrir uma tela de leitura.
+What the group delivered, against UI spec section 9: the ordered list with a drag handle, the per-addon detail with origin, account, coverage, priority, and removal, URL installation, the consolidated Accounts with one row per (addon, console) pair and the connection status, and the token moving from being per-console to being per-pair. What it did not deliver, declared in Task 22: the item count per console in coverage, which would cost one listing request per console when opening a read-only screen.
 
 | Task | Casos | Acumulado |
 | --- | --- | --- |
@@ -9418,26 +9158,26 @@ O que o grupo entregou, contra a seção 9 do spec de UI: a lista ordenada com a
 
 ---
 
-## Grupo 6: o contrato com o RTS, e a varredura da fatia
+## Group 6: the contract with the RTS, and the slice sweep
 
-Duas Tasks. A primeira prende uma coisa que o spec de arquitetura afirma e nenhum teste sustenta: o app é produtor e consumidor do mesmo formato de addon, e esta fatia mexeu no formato. A segunda é o critério de aceitação da fatia inteira.
+Two Tasks. The first pins something the architecture spec states and no test supports: the app is both producer and consumer of the same addon format, and this slice touched the format. The second is the acceptance criterion for the entire slice.
 
-### Task 26: o RTS continua alimentando o app
+### Task 26: the RTS keeps feeding the app
 
 **Files:**
 - Test: `test/rts_addon_contract_test.dart`
 
-Nenhum arquivo de produção. Esta Task só escreve teste, e é de propósito.
+No production file. This Task only writes a test, and that is by design.
 
-A seção 6.4 do spec de arquitetura diz que o **Retro Tools Server** monta um catálogo de pastas locais e serve em `http://host:porta/consoles.json`, que é exatamente o endereço que a instalação de addon consome. Produtor e consumidor são o mesmo binário. E ela tira a consequência: "qualquer extensão do formato tem que ser emitida pelo RTS também. Se o addon passar a declarar `auth` e o RTS continuar emitindo o formato antigo, o app deixa de conseguir se alimentar".
+Architecture spec section 6.4 says that the **Retro Tools Server** builds a catalog of local folders and serves it at `http://host:port/consoles.json`, which is exactly the address addon installation consumes. Producer and consumer are the same binary. And it draws the consequence: "any extension of the format must also be emitted by the RTS. If the addon starts declaring `auth` and the RTS keeps emitting the old format, the app will no longer be able to feed itself."
 
-Esta fatia mexeu no formato: `harvestAuthTokens` tira `auth.token` e põe `requires_token`, a fusão passou a carregar `ConsoleSource` por console, e o id do addon virou chave de cofre. Nada disso quebra o RTS, que nunca emitiu `auth`. O que não existe é um teste que caia no dia em que quebrar, e o custo de escrevê-lo é cinco casos sem uma linha de produção.
+This slice touched the format: `harvestAuthTokens` removes `auth.token` and inserts `requires_token`, the merge started loading `ConsoleSource` per console, and the addon id became a vault key. None of that breaks the RTS, which never emitted `auth`. What does not exist is a test that falls on the day it does break, and the cost of writing it is five cases without a single production line.
 
-`RtsServerService.consoleJson` e `buildConsolesJson` são estáticos e puros (`rts_server_service.dart:13-24`), então o teste liga o produtor no consumidor sem subir servidor.
+`RtsServerService.consoleJson` and `buildConsolesJson` are static and pure (`rts_server_service.dart:13-24`), so the test wires producer to consumer without starting a server.
 
-- [ ] **Step 1: Escreva os testes**
+- [ ] **Step 1: Write the tests**
 
-Crie `test/rts_addon_contract_test.dart`:
+Create `test/rts_addon_contract_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -9452,113 +9192,89 @@ import 'package:roms_downloader/services/console_merge.dart';
 import 'package:roms_downloader/services/rts_server_service.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-const _pastas = [
+const _folders = [
   RtsFolder(path: '/home/u/psp', name: 'PSP', formats: ['.iso'], romsSubfolder: 'psp'),
   RtsFolder(path: '/home/u/snes', name: 'SNES', formats: ['.zip'], romsSubfolder: 'snes'),
 ];
 
-String _emitido() => RtsServerService.buildConsolesJson(_pastas, '192.168.0.10:8080');
+String _emitted() => RtsServerService.buildConsolesJson(_folders, '192.168.0.10:8080');
 
 void main() {
-  test('o que o RTS emite é um catálogo que o consumidor parseia', () {
-    // A ponta a ponta da seção 6.4: o produtor monta, o consumidor lê, e os
-    // dois consoles chegam do outro lado.
-    final consoles = CatalogService.parseConsoles(_emitido());
+  test('what the RTS emits is a catalog the consumer parses', () {
+    final consoles = CatalogService.parseConsoles(_emitted());
 
     expect(consoles.keys, containsAll(<String>['psp', 'snes']));
     expect(consoles['psp']!.urls.single, 'http://192.168.0.10:8080/f/0/');
   });
 
-  test('o id que o RTS gera é o id que o consumidor calcula', () {
-    // Se as duas pontas divergirem, a pasta compartilhada vira um console com
-    // id que nenhuma outra fonte casa, e o MODO PACK para de reconhecer a pasta
-    // local como fonte do mesmo jogo.
-    //
-    // As duas asserções têm um lado **literal** de propósito. A primeira versão
-    // deste caso escrevia `parseConsoles(_emitido()).containsKey(consoleId(
-    // pasta.name))`, e isso não prova nada: `consoleId` é `_nameToId`
-    // (`catalog_service.dart`), e `parseConsoles` chaveia com `_nameToId` do
-    // mesmo `name` que o produtor emitiu verbatim. Os dois lados eram a mesma
-    // chamada, então a asserção era verdadeira para **qualquer** implementação
-    // da regra, inclusive uma quebrada, que é o oposto do que o nome do caso
-    // promete. É o mesmo vício que o último caso deste arquivo evita de
-    // propósito ao escrever o id do addon por extenso.
-    final emitido = (jsonDecode(_emitido()) as List).cast<Map<String, dynamic>>();
+  test('the id the RTS generates equals the id the consumer computes', () {
+    // Both sides are spelled out literally on purpose: asserting one derivation
+    // against the same derivation passes for any implementation, even a broken one.
+    final emitted = (jsonDecode(_emitted()) as List).cast<Map<String, dynamic>>();
 
-    // O produtor manda o nome **cru** da pasta, não um slug já pronto. No dia
-    // em que ele mandar pronto, o consumidor deriva em cima de derivado e o id
-    // muda sem ninguém ter mexido na regra de id.
-    expect(emitido.map((c) => c['name']).toList(), <String>['PSP', 'SNES']);
-    // E o consumidor chaveia pelo slug, escrito por extenso. Se a regra de id
-    // mudar, é aqui que cai.
-    expect(CatalogService.parseConsoles(_emitido()).keys.toList(), <String>['psp', 'snes']);
+    expect(emitted.map((c) => c['name']).toList(), <String>['PSP', 'SNES']);
+    expect(CatalogService.parseConsoles(_emitted()).keys.toList(), <String>['psp', 'snes']);
   });
 
-  test('o RTS não emite token, então a colheita não muda o que ele mandou', () async {
+  test('the RTS emits no token, so harvesting leaves its output unchanged', () async {
     final vault = MemoryVault();
-    final limpo = await CatalogService.harvestAuthTokens(_emitido(), vault: vault, addonId: 'rts');
+    final clean = await CatalogService.harvestAuthTokens(_emitted(), vault: vault, addonId: 'rts');
 
-    expect(CatalogService.parseConsoles(limpo).keys, CatalogService.parseConsoles(_emitido()).keys);
-    // Nenhum dos dois consoles deixou segredo no cofre. `SecretVault` não tem
-    // `isEmpty`, e não vai ter: um cofre que sabe listar tudo que guarda é um
-    // cofre com uma porta a mais.
-    for (final pasta in _pastas) {
-      expect(await vault.read(SecretRef.addonToken('rts', CatalogService.consoleId(pasta.name))), isNull);
+    expect(CatalogService.parseConsoles(clean).keys, CatalogService.parseConsoles(_emitted()).keys);
+    for (final folder in _folders) {
+      expect(await vault.read(SecretRef.addonToken('rts', CatalogService.consoleId(folder.name))), isNull);
     }
   });
 
-  test('nenhum console do RTS pede conta', () {
-    // É isto que apaga o chip de "conta" da linha do RTS na tela de addons. Se
-    // um dia o RTS ganhar auth, este caso cai e a Task que o ganhar tem que
-    // decidir o que a tela mostra, em vez de descobrir depois.
-    for (final console in CatalogService.parseConsoles(_emitido()).values) {
+  test('no RTS console asks for an account', () {
+    for (final console in CatalogService.parseConsoles(_emitted()).values) {
       expect(authNeedsToken(console.auth), isFalse);
     }
   });
 
-  test('o catálogo do RTS entra na fusão com o addonId de quem o instalou', () {
-    final fundido = mergeCatalogs([
-      (addonId: Addon.idFromUrl('http://192.168.0.10:8080/consoles.json'), consoles: CatalogService.parseConsoles(_emitido())),
+  test('the RTS catalog merges under the installer addon id', () {
+    final merged = mergeCatalogs([
+      (addonId: Addon.idFromUrl('http://192.168.0.10:8080/consoles.json'), consoles: CatalogService.parseConsoles(_emitted())),
     ]);
 
-    expect(fundido.sources['psp']!.single.addonId, '192_168_0_10_8080_consoles_json');
-    expect(fundido.sources['psp']!.single.auth, isNull);
+    expect(merged.sources['psp']!.single.addonId, '192_168_0_10_8080_consoles_json');
+    expect(merged.sources['psp']!.single.auth, isNull);
   });
 }
 ```
 
-O último caso fixa o id por extenso, e não por `Addon.idFromUrl(...)` dos dois lados, porque uma asserção que chama a mesma função que produziu o valor passa mesmo quando a função está errada. `192_168_0_10_8080_consoles_json` é feio e é o ponto: esse é o nome do arquivo que vai para `config/addons/`, e vê-lo escrito uma vez no teste é o que impede alguém de "melhorar" o slug sem perceber que ele é chave de cofre.
+The last case fixes the id in full, and not via `Addon.idFromUrl(...)` on both sides, because an assertion that calls the same function that produced the value passes even when the function is wrong. `192_168_0_10_8080_consoles_json` is ugly and that is the point: that is the name of the file that goes into `config/addons/`, and seeing it written once in the test is what stops someone from "improving" the slug without realizing it is a vault key.
 
-`_pastas` é varrida em laço no terceiro caso de propósito: a lista de pastas é a entrada do produtor, então varrer ela é varrer exatamente o que o RTS emitiu, sem depender de o consumidor ter parseado certo.
+`_folders` is iterated in a loop in the third case on purpose: the folder list is the producer's input, so iterating it is iterating exactly what the RTS emitted, without depending on the consumer having parsed correctly.
 
-O segundo caso também era um laço sobre `_pastas`, e a versão que ele tinha é o registro de que este vício reincide. O último caso deste arquivo se gaba, com razão, de escrever `192_168_0_10_8080_consoles_json` por extenso em vez de chamar `Addon.idFromUrl` dos dois lados; três casos acima, o segundo fazia exatamente o que o último evita. Ele escrevia `parseConsoles(_emitido()).containsKey(consoleId(pasta.name))`, e os dois lados disso são `_nameToId` do mesmo nome: o produtor emite `'name': f.name` verbatim e `parseConsoles` chaveia com `_nameToId(name)`, enquanto `consoleId` é `_nameToId`. A asserção era verdadeira para qualquer regra de id, inclusive uma quebrada, e o comentário vendia justamente a garantia que o código não dava. Pior que não ter o caso: um caso que promete detecção e não detecta faz a próxima pessoa confiar. A versão de agora ancora cada asserção num literal, e cobre uma coisa que o primeiro caso não cobre, que é o produtor mandar o nome cru em vez de um slug já pronto.
+The second case was also a loop over `_folders`, and the version it had is the record that this vice recurs. The last case in this file rightly brags about writing `192_168_0_10_8080_consoles_json` in full instead of calling `Addon.idFromUrl` on both sides; three cases above, the second did exactly what the last avoids. It wrote `parseConsoles(_emitted()).containsKey(consoleId(folder.name))`, and both sides of that are `_nameToId` of the same name: the producer emits `'name': f.name` verbatim and `parseConsoles` keys with `_nameToId(name)`, while `consoleId` is `_nameToId`. The assertion was true for any id rule, including a broken one, and the comment was selling exactly the guarantee the code was not giving. Worse than not having the case: a case that promises detection and does not detect makes the next person trust it. The current version anchors each assertion on a literal, and covers something the first case does not cover, which is the producer sending the raw name instead of a pre-made slug.
 
-- [ ] **Step 2: Rode**
+- [ ] **Step 2: Run**
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 flutter test test/rts_addon_contract_test.dart
 ```
 
-Esperado: `+5`, zero falha. **Sem passo de "ver falhar":** esta Task não tem produção, e os cinco casos passam na primeira. Um teste de contrato que já está verde é o normal dele; o valor está em cair quando a próxima fatia mexer no formato.
+Expected: `+5`, zero failures. **No "see it fail" step:** this Task has no production code, and the five cases pass on the first run. A contract test that is already green is its normal state; the value is in falling when the next slice touches the format.
 
-Se algum cair aqui, **não conserte o teste**. Ele está dizendo que o produtor e o consumidor divergiram nesta fatia, e o conserto é do lado que divergiu.
+If any falls here, **do not fix the test**. It is saying the producer and consumer diverged in this slice, and the fix is on the side that diverged.
 
-- [ ] **Step 3: Rode a suíte inteira**
+- [ ] **Step 3: Run the full suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+581`, zero falha.
+Expected: `+581`, zero failures.
 
-- [ ] **Step 4: Analise**
+- [ ] **Step 4: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: `22 issues found`, e nenhum deles em `rts_addon_contract_test.dart`.
+Expected: `22 issues found`, and none of them in `rts_addon_contract_test.dart`.
 
 - [ ] **Step 5: Commit**
 
@@ -9569,15 +9285,15 @@ git commit -m "test(rts): contrato entre o servidor que emite catalogo e o app q
 
 ---
 
-### Task 27: a varredura da fatia
+### Task 27: the slice sweep
 
-**Files:** nenhum. Esta Task não escreve código: ela mede.
+**Files:** none. This Task writes no code: it measures.
 
-O critério de aceitação da fatia inteira, contra o commit **`ef5ee57`**, que é o HEAD de antes da fatia 4. Esse hash é carga: ele está escrito aqui e em nenhum outro lugar, então nada de rebase, amend ou filter-branch que o alcance enquanto a fatia não fechar.
+The acceptance criterion for the entire slice, against commit **`ef5ee57`**, which is the HEAD before slice 4. That hash is load-bearing: it is written here and nowhere else, so no rebase, amend, or filter-branch that reaches it while the slice is open.
 
-Um aviso que custou duas medições inteiras numa fatia anterior: **não encadeie `git checkout <ref> && <comando>; git checkout -` numa chamada só.** Para inspecionar histórico, use `git show <ref>:<caminho>` e `git diff <refA> <refB> -- <caminho>`, que não mexem em HEAD.
+A warning that cost two full measurements in a previous slice: **do not chain `git checkout <ref> && <command>; git checkout -` in a single call.** To inspect history, use `git show <ref>:<path>` and `git diff <refA> <refB> -- <path>`, which do not touch HEAD.
 
-- [ ] **Step 1: O que a fatia não podia tocar**
+- [ ] **Step 1: What the slice could not touch**
 
 ```bash
 git diff --stat ef5ee57 -- \
@@ -9592,17 +9308,17 @@ git diff --stat ef5ee57 -- \
   lib/models/pack_index_model.dart
 ```
 
-Esperado: saída vazia.
+Expected: empty output.
 
-Os cinco servidores de arquivo estão aí porque a seção 6.4 diz, em letras: "os outros cinco servidores (Tinfoil, JDKV, FBI, SMB, FTP) são outra categoria: servem **arquivo** para um console ou outro aparelho, não **catálogo** para o app. Nada neste documento os afeta". O `rts_server_service.dart` está aí porque a Task 26 escreveu teste para ele **sem** mudá-lo, e um diff não-vazio aqui quer dizer que alguém consertou o produtor em vez de consertar quem divergiu. O resto é fatia 1, que esta fatia não tinha por que alcançar.
+The five file-serving servers are there because section 6.4 says, in writing: "the other five servers (Tinfoil, JDKV, FBI, SMB, FTP) are a different category: they serve **files** to a console or another device, not a **catalog** to the app. Nothing in this document affects them". `rts_server_service.dart` is there because Task 26 wrote tests for it **without** changing it, and a non-empty diff here means someone fixed the producer instead of fixing whatever diverged. The rest is slice 1, which this slice had no reason to reach.
 
-- [ ] **Step 2: O que a fatia tocou em `lib/`**
+- [ ] **Step 2: What the slice touched in `lib/`**
 
 ```bash
 git diff --name-only ef5ee57 -- lib/ | sort
 ```
 
-Esperado: exatamente estes 39 arquivos.
+Expected: exactly these 39 files.
 
 ```
 lib/models/addon_model.dart
@@ -9646,15 +9362,15 @@ lib/widgets/settings/settings_content.dart
 lib/widgets/settings/vault_warning.dart
 ```
 
-Confira item por item, não só o total: o número bate por acaso quando um arquivo esperado sumiu e um inesperado entrou. O `39` é derivado desta lista, então uma ressalva de QA que crie arquivo novo atualiza os dois na mesma ação.
+Check item by item, not just the total: the count matches by coincidence when an expected file vanished and an unexpected one entered. The `39` is derived from this list, so a QA note that creates a new file updates both at the same time.
 
-- [ ] **Step 3: O que a fatia tocou em `test/`**
+- [ ] **Step 3: What the slice touched in `test/`**
 
 ```bash
 git diff --name-only ef5ee57 -- test/ | sort
 ```
 
-Esperado: exatamente estes 33 arquivos.
+Expected: exactly these 33 files.
 
 ```
 test/accounts_setting_test.dart
@@ -9692,11 +9408,11 @@ test/vault_provider_test.dart
 test/vault_warning_test.dart
 ```
 
-Cinco deles são **antigos** e foram modificados, não criados: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart` e `test/source_pick_service_test.dart`. Qualquer outro arquivo antigo nesta lista é achado, não ruído: quer dizer que a fatia mudou comportamento que ela não declarou mudar. `test/settings_service_test.dart` **não** é antigo: o repositório não tinha teste do `SettingsService` antes desta fatia. `test/settings_hydrate_test.dart` também não: a Task 8b o criou em `b5553bf` e a Task 9 mexeu nele em `41991eb`.
+Five of them are **existing** files that were modified, not created: `test/game_detail_screen_test.dart`, `test/menu_grid_test.dart`, `test/pack_grid_provider_test.dart`, `test/pack_grid_test.dart`, and `test/source_pick_service_test.dart`. Any other existing file in this list is a finding, not noise: it means the slice changed behavior it did not declare changing. `test/settings_service_test.dart` is **not** existing: the repository had no `SettingsService` test before this slice. `test/settings_hydrate_test.dart` is not either: Task 8b created it in `b5553bf` and Task 9 touched it in `41991eb`.
 
-Este Step já esteve errado, e o erro é o mesmo que o parágrafo da Task 9 conta de outro ângulo: a lista foi escrita antes de a Task 8b existir, e `test/settings_hydrate_test.dart`, que é dela, ficou de fora. O total dizia `32`. Medido com a fatia em `414c43f`, faltando só as Tasks 24 a 26: `git diff --name-only ef5ee57 -- test/ | sort` devolve 30 arquivos, e `comm` contra a lista deste Step acusava três ausências esperadas (`accounts_setting_test`, `rts_addon_contract_test` e `vault_warning_test`, que são das três Tasks que faltam) mais **uma presença não prevista**, o `settings_hydrate_test`. 30 mais as três de fora dá 33, e não 32. A lição é a do próprio Step 2 logo acima, e vale nos dois: confira item por item, porque um total que fecha não prova uma lista que fecha, e aqui o total nem fechava.
+This Step was once wrong, and the error is the same one the Task 9 paragraph tells from another angle: the list was written before Task 8b existed, and `test/settings_hydrate_test.dart`, which belongs to it, was left out. The total said `32`. Measured with the slice at `414c43f`, missing only Tasks 24 to 26: `git diff --name-only ef5ee57 -- test/ | sort` returns 30 files, and `comm` against this Step's list flagged three expected absences (`accounts_setting_test`, `rts_addon_contract_test`, and `vault_warning_test`, from the three missing Tasks) plus **one unexpected presence**, `settings_hydrate_test`. 30 plus the three outside gives 33, not 32. The lesson is the same as Step 2 just above, and applies to both: check item by item, because a total that matches does not prove a list that matches, and here the total did not even match.
 
-`test/vault_contract.dart` e `test/support/fake_addon_store.dart` não terminam em `_test.dart` de propósito: são ajuda compartilhada e não têm `main`, então o runner não os executa sozinhos.
+`test/vault_contract.dart` and `test/support/fake_addon_store.dart` do not end in `_test.dart` on purpose: they are shared helpers with no `main`, so the runner does not execute them on their own.
 
 - [ ] **Step 4: `pubspec`**
 
@@ -9704,77 +9420,77 @@ Este Step já esteve errado, e o erro é o mesmo que o parágrafo da Task 9 cont
 git diff ef5ee57 -- pubspec.yaml
 ```
 
-Esperado: uma linha acrescentada, `flutter_secure_storage`, e nada mais. `pubspec.lock` muda junto e isso é esperado.
+Expected: one line added, `flutter_secure_storage`, and nothing else. `pubspec.lock` changes with it and that is expected.
 
-- [ ] **Step 5: Analise**
+- [ ] **Step 5: Analyze**
 
 ```bash
 flutter analyze
 ```
 
-Esperado: **`22 issues found`**.
+Expected: **`22 issues found`**.
 
-Cuidado com esse número: são **21 `info` e um `warning`**, e o `warning` é o `unnecessary_non_null_assertion` de `test/webdav_server_test.dart:69`, que é pré-existente e não é de arquivo desta fatia. O critério **não** é "zero warning", é: 22 findings, zero `error`, e **zero finding em arquivo tocado pela fatia**. Cruze a saída com as duas listas dos Steps 2 e 3.
+Watch this number carefully: they are **21 `info` and one `warning`**, and the `warning` is the `unnecessary_non_null_assertion` in `test/webdav_server_test.dart:69`, which is pre-existing and not in a file this slice touched. The criterion is **not** "zero warnings"; it is: 22 findings, zero `error`, and **zero findings in a file touched by the slice**. Cross the output against the two lists from Steps 2 and 3.
 
-- [ ] **Step 6: A suíte**
+- [ ] **Step 6: The suite**
 
 ```bash
 flutter test
 ```
 
-Esperado: `+581`, zero falha.
+Expected: `+581`, zero failures.
 
-Não existe mais "a falha de sempre": o único teste vermelho do repositório (`test/rar_decompress_screen_test.dart`) foi consertado em `5d21b14`, antes desta fatia começar. Qualquer falha aqui é regressão.
+There is no longer "the usual failure": the only red test in the repository (`test/rar_decompress_screen_test.dart`) was fixed in `5d21b14`, before this slice started. Any failure here is a regression.
 
-- [ ] **Step 7: O app compila inteiro**
+- [ ] **Step 7: The app compiles in full**
 
 ```bash
 flutter build linux --debug
 ```
 
-Esperado: build ok.
+Expected: build ok.
 
-**Isto não é conferência visual, e não adianta fingir que é.** A VM é headless: não tem `DISPLAY` nem `Xvfb`, então `flutter run -d linux` não roda. O build compila o app inteiro e pega regressão de compilação no caminho de GUI, que é a maior parte desta fatia, e não prova nada sobre o que aparece na tela. A tela de addons, o arrasto, o Accounts consolidado e o aviso do cofre ficam conferidos por teste de widget e por leitura. Diga isso no relatório em vez de escrever "conferido visualmente".
+**This is not a visual check, and pretending otherwise would be wrong.** The VM is headless: it has no `DISPLAY` or `Xvfb`, so `flutter run -d linux` does not run. The build compiles the whole app and catches compile regressions on the GUI path, which is most of this slice, and proves nothing about what appears on screen. The addons screen, the drag, the consolidated Accounts, and the vault warning are verified by widget test and by reading. Say that in the report instead of writing "verified visually".
 
-- [ ] **Step 8: A varredura da 6.3, e as duas metades separadas**
+- [ ] **Step 8: The 6.3 sweep, with the two halves separated**
 
-Esta é a razão de ser da fatia, e é o passo que mais dá vontade de resumir errado.
+This is the reason for the slice's existence, and it is the step most tempting to summarize incorrectly.
 
-Primeiro, os sítios que leem o token de dentro do arquivo compartilhável. O grep que acha os quatro **não** é por `buildConsoleAuthHeaders`, que só acha os chamadores dele:
+First, the sites that read the token from inside the shareable file. The grep that finds all four is **not** by `buildConsoleAuthHeaders`, which only finds its callers:
 
 ```bash
 grep -rnE "auth\??\['token'\]" lib/
 ```
 
-O `-E` é obrigatório, e se você rodar a versão BRE deste mesmo grep a varredura mente para você: sem `-E` o `\?` vira quantificador e o segundo `?` vira literal, o padrão passa a exigir uma `?` depois de `auth`, e o único dos quatro que escreve `auth['token']` sem `?` é justamente `network.dart:41`, o sítio que a 6.3 lista. Medido antes da Task 7 rodar: BRE achou três, `-E` achou quatro.
+The `-E` is mandatory, and if you run the BRE version of this grep the sweep lies to you: without `-E`, `\?` becomes a quantifier and the second `?` becomes a literal, the pattern then requires a `?` after `auth`, and the only one of the four that writes `auth['token']` without `?` is exactly `network.dart:41`, the site that section 6.3 lists. Measured before Task 7 ran: BRE found three, `-E` found four.
 
-Esperado: **uma única linha**, e nenhuma outra: **o comentário em `lib/utils/network.dart:41`**, que cita `` `?? auth['token']` `` entre crases para registrar o que havia ali antes; é texto, não leitura, e confirmado por inspeção da linha. Qualquer segunda linha é sítio vivo.
+Expected: **one single line**, and no other: **the comment in `lib/utils/network.dart:41`**, which cites `` `?? auth['token']` `` in backticks to record what was there before; it is text, not a read, and confirmed by inspecting the line. Any second line is a live site.
 
-Uma versão anterior deste Step dizia "duas classes de linha", contando `harvestAuthTokens` como a primeira. Está errado, e a correção é medida: a Task 7 escreveu `harvestAuthTokens` com `auth.containsKey('token')` e `auth.remove('token')`, nunca com um subscrito `auth['token']`, então este primeiro grep não tem como achá-la. Quem acha `harvestAuthTokens` é o **segundo** grep, o de `'token'` em `catalog_service.dart`, logo abaixo. As duas classes existem, mas uma em cada varredura, não as duas na primeira. Os quatro sítios de partida eram `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91` e `lib/screens/setup_wizard_screen.dart:392`. Os dois últimos não montavam header: decidiam se o console "tem auth configurada" com `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, e por isso passam despercebidos num grep por `buildConsoleAuthHeaders`. Se eles sobrarem, o app continua dizendo "este console tem auth" com base num campo que ninguém mais lê para autenticar. Não é vazamento, é mentira de interface.
+An earlier version of this Step said "two classes of lines", counting `harvestAuthTokens` as the first. That is wrong, and the correction is measured: Task 7 wrote `harvestAuthTokens` with `auth.containsKey('token')` and `auth.remove('token')`, never with a subscript `auth['token']`, so this first grep cannot find it. What finds `harvestAuthTokens` is the **second** grep, the one for `'token'` in `catalog_service.dart`, just below. The two classes exist, but one in each sweep, not both in the first. The four starting sites were `lib/utils/network.dart:41`, `lib/services/task_queue_service.dart:20`, `lib/screens/tinfoil_server_screen.dart:91`, and `lib/screens/setup_wizard_screen.dart:392`. The last two did not build a header: they decided whether the console "has auth configured" with `(c.auth?['token'] as String?)?.isNotEmpty ?? false`, which is why they go unnoticed in a grep for `buildConsoleAuthHeaders`. If they remain, the app continues saying "this console has auth" based on a field nobody reads anymore for authentication. It is not a leak; it is an interface lie.
 
-Depois, o arquivo compartilhável em si:
+Then, the shareable file itself:
 
 ```bash
 grep -rn "'token'" lib/services/catalog_service.dart lib/models/settings_model.dart
 ```
 
-Esperado: só as ocorrências dentro de `harvestAuthTokens`.
+Expected: only the occurrences inside `harvestAuthTokens`.
 
-E então **escreva o relatório com as duas metades separadas**. Elas não fecharam juntas, e reportar "6.3 corrigida" sem separá-las é maquiagem:
+And then **write the report with the two halves separated**. They did not close together, and reporting "6.3 fixed" without separating them is window-dressing:
 
-1. **Tirar o token do JSON compartilhável: fechado, incondicional, em toda plataforma.** É o arquivo que o usuário manda para outra pessoa, e `harvestAuthTokens` tira o token dele na instalação, em qualquer sistema operacional, com chaveiro ou sem. Provado pelos casos da Task 8 e pelos greps acima. A metade da **exportação** que a 6.3 também pede não foi feita porque não há o que fazer: o app não exporta catálogo em `ef5ee57`. Diga isso com essas palavras, e não "exportação corrigida".
-2. **Cifrar o segredo em repouso: melhor-esforço, e não acontece em toda máquina.** Depende de `flutter_secure_storage` abrir, e no Linux isso exige `gnome-keyring` ou KWallet vivo no D-Bus. Num Linux de servidor não há, `chooseVault` cai no `PrefsVault` e o segredo fica em texto puro, como sempre esteve. O que a fatia entrega nesse caso é o aviso na tela onde o segredo é digitado (Task 24), não a cifra.
+1. **Removing the token from the shareable JSON: closed, unconditional, on every platform.** It is the file the user sends to someone else, and `harvestAuthTokens` removes the token from it at installation, on any operating system, with or without a keyring. Proven by the Task 8 cases and the greps above. The **export** half that section 6.3 also asks for was not done because there is nothing to do: the app does not export a catalog at `ef5ee57`. Say that with those words, and not "export fixed".
+2. **Encrypting the secret at rest: best-effort, and does not happen on every machine.** Depends on `flutter_secure_storage` opening, and on Linux that requires `gnome-keyring` or KWallet live on D-Bus. On a server Linux there is none, `chooseVault` falls back to `PrefsVault`, and the secret stays in plain text, as it always was. What the slice delivers in that case is the warning on the screen where the secret is typed (Task 24), not the encryption.
 
-Diga em qual dos dois casos **esta** máquina caiu:
+State which of the two cases **this** machine fell into:
 
 ```bash
 flutter test test/vault_provider_test.dart
 ```
 
-Os casos da Task 4 dizem o que `chooseVault` faz com um backend que responde e com um que não responde; o que eles não dizem é qual dos dois é o D-Bus desta VM. Se quiser essa resposta, ela vem do app rodando, não da suíte, e numa VM headless ela fica em aberto. Reporte em aberto em vez de supor.
+The Task 4 cases say what `chooseVault` does with a backend that responds and one that does not; what they do not say is which of the two is the D-Bus on this VM. If you want that answer, it comes from the running app, not from the suite, and on a headless VM it remains open. Report it as open rather than assuming.
 
-- [ ] **Step 9: O relatório**
+- [ ] **Step 9: The report**
 
-Sem commit. O que sai daqui é o texto de fechamento da fatia, e ele tem que conter, nesta ordem: o resultado literal de cada um dos oito Steps, a separação das duas metades da 6.3, a dívida declarada da Task 22 (a cobertura não conta itens por console), e o que ficou conferido só por leitura (a ordem dentro de `invalidateForAddonChange`, na Task 14, e a aparência das duas telas novas e do Accounts refeito).
+No commit. What comes out of here is the closing text for the slice, and it must contain, in this order: the literal result of each of the eight Steps, the separation of the two 6.3 halves, the declared debt from Task 22 (coverage does not count items per console), and what was verified only by reading (the order inside `invalidateForAddonChange`, in Task 14, and the appearance of the two new screens and the rebuilt Accounts).
 
 ---

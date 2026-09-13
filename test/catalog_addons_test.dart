@@ -9,104 +9,98 @@ import 'package:roms_downloader/services/addon_store.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 
-typedef _Espiao = ({String url, List<Map<String, String?>> vistos});
+typedef _Spy = ({String url, List<Map<String, String?>> seen});
 
-/// Um servidor local que grava os cabeçalhos que recebeu e responde [corpo].
-Future<_Espiao> _servidor(String corpo, {int status = 200}) async {
-  final servidor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-  addTearDown(() => servidor.close(force: true));
-  final vistos = <Map<String, String?>>[];
-  servidor.listen((req) async {
-    vistos.add({
+/// A local server that records the headers it received and answers [body].
+Future<_Spy> _server(String body, {int status = 200}) async {
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  addTearDown(() => server.close(force: true));
+  final seen = <Map<String, String?>>[];
+  server.listen((req) async {
+    seen.add({
       'authorization': req.headers.value('authorization'),
       'cookie': req.headers.value('cookie'),
     });
     req.response.statusCode = status;
-    req.response.write(corpo);
+    req.response.write(body);
     await req.response.close();
   });
-  return (url: 'http://${servidor.address.address}:${servidor.port}/', vistos: vistos);
+  return (url: 'http://${server.address.address}:${server.port}/', seen: seen);
 }
 
-String _listagem(List<String> nomes) => jsonEncode([
-      for (final nome in nomes) {'name': nome, 'size': 1024},
+String _listing(List<String> names) => jsonEncode([
+      for (final name in names) {'name': name, 'size': 1024},
     ]);
 
-Future<AddonStore> _store(List<Addon> addons, Map<String, String> catalogos) async {
+Future<AddonStore> _store(List<Addon> addons, Map<String, String> catalogs) async {
   SharedPreferences.setMockInitialValues({});
   SharedPreferences.resetStatic();
-  final raiz = await Directory.systemTemp.createTemp('catalog_addons_test');
-  addTearDown(() => raiz.delete(recursive: true));
-  final store = AddonStore(await SharedPreferences.getInstance(), raiz);
+  final root = await Directory.systemTemp.createTemp('catalog_addons_test');
+  addTearDown(() => root.delete(recursive: true));
+  final store = AddonStore(await SharedPreferences.getInstance(), root);
   await store.save(addons);
-  for (final entrada in catalogos.entries) {
-    await store.writeCatalog(entrada.key, entrada.value);
+  for (final entry in catalogs.entries) {
+    await store.writeCatalog(entry.key, entry.value);
   }
   return store;
 }
 
-String _catalogo(String nomeDoConsole, String url, {Map<String, dynamic>? auth}) => jsonEncode([
-      {'name': nomeDoConsole, 'url': url, 'file_format': ['.zip'], if (auth != null) 'auth': auth},
+String _catalog(String consoleName, String url, {Map<String, dynamic>? auth}) => jsonEncode([
+      {'name': consoleName, 'url': url, 'file_format': ['.zip'], if (auth != null) 'auth': auth},
     ]);
 
 void main() {
-  // Sem `TestWidgetsFlutterBinding.ensureInitialized()` de propósito, e não é
-  // esquecimento: o binding instala um `HttpOverrides` que devolve 400 em toda
-  // requisição, e o grupo `fetchSources` fala com um `HttpServer` de verdade em
-  // loopback. Os outros cinco arquivos que usam `setMockInitialValues` chamam o
-  // binding, mas nenhum deles precisa: `setMockInitialValues` só troca
-  // `SharedPreferencesStorePlatform.instance` por um store em memória
-  // (`shared_preferences_legacy.dart:279`), sem passar pelo binary messenger.
-  // `tinfoil_server_proxy_test.dart`, o outro arquivo da suíte que sobe um
-  // `HttpServer`, também não chama binding nenhum.
+  // No `TestWidgetsFlutterBinding.ensureInitialized()` on purpose: the binding
+  // installs an `HttpOverrides` that returns 400 for every request, and
+  // `fetchSources` talks to a real loopback `HttpServer`.
 
   group('buildCatalog', () {
-    test('dois addons com arquivo entram os dois, na ordem da lista', () async {
+    test('two addons with a file both enter, in list order', () async {
       final store = await _store(
-        const [Addon(id: 'um', name: 'Um'), Addon(id: 'dois', name: 'Dois')],
+        const [Addon(id: 'one', name: 'One'), Addon(id: 'two', name: 'Two')],
         {
-          'um': _catalogo('SNES', 'https://um/'),
-          'dois': _catalogo('SNES', 'https://dois/'),
+          'one': _catalog('SNES', 'https://one/'),
+          'two': _catalog('SNES', 'https://two/'),
         },
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.consoles['snes']!.urls, ['https://um/', 'https://dois/']);
-      expect(merged.sources['snes']!.map((f) => f.addonId), ['um', 'dois']);
+      expect(merged.consoles['snes']!.urls, ['https://one/', 'https://two/']);
+      expect(merged.sources['snes']!.map((f) => f.addonId), ['one', 'two']);
     });
 
-    test('addon sem arquivo não entra e não derruba os outros', () async {
+    test('addon with no catalog file is skipped without affecting others', () async {
       final store = await _store(
-        const [Addon(id: 'fantasma', name: 'Fantasma'), Addon(id: 'um', name: 'Um')],
-        {'um': _catalogo('SNES', 'https://um/')},
+        const [Addon(id: 'ghost', name: 'Ghost'), Addon(id: 'one', name: 'One')],
+        {'one': _catalog('SNES', 'https://one/')},
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.sources['snes']!.single.addonId, 'um');
+      expect(merged.sources['snes']!.single.addonId, 'one');
     });
 
-    test('catálogo ilegível de um addon não derruba os outros', () async {
+    test('unreadable catalog from one addon does not affect others', () async {
       final store = await _store(
-        const [Addon(id: 'quebrado', name: 'Quebrado'), Addon(id: 'um', name: 'Um')],
-        {'quebrado': 'isto não é json', 'um': _catalogo('SNES', 'https://um/')},
+        const [Addon(id: 'broken', name: 'Broken'), Addon(id: 'one', name: 'One')],
+        {'broken': 'this is not json', 'one': _catalog('SNES', 'https://one/')},
       );
       final merged = await CatalogService().buildCatalog(store);
       expect(merged.consoles.keys, ['snes']);
-      expect(merged.sources['snes']!.single.addonId, 'um');
+      expect(merged.sources['snes']!.single.addonId, 'one');
     });
 
-    test('a auth de cada fonte é a do addon que declarou o console', () async {
+    test('each source auth comes from the addon that declared the console', () async {
       final store = await _store(
-        const [Addon(id: 'um', name: 'Um'), Addon(id: 'dois', name: 'Dois')],
+        const [Addon(id: 'one', name: 'One'), Addon(id: 'two', name: 'Two')],
         {
-          'um': _catalogo('SNES', 'https://um/', auth: {'auth_message': 'cole o token'}),
-          'dois': _catalogo('SNES', 'https://dois/', auth: {'cookies': true}),
+          'one': _catalog('SNES', 'https://one/', auth: {'auth_message': 'paste the token'}),
+          'two': _catalog('SNES', 'https://two/', auth: {'cookies': true}),
         },
       );
       final merged = await CatalogService().buildCatalog(store);
-      expect(merged.sources['snes']![0].auth!['auth_message'], 'cole o token');
+      expect(merged.sources['snes']![0].auth!['auth_message'], 'paste the token');
       expect(merged.sources['snes']![1].auth!['cookies'], true);
     });
 
-    test('lista de addons vazia dá catálogo vazio', () async {
+    test('empty addon list yields empty catalog', () async {
       final store = await _store(const [], const {});
       final merged = await CatalogService().buildCatalog(store);
       expect(merged.isEmpty, isTrue);
@@ -116,9 +110,9 @@ void main() {
   group('fetchSources', () {
     const console = Console(id: 'snes', name: 'SNES', urls: [], fileFormat: ['.zip']);
 
-    test('cada fonte é buscada com a auth do SEU addon', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
-      final b = await _servidor(_listagem(['B (USA).zip']));
+    test('each source is fetched with its own addon auth', () async {
+      final a = await _server(_listing(['A (USA).zip']));
+      final b = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
@@ -126,67 +120,67 @@ void main() {
         client,
         console,
         [
-          ConsoleSource(addonId: 'um', url: a.url, auth: const {'auth_message': 'cole'}),
-          ConsoleSource(addonId: 'dois', url: b.url, auth: const {'cookies': true, 'cookie_name': 'sessao'}),
+          ConsoleSource(addonId: 'one', url: a.url, auth: const {'auth_message': 'paste'}),
+          ConsoleSource(addonId: 'two', url: b.url, auth: const {'cookies': true, 'cookie_name': 'session'}),
         ],
-        tokens: const {'um': 'tok-um', 'dois': 'tok-dois'},
+        tokens: const {'one': 'tok-one', 'two': 'tok-two'},
       );
 
-      expect(a.vistos.single['authorization'], 'Bearer tok-um');
-      expect(a.vistos.single['cookie'], isNull);
-      expect(b.vistos.single['cookie'], 'sessao=tok-dois');
-      expect(b.vistos.single['authorization'], isNull);
+      expect(a.seen.single['authorization'], 'Bearer tok-one');
+      expect(a.seen.single['cookie'], isNull);
+      expect(b.seen.single['cookie'], 'session=tok-two');
+      expect(b.seen.single['authorization'], isNull);
     });
 
-    test('os jogos voltam marcados com o addon que os serviu', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
-      final b = await _servidor(_listagem(['B (USA).zip']));
+    test('games are tagged with the addon that served them', () async {
+      final a = await _server(_listing(['A (USA).zip']));
+      final b = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
-      final jogos = await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'um', url: a.url),
-        ConsoleSource(addonId: 'dois', url: b.url),
+      final games = await CatalogService().fetchSources(client, console, [
+        ConsoleSource(addonId: 'one', url: a.url),
+        ConsoleSource(addonId: 'two', url: b.url),
       ]);
 
-      final porTitulo = {for (final jogo in jogos) jogo.title: jogo.sourceId};
-      expect(porTitulo, {'A (USA).zip': 'um', 'B (USA).zip': 'dois'});
+      final byTitle = {for (final game in games) game.title: game.sourceId};
+      expect(byTitle, {'A (USA).zip': 'one', 'B (USA).zip': 'two'});
     });
 
-    test('sem token para o addon, nenhum cabeçalho de auth é mandado', () async {
-      final a = await _servidor(_listagem(['A (USA).zip']));
+    test('no token for the addon means no auth header is sent', () async {
+      final a = await _server(_listing(['A (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
       await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'um', url: a.url, auth: const {'auth_message': 'cole'}),
+        ConsoleSource(addonId: 'one', url: a.url, auth: const {'auth_message': 'paste'}),
       ]);
 
-      expect(a.vistos.single['authorization'], isNull);
+      expect(a.seen.single['authorization'], isNull);
     });
 
-    test('uma fonte que falha não impede a outra de entregar', () async {
-      final ruim = await _servidor('erro', status: 500);
-      final boa = await _servidor(_listagem(['B (USA).zip']));
+    test('one failing source does not prevent the other from delivering', () async {
+      final bad = await _server('error', status: 500);
+      final good = await _server(_listing(['B (USA).zip']));
       final client = HttpClient();
       addTearDown(client.close);
 
-      final jogos = await CatalogService().fetchSources(client, console, [
-        ConsoleSource(addonId: 'ruim', url: ruim.url),
-        ConsoleSource(addonId: 'boa', url: boa.url),
+      final games = await CatalogService().fetchSources(client, console, [
+        ConsoleSource(addonId: 'bad', url: bad.url),
+        ConsoleSource(addonId: 'good', url: good.url),
       ]);
 
-      expect(jogos.map((j) => j.title), ['B (USA).zip']);
-      expect(jogos.single.sourceId, 'boa');
+      expect(games.map((j) => j.title), ['B (USA).zip']);
+      expect(games.single.sourceId, 'good');
     });
 
-    test('todas as fontes falhando propaga o erro', () async {
-      final ruim = await _servidor('erro', status: 500);
+    test('all sources failing propagates the error', () async {
+      final bad = await _server('error', status: 500);
       final client = HttpClient();
       addTearDown(client.close);
 
       expect(
-        () => CatalogService().fetchSources(client, console, [ConsoleSource(addonId: 'ruim', url: ruim.url)]),
+        () => CatalogService().fetchSources(client, console, [ConsoleSource(addonId: 'bad', url: bad.url)]),
         throwsA(isA<Exception>()),
       );
     });

@@ -4,70 +4,61 @@ import 'package:roms_downloader/services/secure_storage_vault.dart';
 
 import 'vault_contract.dart';
 
-/// O plugin de verdade não existe dentro de `flutter test`: ele fala por canal
-/// de plataforma. Este falso é o que torna o cofre de sistema testável.
-class _BackendFalso implements SecureStorageBackend {
-  _BackendFalso({this.lancaAoEscrever = false, this.engoleEscrita = false});
+/// The real plugin talks over a platform channel, absent in `flutter test`.
+/// This fake makes the system vault testable.
+class _FakeBackend implements SecureStorageBackend {
+  _FakeBackend({this.throwsOnWrite = false, this.swallowsWrite = false});
 
-  /// Um Linux sem Secret Service: a escrita levanta `PlatformException`.
-  final bool lancaAoEscrever;
+  /// A Linux without Secret Service: the write throws `PlatformException`.
+  final bool throwsOnWrite;
 
-  /// Pior que levantar: aceita a escrita e não guarda. É por isso que a sonda
-  /// lê de volta em vez de só olhar se a escrita lançou.
-  final bool engoleEscrita;
+  /// Worse than throwing: accepts the write and stores nothing, which is why
+  /// the probe reads back instead of only checking that the write threw.
+  final bool swallowsWrite;
 
-  final Map<String, String> valores = {};
+  final Map<String, String> values = {};
 
   @override
-  Future<String?> read(String key) async => valores[key];
+  Future<String?> read(String key) async => values[key];
 
   @override
   Future<void> write(String key, String value) async {
-    if (lancaAoEscrever) throw PlatformException(code: 'Libsecret error');
-    if (engoleEscrita) return;
-    valores[key] = value;
+    if (throwsOnWrite) throw PlatformException(code: 'Libsecret error');
+    if (swallowsWrite) return;
+    values[key] = value;
   }
 
   @override
   Future<void> delete(String key) async {
-    valores.remove(key);
+    values.remove(key);
   }
 
   @override
-  Future<Map<String, String>> readAll() async => Map.of(valores);
+  Future<Map<String, String>> readAll() async => Map.of(values);
 }
 
 void main() {
-  runVaultContract('SecureStorageVault', () async => SecureStorageVault(_BackendFalso()));
+  runVaultContract('SecureStorageVault', () async => SecureStorageVault(_FakeBackend()));
 
-  group('sonda de disponibilidade', () {
-    test('aprova o chaveiro que devolve o que escreveu', () async {
-      expect(await probeSecureStorage(_BackendFalso()), isTrue);
+  group('availability probe', () {
+    test('passes a keyring that reads back what it wrote', () async {
+      expect(await probeSecureStorage(_FakeBackend()), isTrue);
     });
 
-    test('reprova o chaveiro que levanta', () async {
-      // Este é o Linux de servidor da decisão travada: sem `gnome-keyring` nem
-      // KWallet no D-Bus, o plugin levanta `PlatformException`. Se a sonda
-      // deixasse a exceção subir, o app quebraria no boot em vez de cair para
-      // a reserva.
-      expect(await probeSecureStorage(_BackendFalso(lancaAoEscrever: true)), isFalse);
+    test('fails a keyring that throws', () async {
+      expect(await probeSecureStorage(_FakeBackend(throwsOnWrite: true)), isFalse);
     });
 
-    test('reprova o chaveiro que engole a escrita em silêncio', () async {
-      // O caso que justifica ler de volta. Se a sonda parasse em "escreveu sem
-      // lançar", este backend passaria, o app anunciaria "cifrado em repouso"
-      // e o token do usuário sumiria a cada reinício, sem erro nenhum.
-      expect(await probeSecureStorage(_BackendFalso(engoleEscrita: true)), isFalse);
+    test('fails a keyring that silently swallows the write', () async {
+      expect(await probeSecureStorage(_FakeBackend(swallowsWrite: true)), isFalse);
     });
 
-    test('não deixa o canário para trás', () async {
-      // A sonda roda no boot. Uma chave por boot acumulando no chaveiro do
-      // sistema do usuário é lixo que o app não tem como limpar depois.
-      final backend = _BackendFalso();
+    test('leaves no canary behind', () async {
+      final backend = _FakeBackend();
 
       await probeSecureStorage(backend);
 
-      expect(backend.valores, isEmpty);
+      expect(backend.values, isEmpty);
     });
   });
 }

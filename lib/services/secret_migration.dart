@@ -1,69 +1,56 @@
 import 'package:roms_downloader/models/secret_ref.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// Tira os quatro segredos de dentro do JSON do `app_settings` e os põe no
-/// cofre.
+/// Moves the four secrets out of the `app_settings` JSON and into the vault.
 ///
-/// Trabalha sobre o mapa **cru**, antes de `AppSettings.fromJson`, porque o
-/// modelo descarta campo desconhecido em silêncio: rodar depois da
-/// desserialização amarraria esta migração aos campos que a Grupo 2 vai tirar
-/// do modelo.
+/// Works on the raw map, before `AppSettings.fromJson`, because the model
+/// drops unknown fields silently. Returns the cleaned map instead of saving;
+/// the caller saves.
 ///
-/// Devolve o mapa limpo em vez de salvar. Quem salva é quem chama, e é lá que
-/// mora o `shared_preferences`.
-///
-/// **Não tem flag de "já rodei".** Depois da primeira passada os campos não
-/// estão mais no mapa, então a segunda é inócua sozinha. Se o salvamento
-/// falhar no meio, a próxima abertura tenta de novo, e aí vale a regra de que
-/// o valor já no cofre ganha do valor do arquivo.
+/// No "already ran" flag: after the first pass the fields are gone, so a second
+/// pass is a no-op on its own.
 class SecretMigration {
   final SecretVault vault;
 
-  /// O addon a que pertencem os consoles do catálogo de hoje. Entra por
-  /// parâmetro porque a constante nasce na Grupo 3 e esta Task não pode
-  /// depender dela.
+  /// The addon that owns today's catalog consoles.
   final String builtinAddonId;
 
   const SecretMigration({required this.vault, required this.builtinAddonId});
 
   Future<Map<String, dynamic>> drain(Map<String, dynamic> raw) async {
-    final limpo = Map<String, dynamic>.from(raw);
+    final cleaned = Map<String, dynamic>.from(raw);
 
-    await _mover(limpo, 'iaAccessKey', SecretRef.iaAccessKey);
-    await _mover(limpo, 'iaSecretKey', SecretRef.iaSecretKey);
-    await _mover(limpo, 'iaCookies', SecretRef.iaCookies);
+    await _move(cleaned, 'iaAccessKey', SecretRef.iaAccessKey);
+    await _move(cleaned, 'iaSecretKey', SecretRef.iaSecretKey);
+    await _move(cleaned, 'iaCookies', SecretRef.iaCookies);
 
-    final consoles = limpo['consoleSettings'];
+    final consoles = cleaned['consoleSettings'];
     if (consoles is Map) {
-      final novos = <String, dynamic>{};
-      for (final entrada in consoles.entries) {
-        final id = entrada.key.toString();
-        final valor = entrada.value;
-        if (valor is! Map) {
-          // Arquivo editado à mão. Deixa passar intacto: a migração roda na
-          // abertura do app, e levantar aqui vira app que não abre.
-          novos[id] = valor;
+      final result = <String, dynamic>{};
+      for (final entry in consoles.entries) {
+        final id = entry.key.toString();
+        final value = entry.value;
+        if (value is! Map) {
+          result[id] = value;
           continue;
         }
-        // Cópia própria, e não o mapa aninhado do chamador: `Map.from` no
-        // nível de cima é raso, e mexer no de dentro apagaria o token do mapa
-        // de quem chamou antes de qualquer coisa ter sido salva.
-        final console = Map<String, dynamic>.from(valor);
-        await _mover(console, 'authToken', SecretRef.addonToken(builtinAddonId, id));
-        novos[id] = console;
+        // Own copy, not the caller's nested map: `Map.from` above is shallow.
+        final console = Map<String, dynamic>.from(value);
+        await _move(console, 'authToken', SecretRef.addonToken(builtinAddonId, id));
+        result[id] = console;
       }
-      limpo['consoleSettings'] = novos;
+      cleaned['consoleSettings'] = result;
     }
 
-    return limpo;
+    return cleaned;
   }
 
-  /// Tira [campo] de [de] **sempre**, e grava no cofre só se houver o que
-  /// gravar e o cofre ainda não tiver valor.
-  Future<void> _mover(Map<String, dynamic> de, String campo, String chave) async {
-    final valor = de.remove(campo);
-    if (valor is! String || valor.isEmpty) return;
-    if (await vault.read(chave) != null) return;
-    await vault.write(chave, valor);
+  /// Removes [field] from [from] always, and writes to the vault only when there
+  /// is something to write and the vault has no value yet.
+  Future<void> _move(Map<String, dynamic> from, String field, String ref) async {
+    final value = from.remove(field);
+    if (value is! String || value.isEmpty) return;
+    if (await vault.read(ref) != null) return;
+    await vault.write(ref, value);
   }
 }

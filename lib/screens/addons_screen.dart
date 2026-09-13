@@ -7,18 +7,16 @@ import 'package:roms_downloader/screens/addon_detail_screen.dart';
 import 'package:roms_downloader/services/addon_install.dart';
 import 'package:roms_downloader/services/console_merge.dart';
 
-/// A lista ordenada de fontes, como a seção 9 do spec de UI pede.
-///
-/// A ordem **é** a prioridade: ela alimenta `sourcePriorityProvider`, que
-/// alimenta o `sourcePriority` de `planFromEntries`. Arrastar uma linha aqui
-/// muda qual fonte baixa o arquivo.
+/// The ordered list of sources. The order is the priority: it feeds
+/// `sourcePriorityProvider`, so dragging a row here changes which source
+/// downloads the file.
 class AddonsScreen extends ConsumerWidget {
   const AddonsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final addons = ref.watch(addonProvider);
-    final cobertura = ref.watch(addonCoverageProvider).valueOrNull ?? const <String, AddonCoverage>{};
+    final coverage = ref.watch(addonCoverageProvider).valueOrNull ?? const <String, AddonCoverage>{};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Addons')),
@@ -26,20 +24,20 @@ class AddonsScreen extends ConsumerWidget {
         children: [
           Expanded(
             child: addons.isEmpty
-                ? const Center(child: Text('Nenhum addon instalado.'))
+                ? const Center(child: Text('No addons installed.'))
                 : ReorderableListView.builder(
                     buildDefaultDragHandles: false,
                     itemCount: addons.length,
                     onReorder: (from, to) => ref.read(addonProvider.notifier).reorder(from, to),
                     itemBuilder: (context, i) {
                       final addon = addons[i];
-                      return _Linha(
+                      return _Row(
                         key: ValueKey(addon.id),
-                        indice: i,
+                        index: i,
                         addon: addon,
-                        // Ausente é cobertura zero, não erro: é o estado de um
-                        // addon recém instalado cujo catálogo ainda não foi lido.
-                        cobertura: cobertura[addon.id] ?? (consoles: const <String>[], authConsoles: const <String>[]),
+                        // Absent means zero coverage, not error: the state of a
+                        // freshly installed addon whose catalog is not read yet.
+                        coverage: coverage[addon.id] ?? (consoles: const <String>[], authConsoles: const <String>[]),
                       );
                     },
                   ),
@@ -50,9 +48,9 @@ class AddonsScreen extends ConsumerWidget {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => _dialogoDeInstalacao(context, ref),
+                onPressed: () => _installDialog(context, ref),
                 icon: const Icon(Icons.add),
-                label: const Text('Instalar de URL'),
+                label: const Text('Install from URL'),
               ),
             ),
           ),
@@ -61,8 +59,8 @@ class AddonsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _dialogoDeInstalacao(BuildContext context, WidgetRef ref) async {
-    final url = await showDialog<String>(context: context, builder: (_) => const _DialogoDeUrl());
+  Future<void> _installDialog(BuildContext context, WidgetRef ref) async {
+    final url = await showDialog<String>(context: context, builder: (_) => const _UrlDialog());
     if (url == null || url.isEmpty || !context.mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -75,29 +73,25 @@ class AddonsScreen extends ConsumerWidget {
         fetch: ref.read(catalogFetcherProvider),
       );
     } catch (e) {
-      // Mensagem em vez de stack trace: os dois erros prováveis são url errada
-      // e servidor que devolve página de login, e nenhum dos dois é bug.
-      messenger.showSnackBar(SnackBar(content: Text('Não deu para instalar: $e')));
+      // A message instead of a stack trace: the two likely errors are a wrong
+      // URL and a server that returns a login page, neither of which is a bug.
+      messenger.showSnackBar(SnackBar(content: Text('Could not install: $e')));
     }
   }
 }
 
-/// O diálogo do "Instalar de URL". Tem estado só por causa do `dispose`.
-///
-/// O `TextEditingController` precisa viver enquanto o `TextField` viver, e o
-/// `showDialog` devolve assim que a rota é desempilhada, com a animação de
-/// saída ainda rodando. Descartar o controller ali é descartá-lo num quadro em
-/// que o `TextField` ainda está na árvore, e a transição reinscreve nele:
-/// `A TextEditingController was used after being disposed`. Com o controller no
-/// `State`, quem escolhe a hora é o framework, depois que a rota sai de fato.
-class _DialogoDeUrl extends StatefulWidget {
-  const _DialogoDeUrl();
+/// The "Install from URL" dialog. Stateful only for the sake of `dispose`: the
+/// controller must outlive the `TextField`, and disposing it inline would kill
+/// it mid-transition. With it in `State`, the framework disposes it after the
+/// route is actually gone.
+class _UrlDialog extends StatefulWidget {
+  const _UrlDialog();
 
   @override
-  State<_DialogoDeUrl> createState() => _DialogoDeUrlState();
+  State<_UrlDialog> createState() => _UrlDialogState();
 }
 
-class _DialogoDeUrlState extends State<_DialogoDeUrl> {
+class _UrlDialogState extends State<_UrlDialog> {
   final _controller = TextEditingController();
 
   @override
@@ -109,40 +103,40 @@ class _DialogoDeUrlState extends State<_DialogoDeUrl> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Instalar de URL'),
+      title: const Text('Install from URL'),
       content: TextField(
         controller: _controller,
         autofocus: true,
-        decoration: const InputDecoration(labelText: 'Endereço do catálogo', hintText: 'https://exemplo.org/catalogo.json'),
+        decoration: const InputDecoration(labelText: 'Catalog address', hintText: 'https://example.org/catalog.json'),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: const Text('Instalar')),
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(context).pop(_controller.text.trim()), child: const Text('Install')),
       ],
     );
   }
 }
 
-class _Linha extends StatelessWidget {
-  final int indice;
+class _Row extends StatelessWidget {
+  final int index;
   final Addon addon;
-  final AddonCoverage cobertura;
+  final AddonCoverage coverage;
 
-  const _Linha({super.key, required this.indice, required this.addon, required this.cobertura});
+  const _Row({super.key, required this.index, required this.addon, required this.coverage});
 
   @override
   Widget build(BuildContext context) {
-    final n = cobertura.consoles.length;
+    final n = coverage.consoles.length;
     return ListTile(
       leading: const Icon(Icons.extension_outlined),
       title: Text(addon.name),
       subtitle: Row(
         children: [
-          Text(n == 0 ? 'Nenhum console' : '$n console${n == 1 ? '' : 's'}'),
-          if (cobertura.authConsoles.isNotEmpty) ...[
+          Text(n == 0 ? 'No console' : '$n console${n == 1 ? '' : 's'}'),
+          if (coverage.authConsoles.isNotEmpty) ...[
             const SizedBox(width: 8),
             const Chip(
-              label: Text('conta'),
+              label: Text('account'),
               visualDensity: VisualDensity.compact,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -152,11 +146,10 @@ class _Linha extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // A alça é o único ponto que arrasta, e por isso
-          // `buildDefaultDragHandles` é falso lá em cima: com ele ligado, a
-          // linha inteira arrasta e o toque que abre o detalhe vira um arrasto
-          // de um pixel.
-          ReorderableDragStartListener(index: indice, child: const Icon(Icons.drag_handle)),
+          // The handle is the only drag point, which is why
+          // `buildDefaultDragHandles` is false above: with it on, the whole row
+          // drags and the tap that opens the detail becomes a one-pixel drag.
+          ReorderableDragStartListener(index: index, child: const Icon(Icons.drag_handle)),
           const SizedBox(width: 8),
           const Icon(Icons.chevron_right),
         ],

@@ -22,47 +22,47 @@ void main() {
 }
 ''';
 
-  test('decode lê as entradas', () {
+  test('decode reads the entries', () {
     final index = PackIndex.decode(sample);
     expect(index.built, '2026-09-10');
     expect(index.packs.length, 2);
     expect(index.packs.first.games, 2415);
   });
 
-  test('normalize segue a mesma regra do id de console do catálogo', () {
+  test('normalize follows the catalog console-id rule', () {
     expect(PackIndex.normalize('Nintendo - Super Nintendo Entertainment System'),
         'nintendo_super_nintendo_entertainment_system');
     expect(PackIndex.normalize('  PlayStation 1!! '), 'playstation_1');
   });
 
-  test('resolve pelo id do pacote', () {
+  test('resolves by pack id', () {
     final index = PackIndex.decode(sample);
     final entry = index.resolve(const PackTarget(
-        'nintendo_super_nintendo_entertainment_system', 'Qualquer Nome'));
+        'nintendo_super_nintendo_entertainment_system', 'Any Name'));
     expect(entry?.pack, 'nintendo_super_nintendo_entertainment_system');
   });
 
-  test('resolve pelo nome do console normalizado', () {
+  test('resolves by the normalized console name', () {
     final index = PackIndex.decode(sample);
     final entry = index.resolve(const PackTarget(
-        'catalogo_do_fulano', 'Nintendo - Super Nintendo Entertainment System'));
+        'acme_catalog', 'Nintendo - Super Nintendo Entertainment System'));
     expect(entry?.pack, 'nintendo_super_nintendo_entertainment_system');
   });
 
-  test('resolve por alias, do id e do nome', () {
+  test('resolves by alias, from id and from name', () {
     final index = PackIndex.decode(sample);
-    expect(index.resolve(const PackTarget('snes', 'Meu Set'))?.pack,
+    expect(index.resolve(const PackTarget('snes', 'My Set'))?.pack,
         'nintendo_super_nintendo_entertainment_system');
-    expect(index.resolve(const PackTarget('qualquer', 'PlayStation 1'))?.pack,
+    expect(index.resolve(const PackTarget('any', 'PlayStation 1'))?.pack,
         'sony_playstation');
   });
 
-  test('pack exato ganha de alias de outra entrada', () {
+  test('an exact pack beats another entry alias regardless of order', () {
     const colliding = '''
 {
   "built": "2026-09-10",
   "packs": [
-    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]},
+    {"pack": "other", "system": "Other", "games": 1, "aliases": ["snes"]},
     {"pack": "snes", "system": "Snes", "games": 2, "aliases": []}
   ]
 }
@@ -70,15 +70,14 @@ void main() {
     final index = PackIndex.decode(colliding);
     expect(index.resolve(const PackTarget('snes', 'Snes'))?.pack, 'snes');
 
-    // A mesma asserção com a ordem das entradas invertida. A garantia vem de
-    // resolve varrer todos os packs antes de olhar qualquer alias, não da
-    // ordem em que o índice foi escrito, e este par prova isso.
+    // Same assertion with the entries reversed: the guarantee comes from
+    // resolve scanning every pack before any alias, not from index order.
     const reversed = '''
 {
   "built": "2026-09-10",
   "packs": [
     {"pack": "snes", "system": "Snes", "games": 2, "aliases": []},
-    {"pack": "outro", "system": "Outro", "games": 1, "aliases": ["snes"]}
+    {"pack": "other", "system": "Other", "games": 1, "aliases": ["snes"]}
   ]
 }
 ''';
@@ -87,13 +86,13 @@ void main() {
         'snes');
   });
 
-  test('console sem pacote devolve null', () {
+  test('a console without a pack returns null', () {
     final index = PackIndex.decode(sample);
     expect(index.resolve(const PackTarget('nintendo_switch', 'Nintendo Switch')),
         isNull);
   });
 
-  test('PackTarget tem igualdade por valor, para servir de chave de family', () {
+  test('PackTarget has value equality, to serve as a family key', () {
     expect(const PackTarget('a', 'b'), const PackTarget('a', 'b'));
     expect(const PackTarget('a', 'b').hashCode, const PackTarget('a', 'b').hashCode);
     expect(const PackTarget('a', 'b') == const PackTarget('a', 'c'), isFalse);

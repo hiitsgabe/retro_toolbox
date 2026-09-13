@@ -68,39 +68,19 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
           console.id,
           iaAccessKey: settings.iaAccessKey,
           iaSecretKey: settings.iaSecretKey,
-          // Só o embutido. Ver a limitação escrita no doc de `_authHeaders`,
-          // logo abaixo neste mesmo arquivo.
-          tokens: _tokensDoEmbutido(settings, console.id),
+          tokens: _builtinTokens(settings, console.id),
         );
-      } catch (_) {
-        // Skip consoles whose catalog fails to load; the rest still serve.
-      }
+      } catch (_) {}
     }
     return result;
   }
 
-  /// O token do addon embutido para este console, no formato que
-  /// `loadCatalog` espera.
+  /// The builtin addon's token for this console, in the shape `loadCatalog`
+  /// expects.
   ///
-  /// **Limitação conhecida da fatia 4, e deliberada.** Os servidores de LAN
-  /// (Tinfoil e FBI) continuam falando só com a credencial do addon embutido.
-  /// A razão é o `_authHeaders` daqui: ele é síncrono, porque
-  /// `TinfoilServerService.start` o recebe como
-  /// `Map<String, String> Function(Console)` (`tinfoil_server_service.dart:80`),
-  /// e só tem um `Console` em mãos, sem o `Game` que diria de qual addon o
-  /// arquivo veio. Ler o cofre de lá exigiria mudar o contrato
-  /// do servidor HTTP, que não é assunto desta fatia. Consequência honesta:
-  /// um console servido por um addon de terceiro com auth aparece na listagem
-  /// do Tinfoil e falha ao baixar. O caminho normal do app, que é a grade e o
-  /// download pelo `download_provider`, usa o token certo por addon.
-  ///
-  /// **Dois outros chamadores não passam token nenhum, e nem antes passavam:**
-  /// `jdkv_server_provider.dart:96` e `sports_rom_lookup.dart:41` chamam
-  /// `loadCatalog(id)` seco. Com o parâmetro antigo `authToken` isso já era
-  /// verdade, então esta fatia não piora nem conserta: o padrão `const {}`
-  /// mantém o comportamento. Ficam declarados aqui porque a frase acima,
-  /// sozinha, sugere que só os dois servidores de LAN estão de fora.
-  Map<String, String> _tokensDoEmbutido(AppSettings settings, String consoleId) {
+  /// The LAN servers only serve the builtin addon's credential, so a console
+  /// served by a third-party addon with auth lists here but fails to download.
+  Map<String, String> _builtinTokens(AppSettings settings, String consoleId) {
     final token = settings.consoleSettings[consoleId]?.authToken ?? '';
     return token.isEmpty ? const {} : {kBuiltinAddonId: token};
   }
@@ -157,9 +137,7 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
 
 @pragma('vm:entry-point')
 void tinfoilKeepAliveCallback() {
-  // ponytail: no-op handler — the HTTP server lives in the main isolate; this
-  // service only keeps the process alive. Known ceiling: the extraction
-  // service shares the single foreground slot and may replace/stop it.
+  // The extraction service shares the single foreground slot and may stop this.
   FlutterForegroundTask.setTaskHandler(_TinfoilKeepAliveHandler());
 }
 

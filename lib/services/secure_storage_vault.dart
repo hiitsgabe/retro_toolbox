@@ -1,12 +1,10 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 
-/// O pedaço de `flutter_secure_storage` que este app usa.
+/// The slice of `flutter_secure_storage` this app uses.
 ///
-/// Existe porque o plugin fala por canal de plataforma, que não existe dentro
-/// de `flutter test`. Sem esta interface, o cofre de sistema seria a única
-/// implementação de [SecretVault] sem teste nenhum, justo a que guarda os
-/// segredos de verdade.
+/// An interface because the plugin talks over a platform channel, which does
+/// not exist inside `flutter test`.
 abstract class SecureStorageBackend {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
@@ -14,8 +12,8 @@ abstract class SecureStorageBackend {
   Future<Map<String, String>> readAll();
 }
 
-/// A implementação de verdade. Três linhas de delegação por método e nenhuma
-/// decisão: tudo que é decisão mora no [SecureStorageVault], que é testado.
+/// The real implementation: pure delegation, no decisions. Every decision
+/// lives in [SecureStorageVault], which is tested.
 class PluginSecureStorage implements SecureStorageBackend {
   final FlutterSecureStorage _storage;
 
@@ -34,8 +32,8 @@ class PluginSecureStorage implements SecureStorageBackend {
   Future<Map<String, String>> readAll() => _storage.readAll();
 }
 
-/// O cofre cifrado pelo sistema operacional: Keychain no Apple, Keystore no
-/// Android, DPAPI no Windows, libsecret no Linux.
+/// The OS-encrypted vault: Keychain on Apple, Keystore on Android, DPAPI on
+/// Windows, libsecret on Linux.
 class SecureStorageVault implements SecretVault {
   final SecureStorageBackend _backend;
 
@@ -58,35 +56,29 @@ class SecureStorageVault implements SecretVault {
 
   @override
   Future<void> deleteWithPrefix(String prefix) async {
-    final todas = await _backend.readAll();
-    // `toList()` antes de apagar: `keys` é a visão viva do mapa devolvido, e
-    // uma implementação que devolva o mapa interno em vez de cópia lançaria
-    // `ConcurrentModificationError` no meio da remoção de um addon.
-    for (final chave in todas.keys.where((chave) => chave.startsWith(prefix)).toList()) {
-      await _backend.delete(chave);
+    final all = await _backend.readAll();
+    // `toList()` before deleting: a backend that returns its live map would
+    // throw `ConcurrentModificationError` mid-removal.
+    for (final key in all.keys.where((key) => key.startsWith(prefix)).toList()) {
+      await _backend.delete(key);
     }
   }
 }
 
-/// Escreve, lê de volta e apaga uma chave-canário.
+/// Writes, reads back, and deletes a canary key.
 ///
-/// **Ler de volta é o ponto.** No Linux sem Secret Service o plugin levanta, e
-/// isso o `try` pega; mas existe também backend que aceita a escrita e não
-/// guarda nada, e esse só aparece na leitura. Um app que anuncia "cifrado em
-/// repouso" por cima de um desses perde o token do usuário a cada reinício sem
-/// emitir um erro sequer.
+/// Reading back is the point: a backend that accepts the write and stores
+/// nothing only shows up on the read, and would silently lose the token every
+/// restart.
 Future<bool> probeSecureStorage(SecureStorageBackend backend) async {
-  const chave = 'probe/canary';
-  const valor = 'ok';
+  const key = 'probe/canary';
+  const value = 'ok';
   try {
-    await backend.write(chave, valor);
-    final volta = await backend.read(chave);
-    await backend.delete(chave);
-    return volta == valor;
+    await backend.write(key, value);
+    final readBack = await backend.read(key);
+    await backend.delete(key);
+    return readBack == value;
   } catch (_) {
-    // Engolir é o comportamento certo aqui, e só aqui: a sonda existe
-    // justamente para transformar "levantou" em `false`. Quem chama decide o
-    // que fazer, e o que ele faz é cair para a reserva.
     return false;
   }
 }

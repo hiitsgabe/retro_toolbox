@@ -12,11 +12,11 @@ import 'package:roms_downloader/providers/vault_provider.dart';
 import 'package:roms_downloader/services/secret_vault.dart';
 import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 
-const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://exemplo.org/snes/'], auth: {'requires_token': true});
+const _snes = Console(id: 'snes', name: 'SNES', urls: ['https://example.org/snes/'], auth: {'requires_token': true});
 
-/// `Scaffold` porque o widget chama `ScaffoldMessenger` ao salvar, e o
-/// `app_settings` semeado com `{}` pelo mesmo motivo do `addon_token_test`:
-/// sem a chave a carga cai no ramo que pergunta diretório por plugin.
+/// `Scaffold` because the widget calls `ScaffoldMessenger` on save, and
+/// `app_settings` seeded with `{}` so settings load does not fall into the
+/// plugin directory branch.
 Widget _host(MemoryVault vault, {String addonId = kBuiltinAddonId}) {
   SharedPreferences.setMockInitialValues({'app_settings': jsonEncode(<String, dynamic>{})});
   SharedPreferences.resetStatic();
@@ -33,7 +33,7 @@ Widget _host(MemoryVault vault, {String addonId = kBuiltinAddonId}) {
 ProviderContainer _container(WidgetTester tester) => ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
 
 void main() {
-  testWidgets('sem token guardado, mostra o campo para digitar', (tester) async {
+  testWidgets('with no stored token, shows the input field', (tester) async {
     await tester.pumpWidget(_host(MemoryVault()));
     await tester.pumpAndSettle();
 
@@ -41,10 +41,9 @@ void main() {
     expect(find.text('Signed in'), findsNothing);
   });
 
-  testWidgets('com token no cofre, mostra assinado', (tester) async {
-    // A leitura é assíncrona, então o estado inicial é carregando e só depois
-    // vira "Signed in". Sem o `pumpAndSettle`, este caso passaria a ver o
-    // formulário vazio e a afirmar o contrário do que o usuário vê.
+  testWidgets('with a token in the vault, shows signed in', (tester) async {
+    // The read is async, so without `pumpAndSettle` this case would see the
+    // empty form and assert the opposite of what the user sees.
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken(kBuiltinAddonId, 'snes'), 'tok');
 
@@ -54,7 +53,7 @@ void main() {
     expect(find.text('Signed in'), findsOneWidget);
   });
 
-  testWidgets('salvar grava na chave do par (addon, console)', (tester) async {
+  testWidgets('saving writes to the (addon, console) key', (tester) async {
     final vault = MemoryVault();
     await tester.pumpWidget(_host(vault, addonId: 'ultranx'));
     await tester.pumpAndSettle();
@@ -67,9 +66,8 @@ void main() {
     expect(await vault.read(SecretRef.addonToken('ultranx', 'snes')), 'tok-ultranx');
   });
 
-  testWidgets('o mesmo console em dois addons não divide token', (tester) async {
-    // O que esta Task existe para garantir. O usuário tem conta no UltraNX e
-    // não tem no embutido, e os dois servem `snes`.
+  testWidgets('the same console under two addons does not share a token', (tester) async {
+    // The user has an UltraNX account and no built-in one, and both serve `snes`.
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken('ultranx', 'snes'), 'tok-ultranx');
 
@@ -80,7 +78,7 @@ void main() {
     expect(find.text('Bearer token'), findsOneWidget);
   });
 
-  testWidgets('deslogar apaga a chave do par', (tester) async {
+  testWidgets('logging out deletes the pair key', (tester) async {
     final vault = MemoryVault();
     await vault.write(SecretRef.addonToken('ultranx', 'snes'), 'tok-ultranx');
 
@@ -93,18 +91,18 @@ void main() {
     expect(find.text('Bearer token'), findsOneWidget);
   });
 
-  testWidgets('o token do embutido continua chegando no espelho das settings', (tester) async {
-    // O espelho é o que mantém de pé `consoleHasToken` e os `_authHeaders` de
-    // LAN. Salvar pela tela tem que continuar alimentando os dois.
+  testWidgets('the built-in token still reaches the settings mirror', (tester) async {
+    // The mirror is what keeps `consoleHasToken` and the LAN `_authHeaders`
+    // alive. Saving via the screen must keep feeding both.
     final vault = MemoryVault();
     await tester.pumpWidget(_host(vault));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'tok-embutido');
+    await tester.enterText(find.byType(TextField), 'tok-builtin');
     await tester.pump();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(_container(tester).read(settingsProvider).consoleSettings['snes']?.authToken, 'tok-embutido');
+    expect(_container(tester).read(settingsProvider).consoleSettings['snes']?.authToken, 'tok-builtin');
   });
 }

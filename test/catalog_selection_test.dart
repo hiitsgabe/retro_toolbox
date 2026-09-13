@@ -5,8 +5,8 @@ import 'package:roms_downloader/providers/catalog_provider.dart';
 import 'support/favorites_stub.dart';
 
 void main() {
-  test('clearSelection zera a seleção inteira', () {
-    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
+  test('clearSelection wipes the whole selection', () {
+    final container = ProviderContainer(overrides: [withoutFavoritesDisk]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -20,8 +20,8 @@ void main() {
     expect(container.read(catalogProvider).selectedGames, isEmpty);
   });
 
-  test('clearSelection não emite estado quando a seleção já está vazia', () {
-    final container = ProviderContainer(overrides: [semDiscoDeFavoritos]);
+  test('clearSelection emits no state when the selection is already empty', () {
+    final container = ProviderContainer(overrides: [withoutFavoritesDisk]);
     addTearDown(container.dispose);
     final notifier = container.read(catalogProvider.notifier);
 
@@ -30,8 +30,8 @@ void main() {
 
     notifier.clearSelection();
 
-    // A grade inteira reconstrói a cada emissão do catalogProvider. Limpar
-    // uma seleção que já está vazia não pode custar isso.
+    // The whole grid rebuilds on every catalogProvider emission; clearing an
+    // already-empty selection must not cost that.
     expect(emissions, 0);
   });
 }

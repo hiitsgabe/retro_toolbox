@@ -1,6 +1,6 @@
-// Roda o matcher sobre um pacote real e uma listagem real, e imprime a tabela
-// da secao 5.9 do spec. Roda fora do Flutter:
-//   dart run tool/verify_matcher.dart <pacote.json> <listagem.json>
+// Runs the matcher over a real pack and a real listing, and prints the tier
+// table. Runs outside Flutter:
+//   dart run tool/verify_matcher.dart <pack.json> <listing.json>
 import 'dart:convert';
 import 'dart:io';
 
@@ -12,7 +12,7 @@ import 'package:roms_downloader/utils/pack_naming.dart';
 Future<void> main(List<String> args) async {
   if (args.length != 2) {
     stderr.writeln(
-        'uso: dart run tool/verify_matcher.dart <pacote.json> <listagem.json>');
+        'usage: dart run tool/verify_matcher.dart <pack.json> <listing.json>');
     exitCode = 64;
     return;
   }
@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
   final files = listingNames(
       jsonDecode(await File(args[1]).readAsString()) as Map<String, dynamic>);
   if (files.isEmpty) {
-    stderr.writeln('a listagem nao tem nenhum arquivo com extensao de ROM');
+    stderr.writeln('the listing has no file with a ROM extension');
     exitCode = 1;
     return;
   }
@@ -45,25 +45,25 @@ Future<void> main(List<String> args) async {
   String line(String label, int n) =>
       '$label ${n.toString().padLeft(5)}  ${pct(n).padLeft(5)}%';
 
-  print('pacote ${pack.pack}: ${matcher.indexedGames} jogos, '
-      '${matcher.indexedCanonKeys} chaves canonicas');
-  print('listagem: $total arquivos');
-  print(line('tier 1 nome exato     ', tiers[MatchTier.exactName]!));
-  print(line('tier 2 titulo canonico', tiers[MatchTier.canonicalName]!));
-  print(line('tier 3 similaridade   ', tiers[MatchTier.fuzzyName]!));
-  print(line('tier 4 sem palpite    ', misses.length));
-  print('cobertura de arquivo $attributed/$total = ${pct(attributed)}%');
-  print('cobertura de jogo    ${hitGames.length}/${matcher.indexedGames} = '
+  print('pack ${pack.pack}: ${matcher.indexedGames} games, '
+      '${matcher.indexedCanonKeys} canonical keys');
+  print('listing: $total files');
+  print(line('tier 1 exact name     ', tiers[MatchTier.exactName]!));
+  print(line('tier 2 canonical title', tiers[MatchTier.canonicalName]!));
+  print(line('tier 3 similarity     ', tiers[MatchTier.fuzzyName]!));
+  print(line('tier 4 no guess       ', misses.length));
+  print('file coverage $attributed/$total = ${pct(attributed)}%');
+  print('game coverage ${hitGames.length}/${matcher.indexedGames} = '
       '${(hitGames.length / matcher.indexedGames * 100).toStringAsFixed(2)}%');
   print('');
-  print('primeiras falhas:');
+  print('first misses:');
   for (final miss in misses.take(15)) {
     print('  $miss');
   }
 }
 
-/// Nomes de ROM de uma resposta de `archive.org/metadata/<item>`. Derivativos
-/// ficam de fora: sao as capas e os indices que o proprio archive.org gera.
+/// ROM names from an `archive.org/metadata/<item>` response, excluding
+/// derivative files.
 List<String> listingNames(Map<String, dynamic> meta) {
   final out = <String>[];
   for (final entry in (meta['files'] as List? ?? const [])) {

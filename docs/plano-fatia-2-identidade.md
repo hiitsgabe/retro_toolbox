@@ -1,86 +1,86 @@
-# Fatia 2, Identidade: plano de implementação
+# Slice 2, Identity: implementation plan
 
-> **Para quem executa:** SUB-SKILL OBRIGATÓRIA: use `superpowers:subagent-driven-development` (recomendado) ou `superpowers:executing-plans` para executar tarefa a tarefa. Os passos usam checkbox (`- [ ]`) para acompanhamento.
+> **For whoever executes this:** MANDATORY SUB-SKILL: use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to execute task by task. The steps use checkboxes (`- [ ]`) for tracking.
 
-**Goal:** dar ao app a capacidade de dizer, para um nome de arquivo qualquer vindo de uma fonte remota ou do disco do usuário, qual jogo do metadata pack ele é, e com que grau de certeza.
+**Goal:** give the app the ability to say, for any file name coming from a remote source or from the user's disk, which game of the metadata pack it is, and with what degree of certainty.
 
-**Architecture:** três eixos, exatamente como a seção 5 do spec descreve. O eixo de nome é uma porta Dart do `norm`/`canon` do builder mais um matcher em três tiers, e é grátis. O eixo de CRC por HTTP Range lê o diretório central do ZIP remoto em duas requisições e confirma ou corrige o eixo de nome antes de qualquer download. O eixo local aplica a regra "nome primeiro, CRC só na dúvida" da seção 5.7 sobre os arquivos que já estão no disco. Nada disso aparece na tela: a fatia 3 é quem consome.
+**Architecture:** three axes, exactly as section 5 of the spec describes. The name axis is a Dart port of the builder's `norm`/`canon` plus a three tier matcher, and it is free. The CRC axis over HTTP Range reads the central directory of the remote ZIP in two requests and confirms or corrects the name axis before any download. The local axis applies the "name first, CRC only when in doubt" rule of section 5.7 to the files that are already on disk. None of this appears on screen: slice 3 is the consumer.
 
-**Tech Stack:** Dart puro nos utilitários (sem import de Flutter, para poderem rodar em `dart run`), `package:rapidfuzz` para o tier 3, `getCrc32` do `package:archive` que já é dependência, `dart:io HttpClient` com header `Range`, Riverpod para a fiação, `flutter_test` sem mock, injeção por construtor.
+**Tech Stack:** pure Dart in the utilities (no Flutter import, so they can run under `dart run`), `package:rapidfuzz` for tier 3, `getCrc32` from `package:archive` which is already a dependency, `dart:io HttpClient` with a `Range` header, Riverpod for the wiring, `flutter_test` with no mock, constructor injection.
 
 ---
 
-## Antes de começar: leia estas três coisas
+## Before you start: read these three things
 
-1. **`docs/stremio-de-jogos-design.md`, seção 5 inteira.** Em especial 5.3 (o piso de erro silencioso), 5.5 (o desenho final), 5.7 (o eixo local), 5.8 (as guardas obrigatórias do Range) e 5.9 (os números remedidos). Este plano implementa a seção 5 e nada mais.
-2. **`tool/build_metadata_pack.py`, linhas 169 a 219.** São as funções `strip_ext`, `norm`, `display_title` e `canon`. A Task 1 e a Task 2 são a porta Dart delas. Não invente uma normalização nova: qualquer diferença quebra o casamento com os `id` que já foram publicados.
-3. **`lib/models/metadata_pack_model.dart`.** É a entrada do matcher. `PackGame.dumps` é uma lista de `PackDump`, e `PackDump.name` é o nome do bloco `game` do DAT, com as tags de região e revisão preservadas. `MetadataPack.byCrc` já existe e já é memoizado.
+1. **`docs/stremio-de-jogos-design.md`, the whole of section 5.** Especially 5.3 (the silent error floor), 5.5 (the final design), 5.7 (the local axis), 5.8 (the mandatory Range guards) and 5.9 (the remeasured numbers). This plan implements section 5 and nothing more.
+2. **`tool/build_metadata_pack.py`, lines 169 to 219.** These are the `strip_ext`, `norm`, `display_title` and `canon` functions. Task 1 and Task 2 are the Dart port of them. Do not invent a new normalization: any difference breaks the match with the `id` values that have already been published.
+3. **`lib/models/metadata_pack_model.dart`.** This is the matcher's input. `PackGame.dumps` is a list of `PackDump`, and `PackDump.name` is the name of the DAT `game` block, with the region and revision tags preserved. `MetadataPack.byCrc` already exists and is already memoized.
 
-### Comandos deste repositório
+### Commands for this repository
 
-O `flutter` não está no PATH. Toda linha de comando deste plano assume:
+`flutter` is not on the PATH. Every command line in this plan assumes:
 
 ```bash
 export PATH=/home/exedev/flutter/bin:$PATH
 cd /home/exedev/Workspace/retro_toolbox
 ```
 
-- Suíte Dart: `flutter test`
-- Um arquivo só: `flutter test test/pack_naming_test.dart`
-- Suíte Python: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
-- Análise: `flutter analyze`
+- Dart suite: `flutter test`
+- A single file: `flutter test test/pack_naming_test.dart`
+- Python suite: `cd tool && python3 -m unittest discover -s . -p 'test_*.py'`
+- Analysis: `flutter analyze`
 
-**Linha de base antes desta fatia:** `flutter test` sai com `+100 -1`. A falha é `test/rar_decompress_screen_test.dart`, com um `StateError`, e é anterior à fatia 1. Não é sua. Não tente consertar. Ao fim desta fatia o número esperado é `+176 -1`.
+**Baseline before this slice:** `flutter test` exits with `+100 -1`. The failure is `test/rar_decompress_screen_test.dart`, with a `StateError`, and it predates slice 1. It is not yours. Do not try to fix it. At the end of this slice the expected number is `+176 -1`.
 
 ---
 
-## Estrutura de arquivos
+## File structure
 
-Oito arquivos de produção novos, um por responsabilidade. Nenhum arquivo de produção existente é modificado, e o `pubspec.yaml` não muda: `rapidfuzz`, `archive` e `path` já são dependências. Do lado do teste, `test/pack_matcher_test.dart` é modificado uma vez, na Task 12, para passar a importar a fixture compartilhada.
+Eight new production files, one per responsibility. No existing production file is modified, and `pubspec.yaml` does not change: `rapidfuzz`, `archive` and `path` are already dependencies. On the test side, `test/pack_matcher_test.dart` is modified once, in Task 12, so that it imports the shared fixture.
 
-| Arquivo | Responsabilidade | Depende de |
+| File | Responsibility | Depends on |
 | --- | --- | --- |
-| `lib/utils/pack_naming.dart` | `norm`, `displayTitle`, `canon`, e as listas de extensão. Dart puro. | nada |
+| `lib/utils/pack_naming.dart` | `norm`, `displayTitle`, `canon`, and the extension lists. Pure Dart. | nothing |
 | `lib/models/game_match_model.dart` | `MatchTier`, `MatchConfidence`, `GameMatch`. | `metadata_pack_model.dart` |
-| `lib/services/pack_matcher.dart` | Índices do pacote e os três tiers de nome, mais `matchCrc`. Dart puro. | naming, model, rapidfuzz |
-| `lib/utils/file_crc32.dart` | CRC32 de um arquivo local, em pedaços, e a formatação de CRC. | `package:archive` |
-| `lib/services/zip_central_directory.dart` | Lê o diretório central de um ZIP remoto por Range, com as guardas da 5.8. | file_crc32, naming |
-| `lib/services/crc_confirm_service.dart` | Junta matcher e diretório central: confirma ou corrige um match de nome. | matcher, zip cd |
-| `lib/services/local_identity_service.dart` | O eixo da 5.7: nome primeiro, CRC só na dúvida, com cache. | matcher, file_crc32 |
-| `lib/providers/identity_provider.dart` | Fiação Riverpod. | tudo acima, `metadata_pack_provider.dart` |
+| `lib/services/pack_matcher.dart` | Pack indices and the three name tiers, plus `matchCrc`. Pure Dart. | naming, model, rapidfuzz |
+| `lib/utils/file_crc32.dart` | CRC32 of a local file, in chunks, and CRC formatting. | `package:archive` |
+| `lib/services/zip_central_directory.dart` | Reads the central directory of a remote ZIP over Range, with the 5.8 guards. | file_crc32, naming |
+| `lib/services/crc_confirm_service.dart` | Joins matcher and central directory: confirms or corrects a name match. | matcher, zip cd |
+| `lib/services/local_identity_service.dart` | The 5.7 axis: name first, CRC only when in doubt, with cache. | matcher, file_crc32 |
+| `lib/providers/identity_provider.dart` | Riverpod wiring. | everything above, `metadata_pack_provider.dart` |
 
-Mais dois helpers de teste, que não são suítes e por isso não terminam em `_test.dart`:
+Plus two test helpers, which are not suites and therefore do not end in `_test.dart`:
 
-| Arquivo | Responsabilidade | Criado na |
+| File | Responsibility | Created in |
 | --- | --- | --- |
-| `test/support/zip_fixture.dart` | Monta bytes de ZIP e um servidor de Range falso. | Task 10 |
-| `test/support/pack_fixture.dart` | O `buildPack()` compartilhado, extraído da suíte do matcher. | Task 12 |
+| `test/support/zip_fixture.dart` | Builds ZIP bytes and a fake Range server. | Task 10 |
+| `test/support/pack_fixture.dart` | The shared `buildPack()`, extracted from the matcher suite. | Task 12 |
 
-E mais três ferramentas de linha de comando:
+And three command line tools:
 
-| Arquivo | Responsabilidade |
+| File | Responsibility |
 | --- | --- |
-| `tool/dump_naming_golden.py` | Gera o golden de paridade Python/Dart a partir do DAT real. |
-| `tool/probe_zip_cd.dart` | Sonda: lê o diretório central de um ZIP remoto de verdade e imprime as entradas. |
-| `tool/verify_matcher.dart` | Roda o matcher contra o pacote real e a listagem real, e confere os números da seção 5.9. |
+| `tool/dump_naming_golden.py` | Generates the Python/Dart parity golden from the real DAT. |
+| `tool/probe_zip_cd.dart` | Probe: reads the central directory of a real remote ZIP and prints the entries. |
+| `tool/verify_matcher.dart` | Runs the matcher against the real pack and the real listing, and checks the section 5.9 numbers. |
 
-Regra que vale para os três arquivos marcados como "Dart puro": **nenhum `import 'package:flutter/...'`**. Eles precisam rodar sob `dart run`, que é o que a Task 15 faz. Se você precisar de log, use `print` nos utilitários ou passe um callback; `debugPrint` está fora.
+Rule that holds for the three files marked "pure Dart": **no `import 'package:flutter/...'`**. They need to run under `dart run`, which is what Task 15 does. If you need logging, use `print` in the utilities or pass a callback; `debugPrint` is out.
 
 ---
 
-### Task 1: `norm` e as extensões
+### Task 1: `norm` and the extensions
 
 **Files:**
 - Create: `lib/utils/pack_naming.dart`
 - Test: `test/pack_naming_test.dart`
 
-O `norm` é a forma comparável do nome de um arquivo: sem extensão, sem acento, sem pontuação, em caixa baixa, **com as tags de região e revisão preservadas**. É ele que faz o tier 1 do matcher. A referência é `tool/build_metadata_pack.py:185`.
+`norm` is the comparable form of a file name: no extension, no accent, no punctuation, lowercase, **with the region and revision tags preserved**. It is what powers tier 1 of the matcher. The reference is `tool/build_metadata_pack.py:185`.
 
-Uma diferença de implementação que precisa estar clara: o Python faz `unicodedata.normalize("NFKD", ...)` e descarta os caracteres combinantes. O Dart não tem `unicodedata`, então a porta usa uma tabela de dobra. Isso é seguro e dá para provar: os nomes do DAT do No-Intro e do Redump são **ASCII puro**. Foram conferidos 4268 nomes do SNES, 13592 do PlayStation, 7701 do Nintendo DS e 3692 do Game Boy Advance, e nenhum tem um caractere acima de U+007F. A dobra só é exercida do lado do **nome do arquivo remoto**, que pode vir de qualquer lugar, e para esse lado uma tabela de latim resolve.
+One implementation difference that needs to be clear: Python does `unicodedata.normalize("NFKD", ...)` and discards the combining characters. Dart has no `unicodedata`, so the port uses a fold table. This is safe and provable: the No-Intro and Redump DAT names are **pure ASCII**. 4268 SNES names, 13592 PlayStation, 7701 Nintendo DS and 3692 Game Boy Advance were checked, and none has a character above U+007F. The fold is only exercised on the **remote file name** side, which can come from anywhere, and for that side a Latin table is enough.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/pack_naming_test.dart`:
+Create `test/pack_naming_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -88,51 +88,52 @@ import 'package:roms_downloader/utils/pack_naming.dart';
 
 void main() {
   group('stripRomExtension', () {
-    test('tira a extensão de ROM', () {
-      expect(stripRomExtension('Chrono Trigger (USA).sfc'), 'Chrono Trigger (USA)');
-      expect(stripRomExtension('Chrono Trigger (USA).zip'), 'Chrono Trigger (USA)');
-      expect(stripRomExtension('Chrono Trigger (USA).ZIP'), 'Chrono Trigger (USA)');
+    test('strips the ROM extension', () {
+      expect(stripRomExtension('Crystal Vanguard (USA).sfc'), 'Crystal Vanguard (USA)');
+      expect(stripRomExtension('Crystal Vanguard (USA).zip'), 'Crystal Vanguard (USA)');
+      expect(stripRomExtension('Crystal Vanguard (USA).ZIP'), 'Crystal Vanguard (USA)');
     });
 
-    test('não tira o que não é extensão de ROM', () {
-      expect(stripRomExtension('Chrono Trigger (USA).txt'), 'Chrono Trigger (USA).txt');
+    test('leaves alone what is not a ROM extension', () {
+      expect(stripRomExtension('Crystal Vanguard (USA).txt'), 'Crystal Vanguard (USA).txt');
       expect(stripRomExtension('Vol. 3'), 'Vol. 3');
     });
 
-    test('prefere a extensão mais longa', () {
-      // .gbc e .gb casam os dois; a mais longa é a certa.
-      expect(stripRomExtension('Zelda.gbc'), 'Zelda');
+    test('prefers the longer extension', () {
+      // .gbc and .gb both match; the longer one is the right one.
+      expect(stripRomExtension('Kaelis.gbc'), 'Kaelis');
     });
   });
 
   group('norm', () {
-    test('baixa a caixa e troca pontuação por espaço', () {
-      expect(norm('Chrono Trigger (USA)'), 'chrono trigger (usa)');
-      expect(norm('Zero 4 Champ RR-Z (Japan)'), 'zero 4 champ rr z (japan)');
+    test('lowercases and swaps punctuation for space', () {
+      expect(norm('Crystal Vanguard (USA)'), 'crystal vanguard (usa)');
+      expect(norm('Reso 4 Kkesv HQ-H (Japan)'), 'reso 4 kkesv hq h (japan)');
     });
 
-    test('expande o e comercial', () {
-      expect(norm('Dig & Spike'), 'dig and spike');
+    test('expands the ampersand', () {
+      expect(norm('Zuf & Lgari'), 'zuf and lgari');
     });
 
-    test('tira acento', () {
-      expect(norm('Pokémon Rojo'), 'pokemon rojo');
-      expect(norm('Astérix & Obélix'), 'asterix and obelix');
+    test('strips accents', () {
+      expect(norm('Prismón Rojo'), 'prismon rojo');
+      expect(norm('Aqtúveh & Atérap'), 'aqtuveh and aterap');
     });
 
-    test('tira a extensão antes de normalizar', () {
-      expect(norm('Chrono Trigger (USA).sfc'), 'chrono trigger (usa)');
+    test('strips the extension before normalizing', () {
+      expect(norm('Crystal Vanguard (USA).sfc'), 'crystal vanguard (usa)');
     });
 
-    test('preserva as tags de região e revisão', () {
-      // O `!` é pontuação proibida e vira espaço, e um espaço só não é
-      // colapsado pelo `\s+`, então o colchete sai com o espaço dentro. É o que
-      // o `norm` do builder faz, conferido rodando o próprio Python. A paridade
-      // com o builder manda aqui, mesmo que `[ ]` seja mais feio que `[]`.
-      expect(norm('Chrono Trigger (USA) (Rev 1) [!]'), 'chrono trigger (usa) (rev 1) [ ]');
+    test('preserves the region and revision tags', () {
+      // `!` is disallowed punctuation and becomes a space, and a single space is
+      // not collapsed by `\s+`, so the bracket comes out with the space inside.
+      // That is what the builder's `norm` does, checked by running the Python
+      // itself. Parity with the builder rules here, even if `[ ]` is uglier than
+      // `[]`.
+      expect(norm('Crystal Vanguard (USA) (Rev 1) [!]'), 'crystal vanguard (usa) (rev 1) [ ]');
     });
 
-    test('nome só de pontuação vira vazio', () {
+    test('a name that is only punctuation becomes empty', () {
       expect(norm('---'), '');
       expect(norm(''), '');
     });
@@ -140,40 +141,40 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_naming_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/utils/pack_naming.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/utils/pack_naming.dart'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/utils/pack_naming.dart`:
+Create `lib/utils/pack_naming.dart`:
 
 ```dart
-/// Porta Dart das funções de nome do builder (`tool/build_metadata_pack.py`).
+/// Dart port of the builder's name functions (`tool/build_metadata_pack.py`).
 ///
-/// O builder gera o pacote e o app consome, mas o app também precisa
-/// normalizar nomes em runtime, porque o nome do arquivo na fonte remota nunca
-/// passou pelo builder. As duas implementações têm que concordar caso a caso, e
-/// é isso que `test/pack_naming_parity_test.dart` prova contra um golden
-/// gerado do DAT real.
+/// The builder generates the pack and the app consumes it, but the app also
+/// needs to normalize names at runtime, because the file name at the remote
+/// source never went through the builder. The two implementations have to agree
+/// case by case, and that is what `test/pack_naming_parity_test.dart` proves
+/// against a golden generated from the real DAT.
 ///
-/// Este arquivo é Dart puro de propósito: `tool/verify_matcher.dart` o roda
-/// fora do Flutter. Não adicione import de `package:flutter`.
+/// This file is pure Dart on purpose: `tool/verify_matcher.dart` runs it
+/// outside Flutter. Do not add an import of `package:flutter`.
 library;
 
-/// Extensões que o No-Intro e o Redump usam, mais os empacotadores que as
-/// fontes servem. Mesma lista de `ROM_EXTS` no builder.
+/// Extensions used by No-Intro and Redump, plus the packagers the sources
+/// serve. Same list as `ROM_EXTS` in the builder.
 const romExtensions = <String>[
   '.zip', '.7z', '.sfc', '.smc', '.fig', '.swc', '.bin', '.rar', '.gz',
   '.nes', '.gb', '.gbc', '.gba', '.nds', '.3ds', '.n64', '.z64', '.v64',
   '.md', '.gen', '.gg', '.iso', '.cue', '.chd', '.col', '.int',
 ];
 
-/// As que são contêiner e não ROM. Isso importa para a seção 5.8 do spec: o
-/// CRC do diretório central só é comparável com o pacote quando a entrada é a
-/// ROM em si. Se a entrada for outro arquivo compactado, o CRC é do compactado
-/// e não casa com nada.
+/// The ones that are a container and not a ROM. This matters for section 5.8 of
+/// the spec: the central directory CRC is only comparable with the pack when the
+/// entry is the ROM itself. If the entry is another compressed file, the CRC is
+/// of the compressed file and matches nothing.
 const archiveExtensions = <String>['.zip', '.7z', '.rar', '.gz'];
 
 final _byLength = [...romExtensions]..sort((a, b) => b.length.compareTo(a.length));
@@ -196,9 +197,9 @@ bool hasArchiveExtension(String name) {
   return archiveExtensions.any(low.endsWith);
 }
 
-/// Tabela de dobra de acento. Só as minúsculas, porque `norm` já baixou a
-/// caixa antes de dobrar. Cobre latim-1 e os pedaços de latim estendido que
-/// aparecem em título de jogo europeu.
+/// Accent fold table. Lowercase only, because `norm` already lowercased before
+/// folding. Covers Latin-1 and the pieces of Latin Extended that appear in
+/// European game titles.
 const _fold = <String, String>{
   'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a', 'ā': 'a', 'ă': 'a', 'ą': 'a',
   'ç': 'c', 'ć': 'c', 'č': 'c',
@@ -226,8 +227,8 @@ String _stripDiacritics(String value) {
 final _disallowed = RegExp(r'[^a-z0-9()\[\]]+');
 final _spaces = RegExp(r'\s+');
 
-/// Forma comparável do nome: sem extensão, sem acento, sem pontuação, mas
-/// **com** as tags de região e revisão. É o eixo do tier 1 do matcher.
+/// Comparable form of the name: no extension, no accent, no punctuation, but
+/// **with** the region and revision tags. It is the tier 1 axis of the matcher.
 String norm(String value) {
   var v = stripRomExtension(value).toLowerCase();
   v = _stripDiacritics(v);
@@ -237,10 +238,10 @@ String norm(String value) {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_naming_test.dart`
-Expected: PASS, 9 testes.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -251,74 +252,74 @@ git commit -m "feat(identidade): norm e as listas de extensao em Dart"
 
 ---
 
-### Task 2: `displayTitle` e `canon`
+### Task 2: `displayTitle` and `canon`
 
 **Files:**
 - Modify: `lib/utils/pack_naming.dart`
 - Test: `test/pack_naming_test.dart`
 
-O `canon` é a chave de agrupamento: o título sem tag de região, sem tag de revisão, com o artigo de volta na frente, passado por `norm`. É ele que faz o tier 2.
+`canon` is the grouping key: the title with no region tag, no revision tag, with the article back in front, run through `norm`. It is what powers tier 2.
 
-O detalhe que não pode ser invertido: a troca do artigo acontece no nome **cru**, antes de `norm`, porque `norm` come a vírgula que separa `Legend of Zelda` de `The`. O builder faz nessa ordem (`tool/build_metadata_pack.py:196`) e a PoC fazia na ordem oposta. A seção 5.9 do spec registra que nos 4122 arquivos medidos os dois dão o mesmo resultado, mas o builder é quem gerou os `id` publicados, então é o builder que manda.
+The detail that cannot be inverted: the article swap happens on the **raw** name, before `norm`, because `norm` eats the comma that separates `Legend of Kaelis` from `The`. The builder does it in this order (`tool/build_metadata_pack.py:196`) and the PoC did it the opposite way. Section 5.9 of the spec records that across the 4122 measured files the two produce the same result, but the builder is what generated the published `id` values, so the builder rules.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Acrescente ao fim de `test/pack_naming_test.dart`, dentro do `main`, depois do `group('norm', ...)`:
+Append to the end of `test/pack_naming_test.dart`, inside `main`, after `group('norm', ...)`:
 
 ```dart
   group('displayTitle', () {
-    test('preserva a caixa original', () {
-      expect(displayTitle('Chrono Trigger (USA)'), 'Chrono Trigger');
+    test('preserves the original case', () {
+      expect(displayTitle('Crystal Vanguard (USA)'), 'Crystal Vanguard');
     });
 
-    test('move o artigo do fim para a frente sem mexer no resto', () {
-      expect(displayTitle('Legend of Zelda, The (USA)'), 'The Legend of Zelda');
-      expect(displayTitle('Blue Crystalrod, The (Japan)'), 'The Blue Crystalrod');
+    test('moves the article from the end to the front without touching the rest', () {
+      expect(displayTitle('Legend of Kaelis, The (USA)'), 'The Legend of Kaelis');
+      expect(displayTitle('Zxia Gztqfevzem, The (Japan)'), 'The Zxia Gztqfevzem');
     });
 
-    test('preserva acento e pontuação', () {
-      expect(displayTitle('Pokémon Rojo (Spain).gb'), 'Pokémon Rojo');
-      expect(displayTitle('Super Mario World 2 - Yoshi\'s Island (USA)'),
-          'Super Mario World 2 - Yoshi\'s Island');
+    test('preserves accent and punctuation', () {
+      expect(displayTitle('Prismón Rojo (Spain).gb'), 'Prismón Rojo');
+      expect(displayTitle('Super Pixel World 2 - Yuki\'s Island (USA)'),
+          'Super Pixel World 2 - Yuki\'s Island');
     });
 
-    test('nome que é só tag vira vazio', () {
+    test('a name that is only a tag becomes empty', () {
       expect(displayTitle('(USA)'), '');
     });
 
-    test('tira vírgula sobrando na ponta', () {
-      expect(displayTitle('Addams Family, (USA)'), 'Addams Family');
+    test('strips a trailing comma', () {
+      expect(displayTitle('Awsoht Dupalj, (USA)'), 'Awsoht Dupalj');
     });
   });
 
   group('canon', () {
-    test('descarta tags de região e revisão', () {
-      expect(canon('Chrono Trigger (USA) (Rev 1)'), 'chrono trigger');
-      expect(canon('Chrono Trigger (Japan) [T+Eng]'), 'chrono trigger');
+    test('discards region and revision tags', () {
+      expect(canon('Crystal Vanguard (USA) (Rev 1)'), 'crystal vanguard');
+      expect(canon('Crystal Vanguard (Japan) [T+Eng]'), 'crystal vanguard');
     });
 
-    test('move o artigo antes de normalizar', () {
-      expect(canon('Legend of Zelda, The (USA)'), 'the legend of zelda');
+    test('moves the article before normalizing', () {
+      expect(canon('Legend of Kaelis, The (USA)'), 'the legend of kaelis');
     });
 
-    test('regiões diferentes do mesmo jogo dão a mesma chave', () {
-      expect(canon('Super Mario World (USA)'), canon('Super Mario World (Europe)'));
+    test('different regions of the same game give the same key', () {
+      expect(canon('Super Pixel World (USA)'), canon('Super Pixel World (Europe)'));
     });
 
-    test('nome que é só tag vira chave vazia', () {
+    test('a name that is only a tag becomes an empty key', () {
       expect(canon('(USA)'), '');
     });
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_naming_test.dart`
-Expected: FALHA de compilação, `The function 'displayTitle' isn't defined`.
+Expected: compile FAILURE, `The function 'displayTitle' isn't defined`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Acrescente ao fim de `lib/utils/pack_naming.dart`:
+Append to the end of `lib/utils/pack_naming.dart`:
 
 ```dart
 final _tags = RegExp(r'\([^)]*\)|\[[^\]]*\]');
@@ -327,8 +328,8 @@ final _trailingArticle = RegExp(
   caseSensitive: false,
 );
 
-/// Equivalente do `.strip().strip(",").strip()` do Python: apara espaço,
-/// depois vírgula das duas pontas, depois espaço de novo.
+/// Equivalent of Python's `.strip().strip(",").strip()`: trim space, then a
+/// comma off both ends, then space again.
 String _trimSpaceThenComma(String value) {
   var v = value.trim();
   var start = 0;
@@ -338,8 +339,8 @@ String _trimSpaceThenComma(String value) {
   return v.substring(start, end).trim();
 }
 
-/// Título de exibição a partir do nome do DAT: sem extensão, sem tags, com o
-/// artigo de volta na frente, e com a caixa e os acentos originais intactos.
+/// Display title from the DAT name: no extension, no tags, with the article back
+/// in front, and with the original case and accents intact.
 String displayTitle(String datName) {
   var v = stripRomExtension(datName).replaceAll(_tags, ' ');
   v = _trimSpaceThenComma(v.replaceAll(_spaces, ' '));
@@ -348,15 +349,15 @@ String displayTitle(String datName) {
   return v;
 }
 
-/// Título canônico: a chave de agrupamento de um jogo. É o título de exibição
-/// passado por [norm].
+/// Canonical title: the grouping key of a game. It is the display title run
+/// through [norm].
 String canon(String value) => norm(displayTitle(value));
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_naming_test.dart`
-Expected: PASS, 18 testes.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -367,31 +368,31 @@ git commit -m "feat(identidade): displayTitle e canon em Dart"
 
 ---
 
-### Task 3: o golden de paridade Python/Dart
+### Task 3: the Python/Dart parity golden
 
 **Files:**
 - Create: `tool/dump_naming_golden.py`
-- Create: `test/fixtures/naming_golden.json` (gerado, e commitado)
+- Create: `test/fixtures/naming_golden.json` (generated, and committed)
 - Create: `test/pack_naming_parity_test.dart`
 
-As Tasks 1 e 2 foram escritas contra fixtures à mão. Isso prova que o Dart faz o que você achou que o Python faz. O golden prova que ele faz o que o Python **de fato** faz, sobre nomes reais que ninguém escolheu a dedo.
+Tasks 1 and 2 were written against handmade fixtures. That proves the Dart does what you thought the Python does. The golden proves it does what the Python **actually** does, over real names that nobody cherry picked.
 
-O gerador é Python, roda contra o DAT real do SNES, pega um nome a cada 50 e junta uma lista de casos difíceis escritos à mão que o DAT não tem (extensão, underscore, acento, artigo, vírgula sobrando). O arquivo resultante é commitado, então o teste Dart não precisa de rede.
+The generator is Python, runs against the real SNES DAT, takes one name every 50 and adds a list of hard, handwritten cases the DAT does not have (extension, underscore, accent, article, trailing comma). The resulting file is committed, so the Dart test needs no network.
 
-- [ ] **Step 1: Escreva o gerador**
+- [ ] **Step 1: Write the generator**
 
-Crie `tool/dump_naming_golden.py`:
+Create `tool/dump_naming_golden.py`:
 
 ```python
 #!/usr/bin/env python3
-"""Gera o golden de paridade entre o norm/canon do builder e o do app.
+"""Generate the parity golden between the builder's norm/canon and the app's.
 
-O app reimplementa norm, display_title e canon em Dart, porque precisa
-normalizar em runtime nomes que nunca passaram pelo builder. As duas
-implementações têm que concordar caso a caso. Este script congela o que o
-Python responde, e test/pack_naming_parity_test.dart cobra o Dart.
+The app reimplements norm, display_title and canon in Dart, because it needs
+to normalize at runtime names that never went through the builder. The two
+implementations have to agree case by case. This script freezes what the
+Python answers, and test/pack_naming_parity_test.dart holds the Dart to it.
 
-Uso:
+Usage:
     python3 tool/dump_naming_golden.py
 """
 import json
@@ -408,23 +409,23 @@ OUT = os.path.join(
     "test", "fixtures", "naming_golden.json",
 )
 
-# Casos que o DAT não produz e o app vai ver: nome de arquivo com extensão,
-# fonte que troca espaço por underscore, título com acento, artigo invertido,
-# vírgula sobrando, e o nome que é só tag.
+# Cases the DAT does not produce: filename with extension, underscore source,
+# accent, inverted article, dangling comma, tag-only name. Already pseudonymized,
+# so used verbatim; do not pass through pseudonymize (it is not idempotent).
 HANDPICKED = [
-    "Chrono Trigger (USA).sfc",
-    "Chrono Trigger (USA).zip",
-    "Chrono_Trigger_(USA).zip",
-    "chrono trigger (usa)",
-    "Legend of Zelda, The (USA).smc",
-    "Blue Crystalrod, The (Japan)",
-    "Addams Family, (USA)",
-    "Pokémon Rojo (Spain).gb",
-    "Astérix & Obélix (Europe)",
-    "Dig & Spike Volleyball (USA)",
-    "Super Mario World 2 - Yoshi's Island (USA)",
-    "Zero 4 Champ RR-Z (Japan)",
-    "Jikkyou Powerful Pro Yakyuu - Basic Ban '98 (Japan)",
+    "Crystal Vanguard (USA).sfc",
+    "Crystal Vanguard (USA).zip",
+    "Crystal_Vanguard_(USA).zip",
+    "crystal vanguard (usa)",
+    "Legend of Kaelis, The (USA).smc",
+    "Zxia Gztqfevzem, The (Japan)",
+    "Awsoht Dupalj, (USA)",
+    "Prismón Moso (Spain).gb",
+    "Aqtúveh & Atérap (Europe)",
+    "Zuf & Lgari Lozbillesh (USA)",
+    "Super Pixel World 2 - Yuki's Island (USA)",
+    "Reso 4 Kkesv HQ-H (Japan)",
+    "Nigfseu Wugezcal Kze Zosbue - Miqed Rew '98 (Japan)",
     "Vol. 3",
     "(USA)",
     "---",
@@ -438,8 +439,11 @@ def main():
     )
     names = [e["name"] for e in b.parse_dat(b.fetch_text(url))]
     sampled = names[::STRIDE]
+    inputs = [pseudonymize(n) for n in sampled] + HANDPICKED
+    if len(set(inputs)) != len(inputs):
+        raise SystemExit("pseudonymizer collapsed distinct inputs")
     cases = []
-    for name in sampled + HANDPICKED:
+    for name in inputs:
         cases.append({
             "input": name,
             "norm": b.norm(name),
@@ -453,23 +457,23 @@ def main():
             fh, ensure_ascii=False, indent=1, sort_keys=True,
         )
         fh.write("\n")
-    print("{} casos em {}".format(len(cases), OUT))
+    print("{} cases in {}".format(len(cases), OUT))
 
 
 if __name__ == "__main__":
     main()
 ```
 
-O `b.urllib.parse.quote` funciona porque `build_metadata_pack.py` importa `urllib.parse` no topo do módulo. Mesma construção de URL do `main` do builder, linha 476.
+`b.urllib.parse.quote` works because `build_metadata_pack.py` imports `urllib.parse` at the top of the module. Same URL construction as the builder's `main`, line 476.
 
-- [ ] **Step 2: Rode o gerador**
+- [ ] **Step 2: Run the generator**
 
 Run: `python3 tool/dump_naming_golden.py`
-Expected: `103 casos em /home/exedev/Workspace/retro_toolbox/test/fixtures/naming_golden.json`. São 86 amostrados (4268 dividido por 50, arredondando para cima) mais 17 escritos à mão. Se o DAT tiver mudado de tamanho o primeiro número muda, e isso não é problema.
+Expected: `103 cases in /home/exedev/Workspace/retro_toolbox/test/fixtures/naming_golden.json`. That is 86 sampled (4268 divided by 50, rounded up) plus 17 handwritten. If the DAT has changed size the first number changes, and that is not a problem.
 
-- [ ] **Step 3: Escreva o teste de paridade**
+- [ ] **Step 3: Write the parity test**
 
-Crie `test/pack_naming_parity_test.dart`:
+Create `test/pack_naming_parity_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -478,12 +482,12 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Prova que a porta Dart de `norm`, `displayTitle` e `canon` concorda com o
-/// builder Python caso a caso, sobre nomes reais do DAT do SNES mais uma lista
-/// de casos difíceis. O golden é gerado por `tool/dump_naming_golden.py`.
+/// Proves that the Dart port of `norm`, `displayTitle` and `canon` agrees with
+/// the Python builder case by case, over real SNES DAT names plus a list of
+/// hard cases. The golden is generated by `tool/dump_naming_golden.py`.
 ///
-/// Se este teste quebrar depois de você mexer no builder, a resposta certa
-/// quase sempre é regerar o golden e alinhar o Dart, não relaxar o teste.
+/// If this test breaks after you touch the builder, the right answer is almost
+/// always to regenerate the golden and align the Dart, not to relax the test.
 void main() {
   late List<Map<String, dynamic>> cases;
 
@@ -491,42 +495,42 @@ void main() {
     final raw = File('test/fixtures/naming_golden.json').readAsStringSync();
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     cases = (decoded['cases'] as List).cast<Map<String, dynamic>>();
-    expect(cases.length, greaterThan(50), reason: 'golden vazio ou truncado');
+    expect(cases.length, greaterThan(50), reason: 'golden empty or truncated');
   });
 
-  test('norm concorda com o builder em todos os casos do golden', () {
+  test('norm agrees with the builder on every golden case', () {
     for (final c in cases) {
       expect(norm(c['input'] as String), c['norm'],
-          reason: 'norm divergiu em "${c['input']}"');
+          reason: 'norm diverged on "${c['input']}"');
     }
   });
 
-  test('displayTitle concorda com o builder em todos os casos do golden', () {
+  test('displayTitle agrees with the builder on every golden case', () {
     for (final c in cases) {
       expect(displayTitle(c['input'] as String), c['displayTitle'],
-          reason: 'displayTitle divergiu em "${c['input']}"');
+          reason: 'displayTitle diverged on "${c['input']}"');
     }
   });
 
-  test('canon concorda com o builder em todos os casos do golden', () {
+  test('canon agrees with the builder on every golden case', () {
     for (final c in cases) {
       expect(canon(c['input'] as String), c['canon'],
-          reason: 'canon divergiu em "${c['input']}"');
+          reason: 'canon diverged on "${c['input']}"');
     }
   });
 }
 ```
 
-- [ ] **Step 4: Rode e resolva as divergências**
+- [ ] **Step 4: Run and resolve the divergences**
 
 Run: `flutter test test/pack_naming_parity_test.dart`
-Expected: PASS, 3 testes.
+Expected: PASS, 3 tests.
 
-Se algum caso divergir, a mensagem diz qual entrada e qual função. **Conserte o Dart, não o golden.** As divergências prováveis, em ordem de probabilidade:
+If any case diverges, the message says which input and which function. **Fix the Dart, not the golden.** The likely divergences, in order of probability:
 
-- um caractere acentuado fora da tabela `_fold`. Acrescente a linha que falta.
-- ordem de `_trimSpaceThenComma`. O Python é `.strip()`, `.strip(",")`, `.strip()`, nessa ordem.
-- a regex de artigo com `caseSensitive: true` por engano.
+- an accented character outside the `_fold` table. Add the missing line.
+- ordering in `_trimSpaceThenComma`. The Python is `.strip()`, `.strip(",")`, `.strip()`, in that order.
+- the article regex with `caseSensitive: true` by mistake.
 
 - [ ] **Step 5: Commit**
 
@@ -537,17 +541,17 @@ git commit -m "test(identidade): golden de paridade entre o norm do builder e o 
 
 ---
 
-### Task 4: o modelo de match
+### Task 4: the match model
 
 **Files:**
 - Create: `lib/models/game_match_model.dart`
 - Test: `test/game_match_model_test.dart`
 
-A seção 5.5 do spec exige que "cada match carregue uma confiança derivada do tier" e que "tier 3 nunca seja apresentado como certeza". Isso vira dois enums: o tier, que é como o match foi obtido, e a confiança, que é o que a UI pode afirmar. A fatia 3 lê a confiança e não precisa saber o que é um tier.
+Section 5.5 of the spec requires that "each match carry a confidence derived from the tier" and that "tier 3 never be presented as certainty". This becomes two enums: the tier, which is how the match was obtained, and the confidence, which is what the UI can assert. Slice 3 reads the confidence and does not need to know what a tier is.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/game_match_model_test.dart`:
+Create `test/game_match_model_test.dart`:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart';
@@ -555,30 +559,30 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
 const _game = PackGame(
-  id: 'snes/chrono-trigger',
-  title: 'Chrono Trigger',
-  dumps: [PackDump(name: 'Chrono Trigger (USA)', crc: '2D206BF7')],
+  id: 'snes/crystal-vanguard',
+  title: 'Crystal Vanguard',
+  dumps: [PackDump(name: 'Crystal Vanguard (USA)', crc: '2D206BF7')],
 );
 
 void main() {
-  test('checksum é a única confiança confirmada', () {
+  test('checksum is the only confirmed confidence', () {
     expect(MatchTier.checksum.confidence, MatchConfidence.confirmed);
   });
 
-  test('os dois tiers de nome confiáveis são prováveis, não confirmados', () {
+  test('the two reliable name tiers are likely, not confirmed', () {
     expect(MatchTier.exactName.confidence, MatchConfidence.likely);
     expect(MatchTier.canonicalName.confidence, MatchConfidence.likely);
   });
 
-  test('fuzzy é palpite', () {
+  test('fuzzy is a guess', () {
     expect(MatchTier.fuzzyName.confidence, MatchConfidence.guess);
   });
 
-  test('o match expõe a confiança do próprio tier', () {
+  test('the match exposes its own tier confidence', () {
     const match = GameMatch(
       game: _game,
       tier: MatchTier.fuzzyName,
-      sourceName: 'Chrono Triger (USA).zip',
+      sourceName: 'Crystal Vangard (USA).zip',
       score: 93.5,
     );
     expect(match.confidence, MatchConfidence.guess);
@@ -588,39 +592,39 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/game_match_model_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist`.
+Expected: compile FAILURE, `Target of URI doesn't exist`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/models/game_match_model.dart`:
+Create `lib/models/game_match_model.dart`:
 
 ```dart
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
-/// Como o match foi obtido. A ordem da declaração é a ordem de preferência: o
-/// matcher tenta de cima para baixo e para no primeiro que resolve.
+/// How the match was obtained. The declaration order is the preference order:
+/// the matcher tries top to bottom and stops at the first one that resolves.
 enum MatchTier {
-  /// O CRC32 bateu com um dump do pacote. É o único tier que não erra.
+  /// The CRC32 matched a pack dump. It is the only tier that does not err.
   checksum,
 
-  /// `norm` do nome do arquivo é igual ao `norm` do nome de um dump.
+  /// `norm` of the file name equals `norm` of a dump name.
   exactName,
 
-  /// `canon` do nome do arquivo é igual ao `canon` de um jogo do pacote.
-  /// Casa variantes de região e revisão, que é o caso comum.
+  /// `canon` of the file name equals `canon` of a pack game. Matches region and
+  /// revision variants, which is the common case.
   canonicalName,
 
-  /// Similaridade de edição acima do corte. Erra: a seção 5.9 do spec mediu
-  /// pelo menos 4 alvos errados em 26 casos, contra 0.63% de ganho de
-  /// cobertura. Existe porque o ganho é de graça, e nunca vira certeza.
+  /// Edit similarity above the cutoff. It errs: section 5.9 of the spec measured
+  /// at least 4 wrong targets in 26 cases, against a 0.63% coverage gain. It
+  /// exists because the gain is free, and it never becomes certainty.
   fuzzyName,
 }
 
-/// O que a tela pode afirmar. Deriva do tier e existe para a fatia 3 não ter
-/// que redecidir isso em cada widget.
+/// What the screen can assert. Derives from the tier and exists so slice 3 does
+/// not have to redecide this in every widget.
 enum MatchConfidence { confirmed, likely, guess }
 
 extension MatchTierConfidence on MatchTier {
@@ -632,21 +636,21 @@ extension MatchTierConfidence on MatchTier {
       };
 }
 
-/// Um arquivo da fonte atribuído a um jogo do pacote.
+/// A source file attributed to a pack game.
 ///
-/// [dump] só vem preenchido quando o tier identifica **qual** versão, ou seja
-/// no `checksum` e no `exactName`. Os tiers canônico e fuzzy resolvem o jogo,
-/// não a versão, e deixam [dump] nulo de propósito.
+/// [dump] is only filled when the tier identifies **which** version, that is on
+/// `checksum` and `exactName`. The canonical and fuzzy tiers resolve the game,
+/// not the version, and leave [dump] null on purpose.
 class GameMatch {
   final PackGame game;
   final MatchTier tier;
 
-  /// O nome do arquivo na fonte, cru, do jeito que a fonte deu.
+  /// The file name at the source, raw, the way the source gave it.
   final String sourceName;
 
   final PackDump? dump;
 
-  /// 0 a 100. Só o tier fuzzy usa; os outros ficam em 100.
+  /// 0 to 100. Only the fuzzy tier uses it; the others stay at 100.
   final double score;
 
   const GameMatch({
@@ -664,10 +668,10 @@ class GameMatch {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/game_match_model_test.dart`
-Expected: PASS, 4 testes.
+Expected: PASS, 4 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -678,25 +682,25 @@ git commit -m "feat(identidade): modelo de match com tier e confianca"
 
 ---
 
-### Task 5: o matcher e o tier 1
+### Task 5: the matcher and tier 1
 
 **Files:**
 - Create: `lib/services/pack_matcher.dart`
 - Test: `test/pack_matcher_test.dart`
 
-O `PackMatcher` recebe um `MetadataPack` e constrói três índices uma vez só, no construtor. Depois cada `match` é uma sequência de consultas baratas.
+`PackMatcher` takes a `MetadataPack` and builds three indices once, in the constructor. After that each `match` is a sequence of cheap lookups.
 
-Os índices:
+The indices:
 
-- `_byName`: `norm(dump.name)` para o par jogo mais dump. É o tier 1.
-- `_byCanon`: `canon(dump.name)` para o jogo. É o tier 2. A primeira ocorrência ganha, que é a mesma regra do `collapse` do builder.
-- `_byHead`: os quatro primeiros caracteres do primeiro token da chave canônica para a lista de chaves canônicas. Existe para o tier 3 não comparar contra as 2415 chaves do pacote a cada falha. É a mesma otimização da PoC.
+- `_byName`: `norm(dump.name)` to the game plus dump pair. It is tier 1.
+- `_byCanon`: `canon(dump.name)` to the game. It is tier 2. The first occurrence wins, which is the same rule as the builder's `collapse`.
+- `_byHead`: the first four characters of the first token of the canonical key to the list of canonical keys. It exists so tier 3 does not compare against the 2415 pack keys on every miss. It is the same optimization as the PoC.
 
-Todas as fixtures deste arquivo de teste saem do mesmo pacote pequeno, montado no topo. Os nomes não são inventados: são casos reais do DAT do SNES escolhidos porque cada um exercita um tier.
+All fixtures in this test file come from the same small pack, built at the top. The names are not invented: they are real SNES DAT cases chosen because each one exercises a tier.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/pack_matcher_test.dart`:
+Create `test/pack_matcher_test.dart`:
 
 ```dart
 import 'dart:convert';
@@ -706,66 +710,66 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 
-/// Pacote de teste com um caso real para cada tier:
-/// - Chrono Trigger tem duas regiões, então exercita tier 1 contra tier 2.
-/// - Blue Crystalrod tem o artigo no fim, que é o caso que o `canon` conserta.
-/// - HammerLock Wrestling é o par fuzzy que a PoC resolveu certo.
-/// - Pro Action Replay MK3 é o par fuzzy que a PoC resolveu **errado**.
-/// - Zero 4 Champ RR e RR-Z são dois candidatos fuzzy do mesmo bucket.
+/// Test pack with a real case for each tier:
+/// - Crystal Vanguard has two regions, so it exercises tier 1 against tier 2.
+/// - Zxia Gztqfevzem has the article at the end, which is the case `canon` fixes.
+/// - CopperBolt Grappling is the fuzzy pair the PoC resolved correctly.
+/// - Duo Vector Recoil MK3 is the fuzzy pair the PoC resolved **wrong**.
+/// - Reso 4 Kkesv HQ and HQ-H are two fuzzy candidates in the same bucket.
 MetadataPack buildPack() => MetadataPack.decode(jsonEncode({
       'pack': 'snes',
       'system': 'Nintendo - Super Nintendo Entertainment System',
       'built': '2026-09-10',
       'games': [
         {
-          'id': 'snes/chrono-trigger',
-          'title': 'Chrono Trigger',
+          'id': 'snes/crystal-vanguard',
+          'title': 'Crystal Vanguard',
           'dumps': [
-            {'name': 'Chrono Trigger (USA)', 'crc': '2D206BF7'},
-            {'name': 'Chrono Trigger (Japan)', 'crc': 'ABCD1234'},
+            {'name': 'Crystal Vanguard (USA)', 'crc': '2D206BF7'},
+            {'name': 'Crystal Vanguard (Japan)', 'crc': 'ABCD1234'},
           ],
         },
         {
-          'id': 'snes/the-blue-crystalrod',
-          'title': 'The Blue Crystalrod',
+          'id': 'snes/the-zxia-gztqfevzem',
+          'title': 'The Zxia Gztqfevzem',
           'dumps': [
-            {'name': 'Blue Crystalrod, The (Japan)', 'crc': '777C7B18'},
+            {'name': 'Zxia Gztqfevzem, The (Japan)', 'crc': '777C7B18'},
           ],
         },
         {
-          'id': 'snes/hammerlock-wrestling',
-          'title': 'HammerLock Wrestling',
+          'id': 'snes/copperbolt-grappling',
+          'title': 'CopperBolt Grappling',
           'dumps': [
-            {'name': 'HammerLock Wrestling (USA)', 'crc': '0F0F0F0F'},
+            {'name': 'CopperBolt Grappling (USA)', 'crc': '0F0F0F0F'},
           ],
         },
         {
-          'id': 'snes/pro-action-replay-mk3',
-          'title': 'Pro Action Replay MK3',
+          'id': 'snes/duo-vector-recoil-mk3',
+          'title': 'Duo Vector Recoil MK3',
           'dumps': [
-            {'name': 'Pro Action Replay MK3 (Europe) (Unl)', 'crc': '11112222'},
+            {'name': 'Duo Vector Recoil MK3 (Europe) (Unl)', 'crc': '11112222'},
           ],
         },
         {
-          'id': 'snes/super-mario-world',
-          'title': 'Super Mario World',
+          'id': 'snes/super-pixel-world',
+          'title': 'Super Pixel World',
           'dumps': [
-            {'name': 'Super Mario World (USA)', 'crc': 'B19ED489'},
-            {'name': 'Super Mario World (Europe)', 'crc': 'A31BEAD4'},
+            {'name': 'Super Pixel World (USA)', 'crc': 'B19ED489'},
+            {'name': 'Super Pixel World (Europe)', 'crc': 'A31BEAD4'},
           ],
         },
         {
-          'id': 'snes/zero-4-champ-rr',
-          'title': 'Zero 4 Champ RR',
+          'id': 'snes/reso-4-kkesv-hq',
+          'title': 'Reso 4 Kkesv HQ',
           'dumps': [
-            {'name': 'Zero 4 Champ RR (Japan)', 'crc': '33334444'},
+            {'name': 'Reso 4 Kkesv HQ (Japan)', 'crc': '33334444'},
           ],
         },
         {
-          'id': 'snes/zero-4-champ-rr-z',
-          'title': 'Zero 4 Champ RR-Z',
+          'id': 'snes/reso-4-kkesv-hq-h',
+          'title': 'Reso 4 Kkesv HQ-H',
           'dumps': [
-            {'name': 'Zero 4 Champ RR-Z (Japan)', 'crc': '55556666'},
+            {'name': 'Reso 4 Kkesv HQ-H (Japan)', 'crc': '55556666'},
           ],
         },
       ],
@@ -776,46 +780,46 @@ void main() {
 
   setUp(() => matcher = PackMatcher(buildPack()));
 
-  group('tier 1, nome exato', () {
-    test('casa o nome do dump letra por letra', () {
-      final m = matcher.match('Chrono Trigger (USA)');
+  group('tier 1, exact name', () {
+    test('matches the dump name letter by letter', () {
+      final m = matcher.match('Crystal Vanguard (USA)');
       expect(m, isNotNull);
       expect(m!.tier, MatchTier.exactName);
-      expect(m.game.id, 'snes/chrono-trigger');
-      expect(m.sourceName, 'Chrono Trigger (USA)');
+      expect(m.game.id, 'snes/crystal-vanguard');
+      expect(m.sourceName, 'Crystal Vanguard (USA)');
     });
 
-    test('casa ignorando a extensão do arquivo', () {
-      expect(matcher.match('Chrono Trigger (USA).zip')?.tier, MatchTier.exactName);
-      expect(matcher.match('Chrono Trigger (USA).sfc')?.tier, MatchTier.exactName);
+    test('matches ignoring the file extension', () {
+      expect(matcher.match('Crystal Vanguard (USA).zip')?.tier, MatchTier.exactName);
+      expect(matcher.match('Crystal Vanguard (USA).sfc')?.tier, MatchTier.exactName);
     });
 
-    test('casa ignorando caixa, underscore e pontuação', () {
-      final m = matcher.match('chrono_trigger_(usa).ZIP');
+    test('matches ignoring case, underscore and punctuation', () {
+      final m = matcher.match('crystal_vanguard_(usa).ZIP');
       expect(m?.tier, MatchTier.exactName);
-      expect(m?.game.id, 'snes/chrono-trigger');
+      expect(m?.game.id, 'snes/crystal-vanguard');
     });
 
-    test('o tier exato devolve o dump concreto, com o CRC daquela região', () {
-      expect(matcher.match('Chrono Trigger (USA)')?.dump?.crc, '2D206BF7');
-      expect(matcher.match('Chrono Trigger (Japan)')?.dump?.crc, 'ABCD1234');
+    test('the exact tier returns the concrete dump, with that region CRC', () {
+      expect(matcher.match('Crystal Vanguard (USA)')?.dump?.crc, '2D206BF7');
+      expect(matcher.match('Crystal Vanguard (Japan)')?.dump?.crc, 'ABCD1234');
     });
 
-    test('devolve null quando não casa em tier nenhum', () {
-      expect(matcher.match('Alguma Coisa Que Nao Existe (USA).zip'), isNull);
+    test('returns null when nothing matches in any tier', () {
+      expect(matcher.match('Something That Does Not Exist (USA).zip'), isNull);
     });
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/pack_matcher.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/services/pack_matcher.dart'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/services/pack_matcher.dart`:
+Create `lib/services/pack_matcher.dart`:
 
 ```dart
 import 'package:rapidfuzz/rapidfuzz.dart';
@@ -823,22 +827,22 @@ import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 
-/// Corte do tier 3, na escala 0 a 100 do `rapidfuzz.ratio`.
+/// Tier 3 cutoff, on the 0 to 100 scale of `rapidfuzz.ratio`.
 ///
-/// O valor vem da PoC, que usou `difflib.SequenceMatcher` com corte 0.90. A
-/// seção 5.9 do spec registra que as duas métricas resolvem os mesmos 26
-/// arquivos para os mesmos alvos neste corte, então a troca de biblioteca não
-/// pede recalibragem.
+/// The value comes from the PoC, which used `difflib.SequenceMatcher` with a
+/// 0.90 cutoff. Section 5.9 of the spec records that the two metrics resolve the
+/// same 26 files to the same targets at this cutoff, so swapping libraries does
+/// not call for recalibration.
 const fuzzyCutoff = 90.0;
 
-/// Casa um nome de arquivo com um jogo do metadata pack.
+/// Matches a file name to a metadata pack game.
 ///
-/// Três tiers de nome, na ordem da seção 5.5 do spec: nome exato, título
-/// canônico, similaridade de edição. Mais um quarto eixo, o `matchCrc`, que é
-/// o único que não erra.
+/// Three name tiers, in the order of section 5.5 of the spec: exact name,
+/// canonical title, edit similarity. Plus a fourth axis, `matchCrc`, which is
+/// the only one that does not err.
 ///
-/// Dart puro de propósito: `tool/verify_matcher.dart` roda esta classe fora do
-/// Flutter. Não adicione import de `package:flutter`.
+/// Pure Dart on purpose: `tool/verify_matcher.dart` runs this class outside
+/// Flutter. Do not add an import of `package:flutter`.
 class PackMatcher {
   final MetadataPack pack;
 
@@ -860,15 +864,15 @@ class PackMatcher {
     }
   }
 
-  /// Os quatro primeiros caracteres do primeiro token. Mesmo balde da PoC:
-  /// serve só para o tier 3 não varrer o pacote inteiro a cada falha.
+  /// The first four characters of the first token. Same bucket as the PoC:
+  /// it only serves to keep tier 3 from scanning the whole pack on every miss.
   static String _head(String canonKey) {
     final first = canonKey.split(' ').first;
     return first.length <= 4 ? first : first.substring(0, 4);
   }
 
-  /// Quantos jogos e quantas chaves canônicas o matcher indexou. Serve para o
-  /// `tool/verify_matcher.dart` e para diagnóstico.
+  /// How many games and how many canonical keys the matcher indexed. Serves
+  /// `tool/verify_matcher.dart` and diagnostics.
   int get indexedGames => pack.games.length;
   int get indexedCanonKeys => _byCanon.length;
 
@@ -887,10 +891,10 @@ class PackMatcher {
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: PASS, 5 testes.
+Expected: PASS, 5 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -901,59 +905,59 @@ git commit -m "feat(identidade): PackMatcher com indices e o tier de nome exato"
 
 ---
 
-### Task 6: o tier 2, título canônico
+### Task 6: tier 2, canonical title
 
 **Files:**
 - Modify: `lib/services/pack_matcher.dart`
 - Test: `test/pack_matcher_test.dart`
 
-O tier 2 casa variantes: outra região, outra revisão, beta, protótipo. Ele resolve o **jogo**, não a versão, e por isso deixa `dump` nulo. Esse é o tier que mais cresce quando a fonte não é um espelho do No-Intro, e é responsável por 10.77% dos arquivos na medição da seção 5.9.
+Tier 2 matches variants: another region, another revision, beta, prototype. It resolves the **game**, not the version, and for that reason leaves `dump` null. This is the tier that grows the most when the source is not a No-Intro mirror, and it accounts for 10.77% of the files in the section 5.9 measurement.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Acrescente ao `main` de `test/pack_matcher_test.dart`, depois do `group('tier 1, nome exato', ...)`:
+Append to `main` in `test/pack_matcher_test.dart`, after `group('tier 1, exact name', ...)`:
 
 ```dart
-  group('tier 2, título canônico', () {
-    test('casa quando só a região e a revisão diferem', () {
-      final m = matcher.match('Chrono Trigger (Europe) (Rev 1).zip');
+  group('tier 2, canonical title', () {
+    test('matches when only region and revision differ', () {
+      final m = matcher.match('Crystal Vanguard (Europe) (Rev 1).zip');
       expect(m, isNotNull);
       expect(m!.tier, MatchTier.canonicalName);
-      expect(m.game.id, 'snes/chrono-trigger');
+      expect(m.game.id, 'snes/crystal-vanguard');
     });
 
-    test('casa quando o artigo está invertido dos dois lados', () {
-      // No pacote o dump é "Blue Crystalrod, The (Japan)". A fonte escreve o
-      // artigo na frente. `canon` põe os dois na mesma forma.
-      final m = matcher.match('The Blue Crystalrod (Japan).zip');
+    test('matches when the article is inverted on both sides', () {
+      // In the pack the dump is "Zxia Gztqfevzem, The (Japan)". The source
+      // writes the article in front. `canon` puts both in the same form.
+      final m = matcher.match('The Zxia Gztqfevzem (Japan).zip');
       expect(m, isNotNull);
       expect(m!.tier, MatchTier.canonicalName);
-      expect(m.game.id, 'snes/the-blue-crystalrod');
+      expect(m.game.id, 'snes/the-zxia-gztqfevzem');
     });
 
-    test('o tier canônico resolve o jogo e não a versão, então não traz dump', () {
-      expect(matcher.match('Chrono Trigger (Europe) (Rev 1).zip')?.dump, isNull);
+    test('the canonical tier resolves the game not the version, so no dump', () {
+      expect(matcher.match('Crystal Vanguard (Europe) (Rev 1).zip')?.dump, isNull);
     });
 
-    test('o tier exato ganha do canônico quando os dois casariam', () {
-      // "Super Mario World (Europe)" casa exato no segundo dump e casaria
-      // canônico no jogo inteiro. O exato tem que vencer, porque só ele sabe
-      // qual das duas regiões é.
-      final m = matcher.match('Super Mario World (Europe).sfc');
+    test('the exact tier beats the canonical when both would match', () {
+      // "Super Pixel World (Europe)" matches exact on the second dump and would
+      // match canonical on the whole game. The exact one has to win, because
+      // only it knows which of the two regions it is.
+      final m = matcher.match('Super Pixel World (Europe).sfc');
       expect(m!.tier, MatchTier.exactName);
       expect(m.dump?.crc, 'A31BEAD4');
     });
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: FALHA. Os três primeiros testes do grupo novo falham com `Expected: not null, Actual: <null>`. O quarto passa, porque o tier 1 já resolve.
+Expected: FAILURE. The first three tests of the new group fail with `Expected: not null, Actual: <null>`. The fourth passes, because tier 1 already resolves it.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Em `lib/services/pack_matcher.dart`, substitua o corpo de `match` por:
+In `lib/services/pack_matcher.dart`, replace the body of `match` with:
 
 ```dart
   GameMatch? match(String sourceName) {
@@ -983,10 +987,10 @@ Em `lib/services/pack_matcher.dart`, substitua o corpo de `match` por:
   }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: PASS, 9 testes.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -997,77 +1001,77 @@ git commit -m "feat(identidade): tier de titulo canonico no PackMatcher"
 
 ---
 
-### Task 7: o tier 3, similaridade, e o erro que ele carrega
+### Task 7: tier 3, similarity, and the error it carries
 
 **Files:**
 - Modify: `lib/services/pack_matcher.dart`
 - Test: `test/pack_matcher_test.dart`
 
-O tier 3 rende 0.63% de cobertura e erra em pelo menos 15% do que resolve. Ele existe porque o ganho é de graça e porque a alternativa, não mostrar nada, também é ruim. O que não pode acontecer é a tela dizer que tem certeza. O teste do `Pro Action Replay MK2` existe justamente para congelar esse comportamento: o match sai errado **e** sai marcado como palpite.
+Tier 3 yields 0.63% coverage and errs on at least 15% of what it resolves. It exists because the gain is free and because the alternative, showing nothing, is also bad. What cannot happen is the screen saying it is certain. The `Duo Vector Recoil MK2` test exists precisely to freeze that behavior: the match comes out wrong **and** comes out marked as a guess.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Acrescente ao `main` de `test/pack_matcher_test.dart`:
+Append to `main` in `test/pack_matcher_test.dart`:
 
 ```dart
-  group('tier 3, similaridade', () {
-    test('casa acima do corte', () {
-      // "Hammer Lock" contra "HammerLock", um espaço de diferença: 97.56.
-      final m = matcher.match('Hammer Lock Wrestling (USA).zip');
+  group('tier 3, similarity', () {
+    test('matches above the cutoff', () {
+      // "Copper Bolt" against "CopperBolt", one space of difference: 97.56.
+      final m = matcher.match('Copper Bolt Grappling (USA).zip');
       expect(m, isNotNull);
       expect(m!.tier, MatchTier.fuzzyName);
-      expect(m.game.id, 'snes/hammerlock-wrestling');
+      expect(m.game.id, 'snes/copperbolt-grappling');
     });
 
-    test('não casa abaixo do corte', () {
-      // 47.46 contra "chrono trigger".
+    test('does not match below the cutoff', () {
+      // 47.46 against "crystal vanguard".
       expect(
-        matcher.match('Chrono Trigger 2 - Ressurection of the Ancients (USA).zip'),
+        matcher.match('Crystal Vanguard 2 - Ressurection of the Ancients (USA).zip'),
         isNull,
       );
     });
 
-    test('o score fica entre o corte e cem', () {
-      final m = matcher.match('Hammer Lock Wrestling (USA).zip')!;
+    test('the score stays between the cutoff and one hundred', () {
+      final m = matcher.match('Copper Bolt Grappling (USA).zip')!;
       expect(m.score, greaterThanOrEqualTo(fuzzyCutoff));
       expect(m.score, lessThan(100));
     });
 
-    test('escolhe o candidato de maior score, não o primeiro do balde', () {
-      // O balde "zero" tem "zero 4 champ rr" (90.32) antes de
-      // "zero 4 champ rr z" (96.97). O segundo é o certo.
-      final m = matcher.match('Zero4 Champ RR-Z (Japan).zip');
+    test('picks the highest scoring candidate, not the first in the bucket', () {
+      // The "reso" bucket has "reso 4 kkesv hq" (90.32) before
+      // "reso 4 kkesv hq h" (96.97). The second one is the right one.
+      final m = matcher.match('Reso4 Kkesv HQ-H (Japan).zip');
       expect(m!.tier, MatchTier.fuzzyName);
-      expect(m.game.id, 'snes/zero-4-champ-rr-z');
+      expect(m.game.id, 'snes/reso-4-kkesv-hq-h');
     });
 
-    test('o tier 3 erra, e o modelo diz que é palpite', () {
-      // Caso real da PoC: MK2 resolve para MK3 com 95.24. O dígito no fim do
-      // título é exatamente o que a distância de edição não enxerga. Ver a
-      // seção 5.9 do spec.
-      final m = matcher.match('Pro Action Replay MK2 (Europe) (Unl) [b].zip');
-      expect(m!.game.id, 'snes/pro-action-replay-mk3');
+    test('tier 3 errs, and the model says it is a guess', () {
+      // Real PoC case: MK2 resolves to MK3 with 95.24. The digit at the end of
+      // the title is exactly what edit distance does not see. See section 5.9 of
+      // the spec.
+      final m = matcher.match('Duo Vector Recoil MK2 (Europe) (Unl) [b].zip');
+      expect(m!.game.id, 'snes/duo-vector-recoil-mk3');
       expect(m.confidence, MatchConfidence.guess);
     });
 
-    test('varre o pacote inteiro quando o balde do primeiro token não existe', () {
-      // "rammerlock" cai no balde "ramm", que não existe. Sem o fallback o
-      // match de 95.00 contra "hammerlock wrestling" se perderia.
-      final m = matcher.match('Rammerlock Wrestling.zip');
-      expect(m!.game.id, 'snes/hammerlock-wrestling');
+    test('scans the whole pack when the first token bucket does not exist', () {
+      // "ropperbolt" falls in the "ropp" bucket, which does not exist. Without
+      // the fallback the 95.00 match against "copperbolt grappling" would be lost.
+      final m = matcher.match('Ropperbolt Grappling.zip');
+      expect(m!.game.id, 'snes/copperbolt-grappling');
       expect(m.tier, MatchTier.fuzzyName);
     });
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: FALHA. Cinco dos seis testes novos falham com null. O `não casa abaixo do corte` passa, porque hoje tudo que chega ali devolve null.
+Expected: FAILURE. Five of the six new tests fail with null. The `does not match below the cutoff` one passes, because today everything that reaches there returns null.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Em `lib/services/pack_matcher.dart`, troque o `return null;` final de `match` por:
+In `lib/services/pack_matcher.dart`, replace the final `return null;` of `match` with:
 
 ```dart
     final pool = _byHead[_head(key)] ?? _byCanon.keys.toList();
@@ -1089,10 +1093,10 @@ Em `lib/services/pack_matcher.dart`, troque o `return null;` final de `match` po
     );
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: PASS, 15 testes.
+Expected: PASS, 15 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1103,55 +1107,55 @@ git commit -m "feat(identidade): tier de similaridade com corte em 90"
 
 ---
 
-### Task 8: o eixo do checksum
+### Task 8: the checksum axis
 
 **Files:**
 - Modify: `lib/services/pack_matcher.dart`
 - Test: `test/pack_matcher_test.dart`
 
-O único tier que não erra. O índice já existe: `MetadataPack.byCrc` foi construído na fatia 1 e é memoizado. O que falta é embrulhar num `GameMatch` e normalizar a caixa do hexadecimal, porque quem chama pode vir do diretório central de um ZIP, do CRC de um arquivo local ou de uma API, e cada um escreve na sua caixa.
+The only tier that does not err. The index already exists: `MetadataPack.byCrc` was built in slice 1 and is memoized. What is missing is wrapping it in a `GameMatch` and normalizing the hexadecimal case, because the caller may come from the central directory of a ZIP, from the CRC of a local file, or from an API, and each writes in its own case.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Acrescente ao `main` de `test/pack_matcher_test.dart`:
+Append to `main` in `test/pack_matcher_test.dart`:
 
 ```dart
-  group('eixo do checksum', () {
-    test('casa o CRC em maiúsculas e traz o dump certo', () {
-      final m = matcher.matchCrc('A31BEAD4', sourceName: 'qualquer.zip');
+  group('checksum axis', () {
+    test('matches the uppercase CRC and brings the right dump', () {
+      final m = matcher.matchCrc('A31BEAD4', sourceName: 'anything.zip');
       expect(m, isNotNull);
       expect(m!.tier, MatchTier.checksum);
       expect(m.confidence, MatchConfidence.confirmed);
-      expect(m.game.id, 'snes/super-mario-world');
-      expect(m.dump?.name, 'Super Mario World (Europe)');
-      expect(m.sourceName, 'qualquer.zip');
+      expect(m.game.id, 'snes/super-pixel-world');
+      expect(m.dump?.name, 'Super Pixel World (Europe)');
+      expect(m.sourceName, 'anything.zip');
     });
 
-    test('casa o CRC em minúsculas', () {
-      expect(matcher.matchCrc('a31bead4')?.game.id, 'snes/super-mario-world');
+    test('matches the lowercase CRC', () {
+      expect(matcher.matchCrc('a31bead4')?.game.id, 'snes/super-pixel-world');
     });
 
-    test('devolve null para CRC que não está no pacote', () {
+    test('returns null for a CRC that is not in the pack', () {
       expect(matcher.matchCrc('DEADBEEF'), isNull);
     });
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: FALHA de compilação, `The method 'matchCrc' isn't defined for the type 'PackMatcher'`.
+Expected: compile FAILURE, `The method 'matchCrc' isn't defined for the type 'PackMatcher'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Acrescente a `PackMatcher`, depois de `match`:
+Append to `PackMatcher`, after `match`:
 
 ```dart
-  /// O eixo que não erra. [crc] pode vir em qualquer caixa.
+  /// The axis that does not err. [crc] can come in any case.
   ///
-  /// Cuidado de quem chama: o CRC tem que ser o da **ROM**, não o do arquivo
-  /// que a fonte serve. Um ZIP tem CRC próprio, e ele não está no pacote. Ver
-  /// a seção 5.8 do spec, limite 1.
+  /// Caller beware: the CRC has to be the one of the **ROM**, not of the file
+  /// the source serves. A ZIP has its own CRC, and it is not in the pack. See
+  /// section 5.8 of the spec, limit 1.
   GameMatch? matchCrc(String crc, {String sourceName = ''}) {
     final upper = crc.toUpperCase();
     final game = pack.byCrc[upper];
@@ -1172,10 +1176,10 @@ Acrescente a `PackMatcher`, depois de `match`:
   }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: PASS, 18 testes.
+Expected: PASS, 18 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1185,17 +1189,17 @@ git commit -m "feat(identidade): matchCrc, o eixo que nao erra"
 ```
 
 ---
-### Task 9: CRC32 de arquivo local, em pedaços
+### Task 9: CRC32 of a local file, in chunks
 
 **Files:**
 - Create: `lib/utils/file_crc32.dart`
 - Test: `test/file_crc32_test.dart`
 
-Duas funções pequenas, mas elas vêm antes das próximas três tarefas porque todas usam o `formatCrc`. O `getCrc32` do `package:archive`, que já é dependência do app, aceita um CRC anterior justamente para poder ser encadeado. Isso importa: um ISO de GameCube tem 1,4 GB, e ler tudo na memória para calcular quatro bytes de hash derruba o app no celular.
+Two small functions, but they come before the next three tasks because all of them use `formatCrc`. `getCrc32` from `package:archive`, which is already an app dependency, accepts a previous CRC precisely so it can be chained. This matters: a GameCube ISO is 1.4 GB, and reading it all into memory to compute four bytes of hash crashes the app on a phone.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/file_crc32_test.dart`:
+Create `test/file_crc32_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -1216,47 +1220,47 @@ void main() {
     if (await tmp.exists()) await tmp.delete(recursive: true);
   });
 
-  test('formatCrc dá oito dígitos em maiúsculas com zero à esquerda', () {
+  test('formatCrc gives eight uppercase digits with leading zeros', () {
     expect(formatCrc(0), '00000000');
     expect(formatCrc(0xABCDE), '000ABCDE');
     expect(formatCrc(0xA31BEAD4), 'A31BEAD4');
   });
 
-  test('crc32OfFile bate com o CRC do conteúdo inteiro', () async {
+  test('crc32OfFile matches the CRC of the whole content', () async {
     final bytes = Uint8List.fromList(List.generate(1000, (i) => i % 251));
-    final file = File('${tmp.path}/pequeno.sfc')..writeAsBytesSync(bytes);
+    final file = File('${tmp.path}/small.sfc')..writeAsBytesSync(bytes);
     expect(await crc32OfFile(file), formatCrc(getCrc32(bytes)));
   });
 
-  test('encadeia certo em arquivo grande o bastante para virar vários pedaços',
+  test('chains correctly on a file large enough to span several chunks',
       () async {
-    // 512 KB força o openRead a entregar mais de um chunk. Se o encadeamento
-    // do getCrc32 estivesse errado, este teste seria o único a pegar.
+    // 512 KB forces openRead to deliver more than one chunk. If the getCrc32
+    // chaining were wrong, this test would be the only one to catch it.
     final bytes = Uint8List.fromList(List.generate(512 * 1024, (i) => i % 253));
-    final file = File('${tmp.path}/grande.iso')..writeAsBytesSync(bytes);
+    final file = File('${tmp.path}/large.iso')..writeAsBytesSync(bytes);
     expect(await crc32OfFile(file), formatCrc(getCrc32(bytes)));
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/file_crc32_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/utils/file_crc32.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/utils/file_crc32.dart'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/utils/file_crc32.dart`:
+Create `lib/utils/file_crc32.dart`:
 
 ```dart
 import 'dart:io';
 
 import 'package:archive/archive.dart';
 
-/// CRC32 de um arquivo local, lido em pedaços.
+/// CRC32 of a local file, read in chunks.
 ///
-/// O `getCrc32` recebe o CRC anterior como segundo argumento e continua de
-/// onde parou, então nunca precisamos do arquivo inteiro na memória.
+/// `getCrc32` takes the previous CRC as its second argument and continues from
+/// where it left off, so we never need the whole file in memory.
 Future<String> crc32OfFile(File file) async {
   var crc = 0;
   await for (final chunk in file.openRead()) {
@@ -1265,16 +1269,16 @@ Future<String> crc32OfFile(File file) async {
   return formatCrc(crc);
 }
 
-/// Oito dígitos hexadecimais em maiúsculas, que é como o DAT escreve e como o
-/// `PackDump.crc` guarda. Sem isso a comparação vira uma loteria de caixa.
+/// Eight hexadecimal digits in uppercase, which is how the DAT writes it and how
+/// `PackDump.crc` stores it. Without this the comparison becomes a case lottery.
 String formatCrc(int crc) =>
     (crc & 0xFFFFFFFF).toRadixString(16).toUpperCase().padLeft(8, '0');
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/file_crc32_test.dart`
-Expected: PASS, 3 testes.
+Expected: PASS, 3 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1285,44 +1289,44 @@ git commit -m "feat(identidade): CRC32 de arquivo local em pedacos"
 
 ---
 
-### Task 10: o diretório central por Range, e as guardas da 5.8
+### Task 10: the central directory over Range, and the 5.8 guards
 
 **Files:**
 - Create: `lib/services/zip_central_directory.dart`
 - Create: `test/support/zip_fixture.dart`
 - Test: `test/zip_central_directory_test.dart`
 
-Esta é a peça que deixa o app confirmar a identidade de um arquivo **antes** de baixar 800 KB dele. O truque é velho e é o mesmo que o `unzip -l` remoto usa: o ZIP guarda um índice no fim, e dá para pegar só o fim.
+This is the piece that lets the app confirm a file's identity **before** downloading 800 KB of it. The trick is old and is the same one remote `unzip -l` uses: the ZIP keeps an index at the end, and you can fetch only the end.
 
-O caminho tem duas requisições:
+The path has two requests:
 
-1. `Range: bytes=-256`. Os últimos 256 bytes contêm o *end of central directory*, o EOCD, que tem 22 bytes fixos e diz onde o diretório central começa e quanto ele ocupa.
-2. `Range: bytes=<offset>-<offset+size-1>`. O diretório central em si.
+1. `Range: bytes=-256`. The last 256 bytes contain the *end of central directory*, the EOCD, which has 22 fixed bytes and says where the central directory starts and how much it takes.
+2. `Range: bytes=<offset>-<offset+size-1>`. The central directory itself.
 
-Foi conferido contra um arquivo real do archive.org, `'96 Zenkoku Koukou Soccer Senshuken (Japan).zip`, de 840120 bytes: a primeira requisição volta `206` com `content-range: bytes 839864-840119/840120`, o EOCD está no deslocamento 212 dos 256 bytes, o diretório central tem 93 bytes a partir de 839983, e o CRC lá dentro é `05FBB855`, que é exatamente o CRC do dump `'96 Zenkoku Koukou Soccer Senshuken (Japan)` no pacote publicado do SNES. O caminho inteiro funciona em dado real.
+It was checked against a real archive.org file, `'96 Zenith Cup Soccer (Japan).zip`, of 840120 bytes: the first request comes back `206` with `content-range: bytes 839864-840119/840120`, the EOCD is at offset 212 of the 256 bytes, the central directory is 93 bytes starting at 839983, and the CRC inside it is `05FBB855`, which is exactly the CRC of the dump `'96 Zenith Cup Soccer (Japan)` in the published SNES pack. The whole path works on real data.
 
-O layout que o parser lê, todo em little-endian:
+The layout the parser reads, all little-endian:
 
-| Estrutura | Campo | Deslocamento |
+| Structure | Field | Offset |
 | --- | --- | --- |
-| EOCD | assinatura `PK\x05\x06`, `0x06054b50` | +0 |
-| EOCD | tamanho do diretório central | +12 |
-| EOCD | deslocamento do diretório central | +16 |
-| EOCD | tamanho do comentário | +20 |
-| Entrada | assinatura `PK\x01\x02`, `0x02014b50` | +0 |
-| Entrada | CRC32 | +16 |
-| Entrada | tamanho do nome | +28 |
-| Entrada | tamanho do extra | +30 |
-| Entrada | tamanho do comentário | +32 |
-| Entrada | o nome | +46 |
+| EOCD | signature `PK\x05\x06`, `0x06054b50` | +0 |
+| EOCD | central directory size | +12 |
+| EOCD | central directory offset | +16 |
+| EOCD | comment size | +20 |
+| Entry | signature `PK\x01\x02`, `0x02014b50` | +0 |
+| Entry | CRC32 | +16 |
+| Entry | name size | +28 |
+| Entry | extra size | +30 |
+| Entry | comment size | +32 |
+| Entry | the name | +46 |
 
-**As guardas são o ponto desta tarefa, não o parser.** A seção 5.8 do spec registra que um servidor pode ignorar o header `Range` e devolver `200` com o arquivo inteiro, ou pior, uma página HTML. O Myrient faz isso. Se o código confiar no status, ele vai tentar achar um EOCD dentro de um HTML e, na melhor das hipóteses, não achar; na pior, baixar o arquivo inteiro para descobrir. Por isso: **status tem que ser exatamente 206, e o `Content-Range` tem que existir e casar o formato**. Sem os dois, o retorno é null e o chamador segue com o nome.
+**The guards are the point of this task, not the parser.** Section 5.8 of the spec records that a server may ignore the `Range` header and return `200` with the whole file, or worse, an HTML page. Myrient does this. If the code trusts the status, it will try to find an EOCD inside HTML and, best case, not find it; worst case, download the whole file to find out. So: **the status has to be exactly 206, and the `Content-Range` has to exist and match the format**. Without both, the return is null and the caller carries on with the name.
 
-Esta tarefa entrega até os bytes crus do diretório central. A Task 11 os transforma em entradas.
+This task delivers up to the raw bytes of the central directory. Task 11 turns them into entries.
 
-- [ ] **Step 1: Escreva a fixture de zip**
+- [ ] **Step 1: Write the zip fixture**
 
-Crie `test/support/zip_fixture.dart`. Não é um arquivo de teste, é um helper: o `flutter test` só executa `*_test.dart`, então ele não vira uma suíte vazia.
+Create `test/support/zip_fixture.dart`. It is not a test file, it is a helper: `flutter test` only runs `*_test.dart`, so it does not become an empty suite.
 
 ```dart
 import 'dart:convert';
@@ -1330,9 +1334,9 @@ import 'dart:typed_data';
 
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// Uma entrada de diretório central: 46 bytes fixos, o nome, e o extra e o
-/// comentário se pedidos. Só os campos que o parser lê são preenchidos, que é
-/// o que um zip real também faz com a maioria deles.
+/// A central directory entry: 46 fixed bytes, the name, and the extra and
+/// comment if requested. Only the fields the parser reads are filled, which is
+/// what a real zip also does with most of them.
 Uint8List cdEntry(String name, int crc, {int extraLen = 0, int commentLen = 0}) {
   final nameBytes = utf8.encode(name);
   final head = ByteData(46);
@@ -1349,13 +1353,13 @@ Uint8List cdEntry(String name, int crc, {int extraLen = 0, int commentLen = 0}) 
   return out.toBytes();
 }
 
-/// Monta um zip inteiro: um bloco de zeros no lugar das entradas locais, o
-/// diretório central, o EOCD, e um comentário depois dele.
+/// Builds a whole zip: a block of zeros in place of the local entries, the
+/// central directory, the EOCD, and a comment after it.
 ///
-/// O comentário depois do EOCD não é invenção de teste: o TorrentZip, que é o
-/// formato que o archive.org serve, grava `TORRENTZIPPED-xxxxxxxx` ali. Se o
-/// parser assumisse que o EOCD são os últimos 22 bytes do arquivo, ele
-/// quebraria em cima de todo o acervo do archive.org.
+/// The comment after the EOCD is not a test invention: TorrentZip, which is the
+/// format archive.org serves, writes `TORRENTZIPPED-xxxxxxxx` there. If the
+/// parser assumed the EOCD were the last 22 bytes of the file, it would break
+/// across all of the archive.org collection.
 Uint8List buildZip(
   List<Uint8List> entries, {
   int localBytes = 64,
@@ -1387,8 +1391,8 @@ Uint8List buildZip(
   return out.toBytes();
 }
 
-/// Servidor falso de Range. Guarda o que foi pedido, para o teste conferir que
-/// foram duas requisições curtas e não o arquivo inteiro.
+/// Fake Range server. Keeps what was asked, so the test can confirm there were
+/// two short requests and not the whole file.
 class FakeRangeServer {
   final Uint8List body;
   final int status;
@@ -1422,9 +1426,9 @@ class FakeRangeServer {
 }
 ```
 
-- [ ] **Step 2: Escreva os testes que falham**
+- [ ] **Step 2: Write the failing tests**
 
-Crie `test/zip_central_directory_test.dart`:
+Create `test/zip_central_directory_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -1436,17 +1440,17 @@ import 'package:roms_downloader/services/zip_central_directory.dart';
 import 'support/zip_fixture.dart';
 
 void main() {
-  final uri = Uri.parse('https://exemplo/arquivo.zip');
-  final entry = cdEntry('Chrono Trigger (USA).sfc', 0x2D206BF7);
+  final uri = Uri.parse('https://example/file.zip');
+  final entry = cdEntry('Crystal Vanguard (USA).sfc', 0x2D206BF7);
 
-  test('devolve exatamente os bytes do diretório central', () async {
+  test('returns exactly the central directory bytes', () async {
     final server = FakeRangeServer(buildZip([entry]));
     final raw = await ZipCentralDirectory.readRaw(uri, server.fetch);
     expect(raw, isNotNull);
     expect(raw, orderedEquals(entry));
   });
 
-  test('faz duas requisições: o sufixo e o intervalo exato', () async {
+  test('makes two requests: the suffix and the exact range', () async {
     final server = FakeRangeServer(buildZip([entry], localBytes: 500));
     await ZipCentralDirectory.readRaw(uri, server.fetch);
     expect(server.asked, [
@@ -1455,68 +1459,68 @@ void main() {
     ]);
   });
 
-  test('acha o EOCD mesmo com o comentário do TorrentZip depois dele', () async {
+  test('finds the EOCD even with the TorrentZip comment after it', () async {
     final server = FakeRangeServer(
         buildZip([entry], comment: 'TORRENTZIPPED-58A7B7DC'));
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch),
         orderedEquals(entry));
   });
 
-  test('devolve null quando o servidor ignora o Range e responde 200', () async {
-    // O caso do Myrient, seção 5.8 limite 2. Sem esta guarda o parser tentaria
-    // achar um EOCD dentro de uma página HTML.
+  test('returns null when the server ignores the Range and answers 200', () async {
+    // The Myrient case, section 5.8 limit 2. Without this guard the parser would
+    // try to find an EOCD inside an HTML page.
     final server = FakeRangeServer(buildZip([entry]), status: 200);
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch), isNull);
     expect(server.asked, ['bytes=-256']);
   });
 
-  test('devolve null quando não vem Content-Range', () async {
+  test('returns null when no Content-Range comes', () async {
     final server =
         FakeRangeServer(buildZip([entry]), sendContentRange: false);
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch), isNull);
   });
 
-  test('devolve null em zip64', () async {
+  test('returns null on zip64', () async {
     final server = FakeRangeServer(buildZip([entry], zip64: true));
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch), isNull);
     expect(server.asked, ['bytes=-256']);
   });
 
-  test('devolve null quando o diretório central cai fora do arquivo', () async {
+  test('returns null when the central directory falls outside the file', () async {
     final server = FakeRangeServer(buildZip([entry], forcedCdOffset: 900000));
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch), isNull);
     expect(server.asked, ['bytes=-256']);
   });
 
-  test('devolve null quando o EOCD não cabe nos 256 bytes finais', () async {
+  test('returns null when the EOCD does not fit in the last 256 bytes', () async {
     final server =
         FakeRangeServer(buildZip([entry], comment: 'x' * 300));
     expect(await ZipCentralDirectory.readRaw(uri, server.fetch), isNull);
   });
 
-  test('devolve null quando a rede levanta exceção', () async {
+  test('returns null when the network throws', () async {
     Future<RangeResponse> explode(Uri uri, String range) async =>
-        throw const SocketException('sem rede');
+        throw const SocketException('no network');
     expect(await ZipCentralDirectory.readRaw(uri, explode), isNull);
   });
 }
 ```
 
-- [ ] **Step 3: Rode e veja falhar**
+- [ ] **Step 3: Run and watch it fail**
 
 Run: `flutter test test/zip_central_directory_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/zip_central_directory.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/services/zip_central_directory.dart'`.
 
-- [ ] **Step 4: Escreva a implementação mínima**
+- [ ] **Step 4: Write the minimal implementation**
 
-Crie `lib/services/zip_central_directory.dart`:
+Create `lib/services/zip_central_directory.dart`:
 
 ```dart
 import 'dart:io';
 import 'dart:typed_data';
 
-/// A resposta de uma requisição com header `Range`, reduzida ao que o parser
-/// precisa. Existe para o teste poder responder sem rede.
+/// The response of a request with a `Range` header, reduced to what the parser
+/// needs. Exists so the test can respond without network.
 class RangeResponse {
   final int statusCode;
   final String? contentRange;
@@ -1529,30 +1533,31 @@ class RangeResponse {
   });
 }
 
-/// Busca um intervalo de bytes. [range] já vem pronto, no formato do header:
-/// `bytes=-256` ou `bytes=100-199`.
+/// Fetches a byte range. [range] comes ready, in the header format:
+/// `bytes=-256` or `bytes=100-199`.
 typedef RangeFetch = Future<RangeResponse> Function(Uri uri, String range);
 
-/// Lê o diretório central de um ZIP remoto em duas requisições curtas.
+/// Reads the central directory of a remote ZIP in two short requests.
 ///
-/// Dart puro de propósito: `tool/probe_zip_cd.dart` roda isto fora do Flutter.
-/// Não adicione import de `package:flutter`.
+/// Pure Dart on purpose: `tool/probe_zip_cd.dart` runs this outside Flutter.
+/// Do not add an import of `package:flutter`.
 class ZipCentralDirectory {
-  /// Quantos bytes do fim buscar para achar o EOCD. 256 cobre os 22 bytes do
-  /// EOCD mais um comentário curto, incluindo o `TORRENTZIPPED-xxxxxxxx` de
-  /// 22 caracteres que o archive.org grava. Zip com comentário maior sai fora,
-  /// e isso é aceitável: virar duas requisições em três não paga o ganho.
+  /// How many bytes from the end to fetch to find the EOCD. 256 covers the 22
+  /// EOCD bytes plus a short comment, including the 22 character
+  /// `TORRENTZIPPED-xxxxxxxx` that archive.org writes. A zip with a longer
+  /// comment falls out, and that is acceptable: turning one request in three
+  /// into two does not pay off.
   static const tailBytes = 256;
 
-  /// Teto do que aceitamos bufferizar. Um diretório central acima disso é um
-  /// zip com dezenas de milhares de entradas, que não é o caso de uso, e
-  /// aceitar significa deixar um servidor hostil encher a memória do app.
+  /// Ceiling of what we accept to buffer. A central directory above this is a
+  /// zip with tens of thousands of entries, which is not the use case, and
+  /// accepting it means letting a hostile server fill the app's memory.
   static const maxDirectoryBytes = 8 * 1024 * 1024;
 
-  /// Os bytes crus do diretório central, ou null quando não deu.
+  /// The raw bytes of the central directory, or null when it did not work.
   ///
-  /// Null nunca é erro fatal: quem chama simplesmente fica com o palpite de
-  /// nome. Este método não levanta.
+  /// Null is never a fatal error: the caller simply keeps the name guess. This
+  /// method does not throw.
   static Future<Uint8List?> readRaw(Uri uri, RangeFetch fetch) async {
     final RangeResponse tail;
     try {
@@ -1570,9 +1575,9 @@ class ZipCentralDirectory {
     final size = view.getUint32(eocd + 12, Endian.little);
     final offset = view.getUint32(eocd + 16, Endian.little);
 
-    // 0xFFFFFFFF nos dois campos é o marcador de zip64: o valor real está num
-    // registro separado, antes do EOCD. Nenhuma fonte de ROM serve zip64, e
-    // implementar isso por completude seria código morto.
+    // 0xFFFFFFFF in both fields is the zip64 marker: the real value is in a
+    // separate record, before the EOCD. No ROM source serves zip64, and
+    // implementing it for completeness would be dead code.
     if (size == 0xFFFFFFFF || offset == 0xFFFFFFFF) return null;
     if (size == 0 || size > maxDirectoryBytes) return null;
     if (offset + size > total) return null;
@@ -1588,12 +1593,12 @@ class ZipCentralDirectory {
     return body.bytes;
   }
 
-  /// O tamanho total do arquivo, extraído do `Content-Range`, ou null se a
-  /// resposta não for uma resposta parcial de verdade.
+  /// The total file size, extracted from the `Content-Range`, or null if the
+  /// response is not a real partial response.
   ///
-  /// As duas condições juntas são a guarda da seção 5.8, limite 2. Um `200`
-  /// significa que o servidor ignorou o `Range` e está mandando o arquivo
-  /// inteiro, ou uma página de erro com cara de sucesso.
+  /// The two conditions together are the guard of section 5.8, limit 2. A `200`
+  /// means the server ignored the `Range` and is sending the whole file, or an
+  /// error page dressed up as success.
   static int? _totalFrom(RangeResponse response) {
     if (response.statusCode != HttpStatus.partialContent) return null;
     final header = response.contentRange;
@@ -1603,9 +1608,9 @@ class ZipCentralDirectory {
     return int.parse(m.group(3)!);
   }
 
-  /// Varre de trás para frente atrás de `PK\x05\x06`. De trás para frente
-  /// porque o EOCD é o último registro, mas não necessariamente os últimos
-  /// bytes: o comentário vem depois dele.
+  /// Scans backwards looking for `PK\x05\x06`. Backwards because the EOCD is the
+  /// last record, but not necessarily the last bytes: the comment comes after
+  /// it.
   static int? _findEocd(Uint8List bytes) {
     if (bytes.length < 22) return null;
     for (var i = bytes.length - 22; i >= 0; i--) {
@@ -1619,15 +1624,15 @@ class ZipCentralDirectory {
     return null;
   }
 
-  /// O fetch de produção.
+  /// The production fetch.
   ///
-  /// A ordem das linhas importa: **confira o status antes de consumir o
-  /// corpo**. Ler primeiro e checar depois significa baixar o arquivo inteiro,
-  /// que é exatamente o que a leitura por Range existe para evitar.
+  /// Line order matters: **check the status before consuming the body**. Reading
+  /// first and checking later means downloading the whole file, which is exactly
+  /// what reading by Range exists to avoid.
   ///
-  /// O `HttpClient` segue redirect sozinho e preserva o header `Range` ao
-  /// fazê-lo, o que foi conferido contra o archive.org, que responde 302 antes
-  /// do 206.
+  /// `HttpClient` follows redirects on its own and preserves the `Range` header
+  /// when it does, which was checked against archive.org, which answers 302
+  /// before the 206.
   static Future<RangeResponse> httpRangeFetch(Uri uri, String range) async {
     final client = HttpClient();
     try {
@@ -1646,7 +1651,7 @@ class ZipCentralDirectory {
         builder.add(chunk);
         if (builder.length > maxDirectoryBytes) {
           throw HttpException(
-              'resposta parcial acima de $maxDirectoryBytes bytes',
+              'partial response above $maxDirectoryBytes bytes',
               uri: uri);
         }
       }
@@ -1662,10 +1667,10 @@ class ZipCentralDirectory {
 }
 ```
 
-- [ ] **Step 5: Rode e veja passar**
+- [ ] **Step 5: Run and watch it pass**
 
 Run: `flutter test test/zip_central_directory_test.dart`
-Expected: PASS, 9 testes.
+Expected: PASS, 9 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -1676,31 +1681,31 @@ git commit -m "feat(identidade): diretorio central por Range com as guardas da 5
 
 ---
 
-### Task 11: as entradas, e a regra de extensão que evita o CRC errado
+### Task 11: the entries, and the extension rule that avoids the wrong CRC
 
 **Files:**
 - Modify: `lib/services/zip_central_directory.dart`
 - Create: `tool/probe_zip_cd.dart`
 - Test: `test/zip_central_directory_test.dart`
 
-Agora os bytes viram entradas. A parte que merece atenção não é o parser, é o `crcMatchesRom`.
+Now the bytes become entries. The part that deserves attention is not the parser, it is `crcMatchesRom`.
 
-A seção 5.8 do spec, limite 1: **o CRC de uma entrada só é comparável com o pacote quando aquela entrada é a ROM.** Se a fonte servir um zip que contém outro zip, ou um `.7z`, o CRC ali é o do arquivo comprimido interno, e não bate com nada do DAT. Aceitar esse CRC seria pior que não olhar, porque no melhor caso não casa e no pior casa por acidente com o CRC de outro jogo.
+Section 5.8 of the spec, limit 1: **an entry's CRC is only comparable with the pack when that entry is the ROM.** If the source serves a zip that contains another zip, or a `.7z`, the CRC there is that of the inner compressed file, and does not match anything in the DAT. Accepting that CRC would be worse than not looking, because best case it does not match and worst case it matches another game's CRC by accident.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Acrescente ao `main` de `test/zip_central_directory_test.dart`:
+Append to `main` in `test/zip_central_directory_test.dart`:
 
 ```dart
-  group('entradas', () {
-    test('lê nome e CRC de uma entrada', () {
+  group('entries', () {
+    test('reads name and CRC of an entry', () {
       final entries = ZipCentralDirectory.parse(entry);
       expect(entries, hasLength(1));
-      expect(entries!.single.name, 'Chrono Trigger (USA).sfc');
+      expect(entries!.single.name, 'Crystal Vanguard (USA).sfc');
       expect(entries.single.crc, '2D206BF7');
     });
 
-    test('lê várias entradas mesmo com extra e comentário entre elas', () {
+    test('reads several entries even with extra and comment between them', () {
       final blob = BytesBuilder()
         ..add(cdEntry('a.sfc', 0x00000001, extraLen: 9))
         ..add(cdEntry('b.sfc', 0x000000FF, commentLen: 5))
@@ -1711,19 +1716,19 @@ Acrescente ao `main` de `test/zip_central_directory_test.dart`:
           ['00000001', '000000FF', 'A31BEAD4']);
     });
 
-    test('crcMatchesRom só aceita a ROM em si', () {
+    test('crcMatchesRom only accepts the ROM itself', () {
       bool rom(String name) =>
           ZipCentralDirectory.parse(cdEntry(name, 1))!.single.crcMatchesRom;
-      expect(rom('Chrono Trigger (USA).sfc'), isTrue);
-      expect(rom('Chrono Trigger (USA).iso'), isTrue);
-      // Contêiner dentro de contêiner: o CRC é do comprimido, não da ROM.
-      expect(rom('Chrono Trigger (USA).zip'), isFalse);
-      expect(rom('Chrono Trigger (USA).7z'), isFalse);
-      // Não é ROM nenhuma.
-      expect(rom('leiame.txt'), isFalse);
+      expect(rom('Crystal Vanguard (USA).sfc'), isTrue);
+      expect(rom('Crystal Vanguard (USA).iso'), isTrue);
+      // Container within container: the CRC is of the compressed file, not the ROM.
+      expect(rom('Crystal Vanguard (USA).zip'), isFalse);
+      expect(rom('Crystal Vanguard (USA).7z'), isFalse);
+      // Not a ROM at all.
+      expect(rom('readme.txt'), isFalse);
     });
 
-    test('para no lixo e devolve o que já tinha lido', () {
+    test('stops at garbage and returns what it had already read', () {
       final blob = BytesBuilder()
         ..add(cdEntry('a.sfc', 0x00000001))
         ..add(Uint8List.fromList(List.filled(60, 0x41)));
@@ -1731,27 +1736,27 @@ Acrescente ao `main` de `test/zip_central_directory_test.dart`:
           ['a.sfc']);
     });
 
-    test('read junta as duas metades e entrega as entradas', () async {
+    test('read joins the two halves and delivers the entries', () async {
       final server = FakeRangeServer(buildZip([
-        cdEntry('Super Mario World (Europe).sfc', 0xA31BEAD4),
-        cdEntry('leiame.txt', 0x00000009),
+        cdEntry('Super Pixel World (Europe).sfc', 0xA31BEAD4),
+        cdEntry('readme.txt', 0x00000009),
       ]));
       final entries = await ZipCentralDirectory.read(uri, server.fetch);
       expect(entries?.map((e) => e.name),
-          ['Super Mario World (Europe).sfc', 'leiame.txt']);
+          ['Super Pixel World (Europe).sfc', 'readme.txt']);
       expect(entries?.where((e) => e.crcMatchesRom).single.crc, 'A31BEAD4');
     });
   });
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/zip_central_directory_test.dart`
-Expected: FALHA de compilação, `The method 'parse' isn't defined for the type 'ZipCentralDirectory'`.
+Expected: compile FAILURE, `The method 'parse' isn't defined for the type 'ZipCentralDirectory'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-No topo de `lib/services/zip_central_directory.dart`, acrescente aos imports:
+At the top of `lib/services/zip_central_directory.dart`, add to the imports:
 
 ```dart
 import 'dart:convert';
@@ -1760,23 +1765,23 @@ import 'package:roms_downloader/utils/file_crc32.dart';
 import 'package:roms_downloader/utils/pack_naming.dart';
 ```
 
-Acrescente a classe, antes de `ZipCentralDirectory`:
+Add the class, before `ZipCentralDirectory`:
 
 ```dart
-/// Uma entrada do diretório central. [crc] em maiúsculas, oito dígitos, no
-/// mesmo formato de `PackDump.crc`.
+/// A central directory entry. [crc] uppercase, eight digits, in the same format
+/// as `PackDump.crc`.
 class ZipEntry {
   final String name;
   final String crc;
 
   const ZipEntry({required this.name, required this.crc});
 
-  /// Verdadeiro quando este CRC pode ser comparado com o de um dump do pacote.
+  /// True when this CRC can be compared with that of a pack dump.
   ///
-  /// Um zip dentro de um zip tem CRC próprio, que é o do comprimido e não o da
-  /// ROM. Comparar esse CRC com o pacote é pior que não comparar: no melhor
-  /// caso não casa, no pior casa por acidente. Ver a seção 5.8 do spec,
-  /// limite 1.
+  /// A zip inside a zip has its own CRC, which is that of the compressed file
+  /// and not of the ROM. Comparing that CRC with the pack is worse than not
+  /// comparing: best case it does not match, worst case it matches by accident.
+  /// See section 5.8 of the spec, limit 1.
   bool get crcMatchesRom => hasRomExtension(name) && !hasArchiveExtension(name);
 
   @override
@@ -1784,19 +1789,20 @@ class ZipEntry {
 }
 ```
 
-E os dois métodos, dentro de `ZipCentralDirectory`:
+And the two methods, inside `ZipCentralDirectory`:
 
 ```dart
-  /// As entradas de um ZIP remoto, ou null quando não deu para ler.
+  /// The entries of a remote ZIP, or null when it could not be read.
   static Future<List<ZipEntry>?> read(Uri uri, RangeFetch fetch) async {
     final raw = await readRaw(uri, fetch);
     if (raw == null) return null;
     return parse(raw);
   }
 
-  /// Quebra os bytes do diretório central em entradas. Para no primeiro
-  /// registro que não começa com `PK\x01\x02` e devolve o que já leu, porque
-  /// meia leitura ainda é útil e um erro aqui não deve custar o palpite todo.
+  /// Breaks the central directory bytes into entries. Stops at the first record
+  /// that does not start with `PK\x01\x02` and returns what it already read,
+  /// because half a read is still useful and an error here should not cost the
+  /// whole guess.
   static List<ZipEntry>? parse(Uint8List directory) {
     final view = ByteData.sublistView(directory);
     final entries = <ZipEntry>[];
@@ -1810,10 +1816,10 @@ E os dois métodos, dentro de `ZipCentralDirectory`:
       final nameEnd = pos + 46 + nameLen;
       if (nameEnd > directory.length) break;
       entries.add(ZipEntry(
-        // O nome pode ser CP437 ou UTF-8, e o zip só distingue por um bit de
-        // flag que quase ninguém grava direito. `allowMalformed` faz o
-        // acentuado errado virar U+FFFD em vez de levantar, e o `norm` do
-        // matcher come o U+FFFD como pontuação.
+        // The name may be CP437 or UTF-8, and the zip only distinguishes them by
+        // a flag bit that almost nobody writes correctly. `allowMalformed` turns
+        // a wrong accented byte into U+FFFD instead of throwing, and the
+        // matcher's `norm` eats U+FFFD as punctuation.
         name: utf8.decode(directory.sublist(pos + 46, nameEnd),
             allowMalformed: true),
         crc: formatCrc(crc),
@@ -1824,18 +1830,18 @@ E os dois métodos, dentro de `ZipCentralDirectory`:
   }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/zip_central_directory_test.dart`
-Expected: PASS, 14 testes.
+Expected: PASS, 14 tests.
 
-- [ ] **Step 5: Escreva a sonda de dado real**
+- [ ] **Step 5: Write the real data probe**
 
-O teste unitário prova o parser contra bytes que o próprio teste montou. Isso não prova que um servidor de verdade coopera. Crie `tool/probe_zip_cd.dart`:
+The unit test proves the parser against bytes the test itself built. That does not prove that a real server cooperates. Create `tool/probe_zip_cd.dart`:
 
 ```dart
-// Lê o diretório central de um ZIP remoto por Range e imprime as entradas.
-// Roda fora do Flutter:
+// Reads the central directory of a remote ZIP over Range and prints the entries.
+// Runs outside Flutter:
 //   dart run tool/probe_zip_cd.dart <url>
 import 'dart:io';
 
@@ -1843,7 +1849,7 @@ import 'package:roms_downloader/services/zip_central_directory.dart';
 
 Future<void> main(List<String> args) async {
   if (args.length != 1) {
-    stderr.writeln('uso: dart run tool/probe_zip_cd.dart <url>');
+    stderr.writeln('usage: dart run tool/probe_zip_cd.dart <url>');
     exitCode = 64;
     return;
   }
@@ -1851,32 +1857,32 @@ Future<void> main(List<String> args) async {
   final entries =
       await ZipCentralDirectory.read(uri, ZipCentralDirectory.httpRangeFetch);
   if (entries == null) {
-    stderr.writeln('nao deu para ler o diretorio central de $uri');
+    stderr.writeln('could not read the central directory of $uri');
     exitCode = 1;
     return;
   }
   for (final entry in entries) {
-    final marca = entry.crcMatchesRom ? 'ROM ' : '    ';
-    print('$marca${entry.crc}  ${entry.name}');
+    final mark = entry.crcMatchesRom ? 'ROM ' : '    ';
+    print('$mark${entry.crc}  ${entry.name}');
   }
 }
 ```
 
-- [ ] **Step 6: Rode a sonda contra o archive.org**
+- [ ] **Step 6: Run the probe against archive.org**
 
 ```bash
-dart run tool/probe_zip_cd.dart "https://archive.org/download/ef_nintendo_snes_no-intro_2024-04-20/%2796%20Zenkoku%20Koukou%20Soccer%20Senshuken%20%28Japan%29.zip"
+dart run tool/probe_zip_cd.dart "https://archive.org/download/ef_nintendo_snes_no-intro_2024-04-20/%2796%20Zenith%20Cup%20Soccer%20%28Japan%29.zip"
 ```
 
-Expected, exatamente uma linha:
+Expected, exactly one line:
 
 ```
-ROM 05FBB855  '96 Zenkoku Koukou Soccer Senshuken (Japan).sfc
+ROM 05FBB855  '96 Zenith Cup Soccer (Japan).sfc
 ```
 
-Esse `05FBB855` é o CRC do dump `'96 Zenkoku Koukou Soccer Senshuken (Japan)` no pacote publicado do SNES. Se a linha sair assim, o caminho inteiro está provado em dado real: 302, 206, EOCD atrás do comentário do TorrentZip, segunda requisição de 93 bytes, e um CRC que casa com o pacote.
+That `05FBB855` is the CRC of the dump `'96 Zenith Cup Soccer (Japan)` in the published SNES pack. If the line comes out like that, the whole path is proven on real data: 302, 206, EOCD behind the TorrentZip comment, a second request of 93 bytes, and a CRC that matches the pack.
 
-Se sair `nao deu para ler`, não mexa nas guardas para "fazer funcionar". Rode `curl -sSL -D - -o /dev/null -H 'Range: bytes=-256' <url>` e veja o que o servidor respondeu de verdade antes de mudar qualquer coisa.
+If it comes out `could not read`, do not touch the guards to "make it work". Run `curl -sSL -D - -o /dev/null -H 'Range: bytes=-256' <url>` and see what the server actually answered before changing anything.
 
 - [ ] **Step 7: Commit**
 
@@ -1886,7 +1892,7 @@ git commit -m "feat(identidade): entradas do diretorio central e a regra de exte
 ```
 
 ---
-### Task 12: confirmar ou corrigir o nome com o CRC do ZIP remoto
+### Task 12: confirm or correct the name with the remote ZIP CRC
 
 **Files:**
 - Create: `lib/services/crc_confirm_service.dart`
@@ -1894,113 +1900,113 @@ git commit -m "feat(identidade): entradas do diretorio central e a regra de exte
 - Modify: `test/pack_matcher_test.dart`
 - Test: `test/crc_confirm_service_test.dart`
 
-Aqui os dois eixos se encontram. O eixo de nome deu um palpite; o diretório central do ZIP remoto diz se o palpite está certo, e às vezes diz qual era a resposta.
+Here the two axes meet. The name axis made a guess; the central directory of the remote ZIP says whether the guess is right, and sometimes says what the answer was.
 
-A regra de decisão é conservadora de propósito:
+The decision rule is conservative on purpose:
 
-- Se o nome do arquivo não termina em `.zip`, **nem vá à rede**. Não temos leitor de `.7z` nem de `.rar` por Range, e gastar duas requisições para descobrir isso é desperdício.
-- Se o diretório central não veio, fique com o palpite de nome.
-- Considere só as entradas em que `crcMatchesRom` é verdadeiro.
-- Se essas entradas apontam para **exatamente um** jogo do pacote, esse é o resultado, com tier `checksum`. Zero jogos ou dois jogos diferentes significa que o zip não é conclusivo, e o palpite de nome continua valendo.
+- If the file name does not end in `.zip`, **do not even go to the network**. We have no `.7z` or `.rar` reader over Range, and spending two requests to find that out is a waste.
+- If the central directory did not come, keep the name guess.
+- Consider only the entries where `crcMatchesRom` is true.
+- If those entries point to **exactly one** pack game, that is the result, with tier `checksum`. Zero games or two different games means the zip is inconclusive, and the name guess still holds.
 
-Note que "exatamente um jogo" não é o mesmo que "exatamente uma entrada": um zip com os três discos do mesmo jogo resolve para um jogo só, e isso conta.
+Note that "exactly one game" is not the same as "exactly one entry": a zip with the three discs of the same game resolves to a single game, and that counts.
 
-- [ ] **Step 1: Extraia a fixture do pacote para um lugar compartilhado**
+- [ ] **Step 1: Extract the pack fixture to a shared place**
 
-A partir daqui duas suítes precisam do mesmo pacote de teste. Crie `test/support/pack_fixture.dart` com o conteúdo abaixo, que é o `buildPack()` que hoje está no topo de `test/pack_matcher_test.dart`, sem alteração nenhuma:
+From here on two suites need the same test pack. Create `test/support/pack_fixture.dart` with the content below, which is the `buildPack()` that today is at the top of `test/pack_matcher_test.dart`, with no change at all:
 
 ```dart
 import 'dart:convert';
 
 import 'package:roms_downloader/models/metadata_pack_model.dart';
 
-/// Pacote de teste com um caso real para cada tier:
-/// - Chrono Trigger tem duas regiões, então exercita tier 1 contra tier 2.
-/// - Blue Crystalrod tem o artigo no fim, que é o caso que o `canon` conserta.
-/// - HammerLock Wrestling é o par fuzzy que a PoC resolveu certo.
-/// - Pro Action Replay MK3 é o par fuzzy que a PoC resolveu **errado**.
-/// - Zero 4 Champ RR e RR-Z são dois candidatos fuzzy do mesmo bucket.
+/// Test pack with a real case for each tier:
+/// - Crystal Vanguard has two regions, so it exercises tier 1 against tier 2.
+/// - Zxia Gztqfevzem has the article at the end, which is the case `canon` fixes.
+/// - CopperBolt Grappling is the fuzzy pair the PoC resolved correctly.
+/// - Duo Vector Recoil MK3 is the fuzzy pair the PoC resolved **wrong**.
+/// - Reso 4 Kkesv HQ and HQ-H are two fuzzy candidates in the same bucket.
 MetadataPack buildPack() => MetadataPack.decode(jsonEncode({
       'pack': 'snes',
       'system': 'Nintendo - Super Nintendo Entertainment System',
       'built': '2026-09-10',
       'games': [
         {
-          'id': 'snes/chrono-trigger',
-          'title': 'Chrono Trigger',
+          'id': 'snes/crystal-vanguard',
+          'title': 'Crystal Vanguard',
           'dumps': [
-            {'name': 'Chrono Trigger (USA)', 'crc': '2D206BF7'},
-            {'name': 'Chrono Trigger (Japan)', 'crc': 'ABCD1234'},
+            {'name': 'Crystal Vanguard (USA)', 'crc': '2D206BF7'},
+            {'name': 'Crystal Vanguard (Japan)', 'crc': 'ABCD1234'},
           ],
         },
         {
-          'id': 'snes/the-blue-crystalrod',
-          'title': 'The Blue Crystalrod',
+          'id': 'snes/the-zxia-gztqfevzem',
+          'title': 'The Zxia Gztqfevzem',
           'dumps': [
-            {'name': 'Blue Crystalrod, The (Japan)', 'crc': '777C7B18'},
+            {'name': 'Zxia Gztqfevzem, The (Japan)', 'crc': '777C7B18'},
           ],
         },
         {
-          'id': 'snes/hammerlock-wrestling',
-          'title': 'HammerLock Wrestling',
+          'id': 'snes/copperbolt-grappling',
+          'title': 'CopperBolt Grappling',
           'dumps': [
-            {'name': 'HammerLock Wrestling (USA)', 'crc': '0F0F0F0F'},
+            {'name': 'CopperBolt Grappling (USA)', 'crc': '0F0F0F0F'},
           ],
         },
         {
-          'id': 'snes/pro-action-replay-mk3',
-          'title': 'Pro Action Replay MK3',
+          'id': 'snes/duo-vector-recoil-mk3',
+          'title': 'Duo Vector Recoil MK3',
           'dumps': [
-            {'name': 'Pro Action Replay MK3 (Europe) (Unl)', 'crc': '11112222'},
+            {'name': 'Duo Vector Recoil MK3 (Europe) (Unl)', 'crc': '11112222'},
           ],
         },
         {
-          'id': 'snes/super-mario-world',
-          'title': 'Super Mario World',
+          'id': 'snes/super-pixel-world',
+          'title': 'Super Pixel World',
           'dumps': [
-            {'name': 'Super Mario World (USA)', 'crc': 'B19ED489'},
-            {'name': 'Super Mario World (Europe)', 'crc': 'A31BEAD4'},
+            {'name': 'Super Pixel World (USA)', 'crc': 'B19ED489'},
+            {'name': 'Super Pixel World (Europe)', 'crc': 'A31BEAD4'},
           ],
         },
         {
-          'id': 'snes/zero-4-champ-rr',
-          'title': 'Zero 4 Champ RR',
+          'id': 'snes/reso-4-kkesv-hq',
+          'title': 'Reso 4 Kkesv HQ',
           'dumps': [
-            {'name': 'Zero 4 Champ RR (Japan)', 'crc': '33334444'},
+            {'name': 'Reso 4 Kkesv HQ (Japan)', 'crc': '33334444'},
           ],
         },
         {
-          'id': 'snes/zero-4-champ-rr-z',
-          'title': 'Zero 4 Champ RR-Z',
+          'id': 'snes/reso-4-kkesv-hq-h',
+          'title': 'Reso 4 Kkesv HQ-H',
           'dumps': [
-            {'name': 'Zero 4 Champ RR-Z (Japan)', 'crc': '55556666'},
+            {'name': 'Reso 4 Kkesv HQ-H (Japan)', 'crc': '55556666'},
           ],
         },
       ],
     }));
 ```
 
-Agora em `test/pack_matcher_test.dart`: apague o comentário e a função `buildPack()` inteira, apague o `import 'dart:convert';` e o `import 'package:roms_downloader/models/metadata_pack_model.dart';` que só ela usava, e acrescente depois dos imports de pacote:
+Now in `test/pack_matcher_test.dart`: delete the comment and the whole `buildPack()` function, delete the `import 'dart:convert';` and the `import 'package:roms_downloader/models/metadata_pack_model.dart';` that only it used, and add after the package imports:
 
 ```dart
 import 'support/pack_fixture.dart';
 ```
 
-- [ ] **Step 2: Confirme que a extração não quebrou nada**
+- [ ] **Step 2: Confirm the extraction broke nothing**
 
 Run: `flutter test test/pack_matcher_test.dart`
-Expected: PASS, 18 testes. Se `flutter analyze` reclamar de import não usado em `pack_matcher_test.dart`, é porque sobrou um dos dois imports antigos. Tire.
+Expected: PASS, 18 tests. If `flutter analyze` complains about an unused import in `pack_matcher_test.dart`, it is because one of the two old imports is left over. Remove it.
 
-- [ ] **Step 3: Commit a extração sozinha**
+- [ ] **Step 3: Commit the extraction on its own**
 
 ```bash
 git add test/pack_matcher_test.dart test/support/pack_fixture.dart
 git commit -m "refactor(identidade): fixture do pacote em test/support"
 ```
 
-- [ ] **Step 4: Escreva os testes que falham**
+- [ ] **Step 4: Write the failing tests**
 
-Crie `test/crc_confirm_service_test.dart`:
+Create `test/crc_confirm_service_test.dart`:
 
 ```dart
 import 'dart:typed_data';
@@ -2014,13 +2020,13 @@ import 'package:roms_downloader/services/zip_central_directory.dart';
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
 
-/// CRCs do pacote de teste, na forma numérica que o diretório central grava.
-const chronoUsa = 0x2D206BF7;
+/// CRCs of the test pack, in the numeric form the central directory writes.
+const crystalUsa = 0x2D206BF7;
 const smwEurope = 0xA31BEAD4;
 
 void main() {
   late PackMatcher matcher;
-  final uri = Uri.parse('https://exemplo/arquivo.zip');
+  final uri = Uri.parse('https://example/file.zip');
 
   setUp(() => matcher = PackMatcher(buildPack()));
 
@@ -2029,46 +2035,46 @@ void main() {
         fetch: FakeRangeServer(zip).fetch,
       );
 
-  test('não vai à rede quando o nome não termina em .zip', () async {
-    var chamadas = 0;
+  test('does not go to the network when the name does not end in .zip', () async {
+    var calls = 0;
     final service = CrcConfirmService(
       matcher: matcher,
       fetch: (u, r) async {
-        chamadas++;
-        throw StateError('não deveria ter ido à rede');
+        calls++;
+        throw StateError('should not have gone to the network');
       },
     );
-    final byName = matcher.match('Chrono Trigger (USA).sfc');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).sfc', byName);
-    expect(chamadas, 0);
+    final byName = matcher.match('Crystal Vanguard (USA).sfc');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).sfc', byName);
+    expect(calls, 0);
     expect(out, same(byName));
   });
 
-  test('confirma o palpite de nome quando o CRC aponta o mesmo jogo', () async {
+  test('confirms the name guess when the CRC points to the same game', () async {
     final service = serving(
-        buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
-    expect(out!.game.id, 'snes/chrono-trigger');
+        buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
+    expect(out!.game.id, 'snes/crystal-vanguard');
     expect(out.tier, MatchTier.checksum);
     expect(out.confidence, MatchConfidence.confirmed);
-    expect(out.dump?.name, 'Chrono Trigger (USA)');
+    expect(out.dump?.name, 'Crystal Vanguard (USA)');
   });
 
-  test('corrige o palpite de nome quando o CRC aponta outro jogo', () async {
-    // O arquivo se chama Chrono Trigger mas contém Super Mario World. O nome
-    // mente, o CRC não.
+  test('corrects the name guess when the CRC points to another game', () async {
+    // The file is called Crystal Vanguard but contains Super Pixel World. The
+    // name lies, the CRC does not.
     final service = serving(
         buildZip([cdEntry('rom.sfc', smwEurope)]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    expect(byName!.game.id, 'snes/chrono-trigger');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
-    expect(out!.game.id, 'snes/super-mario-world');
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    expect(byName!.game.id, 'snes/crystal-vanguard');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
+    expect(out!.game.id, 'snes/super-pixel-world');
     expect(out.tier, MatchTier.checksum);
-    expect(out.dump?.name, 'Super Mario World (Europe)');
+    expect(out.dump?.name, 'Super Pixel World (Europe)');
   });
 
-  test('fica com o nome quando o servidor não fala Range', () async {
+  test('keeps the name when the server does not speak Range', () async {
     final service = CrcConfirmService(
       matcher: matcher,
       fetch: FakeRangeServer(
@@ -2076,73 +2082,74 @@ void main() {
         status: 200,
       ).fetch,
     );
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
     expect(out, same(byName));
   });
 
-  test('fica com o nome quando o zip tem dois jogos diferentes dentro',
+  test('keeps the name when the zip has two different games inside',
       () async {
     final service = serving(buildZip([
-      cdEntry('Chrono Trigger (USA).sfc', chronoUsa),
-      cdEntry('Super Mario World (Europe).sfc', smwEurope),
+      cdEntry('Crystal Vanguard (USA).sfc', crystalUsa),
+      cdEntry('Super Pixel World (Europe).sfc', smwEurope),
     ]));
-    final byName = matcher.match('Chrono Trigger (USA).zip');
-    final out = await service.confirm(uri, 'Chrono Trigger (USA).zip', byName);
+    final byName = matcher.match('Crystal Vanguard (USA).zip');
+    final out = await service.confirm(uri, 'Crystal Vanguard (USA).zip', byName);
     expect(out, same(byName));
   });
 
-  test('ignora o que não é ROM e decide pela única que é', () async {
-    // Se o filtro de extensão não existisse, o bonus.zip entraria com o CRC do
-    // Super Mario World, viraria dois jogos, e o zip seria descartado como
-    // inconclusivo. Ver 5.8, limite 1.
+  test('ignores what is not a ROM and decides by the only one that is', () async {
+    // If the extension filter did not exist, bonus.zip would come in with the
+    // Super Pixel World CRC, become two games, and the zip would be discarded as
+    // inconclusive. See 5.8, limit 1.
     final service = serving(buildZip([
-      cdEntry('leiame.txt', 0x00000009),
+      cdEntry('readme.txt', 0x00000009),
       cdEntry('bonus.zip', smwEurope),
-      cdEntry('Chrono Trigger (USA).sfc', chronoUsa),
+      cdEntry('Crystal Vanguard (USA).sfc', crystalUsa),
     ]));
-    final byName = matcher.match('qualquer coisa.zip');
+    final byName = matcher.match('random thing.zip');
     expect(byName, isNull);
-    final out = await service.confirm(uri, 'qualquer coisa.zip', byName);
-    expect(out!.game.id, 'snes/chrono-trigger');
+    final out = await service.confirm(uri, 'random thing.zip', byName);
+    expect(out!.game.id, 'snes/crystal-vanguard');
     expect(out.tier, MatchTier.checksum);
-    expect(out.sourceName, 'qualquer coisa.zip');
+    expect(out.sourceName, 'random thing.zip');
   });
 }
 ```
 
-- [ ] **Step 5: Rode e veja falhar**
+- [ ] **Step 5: Run and watch it fail**
 
 Run: `flutter test test/crc_confirm_service_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/crc_confirm_service.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/services/crc_confirm_service.dart'`.
 
-- [ ] **Step 6: Escreva a implementação mínima**
+- [ ] **Step 6: Write the minimal implementation**
 
-Crie `lib/services/crc_confirm_service.dart`:
+Create `lib/services/crc_confirm_service.dart`:
 
 ```dart
 import 'package:roms_downloader/models/game_match_model.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// Confirma ou corrige um palpite de nome lendo o CRC da ROM de dentro do ZIP
-/// remoto, antes de qualquer download. É o eixo do meio da seção 5.5 do spec.
+/// Confirms or corrects a name guess by reading the ROM CRC from inside the
+/// remote ZIP, before any download. It is the middle axis of section 5.5 of the
+/// spec.
 ///
-/// Dart puro de propósito. Não adicione import de `package:flutter`.
+/// Pure Dart on purpose. Do not add an import of `package:flutter`.
 class CrcConfirmService {
   final PackMatcher matcher;
   final RangeFetch fetch;
 
   const CrcConfirmService({required this.matcher, required this.fetch});
 
-  /// [byName] é o que o eixo de nome achou, e pode ser null.
+  /// [byName] is what the name axis found, and can be null.
   ///
-  /// Devolve um match de tier [MatchTier.checksum] quando o ZIP foi
-  /// conclusivo, e [byName] intocado em todos os outros casos. Nunca levanta:
-  /// falha de rede aqui só significa ficar com o palpite que já se tinha.
+  /// Returns a match of tier [MatchTier.checksum] when the ZIP was conclusive,
+  /// and [byName] untouched in all other cases. Never throws: a network failure
+  /// here just means keeping the guess we already had.
   Future<GameMatch?> confirm(
       Uri uri, String sourceName, GameMatch? byName) async {
-    // Sem leitor de 7z ou rar por Range, então nem gaste a requisição.
+    // No 7z or rar reader over Range, so do not even spend the request.
     if (!sourceName.toLowerCase().endsWith('.zip')) return byName;
 
     final entries = await ZipCentralDirectory.read(uri, fetch);
@@ -2155,19 +2162,19 @@ class CrcConfirmService {
       if (hit != null) hits[hit.game.id] = hit;
     }
 
-    // Um jogo só é conclusivo, e três discos do mesmo jogo continuam sendo um
-    // jogo só. Zero ou dois não decidem nada, e inventar um critério de
-    // desempate aqui seria trocar uma certeza por um palpite.
+    // A single game is conclusive, and three discs of the same game are still a
+    // single game. Zero or two decide nothing, and inventing a tie breaker here
+    // would be trading a certainty for a guess.
     if (hits.length != 1) return byName;
     return hits.values.first;
   }
 }
 ```
 
-- [ ] **Step 7: Rode e veja passar**
+- [ ] **Step 7: Run and watch it pass**
 
 Run: `flutter test test/crc_confirm_service_test.dart`
-Expected: PASS, 6 testes.
+Expected: PASS, 6 tests.
 
 - [ ] **Step 8: Commit**
 
@@ -2178,27 +2185,27 @@ git commit -m "feat(identidade): confirmar ou corrigir o nome pelo CRC do zip re
 
 ---
 
-### Task 13: o eixo local, nome primeiro e CRC só na dúvida
+### Task 13: the local axis, name first and CRC only when in doubt
 
 **Files:**
 - Create: `lib/services/local_identity_service.dart`
 - Test: `test/local_identity_service_test.dart`
 
-A seção 5.7 do spec trata de um caso diferente dos dois anteriores: o arquivo **já está no disco**. Não há rede envolvida e o CRC é calculável de verdade, byte a byte. Só que calcular custa: um ISO de 1,4 GB leva segundos, e uma biblioteca de mil arquivos leva minutos.
+Section 5.7 of the spec deals with a case different from the previous two: the file **is already on disk**. There is no network involved and the CRC is really computable, byte by byte. Except computing costs: a 1.4 GB ISO takes seconds, and a library of a thousand files takes minutes.
 
-A regra da 5.7 resolve isso: **nome primeiro, CRC só na dúvida.**
+The 5.7 rule resolves this: **name first, CRC only when in doubt.**
 
-- Tier `exactName` ou `canonicalName`: aceite e vá embora. Não leia o arquivo.
-- Tier `fuzzyName` ou nada: aí sim, calcule o CRC. É o caso raro.
+- Tier `exactName` or `canonicalName`: accept it and move on. Do not read the file.
+- Tier `fuzzyName` or nothing: then yes, compute the CRC. It is the rare case.
 
-Mais duas decisões que precisam ficar explícitas:
+Two more decisions that need to be explicit:
 
-1. **Contêiner não entra no CRC.** Se o arquivo local é `.zip` ou `.7z`, o CRC do arquivo é o do contêiner e não bate com o pacote, pelo mesmo motivo da 5.8 limite 1. Para esses o nome é tudo que temos. Ler o diretório central de um zip **local** resolveria, e é uma extensão natural, mas não é desta fatia.
-2. **O cache é da sessão.** A chave é `tamanho|mtime|caminho`: se qualquer um dos três mudar, o arquivo é outro e o CRC é recalculado. O serviço aceita um cache inicial e expõe o que acumulou, para quem quiser persistir depois. Persistir de fato não é desta fatia, porque nesta fatia ninguém ainda chama o serviço em loop.
+1. **A container does not enter the CRC.** If the local file is `.zip` or `.7z`, the file CRC is that of the container and does not match the pack, for the same reason as 5.8 limit 1. For those the name is all we have. Reading the central directory of a **local** zip would resolve it, and it is a natural extension, but it is not part of this slice.
+2. **The cache is per session.** The key is `size|mtime|path`: if any of the three changes, the file is another and the CRC is recomputed. The service accepts an initial cache and exposes what it accumulated, for whoever wants to persist it later. Actually persisting is not part of this slice, because in this slice nobody calls the service in a loop yet.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/local_identity_service_test.dart`:
+Create `test/local_identity_service_test.dart`:
 
 ```dart
 import 'dart:io';
@@ -2213,12 +2220,12 @@ import 'support/pack_fixture.dart';
 void main() {
   late Directory tmp;
   late PackMatcher matcher;
-  late List<String> lidos;
+  late List<String> reads;
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('local_identity_test');
     matcher = PackMatcher(buildPack());
-    lidos = [];
+    reads = [];
   });
 
   tearDown(() async {
@@ -2226,91 +2233,91 @@ void main() {
   });
 
   File write(String name) =>
-      File('${tmp.path}/$name')..writeAsStringSync('conteudo');
+      File('${tmp.path}/$name')..writeAsStringSync('content');
 
-  /// Serviço com um CRC falso, para o teste controlar o que o disco "tem" e
-  /// contar quantas vezes o arquivo foi lido.
+  /// Service with a fake CRC, so the test controls what the disk "has" and
+  /// counts how many times the file was read.
   LocalIdentityService serviceReturning(String crc) => LocalIdentityService(
         matcher: matcher,
         crcOfFile: (file) async {
-          lidos.add(file.path);
+          reads.add(file.path);
           return crc;
         },
       );
 
-  test('aceita o nome exato e nem toca no arquivo', () async {
+  test('accepts the exact name and does not touch the file', () async {
     final service = serviceReturning('B19ED489');
-    final m = await service.identify(write('Chrono Trigger (USA).sfc'));
+    final m = await service.identify(write('Crystal Vanguard (USA).sfc'));
     expect(m!.tier, MatchTier.exactName);
-    expect(m.game.id, 'snes/chrono-trigger');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/crystal-vanguard');
+    expect(reads, isEmpty);
   });
 
-  test('aceita o nome canônico e nem toca no arquivo', () async {
+  test('accepts the canonical name and does not touch the file', () async {
     final service = serviceReturning('B19ED489');
-    final m = await service.identify(write('The Blue Crystalrod.sfc'));
+    final m = await service.identify(write('The Zxia Gztqfevzem.sfc'));
     expect(m!.tier, MatchTier.canonicalName);
-    expect(m.game.id, 'snes/the-blue-crystalrod');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/the-zxia-gztqfevzem');
+    expect(reads, isEmpty);
   });
 
-  test('no palpite fuzzy calcula o CRC e corrige o jogo', () async {
-    // O nome parece HammerLock Wrestling, mas os bytes são do Pro Action
-    // Replay MK3. O CRC ganha.
+  test('on a fuzzy guess it computes the CRC and corrects the game', () async {
+    // The name looks like CopperBolt Grappling, but the bytes are Duo Vector
+    // Replay MK3. The CRC wins.
     final service = serviceReturning('11112222');
-    final file = write('Hammer Lock Wrestling (USA).sfc');
-    expect(matcher.match('Hammer Lock Wrestling (USA).sfc')!.tier,
+    final file = write('Copper Bolt Grappling (USA).sfc');
+    expect(matcher.match('Copper Bolt Grappling (USA).sfc')!.tier,
         MatchTier.fuzzyName);
     final m = await service.identify(file);
     expect(m!.tier, MatchTier.checksum);
-    expect(m.game.id, 'snes/pro-action-replay-mk3');
-    expect(lidos, [file.path]);
+    expect(m.game.id, 'snes/duo-vector-recoil-mk3');
+    expect(reads, [file.path]);
   });
 
-  test('sem palpite de nome nenhum, o CRC resolve sozinho', () async {
+  test('with no name guess at all, the CRC resolves on its own', () async {
     final service = serviceReturning('A31BEAD4');
-    final file = write('rom desconhecida 0042.sfc');
-    expect(matcher.match('rom desconhecida 0042.sfc'), isNull);
+    final file = write('unknown rom 0042.sfc');
+    expect(matcher.match('unknown rom 0042.sfc'), isNull);
     final m = await service.identify(file);
     expect(m!.tier, MatchTier.checksum);
-    expect(m.game.id, 'snes/super-mario-world');
+    expect(m.game.id, 'snes/super-pixel-world');
   });
 
-  test('CRC que não está no pacote devolve o palpite de nome intocado',
+  test('a CRC not in the pack returns the name guess untouched',
       () async {
     final service = serviceReturning('DEADBEEF');
-    final m = await service.identify(write('Hammer Lock Wrestling (USA).sfc'));
+    final m = await service.identify(write('Copper Bolt Grappling (USA).sfc'));
     expect(m!.tier, MatchTier.fuzzyName);
-    expect(m.game.id, 'snes/hammerlock-wrestling');
+    expect(m.game.id, 'snes/copperbolt-grappling');
   });
 
-  test('não calcula CRC de contêiner, porque não seria comparável', () async {
+  test('does not compute the CRC of a container, because it would not be comparable', () async {
     final service = serviceReturning('11112222');
-    final m = await service.identify(write('Hammer Lock Wrestling (USA).zip'));
+    final m = await service.identify(write('Copper Bolt Grappling (USA).zip'));
     expect(m!.tier, MatchTier.fuzzyName);
-    expect(m.game.id, 'snes/hammerlock-wrestling');
-    expect(lidos, isEmpty);
+    expect(m.game.id, 'snes/copperbolt-grappling');
+    expect(reads, isEmpty);
   });
 
-  test('o cache evita a segunda leitura do mesmo arquivo', () async {
+  test('the cache avoids the second read of the same file', () async {
     final service = serviceReturning('11112222');
-    final file = write('Hammer Lock Wrestling (USA).sfc');
+    final file = write('Copper Bolt Grappling (USA).sfc');
     await service.identify(file);
     await service.identify(file);
-    expect(lidos, hasLength(1));
+    expect(reads, hasLength(1));
     expect(service.cache.values, ['11112222']);
   });
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/local_identity_service_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/services/local_identity_service.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/services/local_identity_service.dart'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/services/local_identity_service.dart`:
+Create `lib/services/local_identity_service.dart`:
 
 ```dart
 import 'dart:io';
@@ -2323,12 +2330,14 @@ import 'package:roms_downloader/utils/pack_naming.dart';
 
 typedef FileCrc = Future<String> Function(File file);
 
-/// O eixo da seção 5.7 do spec: identifica um arquivo que já está no disco.
+/// The axis of section 5.7 of the spec: identifies a file that is already on
+/// disk.
 ///
-/// Nome primeiro, CRC só na dúvida. Calcular CRC é a operação cara desta
-/// fatia, e o tier de nome resolve a esmagadora maioria dos casos de graça.
+/// Name first, CRC only when in doubt. Computing a CRC is the expensive
+/// operation of this slice, and the name tier resolves the vast majority of
+/// cases for free.
 ///
-/// Dart puro de propósito. Não adicione import de `package:flutter`.
+/// Pure Dart on purpose. Do not add an import of `package:flutter`.
 class LocalIdentityService {
   final PackMatcher matcher;
   final FileCrc crcOfFile;
@@ -2341,9 +2350,9 @@ class LocalIdentityService {
   })  : crcOfFile = crcOfFile ?? crc32OfFile,
         _cache = {...?initialCache};
 
-  /// O que já foi calculado nesta sessão. Chave `tamanho|mtime|caminho`, valor
-  /// o CRC em maiúsculas. Exposto para quem quiser persistir; nesta fatia
-  /// ninguém persiste.
+  /// What has already been computed this session. Key `size|mtime|path`, value
+  /// the uppercase CRC. Exposed for whoever wants to persist it; in this slice
+  /// nobody persists.
   Map<String, String> get cache => Map.unmodifiable(_cache);
 
   Future<GameMatch?> identify(File file) async {
@@ -2355,8 +2364,8 @@ class LocalIdentityService {
       return byName;
     }
 
-    // Um contêiner tem CRC próprio, que não é o da ROM, então calcular seria
-    // gastar segundos para comparar com o índice errado. Ver 5.8, limite 1.
+    // A container has its own CRC, which is not the ROM's, so computing it would
+    // spend seconds to compare against the wrong index. See 5.8, limit 1.
     if (hasArchiveExtension(name)) return byName;
 
     final crc = await _crcOf(file);
@@ -2381,18 +2390,18 @@ class LocalIdentityService {
       _cache[key] = crc;
       return crc;
     } catch (_) {
-      // Arquivo sem permissão, meio copiado, ou num pendrive que sumiu. Nada
-      // disso justifica derrubar a varredura da biblioteca inteira.
+      // File with no permission, half copied, or on a thumb drive that vanished.
+      // None of that justifies bringing down the sweep of the whole library.
       return null;
     }
   }
 }
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/local_identity_service_test.dart`
-Expected: PASS, 7 testes.
+Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2403,19 +2412,19 @@ git commit -m "feat(identidade): eixo local com nome primeiro e CRC so na duvida
 
 ---
 
-### Task 14: a fiação Riverpod
+### Task 14: the Riverpod wiring
 
 **Files:**
 - Create: `lib/providers/identity_provider.dart`
 - Test: `test/identity_provider_test.dart`
 
-Dois providers finos por cima do que já existe. O que eles compram é a memoização: construir os três índices do `PackMatcher` custa uma passada por todos os dumps do console, 4267 no SNES, e refazer isso a cada rebuild de widget seria caro à toa. Um `FutureProvider.family` mantém o resultado vivo enquanto alguém observa.
+Two thin providers on top of what already exists. What they buy is memoization: building the three `PackMatcher` indices costs a pass over all of the console's dumps, 4267 on the SNES, and redoing that on every widget rebuild would be expensive for nothing. A `FutureProvider.family` keeps the result alive while someone is watching.
 
-Os dois seguem o mesmo contrato de null do `metadataPackProvider`: console sem pacote no índice devolve null, e quem consome trata isso como "esse console não tem metadados", não como erro.
+Both follow the same null contract as `metadataPackProvider`: a console with no pack in the index returns null, and the consumer treats that as "this console has no metadata", not as an error.
 
-- [ ] **Step 1: Escreva os testes que falham**
+- [ ] **Step 1: Write the failing tests**
 
-Crie `test/identity_provider_test.dart`. Ele sobrescreve o `metadataPackServiceProvider`, que é o mesmo ponto de entrada que `test/metadata_pack_provider_test.dart` já usa, então o pacote vem de um fetch falso e nada toca a rede nem o disco do usuário.
+Create `test/identity_provider_test.dart`. It overrides `metadataPackServiceProvider`, which is the same entry point `test/metadata_pack_provider_test.dart` already uses, so the pack comes from a fake fetch and nothing touches the network or the user's disk.
 
 ```dart
 import 'dart:convert';
@@ -2432,7 +2441,7 @@ import 'package:roms_downloader/services/metadata_pack_service.dart';
 const indexJson =
     '{"built":"2026-09-10","packs":[{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","games":1,"aliases":["super_nintendo"]}]}';
 const packJson =
-    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/chrono-trigger","title":"Chrono Trigger","dumps":[{"name":"Chrono Trigger (USA)","crc":"2D206BF7"}]}]}';
+    '{"pack":"snes","system":"Nintendo - Super Nintendo Entertainment System","built":"2026-09-10","games":[{"id":"snes/crystal-vanguard","title":"Crystal Vanguard","dumps":[{"name":"Crystal Vanguard (USA)","crc":"2D206BF7"}]}]}';
 
 const snes = PackTarget('super_nintendo', 'Super Nintendo');
 const switchTarget = PackTarget('nintendo_switch', 'Nintendo Switch');
@@ -2463,21 +2472,21 @@ void main() {
     return c;
   }
 
-  test('constrói o matcher a partir do pacote do console', () async {
+  test('builds the matcher from the console pack', () async {
     final matcher = await container().read(packMatcherProvider(snes).future);
     expect(matcher, isNotNull);
-    expect(matcher!.match('Chrono Trigger (USA).zip')?.tier,
+    expect(matcher!.match('Crystal Vanguard (USA).zip')?.tier,
         MatchTier.exactName);
   });
 
-  test('console sem pacote devolve null em vez de erro', () async {
+  test('a console with no pack returns null instead of an error', () async {
     final c = container();
     expect(await c.read(packMatcherProvider(switchTarget).future), isNull);
     expect(
         await c.read(localIdentityServiceProvider(switchTarget).future), isNull);
   });
 
-  test('o serviço local reusa o mesmo matcher memoizado', () async {
+  test('the local service reuses the same memoized matcher', () async {
     final c = container();
     final matcher = await c.read(packMatcherProvider(snes).future);
     final service = await c.read(localIdentityServiceProvider(snes).future);
@@ -2486,14 +2495,14 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Rode e veja falhar**
+- [ ] **Step 2: Run and watch it fail**
 
 Run: `flutter test test/identity_provider_test.dart`
-Expected: FALHA de compilação, `Target of URI doesn't exist: 'package:roms_downloader/providers/identity_provider.dart'`.
+Expected: compile FAILURE, `Target of URI doesn't exist: 'package:roms_downloader/providers/identity_provider.dart'`.
 
-- [ ] **Step 3: Escreva a implementação mínima**
+- [ ] **Step 3: Write the minimal implementation**
 
-Crie `lib/providers/identity_provider.dart`:
+Create `lib/providers/identity_provider.dart`:
 
 ```dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2502,11 +2511,11 @@ import 'package:roms_downloader/providers/metadata_pack_provider.dart';
 import 'package:roms_downloader/services/local_identity_service.dart';
 import 'package:roms_downloader/services/pack_matcher.dart';
 
-/// O matcher de um console. Null quando o console não tem pacote, que é o
-/// mesmo contrato do `metadataPackProvider`.
+/// The matcher of a console. Null when the console has no pack, which is the
+/// same contract as `metadataPackProvider`.
 ///
-/// Existe para memoizar: os três índices custam uma passada por todos os dumps
-/// do console, e refazer isso a cada rebuild não tem cabimento.
+/// It exists to memoize: the three indices cost a pass over all of the console's
+/// dumps, and redoing that on every rebuild makes no sense.
 final packMatcherProvider =
     FutureProvider.family<PackMatcher?, PackTarget>((ref, target) async {
   final pack = await ref.watch(metadataPackProvider(target).future);
@@ -2514,7 +2523,7 @@ final packMatcherProvider =
   return PackMatcher(pack);
 });
 
-/// O eixo local de um console, por cima do mesmo matcher memoizado.
+/// The local axis of a console, on top of the same memoized matcher.
 final localIdentityServiceProvider =
     FutureProvider.family<LocalIdentityService?, PackTarget>(
         (ref, target) async {
@@ -2524,18 +2533,18 @@ final localIdentityServiceProvider =
 });
 ```
 
-- [ ] **Step 4: Rode e veja passar**
+- [ ] **Step 4: Run and watch it pass**
 
 Run: `flutter test test/identity_provider_test.dart`
-Expected: PASS, 3 testes.
+Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Rode a suíte inteira e a análise**
+- [ ] **Step 5: Run the whole suite and the analysis**
 
 Run: `flutter test`
-Expected: `+176 -1`. A única falha continua sendo `test/rar_decompress_screen_test.dart`, que é anterior a esta fatia.
+Expected: `+176 -1`. The only failure is still `test/rar_decompress_screen_test.dart`, which predates this slice.
 
 Run: `flutter analyze`
-Expected: nenhum problema novo.
+Expected: no new problems.
 
 - [ ] **Step 6: Commit**
 
@@ -2546,18 +2555,18 @@ git commit -m "feat(identidade): providers do matcher e do eixo local"
 
 ---
 
-### Task 15: rodar o matcher contra o acervo real
+### Task 15: run the matcher against the real collection
 
 **Files:**
 - Create: `tool/verify_matcher.dart`
 
-Os testes das tarefas anteriores provam o comportamento em cima de sete jogos escolhidos a dedo. Esta tarefa prova o **número**: o matcher, rodando sobre o pacote publicado do SNES e sobre a listagem real de um item do archive.org com 4122 arquivos, tem que reproduzir a tabela da seção 5.9 do spec.
+The tests of the previous tasks prove the behavior over seven cherry picked games. This task proves the **number**: the matcher, running over the published SNES pack and over the real listing of an archive.org item with 4122 files, has to reproduce the table of section 5.9 of the spec.
 
-Isso não é enfeite. A seção 5.9 é o contrato de qualidade do eixo de nome, e se o Dart divergir do que foi medido em Python, alguma coisa na porta do `norm` ou do `canon` saiu diferente e a fatia 3 vai exibir badge errado em escala.
+This is not decoration. Section 5.9 is the quality contract of the name axis, and if the Dart diverges from what was measured in Python, something in the port of `norm` or `canon` came out different and slice 3 will show a wrong badge at scale.
 
-- [ ] **Step 1: Junte os dois insumos**
+- [ ] **Step 1: Gather the two inputs**
 
-O pacote, construído com a ferramenta da fatia 1:
+The pack, built with the slice 1 tool:
 
 ```bash
 python3 tool/build_metadata_pack.py --out /tmp/packs-verify --built 2026-09-10 \
@@ -2566,21 +2575,21 @@ gunzip -c /tmp/packs-verify/nintendo_super_nintendo_entertainment_system.json.gz
   > /tmp/snes-pack.json
 ```
 
-A listagem, direto do archive.org:
+The listing, straight from archive.org:
 
 ```bash
 curl -sL https://archive.org/metadata/ef_nintendo_snes_no-intro_2024-04-20 \
   -o /tmp/snes-listing.json
 ```
 
-- [ ] **Step 2: Escreva a ferramenta**
+- [ ] **Step 2: Write the tool**
 
-Crie `tool/verify_matcher.dart`:
+Create `tool/verify_matcher.dart`:
 
 ```dart
-// Roda o matcher sobre um pacote real e uma listagem real, e imprime a tabela
-// da secao 5.9 do spec. Roda fora do Flutter:
-//   dart run tool/verify_matcher.dart <pacote.json> <listagem.json>
+// Runs the matcher over a real pack and a real listing, and prints the table
+// of section 5.9 of the spec. Runs outside Flutter:
+//   dart run tool/verify_matcher.dart <pack.json> <listing.json>
 import 'dart:convert';
 import 'dart:io';
 
@@ -2592,7 +2601,7 @@ import 'package:roms_downloader/utils/pack_naming.dart';
 Future<void> main(List<String> args) async {
   if (args.length != 2) {
     stderr.writeln(
-        'uso: dart run tool/verify_matcher.dart <pacote.json> <listagem.json>');
+        'usage: dart run tool/verify_matcher.dart <pack.json> <listing.json>');
     exitCode = 64;
     return;
   }
@@ -2601,7 +2610,7 @@ Future<void> main(List<String> args) async {
   final files = listingNames(
       jsonDecode(await File(args[1]).readAsString()) as Map<String, dynamic>);
   if (files.isEmpty) {
-    stderr.writeln('a listagem nao tem nenhum arquivo com extensao de ROM');
+    stderr.writeln('the listing has no file with a ROM extension');
     exitCode = 1;
     return;
   }
@@ -2625,25 +2634,25 @@ Future<void> main(List<String> args) async {
   String line(String label, int n) =>
       '$label ${n.toString().padLeft(5)}  ${pct(n).padLeft(5)}%';
 
-  print('pacote ${pack.pack}: ${matcher.indexedGames} jogos, '
-      '${matcher.indexedCanonKeys} chaves canonicas');
-  print('listagem: $total arquivos');
-  print(line('tier 1 nome exato     ', tiers[MatchTier.exactName]!));
-  print(line('tier 2 titulo canonico', tiers[MatchTier.canonicalName]!));
-  print(line('tier 3 similaridade   ', tiers[MatchTier.fuzzyName]!));
-  print(line('tier 4 sem palpite    ', misses.length));
-  print('cobertura de arquivo $attributed/$total = ${pct(attributed)}%');
-  print('cobertura de jogo    ${hitGames.length}/${matcher.indexedGames} = '
+  print('pack ${pack.pack}: ${matcher.indexedGames} games, '
+      '${matcher.indexedCanonKeys} canonical keys');
+  print('listing: $total files');
+  print(line('tier 1 exact name     ', tiers[MatchTier.exactName]!));
+  print(line('tier 2 canonical title', tiers[MatchTier.canonicalName]!));
+  print(line('tier 3 similarity     ', tiers[MatchTier.fuzzyName]!));
+  print(line('tier 4 no guess       ', misses.length));
+  print('file coverage $attributed/$total = ${pct(attributed)}%');
+  print('game coverage ${hitGames.length}/${matcher.indexedGames} = '
       '${(hitGames.length / matcher.indexedGames * 100).toStringAsFixed(2)}%');
   print('');
-  print('primeiras falhas:');
+  print('first misses:');
   for (final miss in misses.take(15)) {
     print('  $miss');
   }
 }
 
-/// Nomes de ROM de uma resposta de `archive.org/metadata/<item>`. Derivativos
-/// ficam de fora: sao as capas e os indices que o proprio archive.org gera.
+/// ROM names from an `archive.org/metadata/<item>` response. Derivatives are
+/// left out: they are the covers and indices that archive.org itself generates.
 List<String> listingNames(Map<String, dynamic> meta) {
   final out = <String>[];
   for (final entry in (meta['files'] as List? ?? const [])) {
@@ -2657,28 +2666,28 @@ List<String> listingNames(Map<String, dynamic> meta) {
 }
 ```
 
-- [ ] **Step 3: Rode e confira contra a seção 5.9**
+- [ ] **Step 3: Run and check against section 5.9**
 
 Run: `dart run tool/verify_matcher.dart /tmp/snes-pack.json /tmp/snes-listing.json`
 
-Expected, número por número:
+Expected, number by number:
 
 ```
-pacote nintendo_super_nintendo_entertainment_system: 2415 jogos, 2415 chaves canonicas
-listagem: 4122 arquivos
-tier 1 nome exato       3584  86.95%
-tier 2 titulo canonico   444  10.77%
-tier 3 similaridade       26   0.63%
-tier 4 sem palpite        68   1.65%
-cobertura de arquivo 4054/4122 = 98.35%
-cobertura de jogo    2342/2415 = 96.98%
+pack nintendo_super_nintendo_entertainment_system: 2415 games, 2415 canonical keys
+listing: 4122 files
+tier 1 exact name       3584  86.95%
+tier 2 canonical title   444  10.77%
+tier 3 similarity         26   0.63%
+tier 4 no guess           68   1.65%
+file coverage 4054/4122 = 98.35%
+game coverage 2342/2415 = 96.98%
 ```
 
-Estes números não são estimativa: foram medidos sobre este mesmo pacote e esta mesma listagem antes de este plano ser escrito, e são os que a seção 5.9 do spec registra.
+These numbers are not an estimate: they were measured over this same pack and this same listing before this plan was written, and they are the ones section 5.9 of the spec records.
 
-**Se divergirem, o problema é a porta do `norm` ou do `canon`, não a ferramenta.** Uma divergência grande no tier 1 contra o tier 2 aponta o `norm`; uma divergência entre tier 2 e tier 4 aponta o `canon`, em geral a regra do artigo invertido. Volte para `test/pack_naming_parity_test.dart` e acrescente ao golden o caso que divergiu.
+**If they diverge, the problem is the port of `norm` or `canon`, not the tool.** A large divergence in tier 1 against tier 2 points to `norm`; a divergence between tier 2 and tier 4 points to `canon`, usually the inverted article rule. Go back to `test/pack_naming_parity_test.dart` and add the diverging case to the golden.
 
-Uma tolerância que **não** é divergência: se o pacote for reconstruído numa data em que o libretro-database ou o OpenVGDB mudaram, a contagem de jogos muda junto e os percentuais andam um pouco. Nesse caso o que vale é a forma: tier 1 na casa dos 87%, tier 2 na dos 11%, tier 3 abaixo de 1%, cobertura de arquivo acima de 98%.
+A tolerance that is **not** a divergence: if the pack is rebuilt on a date when libretro-database or OpenVGDB changed, the game count changes along with it and the percentages move a little. In that case what matters is the shape: tier 1 in the 87% range, tier 2 in the 11% range, tier 3 below 1%, file coverage above 98%.
 
 - [ ] **Step 4: Commit**
 
@@ -2689,13 +2698,13 @@ git commit -m "feat(identidade): ferramenta que roda o matcher contra o acervo r
 
 ---
 
-## O que esta fatia não faz
+## What this slice does not do
 
-Escrito para quem for revisar e sentir falta de alguma coisa. Nada aqui é esquecimento.
+Written for whoever reviews it and misses something. Nothing here is an oversight.
 
-- **Nenhuma tela.** Não há grade, badge, cartão de detalhe nem indicador de confiança. `MatchConfidence` existe para a fatia 3 consumir, e é ela que decide como "confirmado", "provável" e "palpite" aparecem para o usuário.
-- **Nenhuma fonte.** O `CrcConfirmService` recebe uma `Uri` pronta. Quem produz essa `Uri` a partir de um addon é o `SourceResolver`, que é a fatia 5. Aqui a fonte é sempre um parâmetro.
-- **O cache do eixo local não é persistido.** Ele existe e é injetável, mas nesta fatia ninguém chama o serviço em loop, então persistir seria escrever código sem consumidor. A fatia 3, que varre a biblioteca do usuário, é quem vai precisar.
-- **Serial como chave em sistema de disco.** A seção 5.6 do spec descreve casar PlayStation e GameCube pelo serial do disco, que é mais robusto que o nome. `PackDump.serial` já vem preenchido pelo pacote da fatia 1, e o matcher ainda não olha para ele. Fica para quando um console de disco entrar de verdade.
-- **Diretório central de zip local.** Resolveria o buraco do item 6 da Task 13, arquivo `.zip` no disco do usuário que só tem palpite de nome. É a extensão mais óbvia desta fatia, e continua sendo trabalho futuro.
-- **Zip64 e 7z remoto.** Zip64 é recusado explicitamente na Task 10, e `.7z` nem chega a virar requisição na Task 12. Nenhuma fonte conhecida serve os dois, e implementar por completude seria código sem exercício.
+- **No screen.** There is no grid, badge, detail card, or confidence indicator. `MatchConfidence` exists for slice 3 to consume, and it is slice 3 that decides how "confirmed", "likely" and "guess" appear to the user.
+- **No source.** `CrcConfirmService` receives a ready `Uri`. Whoever produces that `Uri` from an addon is `SourceResolver`, which is slice 5. Here the source is always a parameter.
+- **The local axis cache is not persisted.** It exists and is injectable, but in this slice nobody calls the service in a loop, so persisting would be writing code with no consumer. Slice 3, which sweeps the user's library, is the one that will need it.
+- **Serial as key on a disc system.** Section 5.6 of the spec describes matching PlayStation and GameCube by the disc serial, which is more robust than the name. `PackDump.serial` already comes filled by the slice 1 pack, and the matcher does not look at it yet. It waits until a disc console actually arrives.
+- **Central directory of a local zip.** It would resolve the gap of item 6 in Task 13, a `.zip` file on the user's disk that only has a name guess. It is the most obvious extension of this slice, and it remains future work.
+- **Remote zip64 and 7z.** Zip64 is explicitly refused in Task 10, and `.7z` does not even become a request in Task 12. No known source serves either, and implementing them for completeness would be code with no exercise.

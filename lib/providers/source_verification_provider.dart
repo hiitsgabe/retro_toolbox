@@ -6,16 +6,8 @@ import 'package:roms_downloader/providers/pack_grid_provider.dart';
 import 'package:roms_downloader/services/source_verification_service.dart';
 import 'package:roms_downloader/services/zip_central_directory.dart';
 
-/// O que identifica uma verificação.
-///
-/// É record, e não classe, porque record tem igualdade estrutural de graça, e
-/// é essa igualdade que faz a família do Riverpod cachear. Com uma classe sem
-/// `operator ==`, cada rebuild criaria uma chave nova e a verificação rodaria
-/// de novo a cada frame, com duas requisições por vez.
-///
-/// A chave efetiva é (fonte, arquivo), como pede a seção 8 do spec de UI. Os
-/// outros dois campos são função desses dois e estão aqui só para o provider
-/// não precisar receber a fonte inteira.
+/// What identifies a verification. A record so its structural equality lets
+/// the Riverpod family cache. The effective key is (source, file).
 typedef SourceVerificationRequest = ({
   String sourceId,
   String filename,
@@ -23,11 +15,8 @@ typedef SourceVerificationRequest = ({
   String gameId,
 });
 
-/// O verificador do console atual. Null quando o console não tem pacote, que é
-/// o mesmo contrato de `packMatcherProvider`.
-///
-/// Fica separado do provider de veredito porque é ele que carrega o `fetch` de
-/// produção, e é ele que o teste sobrescreve para não ir à rede.
+/// The current console's verifier. Null when the console has no pack. Carries
+/// the production `fetch`; tests override it to stay off the network.
 final sourceVerificationServiceProvider =
     FutureProvider.family<SourceVerificationService?, PackTarget>((ref, target) async {
   final matcher = await ref.watch(packMatcherProvider(target).future);
@@ -38,14 +27,11 @@ final sourceVerificationServiceProvider =
   );
 });
 
-/// O veredito de CRC de uma fonte.
+/// The CRC verdict for a source. Not `autoDispose`: the live family is the
+/// cache, one enum per (source, file) seen, not the bytes.
 ///
-/// **Não é `autoDispose`, de propósito.** A família viva é o cache que a seção
-/// 8 pede quando diz que a segunda abertura do mesmo jogo é instantânea. O que
-/// fica na memória é um enum por (fonte, arquivo) visto, não os bytes.
-///
-/// Nunca devolve [SourceVerification.verifying]: enquanto a leitura roda, quem
-/// está em `verifying` é o próprio `AsyncValue`. Traduza com [verificationOf].
+/// Never returns [SourceVerification.verifying]; while the read runs the
+/// `AsyncValue` is loading. Translate with [verificationOf].
 final sourceVerificationProvider =
     FutureProvider.family<SourceVerification, SourceVerificationRequest>((ref, request) async {
   final target = ref.watch(packTargetProvider);
@@ -62,13 +48,10 @@ final sourceVerificationProvider =
   return service.verify(uri, request.filename, request.gameId);
 });
 
-/// O estado que a tela pinta, a partir do que o provider devolveu.
-///
-/// Erro vira `impossible` e não tela vermelha: `verify` não levanta, então
-/// chegar aqui significa que o pacote do console não carregou, e nesse caso o
-/// que o usuário precisa saber é que não deu para verificar.
+/// The state the screen paints from what the provider returned. Error becomes
+/// `impossible`, not a red screen: it means the console's pack failed to load.
 SourceVerification verificationOf(AsyncValue<SourceVerification> value) => value.when(
-      data: (veredito) => veredito,
+      data: (verdict) => verdict,
       loading: () => SourceVerification.verifying,
       error: (_, __) => SourceVerification.impossible,
     );

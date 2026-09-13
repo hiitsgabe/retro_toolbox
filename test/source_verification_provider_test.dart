@@ -11,119 +11,114 @@ import 'package:roms_downloader/services/source_verification_service.dart';
 import 'support/pack_fixture.dart';
 import 'support/zip_fixture.dart';
 
-const _alvo = PackTarget('snes', 'Super Nintendo');
-const chronoUsa = 0x2D206BF7;
+const _target = PackTarget('snes', 'Super Nintendo');
+const crystalUsa = 0x2D206BF7;
 
-SourceVerificationRequest _pedido({String? url = 'https://exemplo/ct.zip'}) => (
-      sourceId: 'listagem',
-      filename: 'Chrono Trigger (USA).zip',
+SourceVerificationRequest _request({String? url = 'https://example/ct.zip'}) => (
+      sourceId: 'listing',
+      filename: 'Crystal Vanguard (USA).zip',
       url: url,
-      gameId: 'snes/chrono-trigger',
+      gameId: 'snes/crystal-vanguard',
     );
 
-SourceVerificationService _servico(FakeRangeServer server) =>
+SourceVerificationService _service(FakeRangeServer server) =>
     SourceVerificationService(matcher: PackMatcher(buildPack()), fetch: server.fetch);
 
 ProviderContainer _container({
-  PackTarget? alvo = _alvo,
-  SourceVerificationService? servico,
+  PackTarget? target = _target,
+  SourceVerificationService? service,
 }) {
   final container = ProviderContainer(overrides: [
-    packTargetProvider.overrideWithValue(alvo),
-    if (servico != null)
-      sourceVerificationServiceProvider(_alvo).overrideWith((ref) => servico),
+    packTargetProvider.overrideWithValue(target),
+    if (service != null)
+      sourceVerificationServiceProvider(_target).overrideWith((ref) => service),
   ]);
   addTearDown(container.dispose);
   return container;
 }
 
 void main() {
-  test('sem console selecionado ninguém verifica nada', () async {
-    final container = _container(alvo: null);
+  test('no selected console verifies nothing', () async {
+    final container = _container(target: null);
 
-    // Nenhuma sobrescrita de serviço aqui: se o provider tentasse construir
-    // um, ele iria à rede de verdade dentro do teste.
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.notVerified,
     );
   });
 
-  test('console sem pacote fica em notVerified', () async {
+  test('console without a pack stays notVerified', () async {
     final container = ProviderContainer(overrides: [
-      packTargetProvider.overrideWithValue(_alvo),
-      packMatcherProvider(_alvo).overrideWith((ref) => null),
+      packTargetProvider.overrideWithValue(_target),
+      packMatcherProvider(_target).overrideWith((ref) => null),
     ]);
     addTearDown(container.dispose);
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.notVerified,
     );
   });
 
-  test('fonte sem url tem verificação impossível', () async {
+  test('a source without a url is impossible', () async {
     final container = _container();
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido(url: null)).future),
+      await container.read(sourceVerificationProvider(_request(url: null)).future),
       SourceVerification.impossible,
     );
   });
 
-  test('url que não parseia tem verificação impossível', () async {
+  test('a url that does not parse is impossible', () async {
     final container = _container();
 
-    // `Uri.tryParse` devolve null aqui por causa do colchete sem par.
     expect(
-      await container.read(sourceVerificationProvider(_pedido(url: 'http://[')).future),
+      await container.read(sourceVerificationProvider(_request(url: 'http://[')).future),
       SourceVerification.impossible,
     );
   });
 
-  test('o veredito do serviço chega inteiro', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the service verdict passes through intact', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
     expect(
-      await container.read(sourceVerificationProvider(_pedido()).future),
+      await container.read(sourceVerificationProvider(_request()).future),
       SourceVerification.crcOk,
     );
   });
 
-  test('enquanto a leitura roda o estado é verificando', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the state is verifying while the read runs', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
-    // `verifying` não sai do provider: ele é o `AsyncLoading` traduzido.
     expect(
-      verificationOf(container.read(sourceVerificationProvider(_pedido()))),
+      verificationOf(container.read(sourceVerificationProvider(_request()))),
       SourceVerification.verifying,
     );
 
-    await container.read(sourceVerificationProvider(_pedido()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
 
     expect(
-      verificationOf(container.read(sourceVerificationProvider(_pedido()))),
+      verificationOf(container.read(sourceVerificationProvider(_request()))),
       SourceVerification.crcOk,
     );
   });
 
-  test('o mesmo par fonte e arquivo é lido uma vez só', () async {
-    final server = FakeRangeServer(buildZip([cdEntry('Chrono Trigger (USA).sfc', chronoUsa)]));
-    final container = _container(servico: _servico(server));
+  test('the same source and file pair is read only once', () async {
+    final server = FakeRangeServer(buildZip([cdEntry('Crystal Vanguard (USA).sfc', crystalUsa)]));
+    final container = _container(service: _service(server));
 
-    await container.read(sourceVerificationProvider(_pedido()).future);
-    await container.read(sourceVerificationProvider(_pedido()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
+    await container.read(sourceVerificationProvider(_request()).future);
 
-    // Duas requisições, não quatro. É o cache da seção 8, e ele é a família
-    // viva do Riverpod, não um `Map` escrito à mão.
+    // Two requests, not four: the cache is the live Riverpod family.
     expect(server.asked.length, 2);
   });
 
-  test('erro vira impossível, e não tela vermelha', () async {
+  test('an error becomes impossible, not a red screen', () async {
     expect(
-      verificationOf(AsyncError(Exception('pacote não carregou'), StackTrace.empty)),
+      verificationOf(AsyncError(Exception('pack did not load'), StackTrace.empty)),
       SourceVerification.impossible,
     );
   });
