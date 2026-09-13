@@ -207,6 +207,17 @@ class TitleMetadataParser {
     _PatternHandler(RegExp(r'\(Alpha[^)]*\)'), (match, context) => context.romTypes.add(RomType.alpha)),
     _PatternHandler(RegExp(r'\(Preview\)'), (match, context) => context.romTypes.add(RomType.beta)),
     _PatternHandler(RegExp(r'\(Pre-Release\)'), (match, context) => context.romTypes.add(RomType.beta)),
+    // Square-bracket spellings. Some listings publish `[Beta]` where a DAT
+    // writes `(Beta)`, and without these the release never gets flagged: the
+    // generic `\[.*-\d+.*\]` above swallows it as a product code when a date
+    // tag follows, which is exactly how a beta won a batch pick.
+    _PatternHandler(RegExp(r'\[Beta[^\]]*\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.beta)),
+    _PatternHandler(RegExp(r'\[Alpha[^\]]*\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.alpha)),
+    _PatternHandler(RegExp(r'\[Proto(?:type)?[^\]]*\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.proto)),
+    _PatternHandler(RegExp(r'\[Demo[^\]]*\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.demo)),
+    _PatternHandler(RegExp(r'\[Sample[^\]]*\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.sample)),
+    _PatternHandler(RegExp(r'\[Preview\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.beta)),
+    _PatternHandler(RegExp(r'\[Pre-Release\]', caseSensitive: false), (match, context) => context.romTypes.add(RomType.beta)),
     _PatternHandler(RegExp(r'\(Test Program\)'), (match, context) => context.romTypes.add(RomType.proto)),
     _PatternHandler(RegExp(r'Auto Erase Disc'), (match, context) => context.romTypes.add(RomType.bios), stripFromTitle: false),
     _PatternHandler(RegExp(r'\(Final\)'), (match, context) => context.categories.add('Final')),

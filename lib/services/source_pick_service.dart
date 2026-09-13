@@ -100,7 +100,27 @@ BatchPlan planFromEntries(
   return BatchPlan(picks: picks, failures: failures);
 }
 
+/// The rom types that mean "this is not the released game": a beta, an alpha,
+/// a prototype, a demo or a sample.
+const _prerelease = {
+  RomType.beta,
+  RomType.alpha,
+  RomType.proto,
+  RomType.demo,
+  RomType.sample,
+};
+
+/// 0 for a finished release, 1 for a prerelease.
+int _prereleaseRank(_Candidate candidate) =>
+    candidate.meta.romTypes.any(_prerelease.contains) ? 1 : 0;
+
 int _compare(_Candidate a, _Candidate b, Set<String> preferred, List<String> priority) {
+  // Ahead of region on purpose: a beta is the wrong game, while a foreign
+  // release is the right game in the wrong language. Nothing below can promote
+  // a prerelease over a finished release.
+  final prerelease = _prereleaseRank(a).compareTo(_prereleaseRank(b));
+  if (prerelease != 0) return prerelease;
+
   final region = _regionRank(a, preferred).compareTo(_regionRank(b, preferred));
   if (region != 0) return region;
 
@@ -154,6 +174,10 @@ String _reason(
 ) {
   if (ordered.length == 1) return 'the only source that has this game';
   final runnerUp = ordered[1];
+
+  if (_prereleaseRank(winner) != _prereleaseRank(runnerUp)) {
+    return 'the finished release, not a beta or a demo';
+  }
 
   if (_regionRank(winner, preferred) != _regionRank(runnerUp, preferred)) {
     final region = winner.meta.regions.where(preferred.contains).firstOrNull;

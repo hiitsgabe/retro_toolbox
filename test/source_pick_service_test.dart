@@ -338,4 +338,75 @@ void main() {
     // Not uncertainty: it is certainty that none fits.
     expect(split.noCertainty, isFalse);
   });
+
+  test('a square-bracket beta loses to the finished release', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA) [Beta] [2000-08-26].zip'),
+        _source('Crystal Vanguard (USA).zip'),
+      ]),
+    ]);
+
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip');
+    expect(plan.picks.single.reason, 'the finished release, not a beta or a demo');
+  });
+
+  test('a beta loses even holding the preferred region alone', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA) [Beta].zip'),
+        _source('Crystal Vanguard (Europe).zip'),
+      ]),
+    ]);
+
+    expect(plan.picks.single.filename, 'Crystal Vanguard (Europe).zip');
+  });
+
+  test('a beta loses even carrying the higher revision', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA) (Rev 2) [Beta].zip'),
+        _source('Crystal Vanguard (USA).zip'),
+      ]),
+    ]);
+
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip');
+  });
+
+  test('a beta loses even being the confirmed match', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (USA) [Beta].zip', confidence: MatchConfidence.confirmed),
+        _source('Crystal Vanguard (USA).zip', confidence: MatchConfidence.guess),
+      ]),
+    ]);
+
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip');
+  });
+
+  test('the other prerelease spellings lose the same way', () {
+    for (final tag in ['[Proto]', '[Demo]', '[Sample]', '[Alpha]', '(Beta)']) {
+      final plan = _plan([
+        _entry('Crystal Vanguard', [
+          _source('Crystal Vanguard (USA) $tag.zip'),
+          _source('Crystal Vanguard (USA).zip'),
+        ]),
+      ]);
+
+      expect(plan.picks.single.filename, 'Crystal Vanguard (USA).zip', reason: tag);
+    }
+  });
+
+  test('when every source is a beta the pick is still made', () {
+    final plan = _plan([
+      _entry('Crystal Vanguard', [
+        _source('Crystal Vanguard (Europe) [Beta].zip'),
+        _source('Crystal Vanguard (USA) [Beta].zip'),
+      ]),
+    ]);
+
+    // No finished release exists, so the region rule below decides.
+    expect(plan.picks.single.filename, 'Crystal Vanguard (USA) [Beta].zip');
+    expect(plan.failures, isEmpty);
+  });
 }
