@@ -17,6 +17,8 @@ void main() {
         {"name": "Crystal Vanguard (Japan)", "crc": "1f2e3d4c"}
       ],
       "cover": "https://example.invalid/cover.png",
+      "screenshot": "https://example.invalid/shot.png",
+      "titleScreen": "https://example.invalid/title.png",
       "synopsis": "An RPG.",
       "genre": "Role-Playing",
       "developer": "Square",
@@ -59,13 +61,42 @@ void main() {
     expect(game.cover, isNull);
     expect(game.synopsis, isNull);
     expect(game.year, isNull);
+    expect(game.screenshot, isNull);
+    expect(game.titleScreen, isNull);
     expect(game.dumps, isEmpty);
+  });
+
+  test('shots lists the screenshot before the title screen', () {
+    final pack = MetadataPack.decode(sample);
+    expect(pack.games.first.shots, [
+      'https://example.invalid/shot.png',
+      'https://example.invalid/title.png',
+    ]);
+  });
+
+  test('shots skips the art a game does not have', () {
+    // Independent fields: the thumbnail repos have three folders and a game can
+    // be in any subset of them, so `shots` is built by filtering, not by
+    // assuming they arrive together.
+    const one = PackGame(id: 'a/b', title: 'B', dumps: [], titleScreen: 'https://example.invalid/t.png');
+    expect(one.shots, ['https://example.invalid/t.png']);
+    expect(const PackGame(id: 'a/c', title: 'C', dumps: []).shots, isEmpty);
+  });
+
+  test('shots treats an empty string as absent art', () {
+    // A pack built before the field existed, or a builder that wrote "" for a
+    // missing thumbnail: either way there is no image to open.
+    const blank = PackGame(id: 'a/d', title: 'D', dumps: [], screenshot: '', titleScreen: '');
+    expect(blank.shots, isEmpty);
   });
 
   test('toJson omits nulls and survives a round trip', () {
     final pack = MetadataPack.decode(sample);
     final round = MetadataPack.decode(jsonEncode(pack.toJson()));
     expect(round.games[1].toJson().containsKey('cover'), isFalse);
+    expect(round.games[1].toJson().containsKey('screenshot'), isFalse);
+    expect(round.games.first.screenshot, 'https://example.invalid/shot.png');
+    expect(round.games.first.titleScreen, 'https://example.invalid/title.png');
     expect(round.games.first.dumps.first.crc, '2D206BF7');
     expect(round.games.first.year, 1995);
     expect(round.games.length, 2);

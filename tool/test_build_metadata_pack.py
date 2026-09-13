@@ -369,10 +369,13 @@ class AttachCoversTest(unittest.TestCase):
             ],
         }]
 
+    def attach(self, games, available, repo="R", field="cover"):
+        b.attach_thumbnails(games, available, repo, b.THUMB_FOLDERS[field], field)
+
     def test_picks_the_preferred_region_cover(self):
         games = self.games()
         available = {"Crystal Vanguard (Japan).png", "Crystal Vanguard (USA).png"}
-        b.attach_thumbnail_covers(games, available, "Nintendo_-_Super_Nintendo_Entertainment_System")
+        self.attach(games, available, "Nintendo_-_Super_Nintendo_Entertainment_System")
         self.assertEqual(
             games[0]["cover"],
             "https://raw.githubusercontent.com/libretro-thumbnails/"
@@ -382,28 +385,52 @@ class AttachCoversTest(unittest.TestCase):
 
     def test_falls_back_to_the_only_available_region(self):
         games = self.games()
-        b.attach_thumbnail_covers(games, {"Crystal Vanguard (Japan).png"}, "R")
+        self.attach(games, {"Crystal Vanguard (Japan).png"})
         self.assertIn("Japan", games[0]["cover"])
 
     def test_no_thumbnail_leaves_the_game_without_cover(self):
         games = self.games()
-        b.attach_thumbnail_covers(games, set(), "R")
+        self.attach(games, set())
         self.assertNotIn("cover", games[0])
+
+    def test_a_screenshot_lands_in_its_own_field_and_folder(self):
+        games = self.games()
+        self.attach(games, {"Crystal Vanguard (USA).png"}, field="screenshot")
+        self.assertIn("/Named_Snaps/", games[0]["screenshot"])
+        self.assertNotIn("cover", games[0])
+
+    def test_the_title_screen_has_its_own_folder(self):
+        games = self.games()
+        self.attach(games, {"Crystal Vanguard (USA).png"}, field="titleScreen")
+        self.assertIn("/Named_Titles/", games[0]["titleScreen"])
+
+    def test_each_folder_resolves_its_own_region(self):
+        # The folders do not hold the same files, so the game can end up with a
+        # USA cover and a Japan screenshot. Reusing the cover's dump would have
+        # left the screenshot missing instead.
+        games = self.games()
+        self.attach(games, {"Crystal Vanguard (USA).png"})
+        self.attach(games, {"Crystal Vanguard (Japan).png"}, field="screenshot")
+        self.assertIn("USA", games[0]["cover"])
+        self.assertIn("Japan", games[0]["screenshot"])
 
 
 class OpenVgdbTest(unittest.TestCase):
     def setUp(self):
         self.conn = sqlite3.connect(":memory:")
         self.conn.executescript('''
-            CREATE TABLE ROMs (romID INTEGER, romHashCRC TEXT);
+            CREATE TABLE ROMs (romID INTEGER, romHashCRC TEXT, romSerial TEXT);
             CREATE TABLE RELEASES (romID INTEGER, releaseDescription TEXT,
                 releaseCoverFront TEXT, releaseDeveloper TEXT,
                 releasePublisher TEXT, releaseGenre TEXT, releaseDate TEXT);
-            INSERT INTO ROMs VALUES (1, '2D206BF7');
+            INSERT INTO ROMs VALUES (1, '2D206BF7', 'SNS-AC-USA');
             INSERT INTO RELEASES VALUES (1, 'An RPG.', 'https://img/ct.jpg',
                 'Square', 'Square', 'Role-Playing', 'Mar 11, 1995');
-            INSERT INTO ROMs VALUES (2, 'AAAAAAAA');
+            INSERT INTO ROMs VALUES (2, 'AAAAAAAA', NULL);
             INSERT INTO RELEASES VALUES (2, NULL, NULL, NULL, NULL, NULL, NULL);
+            INSERT INTO ROMs VALUES (3, 'BBBBBBBB', 'SLUS-01272');
+            INSERT INTO RELEASES VALUES (3, 'A shooter.', NULL, 'Black Ops',
+                NULL, 'Action', 'Nov 6, 2000');
         ''')
 
     def test_index_is_keyed_by_uppercase_crc(self):
@@ -447,6 +474,63 @@ class OpenVgdbTest(unittest.TestCase):
         self.assertEqual(games[0]["cover"], "https://img/ct.jpg")
 
 
+class OpenVgdbSerialTest(OpenVgdbTest):
+    """The disc systems, whose DAT CRC never meets the OpenVGDB CRC."""
+
+    def indexes(self):
+        return b.openvgdb_index(self.conn), b.openvgdb_serial_index(self.conn)
+
+    def disc(self, **dump):
+        return [{"id": "psx/a", "title": "A", "dumps": [dump]}]
+
+    def test_the_index_is_keyed_by_uppercase_serial(self):
+        index = b.openvgdb_serial_index(self.conn)
+        self.assertIn("SLUS-01272", index)
+        self.assertEqual(index["SLUS-01272"]["synopsis"], "A shooter.")
+
+    def test_a_serial_without_any_useful_field_is_skipped(self):
+        self.assertNotIn(None, b.openvgdb_serial_index(self.conn))
+
+    def test_a_disc_with_an_unmatched_crc_is_filled_by_serial(self):
+        games = self.disc(name="Bond (USA)", crc="DEADBEEF", serial="SLUS-01272")
+        b.enrich_from_openvgdb(games, *self.indexes())
+        self.assertEqual(games[0]["synopsis"], "A shooter.")
+        self.assertEqual(games[0]["developer"], "Black Ops")
+        self.assertEqual(games[0]["year"], 2000)
+
+    def test_the_serial_is_matched_case_insensitively(self):
+        games = self.disc(name="Bond (USA)", crc="DEADBEEF", serial="slus-01272")
+        b.enrich_from_openvgdb(games, *self.indexes())
+        self.assertEqual(games[0]["synopsis"], "A shooter.")
+
+    def test_crc_wins_over_serial(self):
+        # CRC names one exact dump and the serial names a release, so a dump
+        # carrying both must come back with the CRC record.
+        games = self.disc(name="A (USA)", crc="2D206BF7", serial="SLUS-01272")
+        b.enrich_from_openvgdb(games, *self.indexes())
+        self.assertEqual(games[0]["synopsis"], "An RPG.")
+
+    def test_a_later_dump_supplies_the_serial(self):
+        games = [{"id": "psx/a", "title": "A", "dumps": [
+            {"name": "A (Japan)", "crc": "DEADBEEF", "serial": "SLPS-99999"},
+            {"name": "A (USA)", "crc": "DEADBEEF", "serial": "SLUS-01272"},
+        ]}]
+        b.enrich_from_openvgdb(games, *self.indexes())
+        self.assertEqual(games[0]["synopsis"], "A shooter.")
+
+    def test_without_a_serial_index_nothing_changes(self):
+        # The cartridge systems keep calling with CRC only, and must not start
+        # picking up serial records by accident.
+        games = self.disc(name="Bond (USA)", crc="DEADBEEF", serial="SLUS-01272")
+        b.enrich_from_openvgdb(games, b.openvgdb_index(self.conn))
+        self.assertNotIn("synopsis", games[0])
+
+    def test_an_unknown_serial_fills_nothing(self):
+        games = self.disc(name="Bond (USA)", crc="DEADBEEF", serial="SLES-00001")
+        b.enrich_from_openvgdb(games, *self.indexes())
+        self.assertNotIn("synopsis", games[0])
+
+
 class BuildPackTest(unittest.TestCase):
     def test_assembles_the_pack_document(self):
         pack = b.build_pack(
@@ -456,7 +540,7 @@ class BuildPackTest(unittest.TestCase):
                     "aliases": ["snes"]},
             dat_text=NO_INTRO_DAT,
             side_texts={"genre": GENRE_DAT, "serial": SERIAL_DAT},
-            thumbs=set(),
+            thumbs={},
             openvgdb={},
             built="2026-09-10",
         )
@@ -471,7 +555,7 @@ class BuildPackTest(unittest.TestCase):
                     "group": "no-intro", "thumbs": "T", "aliases": []},
             dat_text=NO_INTRO_DAT,
             side_texts={"genre": GENRE_DAT, "serial": SERIAL_DAT},
-            thumbs=set(),
+            thumbs={},
             openvgdb={},
             built="2026-09-10",
         )
@@ -485,7 +569,7 @@ class BuildPackTest(unittest.TestCase):
                     "thumbs": "T", "aliases": []},
             dat_text=REDUMP_DAT,
             side_texts={},
-            thumbs=set(),
+            thumbs={},
             openvgdb={},
             built="2026-09-10",
         )

@@ -24,8 +24,18 @@ import urllib.request
 import zipfile
 
 LIBRETRO_RAW = "https://raw.githubusercontent.com/libretro/libretro-database/master"
-THUMBS_API = "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/master:Named_Boxarts"
-THUMBS_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/{repo}/master/Named_Boxarts/{name}"
+THUMBS_API = "https://api.github.com/repos/libretro-thumbnails/{repo}/git/trees/master:{folder}"
+THUMBS_RAW = "https://raw.githubusercontent.com/libretro-thumbnails/{repo}/master/{folder}/{name}"
+
+# The three folders every libretro-thumbnails repository publishes under the
+# same filenames, mapped to the pack field each one fills. Snaps are in-game
+# captures and Titles are title screens; they are listed separately because a
+# game can have one without the other.
+THUMB_FOLDERS = {
+    "cover": "Named_Boxarts",
+    "screenshot": "Named_Snaps",
+    "titleScreen": "Named_Titles",
+}
 OPENVGDB_URL = "https://github.com/OpenVGDB/OpenVGDB/releases/download/v29.0/openvgdb.zip"
 
 SIDE_FIELDS = {
@@ -282,9 +292,13 @@ def region_rank(dat_name):
     return len(REGION_ORDER)
 
 
-def attach_thumbnail_covers(games, available, repo):
-    """Picks the libretro-thumbnails cover of the best-region dump that
-    actually exists in the repository."""
+def attach_thumbnails(games, available, repo, folder, field):
+    """Picks the image of the best-region dump that exists in the repository.
+
+    Each folder is resolved on its own rather than reusing the dump the cover
+    landed on: the three folders do not hold the same set of files, so a game
+    whose USA cover is missing can still have a USA screenshot.
+    """
     for game in games:
         best = None
         for dump in sorted(game["dumps"], key=lambda d: region_rank(d["name"])):
@@ -294,21 +308,25 @@ def attach_thumbnail_covers(games, available, repo):
                 break
         if best is None:
             continue
-        game["cover"] = THUMBS_RAW.format(
-            repo=repo, name=urllib.parse.quote(best, safe="")
+        game[field] = THUMBS_RAW.format(
+            repo=repo, folder=folder, name=urllib.parse.quote(best, safe="")
         )
 
 
-def openvgdb_index(conn):
-    """Maps uppercase CRC32 to the useful OpenVGDB fields."""
+OPENVGDB_FIELDS = ("synopsis", "cover", "developer", "publisher", "genre", "year")
+
+
+def _openvgdb_rows(conn, key_column):
+    """Maps an uppercase key to the useful OpenVGDB fields, skipping the rows
+    that carry no key and the rows where every field is empty."""
     rows = conn.execute(
-        "SELECT r.romHashCRC, rel.releaseDescription, rel.releaseCoverFront, "
+        f"SELECT r.{key_column}, rel.releaseDescription, rel.releaseCoverFront, "
         "rel.releaseDeveloper, rel.releasePublisher, rel.releaseGenre, rel.releaseDate "
         "FROM ROMs r JOIN RELEASES rel ON rel.romID = r.romID"
     )
     index = {}
-    for crc, synopsis, cover, developer, publisher, genre, date in rows:
-        if not crc:
+    for key, synopsis, cover, developer, publisher, genre, date in rows:
+        if not key:
             continue
         year = None
         if date:
@@ -319,25 +337,63 @@ def openvgdb_index(conn):
                   "publisher": publisher, "genre": genre, "year": year}
         if not any(record.values()):
             continue
-        index.setdefault(crc.upper(), record)
+        index.setdefault(key.strip().upper(), record)
     return index
 
 
-def enrich_from_openvgdb(games, index):
-    """Fills gaps only; libretro-database always wins over OpenVGDB."""
+def openvgdb_index(conn):
+    """Maps uppercase CRC32 to the useful OpenVGDB fields."""
+    return _openvgdb_rows(conn, "romHashCRC")
+
+
+def openvgdb_serial_index(conn):
+    """Maps uppercase media serial to the same fields.
+
+    The disc systems need this. Their DAT records the CRC of the disc image,
+    while OpenVGDB records the CRC of a different dump of the same disc, so the
+    two never meet: joining PlayStation by CRC alone matched 0 of 6366 games.
+    The serial (`SLUS-01272`) is printed on the disc and both sides agree on it.
+    """
+    return _openvgdb_rows(conn, "romSerial")
+
+
+def enrich_from_openvgdb(games, index, serial_index=None):
+    """Fills gaps only; libretro-database always wins over OpenVGDB.
+
+    CRC is tried across every dump before serial is tried at all. CRC names one
+    exact dump while a serial names a release, so preferring it keeps the
+    cartridge systems on the more precise key and leaves serial as the fallback
+    that only the disc systems ever reach.
+    """
     for game in games:
-        for dump in game["dumps"]:
-            record = index.get(dump.get("crc"))
-            if not record:
-                continue
-            for field in ("synopsis", "cover", "developer", "publisher", "genre", "year"):
-                if record.get(field) and not game.get(field):
-                    game[field] = record[field]
-            break
+        record = _first_match(game, index, "crc")
+        if record is None and serial_index:
+            record = _first_match(game, serial_index, "serial")
+        if record is None:
+            continue
+        for field in OPENVGDB_FIELDS:
+            if record.get(field) and not game.get(field):
+                game[field] = record[field]
 
 
-def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
-    """Assembles everything into a pack document ready to serialize."""
+def _first_match(game, index, dump_key):
+    for dump in game["dumps"]:
+        value = dump.get(dump_key)
+        if not value:
+            continue
+        record = index.get(value.strip().upper())
+        if record:
+            return record
+    return None
+
+
+def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built,
+               serial_index=None):
+    """Assembles everything into a pack document ready to serialize.
+
+    `thumbs` maps a pack field to the filenames available in that field's
+    folder, so a repository missing one folder costs only that field.
+    """
     pack_id = normalize(system["system"])
     games = collapse(parse_dat(dat_text), pack_id)
     side_maps = {
@@ -345,8 +401,10 @@ def build_pack(system, dat_text, side_texts, thumbs, openvgdb, built):
         for source, text in side_texts.items()
     }
     enrich_from_side(games, side_maps)
-    attach_thumbnail_covers(games, thumbs, system["thumbs"])
-    enrich_from_openvgdb(games, openvgdb)
+    for field, folder in THUMB_FOLDERS.items():
+        attach_thumbnails(games, thumbs.get(field, set()), system["thumbs"],
+                          folder, field)
+    enrich_from_openvgdb(games, openvgdb, serial_index)
     return {"pack": pack_id, "system": system["system"], "built": built, "games": games}
 
 
@@ -391,15 +449,15 @@ def fetch_json(url, token=None):
         return json.loads(response.read().decode("utf-8"))
 
 
-def thumbnail_names(repo, token=None):
-    """Filenames in Named_Boxarts; a truncated tree returns an empty set."""
+def thumbnail_names(repo, folder, token=None):
+    """Filenames in one thumbnail folder; a truncated tree returns an empty set."""
     try:
-        tree = fetch_json(THUMBS_API.format(repo=repo), token)
+        tree = fetch_json(THUMBS_API.format(repo=repo, folder=folder), token)
     except urllib.error.HTTPError as error:
-        print(f"  thumbnails for {repo} unavailable: HTTP {error.code}", file=sys.stderr)
+        print(f"  {folder} for {repo} unavailable: HTTP {error.code}", file=sys.stderr)
         return set()
     if tree.get("truncated"):
-        print(f"  tree for {repo} truncated, skipping covers", file=sys.stderr)
+        print(f"  tree for {repo}/{folder} truncated, skipping it", file=sys.stderr)
         return set()
     return {entry["path"] for entry in tree.get("tree", [])}
 
@@ -431,8 +489,9 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         conn = download_openvgdb(tmp)
         openvgdb = openvgdb_index(conn)
+        serial_index = openvgdb_serial_index(conn)
         conn.close()
-        print(f"OpenVGDB: {len(openvgdb)} CRCs")
+        print(f"OpenVGDB: {len(openvgdb)} CRCs, {len(serial_index)} serials")
 
         packs = []
         aliases = {}
@@ -450,12 +509,14 @@ def main():
                 text = fetch_text(url, optional=True)
                 if text is not None:
                     side_texts[source] = text
-            thumbs = thumbnail_names(system["thumbs"], token)
-            pack = build_pack(system, dat_text, side_texts, thumbs, openvgdb, args.built)
-            with_cover = sum(1 for g in pack["games"] if g.get("cover"))
-            with_synopsis = sum(1 for g in pack["games"] if g.get("synopsis"))
-            print(f"  {len(pack['games'])} games, {with_cover} with cover, "
-                  f"{with_synopsis} with synopsis")
+            thumbs = {field: thumbnail_names(system["thumbs"], folder, token)
+                      for field, folder in THUMB_FOLDERS.items()}
+            pack = build_pack(system, dat_text, side_texts, thumbs, openvgdb,
+                              args.built, serial_index)
+            counts = ", ".join(
+                f"{sum(1 for g in pack['games'] if g.get(field))} {field}"
+                for field in ("cover", "screenshot", "titleScreen", "synopsis"))
+            print(f"  {len(pack['games'])} games, {counts}")
             path = os.path.join(args.out, f"{pack_id}.json.gz")
             with open(path, "wb") as out:
                 out.write(pack_bytes(pack))

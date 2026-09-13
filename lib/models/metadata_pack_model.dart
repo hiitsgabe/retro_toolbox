@@ -45,6 +45,11 @@ class PackGame {
   final String title;
   final List<PackDump> dumps;
   final String? cover;
+
+  /// In-game capture. Independent of [titleScreen]: a game can have one and
+  /// not the other, because they come from two separate folders.
+  final String? screenshot;
+  final String? titleScreen;
   final String? synopsis;
   final String? genre;
   final String? developer;
@@ -56,12 +61,21 @@ class PackGame {
     required this.title,
     required this.dumps,
     this.cover,
+    this.screenshot,
+    this.titleScreen,
     this.synopsis,
     this.genre,
     this.developer,
     this.publisher,
     this.year,
   });
+
+  /// The captures to show, in the order they should appear, skipping the ones
+  /// the pack does not carry.
+  List<String> get shots => [
+        if ((screenshot ?? '').isNotEmpty) screenshot!,
+        if ((titleScreen ?? '').isNotEmpty) titleScreen!,
+      ];
 
   factory PackGame.fromJson(Map<String, dynamic> json) => PackGame(
         id: json['id'] as String,
@@ -70,6 +84,8 @@ class PackGame {
             .map((e) => PackDump.fromJson(e as Map<String, dynamic>))
             .toList(),
         cover: json['cover'] as String?,
+        screenshot: json['screenshot'] as String?,
+        titleScreen: json['titleScreen'] as String?,
         synopsis: json['synopsis'] as String?,
         genre: json['genre'] as String?,
         developer: json['developer'] as String?,
@@ -82,6 +98,8 @@ class PackGame {
         'title': title,
         'dumps': dumps.map((d) => d.toJson()).toList(),
         if (cover != null) 'cover': cover,
+        if (screenshot != null) 'screenshot': screenshot,
+        if (titleScreen != null) 'titleScreen': titleScreen,
         if (synopsis != null) 'synopsis': synopsis,
         if (genre != null) 'genre': genre,
         if (developer != null) 'developer': developer,
