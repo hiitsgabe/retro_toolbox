@@ -39,9 +39,12 @@ class _HeaderState extends ConsumerState<Header> {
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final taskQueueState = ref.watch(taskQueueProvider);
 
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isNarrow = screenWidth < 600;
-    final isMobile = screenWidth < 480;
+    // Below 600dp the console picker gets its own row: squeezed next to the
+    // search field and actions it shrank to an unreadable sliver on handhelds.
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    // The console picker stays enabled while a catalog loads: switching
+    // mid-load is safe (stale loads are discarded), and a slow catalog used to
+    // lock it, so changing consoles looked broken.
 
     final canAccessSettings = !appState.loading && !taskQueueState.hasRunningTasks;
     final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();
@@ -88,7 +91,6 @@ class _HeaderState extends ConsumerState<Header> {
                           child: ConsoleDropdown(
                             consoles: widget.consoles,
                             selectedConsole: widget.selectedConsole,
-                            isInteractive: !appState.loading,
                             onConsoleSelect: widget.onConsoleSelect,
                           ),
                         ),
@@ -126,22 +128,21 @@ class _HeaderState extends ConsumerState<Header> {
                         onPressed: () => Navigator.maybePop(context),
                       ),
                       SizedBox(width: 4),
-                    ] else if (!isNarrow) ...[
+                    ] else ...[
                       Image.asset('assets/icon.png', width: 35),
                       SizedBox(width: 16),
                     ],
                     Expanded(
-                      flex: isNarrow ? 3 : 2,
+                      flex: 2,
                       child: ConsoleDropdown(
                         consoles: widget.consoles,
                         selectedConsole: widget.selectedConsole,
-                        isInteractive: !ref.watch(appStateProvider).loading,
                         onConsoleSelect: widget.onConsoleSelect,
                       ),
                     ),
                     SizedBox(width: 12),
                     Expanded(
-                      flex: isNarrow ? 4 : 3,
+                      flex: 3,
                       child: SearchField(
                         initialText: catalogState.filterText,
                         isEnabled: !ref.watch(appStateProvider).loading,

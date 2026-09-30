@@ -60,7 +60,6 @@ class SettingsTabSelector extends StatelessWidget {
               ConsoleDropdown(
                 selectedConsole: selectedConsole,
                 consoles: consoles,
-                isInteractive: true,
                 onConsoleSelect: onConsoleSelected,
               ),
             ],

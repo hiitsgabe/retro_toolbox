@@ -4,14 +4,12 @@ import 'package:roms_downloader/models/console_model.dart';
 class ConsoleDropdown extends StatelessWidget {
   final List<Console> consoles;
   final Console? selectedConsole;
-  final bool isInteractive;
   final Function(Console) onConsoleSelect;
 
   const ConsoleDropdown({
     super.key,
     required this.consoles,
     required this.selectedConsole,
-    required this.isInteractive,
     required this.onConsoleSelect,
   });
 
@@ -61,14 +59,11 @@ class ConsoleDropdown extends StatelessWidget {
                   Icons.keyboard_arrow_down_rounded,
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                onChanged: isInteractive
-                    ? (value) {
-                        if (value != null) {
-                          final console = consoles.firstWhere((c) => c.id == value);
-                          onConsoleSelect(console);
-                        }
-                      }
-                    : null,
+                onChanged: (value) {
+                  if (value != null) {
+                    onConsoleSelect(consoles.firstWhere((c) => c.id == value));
+                  }
+                },
                 items: consoles.map((console) {
                   return DropdownMenuItem<String>(
                     value: console.id,

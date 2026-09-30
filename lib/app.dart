@@ -12,23 +12,9 @@ class RomsDownloaderApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
+      // Always dark: screens are designed for the dark palette and look broken
+      // when a device's system theme is light.
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF7C4DEF),
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        fontFamily: 'ChakraPetch',
-        scaffoldBackgroundColor: const Color(0xFFF4F0FC),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Color(0xFF2A2340),
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-        ),
-      ),
-      darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF7C4DEF),
           brightness: Brightness.dark,
@@ -44,7 +30,6 @@ class RomsDownloaderApp extends StatelessWidget {
           scrolledUnderElevation: 0,
         ),
       ),
-      themeMode: ThemeMode.system,
       home: const MenuScreen(),
     );
   }
