@@ -38,7 +38,9 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
 
   void updateTaskStatus(String taskId, TaskQueueStatus status, {String? error}) {
     final updatedTasks = state.tasks.map((currentTask) {
-      if (currentTask.id == taskId) {
+      // A download and its follow-up (extract/NSZ) share the game's id; only
+      // touch the live entry so finished siblings don't flip back to running.
+      if (currentTask.id == taskId && !currentTask.status.isCompleted) {
         return currentTask.copyWith(
           status: status,
           startedAt: status == TaskQueueStatus.running ? DateTime.now() : currentTask.startedAt,
