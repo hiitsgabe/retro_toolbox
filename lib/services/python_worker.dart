@@ -41,17 +41,25 @@ class PythonWorker {
   static bool _started = false;
   static String? _jobsDir;
 
-  static Future<String> _ensure() async {
+  @visibleForTesting
+  static Future<String?> Function(Map<String, String> env) launch =
+      (env) => SeriousPython.run(environmentVariables: env);
+
+  @visibleForTesting
+  static Future<String> ensureStarted() async {
     _jobsDir ??= path.join(Directory.systemTemp.path, 'python_worker');
     await Directory(_jobsDir!).create(recursive: true);
 
     if (!_started) {
       _started = true;
-      // Not awaited: the worker loops forever, so this future never completes.
+      // Async run() resolves as soon as the worker thread spawns (null = ok),
+      // NOT when the loop exits. Only a failed spawn may allow a retry;
+      // resetting on success re-initializes Python and crashes the app.
       // ignore: unawaited_futures
-      SeriousPython.run(environmentVariables: {'JOBS_DIR': _jobsDir!}).then(
-        (_) {
-          // Worker returned unexpectedly; allow a restart on the next job.
+      launch({'JOBS_DIR': _jobsDir!}).then(
+        (err) {
+          if (err == null) return;
+          debugPrint('Python worker failed to start: $err');
           _started = false;
         },
         onError: (Object e) {
@@ -75,7 +83,7 @@ class PythonWorker {
     void Function(String status)? onStatus,
     Duration inactivityLimit = const Duration(minutes: 15),
   }) async {
-    final jobsDir = await _ensure();
+    final jobsDir = await ensureStarted();
 
     final progressFile = File(path.join(Directory.systemTemp.path, 'worker_progress_$tag.txt'));
     await progressFile.writeAsString('');
