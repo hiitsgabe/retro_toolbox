@@ -32,8 +32,12 @@ final settingWatcherProvider = Provider.family<Map<String, dynamic>, String>((re
 class SettingsNotifier extends StateNotifier<AppSettings> {
   final SettingsService _settingsService = SettingsService();
 
+  /// Completes once saved settings are in [state]; until then getters return
+  /// defaults (empty download dir, NSZ off).
+  late final Future<void> loaded;
+
   SettingsNotifier() : super(const AppSettings()) {
-    _loadSettings();
+    loaded = _loadSettings();
   }
 
   Future<void> _loadSettings() async {

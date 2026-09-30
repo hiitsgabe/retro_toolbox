@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
+import 'package:roms_downloader/providers/download_provider.dart';
+import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/widgets/footer/task_panel_modal.dart';
 import 'package:roms_downloader/screens/console_grid_screen.dart';
 import 'package:roms_downloader/screens/sports_grid_screen.dart';
@@ -34,6 +35,14 @@ class MenuScreen extends ConsumerStatefulWidget {
 }
 
 class _MenuScreenState extends ConsumerState<MenuScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Start listening to the downloader at boot: downloads the OS resumed after
+    // a crash must reach the task manager before any games screen opens.
+    ref.read(downloadProvider);
+  }
+
   void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
   /// First time into the Games Library, run the setup wizard to configure a
@@ -54,8 +63,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final runningCounts = ref.watch(taskQueueProvider.select((s) => s.runningCounts));
-    final activeTasks = runningCounts.values.fold<int>(0, (a, b) => a + b);
+    // Game states (not queue entries): downloads resumed after a restart have
+    // no queue entry but still need the Tasks tile.
+    final activeTasks = ref.watch(gameStateManagerProvider.select((m) => m.values.where((g) => g.isActive).length));
 
     final tiles = [
       MenuTile(
