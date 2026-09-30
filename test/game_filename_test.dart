@@ -12,4 +12,15 @@ void main() {
     // Never returns empty.
     expect(Game.sanitizeForFat('???'), 'output');
   });
+
+  test('fromTaskId rebuilds a game whose id matches the downloader task', () {
+    for (final original in [
+      const Game(title: 'Some Title', url: 'https://host/files/Some%20Title%20(Rev%201)%20%5Bx%5D.nsz', size: 5, consoleId: 'sys'),
+      const Game(title: 'No Extension Title', url: 'https://host/api/42/base', size: 5, consoleId: 'sys'),
+    ]) {
+      final restored = Game.fromTaskId(original.gameId, original.filename)!;
+      expect(restored.gameId, original.gameId);
+    }
+    expect(Game.fromTaskId('no-slash', 'a.zip'), isNull);
+  });
 }

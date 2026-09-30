@@ -39,6 +39,13 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
   }
 
   Future<void> _initialize() async {
+    // Updates buffered while the app was dead (a restarted download that
+    // finished) replay as soon as we listen. Auto-extract/NSZ decisions read
+    // settings and the console list, so both must be loaded first — otherwise
+    // the download dir is empty, NSZ reads as off, and it "only downloads".
+    await _ref.read(settingsProvider.notifier).loaded;
+    await CatalogService().getConsoles();
+
     final fileDownloader = await downloadService.initialize();
 
     _updateSubscription = fileDownloader.updates.listen((update) {
@@ -100,7 +107,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     taskStatus[update.task.taskId] = update.status;
 
     if (!_tasks.containsKey(update.task.taskId) && update.task is DownloadTask) {
-      _tasks[update.task.taskId] = update.task as DownloadTask;
+      _registerTask(update.task as DownloadTask);
       debugPrint('Registered background task ${update.task.taskId} with status ${update.status}');
     }
 
@@ -153,7 +160,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     final taskStatus = state.taskStatus[update.task.taskId];
 
     if (!_tasks.containsKey(update.task.taskId) && update.task is DownloadTask) {
-      _tasks[update.task.taskId] = update.task as DownloadTask;
+      _registerTask(update.task as DownloadTask);
       debugPrint('Registered background task ${update.task.taskId} from progress update');
     }
 
@@ -176,6 +183,18 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       update,
       false,
     );
+  }
+
+  /// Tracks a downloader task and makes sure the task manager has a row for it.
+  /// After a crash the OS restarts downloads on its own; their games may not be
+  /// in the loaded catalog (other console, or catalog not loaded yet), so the
+  /// row is rebuilt from the task. taskId is `consoleId/filename` (Game.gameId).
+  void _registerTask(DownloadTask task) {
+    _tasks[task.taskId] = task;
+    // ponytail: title/size come from the task only (no catalog metadata); the
+    // row just needs the same gameId to show progress and cancel.
+    final game = Game.fromTaskId(task.taskId, task.filename);
+    if (game != null) gameStateManager.registerTransientGame(game);
   }
 
   void _updateDownloadingState() {
@@ -353,7 +372,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       for (final task in allTasks) {
         debugPrint('_syncWithBackgroundTasks: Inspecting task ${task.taskId} of type ${task.runtimeType}');
         if (task is DownloadTask) {
-          _tasks[task.taskId] = task;
+          _registerTask(task);
           debugPrint('_syncWithBackgroundTasks: Registered DownloadTask ${task.taskId}');
 
           if (!taskStatus.containsKey(task.taskId)) {
@@ -395,6 +414,11 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         taskProgress: taskProgress,
       );
       debugPrint('_syncWithBackgroundTasks: State updated with ${taskStatus.length} statuses');
+
+      // Show restored downloads right away instead of waiting for a progress tick.
+      for (final entry in taskStatus.entries) {
+        gameStateManager.updateDownloadState(entry.key, entry.value, taskProgress[entry.key], false);
+      }
 
       _updateDownloadingState();
 

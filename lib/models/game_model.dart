@@ -36,6 +36,20 @@ class Game {
     );
   }
 
+  /// Minimal Game rebuilt from a downloader task id (`consoleId/filename`, the
+  /// same shape as [gameId]) so a download restored after a crash can show in
+  /// the task manager. Null when the id isn't in that shape.
+  static Game? fromTaskId(String taskId, String filename) {
+    final slash = taskId.indexOf('/');
+    if (slash <= 0) return null;
+    return Game(
+      title: filename,
+      url: 'https://restored/${Uri.encodeComponent(filename)}',
+      size: 0,
+      consoleId: taskId.substring(0, slash),
+    );
+  }
+
   factory Game.fromJson(Map<String, dynamic> json) {
     return Game(
       title: json['title'],
