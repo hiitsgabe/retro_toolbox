@@ -148,7 +148,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Android
-        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.1"
+        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.2"
 
       - name: Verify Python bundle
         shell: bash
@@ -249,7 +249,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for macOS
-        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.1"
+        run: dart run serious_python:main package python_app/ -p Darwin -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.2"
 
       - name: Verify Python bundle
         shell: bash
@@ -354,7 +354,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Linux
-        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.1"
+        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.2"
 
       - name: Verify Python bundle
         shell: bash
@@ -475,7 +475,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app for Windows
-        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.1"
+        run: dart run serious_python:main package python_app/ -p Windows -r zstandard -r pycryptodome -r "retro-roster-patcher>=0.1.2"
 
       - name: Verify Python bundle
         shell: bash
