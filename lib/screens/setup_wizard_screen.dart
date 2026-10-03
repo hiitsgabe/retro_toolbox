@@ -15,7 +15,11 @@ import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
 /// First-run onboarding: catalog source → download directory & defaults →
 /// optional Internet Archive connection.
 class SetupWizardScreen extends ConsumerStatefulWidget {
-  const SetupWizardScreen({super.key});
+  /// Start on this step. Lets tests and screenshots render later steps.
+  @visibleForTesting
+  final int initialStep;
+
+  const SetupWizardScreen({super.key, this.initialStep = 0});
 
   static const seenKey = 'setup_wizard_seen';
 
@@ -35,13 +39,21 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   final _urlController = TextEditingController();
   final _pasteController = TextEditingController();
 
-  int _step = 0;
+  late int _step = widget.initialStep;
   bool _busy = false;
   bool _catalogReady = false;
   bool _usingExample = false;
   bool _changingCatalog = false;
   String? _catalogSummary;
   String? _catalogError;
+
+  /// Short screens (small handhelds): the header, paddings and footer left
+  /// little room for the step.
+  bool get _compact => MediaQuery.sizeOf(context).height < 640;
+
+  /// Very short screens (a 16:9 handheld in landscape is ~360dp tall): the
+  /// step buttons move into the top bar and step blurbs are dropped.
+  bool get _short => MediaQuery.sizeOf(context).height < 480;
 
   @override
   void initState() {
@@ -130,11 +142,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
           children: [
             _header(theme),
             Expanded(
-              child: Center(
+              child: Align(
+                // Centred on big screens; on short ones every line counts.
+                alignment: _compact ? Alignment.topCenter : Alignment.center,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 640),
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
+                    padding: _compact ? const EdgeInsets.fromLTRB(16, 8, 16, 12) : const EdgeInsets.all(24),
                     child: switch (_step) {
                       0 => _catalogStep(theme),
                       1 => _downloadsStep(theme),
@@ -144,7 +158,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
                 ),
               ),
             ),
-            _footer(theme),
+            if (!_short) _footer(theme),
           ],
         ),
       ),
@@ -152,6 +166,22 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   }
 
   Widget _header(ThemeData theme) {
+    if (_compact) {
+      // One row: the step as text instead of the dot rail.
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
+        child: Row(
+          children: [
+            Image.asset('assets/icon.png', width: 24),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Quick setup', style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
+            Text('${_step + 1}/${_steps.length} · ${_steps[_step]}',
+                style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+            if (_short) ...[const SizedBox(width: 12), ..._navButtons()],
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       child: Column(
@@ -208,9 +238,12 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [Icon(icon, color: theme.colorScheme.primary), const SizedBox(width: 10), Text(title, style: theme.textTheme.titleMedium)]),
-        const SizedBox(height: 6),
-        Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 20),
+        if (!_short) ...[
+          SizedBox(height: _compact ? 2 : 6),
+          Text(subtitle,
+              style: (_compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+        SizedBox(height: _compact ? 10 : 20),
       ],
     );
   }
@@ -439,36 +472,49 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     );
   }
 
-  Widget _footer(ThemeData theme) {
+  /// Back, Skip (step 1 without a catalog) and Next/Finish.
+  List<Widget> _navButtons() {
     final isLast = _step == _steps.length - 1;
     final canNext = _step != 0 || _catalogReady;
+    final dense = _short ? VisualDensity.compact : null;
+    return [
+      if (_step > 0)
+        TextButton(
+          style: TextButton.styleFrom(visualDensity: dense),
+          onPressed: _busy ? null : () => setState(() => _step -= 1),
+          child: const Text('Back'),
+        ),
+      if (_short) const SizedBox(width: 4) else const Spacer(),
+      // No catalog yet? Let the user move on and add one later in Settings.
+      if (_step == 0 && !_catalogReady) ...[
+        TextButton(
+          style: TextButton.styleFrom(visualDensity: dense),
+          onPressed: _busy ? null : () => setState(() => _step += 1),
+          child: const Text('Skip for now'),
+        ),
+        const SizedBox(width: 8),
+      ],
+      if (!isLast)
+        FilledButton(
+          style: FilledButton.styleFrom(visualDensity: dense),
+          onPressed: canNext && !_busy ? () => setState(() => _step += 1) : null,
+          child: const Text('Next'),
+        )
+      else
+        FilledButton.icon(
+          style: FilledButton.styleFrom(visualDensity: dense),
+          onPressed: _busy ? null : _finish,
+          icon: const Icon(Icons.check),
+          label: const Text('Finish'),
+        ),
+    ];
+  }
+
+  Widget _footer(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: _compact ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4) : const EdgeInsets.all(16),
       decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)))),
-      child: Row(
-        children: [
-          if (_step > 0)
-            TextButton(onPressed: _busy ? null : () => setState(() => _step -= 1), child: const Text('Back')),
-          const Spacer(),
-          // No catalog yet? Let the user move on and add one later in Settings.
-          if (_step == 0 && !_catalogReady) ...[
-            TextButton(onPressed: _busy ? null : () => setState(() => _step += 1), child: const Text('Skip for now')),
-            const SizedBox(width: 8),
-          ],
-          if (!isLast)
-            FilledButton(
-              onPressed: canNext && !_busy ? () => setState(() => _step += 1) : null,
-              child: const Text('Next'),
-            )
-          else
-            FilledButton.icon(
-              onPressed: _busy ? null : _finish,
-              icon: const Icon(Icons.check),
-              label: const Text('Finish'),
-            ),
-        ],
-      ),
+      child: Row(children: _navButtons()),
     );
   }
 }
-
