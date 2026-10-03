@@ -158,6 +158,7 @@ class SportsService {
     required String label,
     required String rostersFile,
     List<SlotMapping>? slotMapping,
+    String? language,
     void Function(double)? onProgress,
     void Function(String)? onStatus,
   }) async {
@@ -171,6 +172,7 @@ class SportsService {
         'rom_path': romPath,
         'output_dir': outputDir,
         'label': label,
+        if (language != null) 'language': language,
         'rosters_file': rostersFile,
         'slot_mapping': slotMapping?.map((m) => m.toJson()).toList(),
         'cache_dir': await _cacheDir(),

@@ -75,4 +75,12 @@ void main() {
     expect(defaultSeason('nhl', DateTime(2026, 10, 1)), 2026);
     expect(defaultSeason('espn', DateTime(2026, 3, 1)), 2026);
   });
+
+  test('PatcherInfo carries the game languages, empty when it has none', () {
+    final withLangs = PatcherInfo.fromJson({'game_id': 'g', 'languages': ['en', 'pt']});
+    expect(withLangs.languages, ['en', 'pt']);
+    expect(PatcherInfo.fromJson({'game_id': 'g'}).languages, isEmpty);
+    expect(languageName('pt'), 'Português');
+    expect(languageName('xx'), 'XX');
+  });
 }

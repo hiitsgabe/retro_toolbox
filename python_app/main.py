@@ -168,7 +168,7 @@ def _game_base(path):
     return re.sub(_TRACK_SUFFIX, '', stem).strip()
 
 
-def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters_for, on_progress):
+def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters_for, on_progress, options=None):
     """Patch the data track and write the game's whole file set to out_dir.
 
     Every .bin/.cue next to rom_path sharing its game base name comes along,
@@ -203,7 +203,7 @@ def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters_for, on_progress)
         if f == data_file:
             result = patcher.patch(
                 rom_path=Path(f), output_path=Path(dst),
-                rosters=rosters_for(f), on_progress=on_progress,
+                rosters=rosters_for(f), on_progress=on_progress, **(options or {}),
             )
         elif f.lower().endswith('.cue'):
             with open(f, errors='replace') as src:
@@ -216,7 +216,7 @@ def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters_for, on_progress)
     return result, written
 
 
-def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_progress):
+def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_progress, options=None):
     """Patch rom_path into output_dir, mirroring the input's packaging.
 
     Output names are "<label> - <game base>" plus each file's own suffix
@@ -237,7 +237,7 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_
 
     if not rom_path.lower().endswith('.zip'):
         new_prefix = f'{safe_label} - {_game_base(rom_path)}'
-        result, _ = _patch_set(patcher, rom_path, output_dir, new_prefix, rosters_for, on_progress)
+        result, _ = _patch_set(patcher, rom_path, output_dir, new_prefix, rosters_for, on_progress, options)
         return result
 
     work = tempfile.mkdtemp(prefix='rrp_zip_')
@@ -250,7 +250,7 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_
             raise ValueError('No patchable image inside the zip')
         new_prefix = f'{safe_label} - {_game_base(data_file)}'
         staged = os.path.join(work, '__out__')
-        result, written = _patch_set(patcher, data_file, staged, new_prefix, rosters_for, on_progress)
+        result, written = _patch_set(patcher, data_file, staged, new_prefix, rosters_for, on_progress, options)
         os.makedirs(output_dir, exist_ok=True)
         out_zip = os.path.join(output_dir, new_prefix + '.zip')
         with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -260,6 +260,17 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_
         return result
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def _build_patcher(cls, cache_dir, provider):
+    """Instantiate a patcher, handing it the app's bundled data files when it
+    takes an `assets_dir` (the PSX soccer patcher's full menu translation)."""
+    import inspect
+    kwargs = {}
+    if 'assets_dir' in inspect.signature(cls.__init__).parameters:
+        import rrp_assets
+        kwargs['assets_dir'] = os.path.dirname(rrp_assets.__file__)
+    return cls(cache_dir=cache_dir, provider=provider, **kwargs)
 
 
 def _map_rosters(patcher, data, slot_mapping, rom):
@@ -332,7 +343,9 @@ def run_sports(job):
 
     try:
         if jtype == 'list_patchers':
-            emit([p.to_dict() for p in rrp.list_patchers()])
+            # `languages` lives on the patcher class, not in PatcherInfo.
+            emit([{**p.to_dict(), 'languages': list(getattr(rrp.get_patcher(p.game_id), 'languages', ()))}
+                  for p in rrp.list_patchers()])
             _report(progress_file, 'DONE')
             return
 
@@ -381,7 +394,9 @@ def run_sports(job):
             return
 
         if jtype == 'sports_patch':
-            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            patcher = _build_patcher(rrp.get_patcher(game_id), cache_dir, provider)
+            language = job.get('language')
+            options = {'language': language} if language and getattr(patcher, 'languages', ()) else {}
             with open(job['rosters_file']) as f:
                 data = rrp.league_data_from_dict(json.load(f))
             raw_map = job.get('slot_mapping')
@@ -389,7 +404,7 @@ def run_sports(job):
                             if raw_map else None)
             result = _patch_with_packaging(
                 patcher, job['rom_path'], job['output_dir'], job['label'],
-                lambda rom: _map_rosters(patcher, data, slot_mapping, rom), on_progress,
+                lambda rom: _map_rosters(patcher, data, slot_mapping, rom), on_progress, options,
             )
             emit(result.to_dict())
             _report(progress_file, 'DONE')
