@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:rar/rar.dart';
+import 'package:roms_downloader/services/rar_header.dart';
 
 enum ArchiveKind { zip, rar, unsupported }
 
@@ -29,7 +32,11 @@ class ArchiveExtractService {
 
   /// Extracts [path] into [outDir]. Throws [UnsupportedError] for RAR on
   /// unsupported platforms or unknown types, and [Exception] on RAR failure.
-  Future<void> extract(String path, String outDir, {String? overrideOs}) async {
+  ///
+  /// [onProgress] (0.0–1.0) is reported for RAR only, by polling the bytes the
+  /// listed files have reached against the unpacked total in the headers: the
+  /// plugin itself reports nothing until it finishes.
+  Future<void> extract(String path, String outDir, {String? overrideOs, void Function(double progress)? onProgress}) async {
     switch (archiveKind(path)) {
       case ArchiveKind.zip:
         await extractFileToDisk(path, outDir);
@@ -38,7 +45,13 @@ class ArchiveExtractService {
         if (!rarSupported(overrideOs: overrideOs)) {
           throw UnsupportedError('RAR extraction is not supported on this platform yet.');
         }
-        final res = await Rar.extractRarFile(rarFilePath: path, destinationPath: outDir);
+        final poll = onProgress == null ? null : await _pollRarProgress(path, outDir, onProgress);
+        final Map<String, dynamic> res;
+        try {
+          res = await Rar.extractRarFile(rarFilePath: path, destinationPath: outDir);
+        } finally {
+          poll?.cancel();
+        }
         if (res['success'] != true) {
           throw Exception(res['message'] ?? 'RAR extraction failed');
         }
@@ -46,5 +59,30 @@ class ArchiveExtractService {
       case ArchiveKind.unsupported:
         throw UnsupportedError('Unsupported archive type: ${p.extension(path)}');
     }
+  }
+
+  /// Polls extraction progress once a second; null when the total can't be
+  /// read from the headers (then the caller just shows an indeterminate state).
+  static Future<Timer?> _pollRarProgress(String path, String outDir, void Function(double) onProgress) async {
+    final total = rarUnpackedSize(path);
+    if (total == null || total <= 0) return null;
+    final listed = await Rar.listRarContents(rarFilePath: path);
+    final names = [for (final n in (listed['files'] as List? ?? const [])) '$n'.replaceAll('\\', '/')];
+    if (names.isEmpty) return null;
+    var last = -1.0;
+    return Timer.periodic(const Duration(seconds: 1), (_) {
+      var written = 0;
+      for (final n in names) {
+        try {
+          written += File(p.joinAll([outDir, ...n.split('/')])).lengthSync();
+        } catch (_) {} // not created yet, or a folder
+      }
+      // ponytail: capped below 1 — the plugin's own return marks completion.
+      final fraction = min(written / total, 0.99);
+      if (fraction != last) {
+        last = fraction;
+        onProgress(fraction);
+      }
+    });
   }
 }

@@ -2,28 +2,32 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:roms_downloader/models/game_model.dart';
+import 'package:roms_downloader/models/task_queue_model.dart';
+import 'package:roms_downloader/providers/game_state_provider.dart';
+import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/archive_extract_service.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/widgets/common/path_browser.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
 /// Standalone archive extraction: pick a .rar or .zip and an output folder,
-/// then extract. Ported from the console_utilities extract utilities.
-class RarDecompressScreen extends StatefulWidget {
+/// then extract. The work runs as a background task (task manager + Android
+/// notification, with progress), so the user can leave this screen.
+class RarDecompressScreen extends ConsumerStatefulWidget {
   const RarDecompressScreen({super.key});
 
   @override
-  State<RarDecompressScreen> createState() => _RarDecompressScreenState();
+  ConsumerState<RarDecompressScreen> createState() => _RarDecompressScreenState();
 }
 
-class _RarDecompressScreenState extends State<RarDecompressScreen> {
-  final _service = ArchiveExtractService();
+class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
   String? _archivePath;
   String? _outputDir;
   String? _result;
   bool _failed = false;
-  bool _busy = false;
 
   Future<String> _browseRoot() async {
     if (_outputDir != null) return _outputDir!;
@@ -87,27 +91,40 @@ class _RarDecompressScreenState extends State<RarDecompressScreen> {
     }
   }
 
-  Future<void> _extract() async {
-    if (_archivePath == null || _outputDir == null) return;
-    setState(() {
-      _busy = true;
-      _result = null;
-      _failed = false;
-    });
-    try {
-      await _service.extract(_archivePath!, _outputDir!);
-      if (mounted) setState(() => _result = 'Extracted to $_outputDir');
-    } catch (e) {
-      _setError(e);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  /// Hand the extraction to the task queue so it runs in the background and
+  /// shows in the task list — the user can leave this screen and keep browsing.
+  void _extract() {
+    final archive = _archivePath, out = _outputDir;
+    if (archive == null || out == null) return;
+    if (ArchiveExtractService.archiveKind(archive) == ArchiveKind.rar && !ArchiveExtractService.rarSupported()) {
+      _setError(UnsupportedError('RAR extraction is not supported on this platform yet.'));
+      return;
     }
+
+    // A transient game gives the task a row in the task manager; its id is the
+    // task key and archivePath carries the real path.
+    final name = p.basename(archive);
+    int size = 0;
+    try {
+      size = File(archive).lengthSync();
+    } catch (_) {}
+    final game = Game(title: name, url: 'https://manual/${Uri.encodeComponent(name)}', size: size, consoleId: 'manual');
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
+    ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.archiveExtraction, {
+      'taskId': game.gameId,
+      'archivePath': archive,
+      'outputDir': out,
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Extraction added to the task list')),
+    );
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final canRun = _archivePath != null && _outputDir != null && !_busy;
+    final canRun = _archivePath != null && _outputDir != null;
     return Scaffold(
       appBar: AppBar(title: const Text('Rar Decompress')),
       body: Padding(
@@ -122,19 +139,17 @@ class _RarDecompressScreenState extends State<RarDecompressScreen> {
             ),
             const SizedBox(height: 16),
             _fileRow(theme, Icons.insert_drive_file_outlined, 'Archive',
-                _archivePath != null ? p.basename(_archivePath!) : 'No file selected', _busy ? null : _pickArchive),
+                _archivePath != null ? p.basename(_archivePath!) : 'No file selected', _pickArchive),
             const SizedBox(height: 12),
             _fileRow(theme, Icons.folder_outlined, 'Output folder',
-                _outputDir ?? 'No folder selected', _busy ? null : _pickOutput),
+                _outputDir ?? 'No folder selected', _pickOutput),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: canRun ? _extract : null,
-                icon: _busy
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.unarchive, size: 18),
-                label: Text(_busy ? 'Extracting…' : 'Extract'),
+                icon: const Icon(Icons.unarchive, size: 18),
+                label: const Text('Extract'),
               ),
             ),
             if (_result != null) ...[

@@ -8,6 +8,7 @@ import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/providers/library_snapshot_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
+import 'package:roms_downloader/services/archive_extract_service.dart';
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/extraction_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
@@ -188,6 +189,49 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       _onConversionCompleted(taskId);
     } catch (e) {
       debugPrint('3DS→CIA conversion error: $e');
+      _onNszError(taskId, e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
+    }
+  }
+
+  /// The archive tool's extraction (.zip or .rar to any folder), run as a
+  /// background task with progress in the task manager and notification.
+  /// Unlike a downloaded game's auto-extract, the archive is kept.
+  Future<void> archiveExtract({
+    required String taskId,
+    required String archivePath,
+    required String outputDir,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    final fileName = path.basename(archivePath);
+    if (ArchiveExtractService.archiveKind(archivePath) == ArchiveKind.zip) {
+      // Same background path as game auto-extract (foreground service on
+      // Android, an isolate elsewhere), which already reports progress.
+      await ExtractionService.startExtraction(
+        taskId: taskId,
+        filePath: archivePath,
+        extractionDir: outputDir,
+        onProgress: _updateProgress,
+        onComplete: (id, _) => _onConversionCompleted(id),
+        onError: (id, error, _) => _onNszError(id, error),
+      );
+      return;
+    }
+
+    await ExtractionService.startNotification(taskId, 'Extracting', 'Extracting $fileName...');
+    try {
+      await ArchiveExtractService().extract(archivePath, outputDir, onProgress: (progress) {
+        _updateProgress(taskId, progress);
+        ExtractionService.updateNotification('Extracting $fileName... ${(progress * 100).round()}%');
+      });
+      _onConversionCompleted(taskId);
+    } catch (e) {
+      debugPrint('Archive extraction error: $e');
       _onNszError(taskId, e.toString());
     } finally {
       ExtractionService.endNotification(taskId);
