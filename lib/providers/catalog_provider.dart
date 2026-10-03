@@ -51,6 +51,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       errorMessage: '',
       games: [],
       selectedGames: {},
+      // Drop the previous console's list too, or a failed/empty load keeps
+      // showing it under the new console's name.
+      cachedFilteredGames: [],
+      cachedTotalCount: 0,
+      cachedHasMore: false,
     );
 
     try {
@@ -68,6 +73,17 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       );
 
       if (gen != _loadGeneration || !mounted) return;
+
+      // A source that answers but lists nothing (blocked, login page, down) is
+      // a failure from the user's point of view: say so instead of "0 games".
+      if (games.isEmpty) {
+        state = state.copyWith(
+          loading: false,
+          loadingStatus: '',
+          errorMessage: 'No games found for ${console.name}. The catalog source may be unavailable, try again later.',
+        );
+        return;
+      }
 
       Set<String> regions = <String>{};
       Set<String> languages = <String>{};
@@ -200,7 +216,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     callback() async {
       try {
+        final source = state.games;
         final filteredAndPaginated = await _runFilterAndPaginate(skip: 0, limit: kDefaultCatalogDisplaySize);
+        // The console changed while filtering ran: this result is stale.
+        if (!identical(state.games, source)) return;
         state = state.copyWith(
           cachedFilteredGames: filteredAndPaginated.games,
           cachedTotalCount: filteredAndPaginated.totalCount,
