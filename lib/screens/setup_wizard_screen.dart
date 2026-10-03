@@ -420,7 +420,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     // Consoles whose catalog defines a sign-in form (username/password). Listed
     // only here in the wizard so users can connect them during onboarding.
     final settings = ref.watch(settingsProvider);
-    final signinConsoles = ref.watch(appStateProvider).consolesList.where((c) => c.authSignin != null).toList();
+    final consoles = ref.watch(appStateProvider).consolesList;
+    final signinConsoles = consoles.where((c) => c.authSignin != null).toList();
+    // The IA login only matters when some console's games come from IA.
+    final needsIa = consoles.any((c) => c.usesInternetArchive);
     bool authed(Console c) =>
         (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
 
@@ -429,12 +432,16 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       children: [
         _sectionTitle(theme, Icons.hub_outlined, 'Connections (optional)',
             'Connect accounts for restricted sources. You can do this later in Settings.'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: const AccountsSetting(),
+        if (needsIa)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const AccountsSetting(),
+            ),
           ),
-        ),
+        if (!needsIa && signinConsoles.isEmpty)
+          Text('No accounts needed for this catalog.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         for (final c in signinConsoles) ...[
           const SizedBox(height: 8),
           Card(
