@@ -10,6 +10,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/services/archive_extract_service.dart';
 import 'package:roms_downloader/services/directory_service.dart';
+import 'package:roms_downloader/services/file_ops.dart';
 import 'package:roms_downloader/services/extraction_service.dart';
 import 'package:roms_downloader/services/nsz_service.dart';
 import 'package:roms_downloader/services/chd_service.dart';
@@ -232,6 +233,39 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       _onConversionCompleted(taskId);
     } catch (e) {
       debugPrint('Archive extraction error: $e');
+      _onNszError(taskId, e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
+    }
+  }
+
+  /// A file explorer job (copy, move, zip) as a background task: progress in
+  /// the task manager and the notification, like the conversions.
+  Future<void> fileTask({
+    required String taskId,
+    required String verb,
+    required String label,
+    required Future<void> Function(FileOpsProgress onProgress) run,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    await ExtractionService.startNotification(taskId, verb, '$verb $label...');
+    var lastPct = -1;
+    try {
+      await run((done, total) {
+        final progress = total > 0 ? done / total : 0.0;
+        final pct = (progress * 100).floor();
+        if (pct == lastPct) return; // byte-level callbacks; repaint per percent
+        lastPct = pct;
+        _updateProgress(taskId, progress);
+        ExtractionService.updateNotification('$verb $label... $pct%');
+      });
+      _onConversionCompleted(taskId);
+    } catch (e) {
+      debugPrint('$verb failed: $e');
       _onNszError(taskId, e.toString());
     } finally {
       ExtractionService.endNotification(taskId);

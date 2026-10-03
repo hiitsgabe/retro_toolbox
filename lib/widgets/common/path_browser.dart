@@ -48,6 +48,31 @@ class PathBrowser extends StatefulWidget {
   State<PathBrowser> createState() => _PathBrowserState();
 }
 
+/// Internal storage and any SD card, as `root path -> label` (Android only;
+/// empty elsewhere).
+///
+/// `/storage` itself usually can't be listed, so walking up from
+/// `/storage/emulated/0` is a dead end and there is no other way to reach a
+/// removable card. `getExternalStorageDirectories` reports one app-specific
+/// dir per mounted volume — trimming `/Android/...` off each gives the roots.
+Future<Map<String, String>> storageVolumes() async {
+  if (!Platform.isAndroid) return const {};
+  try {
+    final dirs = await getExternalStorageDirectories() ?? const <Directory>[];
+    final volumes = <String, String>{};
+    for (final d in dirs) {
+      final marker = d.path.indexOf('/Android/');
+      if (marker <= 0) continue;
+      final root = d.path.substring(0, marker);
+      volumes[root] = root == '/storage/emulated/0' ? 'Internal storage' : 'SD card (${p.basename(root)})';
+    }
+    return volumes;
+  } catch (_) {
+    // Volume shortcuts are a convenience; browsing still works without them.
+    return const {};
+  }
+}
+
 class _PathBrowserState extends State<PathBrowser> {
   late String _dir;
   List<Directory> _dirs = [];
@@ -64,28 +89,10 @@ class _PathBrowserState extends State<PathBrowser> {
     _loadVolumes();
   }
 
-  /// Internal storage and any SD card, as `root path -> label`.
-  ///
-  /// `/storage` itself usually can't be listed, so walking up from
-  /// `/storage/emulated/0` is a dead end and there is no other way to reach a
-  /// removable card. `getExternalStorageDirectories` reports one app-specific
-  /// dir per mounted volume — trimming `/Android/...` off each gives the roots.
   Future<void> _loadVolumes() async {
-    if (!Platform.isAndroid) return;
-    try {
-      final dirs = await getExternalStorageDirectories() ?? const <Directory>[];
-      final volumes = <String, String>{};
-      for (final d in dirs) {
-        final marker = d.path.indexOf('/Android/');
-        if (marker <= 0) continue;
-        final root = d.path.substring(0, marker);
-        volumes[root] = root == '/storage/emulated/0' ? 'Internal storage' : 'SD card (${p.basename(root)})';
-      }
-      if (!mounted || volumes.length < 2) return;
-      setState(() => _volumes = volumes);
-    } catch (_) {
-      // Volume shortcuts are a convenience; browsing still works without them.
-    }
+    final volumes = await storageVolumes();
+    if (!mounted || volumes.length < 2) return;
+    setState(() => _volumes = volumes);
   }
 
   bool _allowed(File f) {
