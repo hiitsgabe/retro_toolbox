@@ -11,6 +11,16 @@ class BrowserItem {
   const BrowserItem({required this.id, required this.name, required this.isDir, required this.size});
 }
 
+/// An action on the current selection, shown as an icon button. A null
+/// [onPressed] shows it disabled (e.g. Rename with more than one item).
+class BrowserAction {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool destructive;
+  const BrowserAction({required this.icon, required this.label, required this.onPressed, this.destructive = false});
+}
+
 /// A transfer in flight, shown as a progress bar. [total] is 0 while unknown.
 class BrowserTransfer {
   final String name;
@@ -50,7 +60,11 @@ class FileBrowserView extends StatelessWidget {
   final VoidCallback? onZip;
   final VoidCallback? onDelete;
 
-  /// How many selected items are files — download/zip need at least one.
+  /// Replaces the Download/Zip/Delete selection buttons with these.
+  final List<BrowserAction>? selectionActions;
+
+  /// Extra buttons at the right of the location bar (e.g. New folder).
+  final List<Widget> toolbarActions;
 
   const FileBrowserView({
     super.key,
@@ -70,6 +84,8 @@ class FileBrowserView extends StatelessWidget {
     this.onDownload,
     this.onZip,
     this.onDelete,
+    this.selectionActions,
+    this.toolbarActions = const [],
   });
 
   @override
@@ -83,6 +99,7 @@ class FileBrowserView extends StatelessWidget {
             children: [
               IconButton(icon: const Icon(Icons.arrow_upward), tooltip: 'Up', onPressed: canGoUp && !busy ? onUp : null),
               Expanded(child: Text(locationLabel, style: const TextStyle(fontFamily: 'monospace'), overflow: TextOverflow.ellipsis)),
+              ...toolbarActions,
               IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: busy ? null : onRefresh),
             ],
           ),
@@ -93,6 +110,14 @@ class FileBrowserView extends StatelessWidget {
         Expanded(
           child: items.isEmpty && !busy
               ? const Center(child: Text('Empty'))
+              // Short screens: a dense list fits several times more entries
+              // than the icon grid.
+              : MediaQuery.sizeOf(context).height < 640
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: items.length,
+                  itemBuilder: (context, i) => _row(context, items[i]),
+                )
               : GridView.builder(
                   padding: const EdgeInsets.all(16),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -141,6 +166,26 @@ class FileBrowserView extends StatelessWidget {
     );
   }
 
+  Widget _row(BuildContext context, BrowserItem e) {
+    final theme = Theme.of(context);
+    final selected = selectedIds.contains(e.id);
+    return GestureDetector(
+      onDoubleTap: e.isDir && selectable && !busy ? () => onOpen(e) : null,
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        selected: selected,
+        selectedTileColor: theme.colorScheme.primaryContainer,
+        leading: Icon(e.isDir ? Icons.folder : _fileIcon(e.name), color: e.isDir ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+        title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        trailing: selected
+            ? Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 20)
+            : (e.isDir ? null : Text(_fmtSize(e.size), style: theme.textTheme.labelSmall)),
+        onTap: () => selectable ? onToggleSelect(e) : onOpen(e),
+      ),
+    );
+  }
+
   Widget _selectionBar(BuildContext context) {
     final theme = Theme.of(context);
     final busyTransfer = transfer != null;
@@ -156,6 +201,14 @@ class FileBrowserView extends StatelessWidget {
               IconButton(icon: const Icon(Icons.close), tooltip: 'Clear', onPressed: onClearSelection),
               Text('${selectedIds.length} selected', style: theme.textTheme.bodyMedium),
               const Spacer(),
+              if (selectionActions != null)
+                for (final a in selectionActions!)
+                  IconButton(
+                    icon: Icon(a.icon, color: a.destructive && a.onPressed != null ? theme.colorScheme.error : null),
+                    tooltip: a.label,
+                    onPressed: busyTransfer ? null : a.onPressed,
+                  )
+              else ...[
               TextButton.icon(
                 onPressed: busyTransfer ? null : onDownload,
                 icon: const Icon(Icons.download),
@@ -171,6 +224,7 @@ class FileBrowserView extends StatelessWidget {
                 icon: Icon(Icons.delete, color: theme.colorScheme.error),
                 label: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
               ),
+              ],
             ],
           ),
         ),

@@ -8,6 +8,7 @@ import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:roms_downloader/services/file_ops.dart';
 
 class TaskQueueService {
   /// Returns a human-readable reason downloads can't start, or null when OK.
@@ -106,6 +107,32 @@ class TaskQueueService {
           break;
         case TaskType.cia3dsConversion:
           await _executeCia3dsConversionTask(ref, task, notifier);
+          break;
+        case TaskType.fileCopy:
+          final move = task.params['move'] as bool? ?? false;
+          ref.read(extractionProvider.notifier).fileTask(
+                taskId: task.params['taskId'] as String,
+                verb: move ? 'Moving' : 'Copying',
+                label: task.params['label'] as String,
+                run: (onProgress) => FileOps.copyInto(
+                  (task.params['sources'] as List).cast<String>(),
+                  task.params['destDir'] as String,
+                  move: move,
+                  onProgress: onProgress,
+                ),
+              );
+          break;
+        case TaskType.fileZip:
+          ref.read(extractionProvider.notifier).fileTask(
+                taskId: task.params['taskId'] as String,
+                verb: 'Zipping',
+                label: task.params['label'] as String,
+                run: (onProgress) => FileOps.zip(
+                  (task.params['sources'] as List).cast<String>(),
+                  task.params['outZip'] as String,
+                  onProgress: onProgress,
+                ),
+              );
           break;
         case TaskType.archiveExtraction:
           // Fire and forget — archiveExtract manages its own queue-status updates.
