@@ -9,6 +9,7 @@ import 'package:smb_connect/smb_connect.dart';
 
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/smb_service.dart';
+import 'package:roms_downloader/utils/remote_tree.dart';
 
 const _hostKey = 'smb_host';
 const _userKey = 'smb_user';
@@ -57,7 +58,6 @@ class SmbState {
   bool get atRoot => path.isEmpty;
 
   List<SmbFile> get selectedEntries => entries.where((e) => selected.contains(e.path)).toList();
-  List<SmbFile> get selectedFiles => selectedEntries.where((e) => e.isFile()).toList();
 
   SmbState copyWith({
     bool? connected,
@@ -183,32 +183,25 @@ class SmbNotifier extends StateNotifier<SmbState> {
     await _runTransfer(SmbTransfer(name: file.name, done: 0, total: file.size, upload: false), (report) => _service.download(file, localPath, report));
   }
 
-  /// Downloads the selected files into [outputDir], one after another.
+  /// Downloads the selection into [outputDir], one file after another.
+  /// Selected folders are downloaded whole, rebuilding their tree locally.
   Future<void> downloadSelected(String outputDir) async {
-    final files = state.selectedFiles;
-    for (var i = 0; i < files.length; i++) {
-      final f = files[i];
-      final label = files.length > 1 ? '(${i + 1}/${files.length}) ${f.name}' : f.name;
-      await _runTransfer(SmbTransfer(name: label, done: 0, total: f.size, upload: false),
-          (report) => _service.download(f, p.join(outputDir, f.name), report));
-    }
+    await _downloadTree(outputDir);
     clearSelection();
   }
 
-  /// Downloads the selected files to a temp dir, zips them into [outputDir],
-  /// then cleans up. The zip is streamed to disk, so multi-GB ROMs are fine.
+  /// Downloads the selection (folders included, whole) to a temp dir, zips it
+  /// into [outputDir], then cleans up. The zip is streamed to disk, so multi-GB
+  /// ROMs are fine. A single selected folder names the zip.
   Future<void> zipSelected(String outputDir) async {
-    final files = state.selectedFiles;
-    if (files.isEmpty) return;
+    final sel = state.selectedEntries;
+    if (sel.isEmpty) return;
+    final base = sel.length == 1 && sel.single.isDirectory()
+        ? sel.single.name
+        : (state.path.isEmpty ? 'smb' : p.basename(state.path));
     final tmp = await Directory.systemTemp.createTemp('smb_zip');
     try {
-      for (var i = 0; i < files.length; i++) {
-        final f = files[i];
-        final label = '(${i + 1}/${files.length}) ${f.name}';
-        await _runTransfer(SmbTransfer(name: label, done: 0, total: f.size, upload: false),
-            (report) => _service.download(f, p.join(tmp.path, f.name), report));
-      }
-      final base = state.path.isEmpty ? 'smb' : p.basename(state.path);
+      if (!await _downloadTree(tmp.path)) return;
       final outZip = p.join(outputDir, '$base.zip');
       state = state.copyWith(transfer: SmbTransfer(name: 'Zipping $base.zip…', done: 0, total: 0, upload: false));
       await ZipFileEncoder().zipDirectory(tmp, filename: outZip);
@@ -217,8 +210,35 @@ class SmbNotifier extends StateNotifier<SmbState> {
       state = state.copyWith(clearTransfer: true, error: '$e');
     } finally {
       await tmp.delete(recursive: true);
+      clearSelection();
     }
-    clearSelection();
+  }
+
+  /// Expands the selection into every file inside it and downloads each to
+  /// [root] at its relative path. False when the folders couldn't be listed.
+  Future<bool> _downloadTree(String root) async {
+    state = state.copyWith(transfer: const SmbTransfer(name: 'Listing folders…', done: 0, total: 0, upload: false), clearError: true);
+    final List<RemoteFile<SmbFile>> files;
+    try {
+      files = await collectRemoteFiles<SmbFile>(
+        state.selectedEntries,
+        nameOf: (e) => e.name,
+        isDir: (e) => e.isDirectory(),
+        children: (dir, _) => _service.list(dir.path),
+      );
+    } catch (e) {
+      state = state.copyWith(clearTransfer: true, error: '$e');
+      return false;
+    }
+    state = state.copyWith(clearTransfer: true);
+    for (var i = 0; i < files.length; i++) {
+      final f = files[i];
+      final local = await localPathFor(root, f.relPath);
+      final label = files.length > 1 ? '(${i + 1}/${files.length}) ${f.relPath}' : f.relPath;
+      await _runTransfer(SmbTransfer(name: label, done: 0, total: f.entry.size, upload: false),
+          (report) => _service.download(f.entry, local, report));
+    }
+    return true;
   }
 
   /// Deletes the selected entries (files and folders — [SmbService] delete is

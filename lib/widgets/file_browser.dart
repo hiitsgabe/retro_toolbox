@@ -51,7 +51,6 @@ class FileBrowserView extends StatelessWidget {
   final VoidCallback? onDelete;
 
   /// How many selected items are files — download/zip need at least one.
-  final int selectedFileCount;
 
   const FileBrowserView({
     super.key,
@@ -71,7 +70,6 @@ class FileBrowserView extends StatelessWidget {
     this.onDownload,
     this.onZip,
     this.onDelete,
-    this.selectedFileCount = 0,
   });
 
   @override
@@ -159,12 +157,12 @@ class FileBrowserView extends StatelessWidget {
               Text('${selectedIds.length} selected', style: theme.textTheme.bodyMedium),
               const Spacer(),
               TextButton.icon(
-                onPressed: busyTransfer || selectedFileCount == 0 ? null : onDownload,
+                onPressed: busyTransfer ? null : onDownload,
                 icon: const Icon(Icons.download),
                 label: const Text('Download'),
               ),
               TextButton.icon(
-                onPressed: busyTransfer || selectedFileCount == 0 ? null : onZip,
+                onPressed: busyTransfer ? null : onZip,
                 icon: const Icon(Icons.folder_zip),
                 label: const Text('Zip'),
               ),
