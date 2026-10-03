@@ -311,6 +311,7 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
                 onClearSelection: () => setState(() => _selected = {}),
                 toolbarActions: [
                   if (!atRoots) IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: 'New folder', onPressed: _busy ? null : _newFolder),
+                  if (_roots.isNotEmpty) _storagePicker(),
                 ],
                 selectionActions: [
                   BrowserAction(
@@ -340,6 +341,22 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Jump between internal storage, SD cards and Downloads from any folder.
+  Widget _storagePicker() {
+    final current = _dir == null
+        ? null
+        : _roots.keys.where((r) => _dir == r || p.isWithin(r, _dir!)).fold<String?>(null, (best, r) => best == null || r.length > best.length ? r : best);
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.sd_storage_outlined),
+      tooltip: 'Storage',
+      onSelected: _load,
+      itemBuilder: (_) => [
+        for (final r in _roots.entries)
+          CheckedPopupMenuItem(value: r.key, checked: r.key == current, child: Text(r.value)),
+      ],
     );
   }
 
