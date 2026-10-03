@@ -50,6 +50,10 @@ class Console {
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
 
+  /// True when this console's games come from the Internet Archive (an IA
+  /// listing URL or IA S3 auth), so an IA login can matter for it.
+  bool get usesInternetArchive => auth?['type'] == 'ia_s3' || urls.any((u) => u.contains('archive.org'));
+
   /// True when this console uses a user-editable bearer/cookie token for auth.
   /// IA S3 auth is managed separately via the Internet Archive login flow.
   bool get hasTokenAuth {
