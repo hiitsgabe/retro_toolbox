@@ -160,7 +160,6 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
       onDownload: () => _pickDirThen((d) => notifier.downloadSelected(d)),
       onZip: () => _pickDirThen((d) => notifier.zipSelected(d)),
       onDelete: () => _confirmDelete(context, state, notifier),
-      selectedFileCount: state.selectedFiles.length,
     );
   }
 

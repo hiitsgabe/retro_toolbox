@@ -36,6 +36,18 @@ class FtpClientService {
   Future<List<FTPEntry>> list() => _c!.listDirectoryContent();
   Future<bool> cd(String dir) => _c!.changeDirectory(dir);
 
+  /// Lists [relDir] (relative to the current directory) and returns to where
+  /// it started, since FTP listing only covers the working directory.
+  Future<List<FTPEntry>> listAt(String relDir) async {
+    final home = await pwd();
+    if (!await cd(relDir)) throw 'Cannot open folder $relDir';
+    try {
+      return await list();
+    } finally {
+      await cd(home);
+    }
+  }
+
   Future<void> download(String name, String localPath, FtpProgress onProgress) async {
     await _c!.downloadFile(name, File(localPath), onProgress: (_, received, total) => onProgress(received, total));
   }

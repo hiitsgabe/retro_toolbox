@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:roms_downloader/services/ftp_service.dart';
+import 'package:roms_downloader/utils/remote_tree.dart';
 
 enum FtpMode { client, server }
 
@@ -70,7 +71,6 @@ class FtpState {
   });
 
   List<FTPEntry> get selectedEntries => entries.where((e) => selected.contains(e.name)).toList();
-  List<FTPEntry> get selectedFiles => selectedEntries.where((e) => e.type != FTPEntryType.dir).toList();
 
   FtpState copyWith({
     FtpMode? mode,
@@ -207,28 +207,24 @@ class FtpNotifier extends StateNotifier<FtpState> {
 
   void clearSelection() => state = state.copyWith(selected: const {});
 
+  /// Downloads the selection into [outputDir], one file after another.
+  /// Selected folders are downloaded whole, rebuilding their tree locally.
   Future<void> downloadSelected(String outputDir) async {
-    final files = state.selectedFiles;
-    for (var i = 0; i < files.length; i++) {
-      final f = files[i];
-      final label = files.length > 1 ? '(${i + 1}/${files.length}) ${f.name}' : f.name;
-      await _runTransfer(FtpTransfer(name: label, done: 0, total: f.size ?? 0, upload: false),
-          (report) => _client.download(f.name, p.join(outputDir, f.name), report));
-    }
+    await _downloadTree(outputDir);
     clearSelection();
   }
 
+  /// Downloads the selection (folders included, whole) to a temp dir and zips
+  /// it into [outputDir]. A single selected folder names the zip.
   Future<void> zipSelected(String outputDir) async {
-    final files = state.selectedFiles;
-    if (files.isEmpty) return;
+    final sel = state.selectedEntries;
+    if (sel.isEmpty) return;
+    final base = sel.length == 1 && sel.single.type == FTPEntryType.dir
+        ? sel.single.name
+        : (state.path == '/' || state.path.isEmpty ? 'ftp' : p.basename(state.path));
     final tmp = await Directory.systemTemp.createTemp('ftp_zip');
     try {
-      for (var i = 0; i < files.length; i++) {
-        final f = files[i];
-        await _runTransfer(FtpTransfer(name: '(${i + 1}/${files.length}) ${f.name}', done: 0, total: f.size ?? 0, upload: false),
-            (report) => _client.download(f.name, p.join(tmp.path, f.name), report));
-      }
-      final base = state.path == '/' || state.path.isEmpty ? 'ftp' : p.basename(state.path);
+      if (!await _downloadTree(tmp.path)) return;
       final outZip = p.join(outputDir, '$base.zip');
       state = state.copyWith(transfer: FtpTransfer(name: 'Zipping $base.zip…', done: 0, total: 0, upload: false));
       await ZipFileEncoder().zipDirectory(tmp, filename: outZip);
@@ -237,8 +233,36 @@ class FtpNotifier extends StateNotifier<FtpState> {
       state = state.copyWith(clearTransfer: true, error: '$e');
     } finally {
       await tmp.delete(recursive: true);
+      clearSelection();
     }
-    clearSelection();
+  }
+
+  /// Expands the selection into every file inside it and downloads each to
+  /// [root] at its relative path (FTP RETR accepts paths relative to the
+  /// working directory). False when the folders couldn't be listed.
+  Future<bool> _downloadTree(String root) async {
+    state = state.copyWith(transfer: const FtpTransfer(name: 'Listing folders…', done: 0, total: 0, upload: false), clearError: true);
+    final List<RemoteFile<FTPEntry>> files;
+    try {
+      files = await collectRemoteFiles<FTPEntry>(
+        state.selectedEntries,
+        nameOf: (e) => e.name,
+        isDir: (e) => e.type == FTPEntryType.dir,
+        children: (_, rel) => _client.listAt(rel),
+      );
+    } catch (e) {
+      state = state.copyWith(clearTransfer: true, error: '$e');
+      return false;
+    }
+    state = state.copyWith(clearTransfer: true);
+    for (var i = 0; i < files.length; i++) {
+      final f = files[i];
+      final local = await localPathFor(root, f.relPath);
+      final label = files.length > 1 ? '(${i + 1}/${files.length}) ${f.relPath}' : f.relPath;
+      await _runTransfer(FtpTransfer(name: label, done: 0, total: f.entry.size ?? 0, upload: false),
+          (report) => _client.download(f.relPath, local, report));
+    }
+    return true;
   }
 
   Future<void> deleteSelected() async {
