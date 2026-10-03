@@ -157,98 +157,106 @@ def _find_data_file(files):
     return files[0] if files else None
 
 
-def _patch_with_packaging(patcher, rom_path, output_path, rosters, on_progress):
-    """Run patcher.patch, honoring disc packaging like the old app:
+_TRACK_SUFFIX = r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$'
 
-    - .zip in -> .zip out: extract, patch the data image in place (internal
-      names preserved), re-zip to output_path.
-    - loose .cue/.bin(+tracks): patch the data track, copy companion tracks and
-      the .cue to the output prefix, rewriting the .cue's FILE references.
-    - single image (.iso/.smc/...): patch straight through.
 
-    Returns the library's PatchResult.
+def _game_base(path):
+    """A disc file's shared game name: its stem minus any " (Track N)" suffix."""
+    import os
+    import re
+    stem = os.path.splitext(os.path.basename(path))[0]
+    return re.sub(_TRACK_SUFFIX, '', stem).strip()
+
+
+def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters, on_progress):
+    """Patch the data track and write the game's whole file set to out_dir.
+
+    Every .bin/.cue next to rom_path sharing its game base name comes along,
+    renamed new_prefix + <rest of its name>: the data track patched, the other
+    tracks copied, the .cue's FILE references rewritten. Without the full set
+    the .cue would keep loading the original tracks. A single image (no
+    .bin/.cue siblings) is just patched to new_prefix + its extension.
+
+    Returns (PatchResult, [written paths]).
     """
     import os
+    import shutil
+
+    src_dir = os.path.dirname(rom_path) or '.'
+    game_base = _game_base(rom_path)
+    # Files from an earlier run start with the label, not game_base, so they
+    # are never picked up as input again.
+    files = [
+        os.path.join(src_dir, e) for e in sorted(os.listdir(src_dir))
+        if e.lower().endswith(('.bin', '.cue')) and e.lower().startswith(game_base.lower())
+    ] or [rom_path]
+    data_file = _find_data_file(files)
+
+    os.makedirs(out_dir, exist_ok=True)
+    result, written = None, []
+    for f in files:
+        name = os.path.basename(f)
+        dst = os.path.join(out_dir, new_prefix + name[len(game_base):])
+        if f == data_file:
+            result = patcher.patch(
+                rom_path=Path(f), output_path=Path(dst),
+                rosters=rosters, on_progress=on_progress,
+            )
+        elif f.lower().endswith('.cue'):
+            with open(f, errors='replace') as src:
+                txt = src.read().replace(game_base, new_prefix)
+            with open(dst, 'w') as out:
+                out.write(txt)
+        else:
+            shutil.copy2(f, dst)
+        written.append(dst)
+    return result, written
+
+
+def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters, on_progress):
+    """Patch rom_path into output_dir, mirroring the input's packaging.
+
+    Output names are "<label> - <game base>" plus each file's own suffix
+    (" (Track 2).bin", ".cue", ".iso", ...), the label being "<league> <season>".
+    A .zip in comes back as "<label> - <game base>.zip" holding the full set;
+    a loose .cue/.bin set comes back as the full set; a single image as one
+    file. Returns the library's PatchResult with output_path set to the zip or
+    the patched data file.
+    """
+    import os
+    import re
     import shutil
     import tempfile
     import zipfile
 
     rom_path = str(rom_path)
-    output_path = str(output_path)
-    out_dir = os.path.dirname(output_path)
-    new_prefix = os.path.splitext(os.path.basename(output_path))[0]
+    safe_label = re.sub(r'[\\/:*?"<>|]', '-', label).strip()
 
-    # --- ZIP in -> ZIP out ---------------------------------------------------
-    if rom_path.lower().endswith('.zip'):
-        work = tempfile.mkdtemp(prefix='rrp_zip_')
-        try:
-            with zipfile.ZipFile(rom_path) as zf:
-                zf.extractall(work)
-            inner = [os.path.join(dp, f) for dp, _, fs in os.walk(work) for f in fs]
-            data_file = _find_data_file(inner)
-            if not data_file:
-                raise rrp.RomError('No patchable image inside the zip')
-            result = patcher.patch(
-                rom_path=Path(data_file), output_path=Path(data_file),
-                rosters=rosters, on_progress=on_progress,
-            )
-            out_zip = output_path if output_path.lower().endswith('.zip') else output_path + '.zip'
-            # Rename the inner files to the output prefix too (keeping any
-            # " (Track N)" suffix), and rewrite the .cue's FILE references so it
-            # still points at the renamed tracks.
-            import re as _re
-            data_base = os.path.splitext(os.path.basename(data_file))[0]
-            inner_base = _re.sub(r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', data_base)
-            def _renamed(name):
-                return name.replace(inner_base, new_prefix) if inner_base and inner_base in name else name
-            with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for f in inner:
-                    arc = _renamed(os.path.basename(f))
-                    if f.lower().endswith('.cue') and inner_base:
-                        txt = open(f, errors='replace').read().replace(inner_base, new_prefix)
-                        zf.writestr(arc, txt)
-                    else:
-                        zf.write(f, arc)
-            # Report the zip we actually wrote.
-            result.output_path = out_zip
-            return result
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
-
-    # --- loose multi-track disc (.cue + .bin tracks) -------------------------
-    src_dir = os.path.dirname(rom_path)
-    base = os.path.splitext(os.path.basename(rom_path))[0]
-    # A track suffix like " (Track 2)" isn't part of the shared base name.
-    import re as _re
-    game_base = _re.sub(r'\s*[\(\-]\s*[Tt]rack\s*\d+\)?.*$', '', base)
-    companions = [
-        os.path.join(src_dir, e) for e in (os.listdir(src_dir) if src_dir else [])
-        if e.lower().endswith(('.bin', '.cue')) and e.lower().startswith(game_base.lower())
-    ]
-    if companions:
-        os.makedirs(out_dir, exist_ok=True)
-        data_file = _find_data_file(companions)
-        result = None
-        for f in companions:
-            ext = os.path.splitext(f)[1]
-            dst = os.path.join(out_dir, os.path.basename(f).replace(game_base, new_prefix))
-            if f == data_file:
-                result = patcher.patch(
-                    rom_path=Path(f), output_path=Path(dst),
-                    rosters=rosters, on_progress=on_progress,
-                )
-            elif ext.lower() == '.cue':
-                txt = open(f, errors='replace').read().replace(game_base, new_prefix)
-                open(dst, 'w').write(txt)
-            else:
-                shutil.copy2(f, dst)
+    if not rom_path.lower().endswith('.zip'):
+        new_prefix = f'{safe_label} - {_game_base(rom_path)}'
+        result, _ = _patch_set(patcher, rom_path, output_dir, new_prefix, rosters, on_progress)
         return result
 
-    # --- single image --------------------------------------------------------
-    return patcher.patch(
-        rom_path=Path(rom_path), output_path=Path(output_path),
-        rosters=rosters, on_progress=on_progress,
-    )
+    work = tempfile.mkdtemp(prefix='rrp_zip_')
+    try:
+        with zipfile.ZipFile(rom_path) as zf:
+            zf.extractall(work)
+        inner = [os.path.join(dp, f) for dp, _, fs in os.walk(work) for f in fs]
+        data_file = _find_data_file(inner)
+        if not data_file:
+            raise ValueError('No patchable image inside the zip')
+        new_prefix = f'{safe_label} - {_game_base(data_file)}'
+        staged = os.path.join(work, '__out__')
+        result, written = _patch_set(patcher, data_file, staged, new_prefix, rosters, on_progress)
+        os.makedirs(output_dir, exist_ok=True)
+        out_zip = os.path.join(output_dir, new_prefix + '.zip')
+        with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for f in written:
+                zf.write(f, os.path.basename(f))
+        result.output_path = out_zip
+        return result
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def _register_league(league):
@@ -365,7 +373,7 @@ def run_sports(job):
                             if raw_map else None)
             rosters = patcher.map_rosters(data, slot_mapping)
             result = _patch_with_packaging(
-                patcher, job['rom_path'], job['output_path'], rosters, on_progress,
+                patcher, job['rom_path'], job['output_dir'], job['label'], rosters, on_progress,
             )
             emit(result.to_dict())
             _report(progress_file, 'DONE')
