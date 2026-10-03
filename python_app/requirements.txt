@@ -1,7 +1,7 @@
 zstandard
 pycryptodome
 # Sports roster patching, from PyPI (pure-Python universal wheel).
-retro-roster-patcher>=0.1.1
+retro-roster-patcher>=0.1.2
 # pyaes and certifi are vendored into python_app/ (no reliable wheel path on
 # Android's --only-binary install / SPM site-packages), so they resolve by
 # import, not pip.
