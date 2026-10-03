@@ -43,6 +43,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   late String _provider = widget.info.defaultProvider;
   late int _season = defaultSeason(_provider);
+  // In-game language for games that ship translations; null when there's none.
+  late String? _language = info.languages.isEmpty ? null : info.languages.first;
 
   bool get _isSoccer => widget.info.sport == 'soccer';
   List<League> _leagues = [];
@@ -257,6 +259,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         label: '${doc.leagueName} $_season',
         rostersFile: rostersFile,
         slotMapping: slotMapping,
+        language: _language,
         onProgress: (v) => setState(() => _progress = v),
         onStatus: (s) => setState(() => _status = s),
       );
@@ -879,6 +882,17 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ],
           ),
         ),
+        if (_language != null) ...[
+          const SizedBox(height: 16),
+          Text('Game language', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 4),
+          DropdownButton<String>(
+            value: _language,
+            isExpanded: true,
+            items: [for (final l in info.languages) DropdownMenuItem(value: l, child: Text(languageName(l)))],
+            onChanged: (v) => setState(() => _language = v ?? _language),
+          ),
+        ],
       ],
     );
   }

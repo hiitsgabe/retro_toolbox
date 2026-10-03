@@ -9,12 +9,17 @@ class PatcherInfo {
   final bool requiresSlotMapping;
   final List<String> providers;
 
+  /// In-game text languages the patch can apply (codes like `en`); empty when
+  /// the game has no translation choice.
+  final List<String> languages;
+
   const PatcherInfo({
     required this.gameId,
     required this.platform,
     required this.sport,
     required this.requiresSlotMapping,
     required this.providers,
+    this.languages = const [],
   });
 
   factory PatcherInfo.fromJson(Map<String, dynamic> j) => PatcherInfo(
@@ -23,10 +28,16 @@ class PatcherInfo {
         sport: (j['sport'] ?? '') as String,
         requiresSlotMapping: (j['requires_slot_mapping'] ?? false) as bool,
         providers: ((j['providers'] as List?) ?? const []).map((e) => '$e').toList(),
+        languages: ((j['languages'] as List?) ?? const []).map((e) => '$e').toList(),
       );
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';
 }
+
+const _languageNames = {'en': 'English', 'es': 'Español', 'fr': 'Français', 'pt': 'Português'};
+
+/// Display name for a patch language code; the upper-cased code when unknown.
+String languageName(String code) => _languageNames[code] ?? code.toUpperCase();
 
 /// A selectable soccer league. Built-in leagues come from the library; custom
 /// ones come from the user's JSON file and carry an ESPN [code] so the worker

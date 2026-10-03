@@ -106,6 +106,34 @@ def test_roster_counts_read_from_the_actual_rom():
     assert main._map_rosters(Plain(), None, None, '/x/Cart.sfc') == 'plain'
 
 
+def test_build_patcher_hands_bundled_assets_only_to_patchers_that_take_them():
+    class WithAssets:
+        def __init__(self, cache_dir, *, provider=None, assets_dir=None):
+            self.assets_dir = assets_dir
+
+    class Plain:
+        def __init__(self, cache_dir, *, provider=None):
+            pass
+
+    p = main._build_patcher(WithAssets, '/c', 'espn')
+    assert os.path.isfile(os.path.join(p.assets_dir, 'w202-english.ppf')), p.assets_dir
+    main._build_patcher(Plain, '/c', 'espn')  # must not raise
+
+
+def test_options_reach_patch():
+    seen = {}
+
+    class P(FakePatcher):
+        def patch(self, rom_path, output_path, rosters, on_progress, **options):
+            seen.update(options)
+            return super().patch(rom_path, output_path, rosters, on_progress)
+
+    src, out = tempfile.mkdtemp(), tempfile.mkdtemp()
+    open(os.path.join(src, 'Cart.sfc'), 'wb').write(b'rom')
+    main._patch_with_packaging(P(), os.path.join(src, 'Cart.sfc'), out, 'L', lambda _r: [], None, {'language': 'pt'})
+    assert seen == {'language': 'pt'}
+
+
 if __name__ == '__main__':
     for name, fn in list(globals().items()):
         if name.startswith('test_'):
