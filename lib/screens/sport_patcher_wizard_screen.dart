@@ -29,7 +29,15 @@ import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
 /// separate slot-mapping step.
 class SportPatcherWizardScreen extends ConsumerStatefulWidget {
   final PatcherInfo info;
-  const SportPatcherWizardScreen({super.key, required this.info});
+
+  /// Start on [initialStep] with rosters already fetched. Lets tests and
+  /// screenshots render later steps without the Python worker.
+  @visibleForTesting
+  final RosterDoc? initialDoc;
+  @visibleForTesting
+  final int initialStep;
+
+  const SportPatcherWizardScreen({super.key, required this.info, this.initialDoc, this.initialStep = 0});
 
   @override
   ConsumerState<SportPatcherWizardScreen> createState() => _WizardState();
@@ -39,7 +47,7 @@ enum _Step { rosters, teams, rom, patch }
 
 class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   final List<_Step> _steps = const [_Step.rosters, _Step.teams, _Step.rom, _Step.patch];
-  int _index = 0;
+  late int _index = widget.initialStep;
 
   late String _provider = widget.info.defaultProvider;
   late int _season = defaultSeason(_provider);
@@ -51,7 +59,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   League? _selectedLeague;
   bool _loadingLeagues = false;
 
-  RosterDoc? _doc;
+  late RosterDoc? _doc = widget.initialDoc;
   String? _romPath;
   String? _outputDir;
 
@@ -69,6 +77,14 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   PatcherInfo get info => widget.info;
   _Step get _step => _steps[_index];
 
+  /// Short screens (small handhelds): the full header, paddings and footer
+  /// left almost no room for the step itself.
+  bool get _compact => MediaQuery.sizeOf(context).height < 640;
+
+  /// Very short screens (a 16:9 handheld in landscape is ~360dp tall): the
+  /// Back/Next buttons move into the top bar and step blurbs are dropped.
+  bool get _short => MediaQuery.sizeOf(context).height < 480;
+
   /// The rosters step has something to choose only for soccer (league), a
   /// multi-source game, or a source that exposes a season. Otherwise there's
   /// nothing to pick, so we fetch immediately and skip to the editor.
@@ -80,7 +96,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     super.initState();
     if (_isSoccer) _loadLeagues();
     _lookupRom();
-    if (!_rostersHasOptions) {
+    if (!_rostersHasOptions && _doc == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
     }
   }
@@ -303,7 +319,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 ),
               ),
             ),
-            _footer(theme),
+            if (!_short) _footer(theme),
           ],
         ),
       ),
@@ -311,6 +327,23 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Widget _header(ThemeData theme, Color accent) {
+    if (_compact) {
+      // One row: back, game, and the step as text instead of the dot rail.
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+        child: Row(
+          children: [
+            IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.maybePop(context)),
+            Icon(sportIcon(info.sport), color: accent, size: 20),
+            const SizedBox(width: 8),
+            Expanded(child: Text(gameName(info), style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
+            Text('${_index + 1}/${_steps.length} · ${_label(_step)}',
+                style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+            if (_short) ...[const SizedBox(width: 12), ..._navButtons()],
+          ],
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       child: Column(
@@ -373,9 +406,16 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [Icon(icon, color: theme.colorScheme.primary), const SizedBox(width: 10), Expanded(child: Text(title, style: theme.textTheme.titleMedium))]),
-          const SizedBox(height: 6),
-          Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 16),
+          if (!_short) ...[
+            SizedBox(height: _compact ? 2 : 6),
+            Text(
+              subtitle,
+              maxLines: _compact ? 2 : null,
+              overflow: _compact ? TextOverflow.ellipsis : null,
+              style: (_compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+          SizedBox(height: _compact ? 8 : 16),
         ],
       );
 
@@ -387,7 +427,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _Step.patch => _patchStep(theme),
     };
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: _compact ? const EdgeInsets.fromLTRB(16, 8, 16, 4) : const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -552,11 +592,14 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               child: _sectionTitle(theme, Icons.groups, doc.leagueName,
                   'Drag to reorder (slot order), tap to edit a squad, swipe options to delete.'),
             ),
-            FilledButton.tonalIcon(
-              onPressed: _addTeam,
-              icon: const Icon(Icons.add),
-              label: const Text('Add team'),
-            ),
+            if (_compact)
+              IconButton.filledTonal(onPressed: _addTeam, icon: const Icon(Icons.add), tooltip: 'Add team')
+            else
+              FilledButton.tonalIcon(
+                onPressed: _addTeam,
+                icon: const Icon(Icons.add),
+                label: const Text('Add team'),
+              ),
           ],
         ),
         Expanded(
@@ -570,8 +613,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               final t = teams[i];
               return Card(
                 key: ValueKey('team_${t.id}_$i'),
-                margin: const EdgeInsets.symmetric(vertical: 4),
+                margin: EdgeInsets.symmetric(vertical: _compact ? 2 : 4),
                 child: ListTile(
+                  dense: _compact,
+                  visualDensity: _compact ? VisualDensity.compact : null,
                   leading: _teamCrest(theme, t),
                   title: Text(t.name),
                   subtitle: Text('${t.players.length} players'),
@@ -905,45 +950,56 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ],
       );
 
-  Widget _footer(ThemeData theme) {
+  /// Back (when there is a previous step) and the step's primary action.
+  List<Widget> _navButtons() {
     final isPatch = _step == _Step.patch;
+    final dense = _short ? VisualDensity.compact : null;
+    return [
+      if (_index > 0)
+        TextButton(
+          style: TextButton.styleFrom(visualDensity: dense),
+          onPressed: _busy ? null : () => setState(() => _index--),
+          child: const Text('Back'),
+        ),
+      if (_short) const SizedBox(width: 4) else const Spacer(),
+      if (isPatch && _result != null)
+        FilledButton.icon(
+          style: FilledButton.styleFrom(visualDensity: dense),
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.check),
+          label: const Text('Close'),
+        )
+      else if (isPatch)
+        FilledButton.icon(
+          style: FilledButton.styleFrom(visualDensity: dense),
+          onPressed: (_busy || _romPath == null) ? null : _patch,
+          icon: const Icon(Icons.build),
+          label: const Text('Patch ROM'),
+        )
+      else
+        FilledButton(
+          style: FilledButton.styleFrom(visualDensity: dense),
+          // On the rosters step Next runs the fetch (which advances on
+          // success); elsewhere it just moves forward.
+          onPressed: (_canAdvance && !_busy)
+              ? () {
+                  if (_step == _Step.rosters && _doc == null) {
+                    _fetch();
+                  } else {
+                    setState(() => _index++);
+                  }
+                }
+              : null,
+          child: const Text('Next'),
+        ),
+    ];
+  }
+
+  Widget _footer(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: _compact ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4) : const EdgeInsets.all(16),
       decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)))),
-      child: Row(
-        children: [
-          if (_index > 0)
-            TextButton(onPressed: _busy ? null : () => setState(() => _index--), child: const Text('Back')),
-          const Spacer(),
-          if (isPatch && _result != null)
-            FilledButton.icon(
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.check),
-              label: const Text('Close'),
-            )
-          else if (isPatch)
-            FilledButton.icon(
-              onPressed: (_busy || _romPath == null) ? null : _patch,
-              icon: const Icon(Icons.build),
-              label: const Text('Patch ROM'),
-            )
-          else
-            FilledButton(
-              // On the rosters step Next runs the fetch (which advances on
-              // success); elsewhere it just moves forward.
-              onPressed: (_canAdvance && !_busy)
-                  ? () {
-                      if (_step == _Step.rosters && _doc == null) {
-                        _fetch();
-                      } else {
-                        setState(() => _index++);
-                      }
-                    }
-                  : null,
-              child: const Text('Next'),
-            ),
-        ],
-      ),
+      child: Row(children: _navButtons()),
     );
   }
 }

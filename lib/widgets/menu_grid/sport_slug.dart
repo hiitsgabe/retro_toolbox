@@ -73,7 +73,7 @@ GameRoster gameRoster(String gameId) => _gameRosters[gameId] ?? const GameRoster
 
 const Map<String, GameRoster> _gameRosters = {
   'iss-snes': GameRoster(15, 11), // 4-4-2: 11 start, 4 subs
-  'we2002': GameRoster(23, 11), // starting XI first 11
+  'we2002': GameRoster(22, 11), // starting XI first 11; the library writes 22
   'nbalive95-genesis': GameRoster(12, 5),
   'kgj-mlb-snes': GameRoster(25, 9), // 25 roster, 9 batting lineup
   'mvp-psp': GameRoster(25, 9),

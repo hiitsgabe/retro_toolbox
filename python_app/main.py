@@ -276,9 +276,15 @@ def _build_patcher(cls, cache_dir, provider):
 def _map_rosters(patcher, data, slot_mapping, rom):
     """map_rosters plus the per-ROM extras some games need, as the library's
     CLI does: a game that declares `roster_counts` reads each team's shape off
-    the image (via analyze_rom) instead of falling back to a fixed default."""
+    the image (via analyze_rom) instead of falling back to a fixed default.
+
+    `order_as_given`: the rosters come from the app's editor, whose list order
+    is the ROM order the user set up, so the library must write it as is
+    rather than re-select by stats."""
     import inspect
     extras = {}
+    if 'order_as_given' in inspect.signature(patcher.map_rosters).parameters:
+        extras['order_as_given'] = True
     if 'roster_counts' in inspect.signature(patcher.map_rosters).parameters:
         counts = patcher.analyze_rom(Path(rom)).extra.get('roster_counts')
         if counts:
@@ -383,7 +389,8 @@ def run_sports(job):
             )
             # Reorder each squad into the game's fielding order (starters first)
             # so the editor shows a sensible lineup instead of the provider's
-            # alphabetical dump. Advisory only — patch still runs its own select.
+            # alphabetical dump. The patch writes the (possibly edited) list in
+            # this order: see `_map_rosters`.
             for roster in data.teams:
                 try:
                     roster.players = patcher.suggest_squad_order(roster)

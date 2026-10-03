@@ -24,6 +24,30 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   int get _rosterSize => _roster.rosterSize;
   bool get _usesColor => gameUsesTeamColor(widget.gameId);
 
+  /// Short screens: no FAB over the list, colors scroll with it, dense rows.
+  bool get _compact => MediaQuery.sizeOf(context).height < 640;
+
+  /// Index of the player picked to swap; the next row tapped trades places
+  /// with it. Null when not swapping.
+  int? _swapFrom;
+
+  void _onRowTap(int i, RosterPlayer p) {
+    final from = _swapFrom;
+    if (from == null) {
+      _editPlayer(p);
+      return;
+    }
+    setState(() {
+      if (from != i) {
+        final players = team.players;
+        final a = players[from];
+        players[from] = players[i];
+        players[i] = a;
+      }
+      _swapFrom = null;
+    });
+  }
+
   Future<void> _editPlayer(RosterPlayer? player) async {
     final isNew = player == null;
     final nameCtrl = TextEditingController(text: player?.name ?? '');
@@ -150,8 +174,8 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     return v == null ? null : Color(0xFF000000 | v);
   }
 
-  Widget _colorRow(ThemeData theme) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+  Widget _colorRow(ThemeData theme) => _compact ? _compactColorRow(theme) : Padding(
+        padding: const EdgeInsets.only(top: 4),
         child: Card(
           child: Column(
             children: [
@@ -163,9 +187,34 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         ),
       );
 
+  /// Both colors on one line: a swatch per color, tap to change.
+  Widget _compactColorRow(ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Row(
+          children: [
+            Text('Colors', style: theme.textTheme.labelLarge),
+            const SizedBox(width: 12),
+            _swatch(theme, 'Primary', team.color, (v) => team.color = v),
+            const SizedBox(width: 8),
+            _swatch(theme, 'Alternate', team.alternateColor, (v) => team.alternateColor = v),
+          ],
+        ),
+      );
+
+  Widget _swatch(ThemeData theme, String label, String hex, void Function(String) onPicked) {
+    final c = _hexToColor(hex);
+    return ActionChip(
+      avatar: CircleAvatar(backgroundColor: c ?? theme.colorScheme.surfaceContainerHighest),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+      onPressed: () => _pickColorFor(hex, onPicked),
+    );
+  }
+
   Widget _colorTile(ThemeData theme, String label, String hex, void Function(String) onPicked) {
     final c = _hexToColor(hex);
     return ListTile(
+      dense: _compact,
       leading: Container(
         width: 36,
         height: 36,
@@ -209,76 +258,145 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final players = team.players;
+    final compact = _compact;
+    final swapping = _swapFrom != null;
+    final countLine = '${players.length} players · ROM uses $_rosterSize (first $_starters start)';
     return Scaffold(
       appBar: AppBar(
-        title: Text(team.name),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(22),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text('${players.length} players · ROM uses $_rosterSize (first $_starters start)', style: theme.textTheme.bodySmall),
-          ),
-        ),
+        toolbarHeight: compact ? 48 : null,
+        title: compact
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(team.name, style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis),
+                  Text(countLine, style: theme.textTheme.bodySmall),
+                ],
+              )
+            : Text(team.name),
+        bottom: compact
+            ? null
+            : PreferredSize(
+                preferredSize: const Size.fromHeight(22),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(countLine, style: theme.textTheme.bodySmall),
+                ),
+              ),
+        actions: [
+          if (compact && !swapping)
+            IconButton(icon: const Icon(Icons.person_add), tooltip: 'Add player', onPressed: () => _editPlayer(null)),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _editPlayer(null),
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add player'),
-      ),
+      floatingActionButton: compact || swapping
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _editPlayer(null),
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add player'),
+            ),
       body: Column(
         children: [
-          if (_usesColor) _colorRow(theme),
+          if (swapping)
+            Material(
+              color: theme.colorScheme.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.swap_vert, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('Tap a player to swap with ${players[_swapFrom!].name}', overflow: TextOverflow.ellipsis)),
+                    TextButton(onPressed: () => setState(() => _swapFrom = null), child: const Text('Cancel')),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: players.isEmpty
                 ? const Center(child: Text('No players. Add one.'))
                 : ReorderableListView.builder(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-              itemCount: players.length,
-              onReorder: (oldI, newI) => setState(() {
-                if (newI > oldI) newI--;
-                players.insert(newI, players.removeAt(oldI));
-              }),
-              header: _sectionLabel(theme, 'Starting lineup', Colors.green),
-              itemBuilder: (context, i) {
-                final p = players[i];
-                final starter = i < _starters;
-                final extra = i >= _rosterSize;
-                final showBenchLabel = i == _starters && players.length > _starters;
-                final showExtraLabel = i == _rosterSize && players.length > _rosterSize;
-                final subtitle = [
-                  if (p.position.isNotEmpty) p.position,
-                  if (p.nationality.isNotEmpty) p.nationality,
-                ].join(' · ');
-                return Column(
-                  key: ValueKey('player_${p.id}_$i'),
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (showBenchLabel) _sectionLabel(theme, 'Bench', Colors.grey),
-                    if (showExtraLabel) _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
-                    Opacity(
-                      opacity: extra ? 0.5 : 1,
-                      child: Card(
-                        margin: const EdgeInsets.symmetric(vertical: 3),
-                        color: starter ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5) : null,
-                        child: ListTile(
-                          leading: _avatar(p, starter),
-                          title: Text(p.name),
-                          subtitle: subtitle.isEmpty ? null : Text(subtitle),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                    padding: EdgeInsets.fromLTRB(12, compact ? 4 : 8, 12, compact ? 12 : 88),
+                    itemCount: players.length,
+                    onReorder: (oldI, newI) => setState(() {
+                      if (newI > oldI) newI--;
+                      players.insert(newI, players.removeAt(oldI));
+                    }),
+                    // Colors live in the header so they scroll away instead of
+                    // pinning two tall tiles above the squad.
+                    // While swapping, only the players: no colors, no labels.
+                    header: swapping
+                        ? null
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => setState(() => players.removeAt(i))),
-                              ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                              if (_usesColor) _colorRow(theme),
+                              _sectionLabel(theme, 'Starting lineup', Colors.green),
                             ],
                           ),
-                          onTap: () => _editPlayer(p),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                    buildDefaultDragHandles: !swapping,
+                    itemBuilder: (context, i) {
+                      final p = players[i];
+                      final starter = i < _starters;
+                      final extra = i >= _rosterSize;
+                      final showBenchLabel = i == _starters && players.length > _starters;
+                      final showExtraLabel = i == _rosterSize && players.length > _rosterSize;
+                      final picked = _swapFrom == i;
+                      final subtitle = [
+                        if (p.position.isNotEmpty) p.position,
+                        if (p.nationality.isNotEmpty) p.nationality,
+                      ].join(' · ');
+                      return Column(
+                        key: ValueKey('player_${p.id}_$i'),
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (showBenchLabel && !swapping) _sectionLabel(theme, 'Bench', Colors.grey),
+                          if (showExtraLabel && !swapping)
+                            _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
+                          Opacity(
+                            opacity: extra ? 0.5 : 1,
+                            child: Card(
+                              margin: EdgeInsets.symmetric(vertical: compact ? 2 : 3),
+                              shape: picked
+                                  ? RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(color: theme.colorScheme.primary, width: 2),
+                                    )
+                                  : null,
+                              color: starter ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5) : null,
+                              child: ListTile(
+                                dense: compact,
+                                visualDensity: compact ? VisualDensity.compact : null,
+                                leading: _avatar(p, starter),
+                                title: Text(p.name, overflow: TextOverflow.ellipsis),
+                                subtitle: subtitle.isEmpty ? null : Text(subtitle, overflow: TextOverflow.ellipsis),
+                                trailing: swapping
+                                    ? null
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.swap_vert),
+                                            tooltip: 'Swap with another player',
+                                            visualDensity: VisualDensity.compact,
+                                            onPressed: () => setState(() => _swapFrom = i),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline),
+                                            tooltip: 'Remove',
+                                            visualDensity: VisualDensity.compact,
+                                            onPressed: () => setState(() => players.removeAt(i)),
+                                          ),
+                                          ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                                        ],
+                                      ),
+                                onTap: () => _onRowTap(i, p),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
           ),
         ],
       ),

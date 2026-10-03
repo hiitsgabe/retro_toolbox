@@ -102,8 +102,14 @@ def test_roster_counts_read_from_the_actual_rom():
         def map_rosters(self, data, slot_mapping):
             return 'plain'
 
+    class Ordered:
+        def map_rosters(self, data, slot_mapping, *, order_as_given=False):
+            return order_as_given
+
     assert main._map_rosters(P(), None, None, '/x/Cart.sfc') == [(2, 12, 7)]
     assert main._map_rosters(Plain(), None, None, '/x/Cart.sfc') == 'plain'
+    # The editor's order is the ROM order: ask for it wherever it's supported.
+    assert main._map_rosters(Ordered(), None, None, '/x/Cart.sfc') is True
 
 
 def test_build_patcher_hands_bundled_assets_only_to_patchers_that_take_them():
