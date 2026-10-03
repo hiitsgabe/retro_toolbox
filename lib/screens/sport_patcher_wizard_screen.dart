@@ -14,8 +14,10 @@ import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/screens/team_editor_screen.dart';
+import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/sports_rom_lookup.dart';
 import 'package:roms_downloader/services/sports_service.dart';
+import 'package:roms_downloader/widgets/common/path_browser.dart';
 import 'package:roms_downloader/widgets/game_trivia.dart';
 import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
 
@@ -201,9 +203,19 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _pickRom() async {
-    final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select the ROM to patch');
-    final path = result?.files.firstOrNull?.path;
-    if (path == null) return;
+    String? path;
+    if (Platform.isAndroid) {
+      // Not the SAF picker: it copies the file into the app cache first (slow,
+      // no feedback for a disc image) and the copy sits alone, so a .cue/.bin
+      // set loses its sibling tracks and the output ships only the data track.
+      final root = _romPath != null ? p.dirname(_romPath!) : await DirectoryService().getDownloadDir();
+      if (!mounted) return;
+      path = await PathBrowser.show(context, title: 'Select the ROM to patch', initialDir: root);
+    } else {
+      final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select the ROM to patch');
+      path = result?.files.firstOrNull?.path;
+    }
+    if (path == null || !mounted) return;
     setState(() => _romPath = path);
   }
 
@@ -219,9 +231,6 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final romPath = _romPath, doc = _doc;
     if (romPath == null || doc == null) return;
     final dir = _outputDir ?? _defaultOutputDir();
-    final base = p.basenameWithoutExtension(romPath);
-    final ext = p.extension(romPath);
-    final outputPath = p.join(dir, '$base [${doc.leagueName} $_season]$ext');
 
     setState(() {
       _busy = true;
@@ -242,7 +251,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         gameId: info.gameId,
         provider: _provider,
         romPath: romPath,
-        outputPath: outputPath,
+        // Output mirrors the input's packaging and is named
+        // "<league> <season> - <game>..." by the Python side.
+        outputDir: dir,
+        label: '${doc.leagueName} $_season',
         rostersFile: rostersFile,
         slotMapping: slotMapping,
         onProgress: (v) => setState(() => _progress = v),
@@ -726,11 +738,15 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 const Icon(Icons.insert_drive_file_outlined, size: 20),
                 const SizedBox(width: 10),
                 Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
-                OutlinedButton(onPressed: _pickRom, child: Text(_catalogMatch == null ? 'Choose' : 'Pick a file instead')),
+                OutlinedButton(
+                  onPressed: _pickRom,
+                  child: Text(_romPath != null ? 'Change' : (_catalogMatch == null ? 'Choose' : 'Pick a file instead')),
+                ),
               ],
             ),
           ),
-          if (_catalogMatch != null) ...[
+          // A ROM is already chosen: offering to download the game is noise.
+          if (_catalogMatch != null && _romPath == null) ...[
             const SizedBox(height: 16),
             _catalogCard(theme),
           ],
@@ -781,7 +797,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                     FilledButton.icon(
                       onPressed: () => setState(() => _romPath = downloaded),
                       icon: const Icon(Icons.check, size: 18),
-                      label: Text(_romPath == downloaded ? 'Selected' : 'Use downloaded file'),
+                      label: const Text('Use downloaded file'),
                     )
                   else if (downloading)
                     Column(
