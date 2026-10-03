@@ -153,6 +153,14 @@ bool gameUsesTeamColor(String gameId) => const {'iss-snes', 'we2002', 'mvp-psp'}
 /// year, so only the NHL source lets the user pick a season.
 bool providerHasSeason(String provider) => provider == 'nhl';
 
+/// The season to start on. Hockey seasons run October to June and are named by
+/// their start year, so before October the current one began last year. Other
+/// sources are fixed to the calendar year.
+int defaultSeason(String provider, [DateTime? now]) {
+  now ??= DateTime.now();
+  return providerHasSeason(provider) && now.month < 10 ? now.year - 1 : now.year;
+}
+
 Color sportBrandColor(String sport) =>
     _sportColors[sport.toLowerCase()] ?? const Color(0xFF55606E);
 

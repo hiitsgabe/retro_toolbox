@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:roms_downloader/models/patcher_info.dart';
 import 'package:roms_downloader/services/python_worker.dart';
+import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
 
 void main() {
   group('parseWorkerLine', () {
@@ -66,5 +67,12 @@ void main() {
       expect(data.teams.length, 2);
       expect(data.teams.first.playerCount, 3);
     });
+  });
+
+  test('defaultSeason uses the hockey season start year and the calendar year otherwise', () {
+    // Hockey seasons run October to June, named by their start year.
+    expect(defaultSeason('nhl', DateTime(2026, 9, 30)), 2025);
+    expect(defaultSeason('nhl', DateTime(2026, 10, 1)), 2026);
+    expect(defaultSeason('espn', DateTime(2026, 3, 1)), 2026);
   });
 }
