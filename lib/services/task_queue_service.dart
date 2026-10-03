@@ -107,6 +107,14 @@ class TaskQueueService {
         case TaskType.cia3dsConversion:
           await _executeCia3dsConversionTask(ref, task, notifier);
           break;
+        case TaskType.archiveExtraction:
+          // Fire and forget — archiveExtract manages its own queue-status updates.
+          ref.read(extractionProvider.notifier).archiveExtract(
+                taskId: task.params['taskId'] as String,
+                archivePath: task.params['archivePath'] as String,
+                outputDir: task.params['outputDir'] as String,
+              );
+          break;
       }
     } catch (e) {
       debugPrint('Task execution error for ${task.id}: $e');
