@@ -57,20 +57,35 @@ class PathBrowser extends StatefulWidget {
 /// dir per mounted volume — trimming `/Android/...` off each gives the roots.
 Future<Map<String, String>> storageVolumes() async {
   if (!Platform.isAndroid) return const {};
+  var appDirs = <String>[];
+  var storageEntries = <String>[];
   try {
-    final dirs = await getExternalStorageDirectories() ?? const <Directory>[];
-    final volumes = <String, String>{};
-    for (final d in dirs) {
-      final marker = d.path.indexOf('/Android/');
-      if (marker <= 0) continue;
-      final root = d.path.substring(0, marker);
-      volumes[root] = root == '/storage/emulated/0' ? 'Internal storage' : 'SD card (${p.basename(root)})';
-    }
-    return volumes;
-  } catch (_) {
-    // Volume shortcuts are a convenience; browsing still works without them.
-    return const {};
+    appDirs = [for (final d in await getExternalStorageDirectories() ?? const <Directory>[]) d.path];
+  } catch (_) {}
+  try {
+    // Some handhelds' cards don't show up in the app dirs above; with
+    // all-files access `/storage` itself lists every mounted volume.
+    storageEntries = [for (final e in Directory('/storage').listSync(followLinks: false)) if (e is Directory) e.path];
+  } catch (_) {}
+  return volumesFrom(appDirs: appDirs, storageEntries: storageEntries);
+}
+
+/// `root path -> label` from the app-specific dirs (one per mounted volume,
+/// trimmed at `/Android/`) and the entries of `/storage`. Internal storage
+/// first and always present; `emulated`/`self` are aliases, not cards.
+@visibleForTesting
+Map<String, String> volumesFrom({required List<String> appDirs, required List<String> storageEntries}) {
+  const internal = '/storage/emulated/0';
+  final roots = <String>{internal};
+  for (final d in appDirs) {
+    final marker = d.indexOf('/Android/');
+    if (marker > 0) roots.add(d.substring(0, marker));
   }
+  for (final e in storageEntries) {
+    final name = p.basename(e);
+    if (name != 'emulated' && name != 'self') roots.add(e);
+  }
+  return {for (final r in roots) r: r == internal ? 'Internal storage' : 'SD card (${p.basename(r)})'};
 }
 
 class _PathBrowserState extends State<PathBrowser> {

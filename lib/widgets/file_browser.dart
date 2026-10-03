@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:roms_downloader/providers/browser_layout_provider.dart';
 
 /// One row in a [FileBrowserView]. [id] must be unique within the listing
 /// (a path or a name) — it keys selection and maps back to the underlying
@@ -36,7 +38,7 @@ class BrowserTransfer {
 /// transfer bar. Presentation only — the parent owns the connection, supplies
 /// [items]/[selectedIds]/[transfer] and reacts to the callbacks. Shared by the
 /// SMB and FTP screens so both look identical.
-class FileBrowserView extends StatelessWidget {
+class FileBrowserView extends ConsumerWidget {
   final String locationLabel;
   final bool canGoUp;
   final bool busy;
@@ -89,8 +91,12 @@ class FileBrowserView extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // The user's grid/list choice; until they pick, short screens get the
+    // dense list (more entries) and the rest the icon grid.
+    final layout = ref.watch(browserLayoutProvider) ?? (MediaQuery.sizeOf(context).height < 640 ? BrowserLayout.list : BrowserLayout.grid);
+    final asList = layout == BrowserLayout.list;
     return Column(
       children: [
         Material(
@@ -100,6 +106,11 @@ class FileBrowserView extends StatelessWidget {
               IconButton(icon: const Icon(Icons.arrow_upward), tooltip: 'Up', onPressed: canGoUp && !busy ? onUp : null),
               Expanded(child: Text(locationLabel, style: const TextStyle(fontFamily: 'monospace'), overflow: TextOverflow.ellipsis)),
               ...toolbarActions,
+              IconButton(
+                icon: Icon(asList ? Icons.grid_view_rounded : Icons.view_list_rounded),
+                tooltip: asList ? 'Show as grid' : 'Show as list',
+                onPressed: () => ref.read(browserLayoutProvider.notifier).set(asList ? BrowserLayout.grid : BrowserLayout.list),
+              ),
               IconButton(icon: const Icon(Icons.refresh), tooltip: 'Refresh', onPressed: busy ? null : onRefresh),
             ],
           ),
@@ -110,9 +121,7 @@ class FileBrowserView extends StatelessWidget {
         Expanded(
           child: items.isEmpty && !busy
               ? const Center(child: Text('Empty'))
-              // Short screens: a dense list fits several times more entries
-              // than the icon grid.
-              : MediaQuery.sizeOf(context).height < 640
+              : asList
               ? ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: items.length,

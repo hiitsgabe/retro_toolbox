@@ -85,4 +85,16 @@ void main() {
     expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
     expect(find.text('Paste here'), findsNothing);
   });
+
+  testWidgets('the grid/list choice switches the view and is remembered', (tester) async {
+    await open(tester);
+    expect(find.byType(ListView), findsOneWidget); // short test screen: list by default
+
+    await tester.tap(find.byTooltip('Show as grid'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump();
+
+    expect(find.byType(GridView), findsOneWidget);
+    expect((await SharedPreferences.getInstance()).getString('file_browser_layout'), 'grid');
+  });
 }
