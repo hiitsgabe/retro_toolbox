@@ -42,7 +42,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   int _index = 0;
 
   late String _provider = widget.info.defaultProvider;
-  int _season = DateTime.now().year;
+  late int _season = defaultSeason(_provider);
 
   bool get _isSoccer => widget.info.sport == 'soccer';
   List<League> _leagues = [];
@@ -432,6 +432,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   items: [for (final pr in info.providers) DropdownMenuItem(value: pr, child: Text(pr.toUpperCase()))],
                   onChanged: (v) => setState(() {
                     _provider = v ?? _provider;
+                    _season = defaultSeason(_provider);
                     _doc = null;
                   }),
                 ),

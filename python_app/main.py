@@ -168,7 +168,7 @@ def _game_base(path):
     return re.sub(_TRACK_SUFFIX, '', stem).strip()
 
 
-def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters, on_progress):
+def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters_for, on_progress):
     """Patch the data track and write the game's whole file set to out_dir.
 
     Every .bin/.cue next to rom_path sharing its game base name comes along,
@@ -176,6 +176,9 @@ def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters, on_progress):
     tracks copied, the .cue's FILE references rewritten. Without the full set
     the .cue would keep loading the original tracks. A single image (no
     .bin/.cue siblings) is just patched to new_prefix + its extension.
+
+    rosters_for(data_file) maps the rosters against the actual image, since
+    some games size each team from the ROM itself.
 
     Returns (PatchResult, [written paths]).
     """
@@ -200,7 +203,7 @@ def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters, on_progress):
         if f == data_file:
             result = patcher.patch(
                 rom_path=Path(f), output_path=Path(dst),
-                rosters=rosters, on_progress=on_progress,
+                rosters=rosters_for(f), on_progress=on_progress,
             )
         elif f.lower().endswith('.cue'):
             with open(f, errors='replace') as src:
@@ -213,7 +216,7 @@ def _patch_set(patcher, rom_path, out_dir, new_prefix, rosters, on_progress):
     return result, written
 
 
-def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters, on_progress):
+def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_progress):
     """Patch rom_path into output_dir, mirroring the input's packaging.
 
     Output names are "<label> - <game base>" plus each file's own suffix
@@ -234,7 +237,7 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters, on_prog
 
     if not rom_path.lower().endswith('.zip'):
         new_prefix = f'{safe_label} - {_game_base(rom_path)}'
-        result, _ = _patch_set(patcher, rom_path, output_dir, new_prefix, rosters, on_progress)
+        result, _ = _patch_set(patcher, rom_path, output_dir, new_prefix, rosters_for, on_progress)
         return result
 
     work = tempfile.mkdtemp(prefix='rrp_zip_')
@@ -247,7 +250,7 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters, on_prog
             raise ValueError('No patchable image inside the zip')
         new_prefix = f'{safe_label} - {_game_base(data_file)}'
         staged = os.path.join(work, '__out__')
-        result, written = _patch_set(patcher, data_file, staged, new_prefix, rosters, on_progress)
+        result, written = _patch_set(patcher, data_file, staged, new_prefix, rosters_for, on_progress)
         os.makedirs(output_dir, exist_ok=True)
         out_zip = os.path.join(output_dir, new_prefix + '.zip')
         with zipfile.ZipFile(out_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -257,6 +260,19 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters, on_prog
         return result
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def _map_rosters(patcher, data, slot_mapping, rom):
+    """map_rosters plus the per-ROM extras some games need, as the library's
+    CLI does: a game that declares `roster_counts` reads each team's shape off
+    the image (via analyze_rom) instead of falling back to a fixed default."""
+    import inspect
+    extras = {}
+    if 'roster_counts' in inspect.signature(patcher.map_rosters).parameters:
+        counts = patcher.analyze_rom(Path(rom)).extra.get('roster_counts')
+        if counts:
+            extras['roster_counts'] = counts
+    return patcher.map_rosters(data, slot_mapping, **extras)
 
 
 def _register_league(league):
@@ -371,9 +387,9 @@ def run_sports(job):
             raw_map = job.get('slot_mapping')
             slot_mapping = ([rrp.SlotMapping.from_dict(m) for m in raw_map]
                             if raw_map else None)
-            rosters = patcher.map_rosters(data, slot_mapping)
             result = _patch_with_packaging(
-                patcher, job['rom_path'], job['output_dir'], job['label'], rosters, on_progress,
+                patcher, job['rom_path'], job['output_dir'], job['label'],
+                lambda rom: _map_rosters(patcher, data, slot_mapping, rom), on_progress,
             )
             emit(result.to_dict())
             _report(progress_file, 'DONE')

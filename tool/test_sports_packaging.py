@@ -35,7 +35,7 @@ def _disc(d):
 
 
 def run(rom, out_dir, label='Liga A/B 2026'):
-    return main._patch_with_packaging(FakePatcher(), rom, out_dir, label, [], None)
+    return main._patch_with_packaging(FakePatcher(), rom, out_dir, label, lambda _rom: [], None)
 
 
 def test_loose_disc():
@@ -83,6 +83,27 @@ def test_single_image():
     res = run(os.path.join(src, 'Cart.sfc'), out, label='Liga 2026')
     assert os.listdir(out) == ['Liga 2026 - Cart.sfc'], os.listdir(out)
     assert res.output_path == os.path.join(out, 'Liga 2026 - Cart.sfc')
+
+
+def test_roster_counts_read_from_the_actual_rom():
+    """A game declaring roster_counts gets them from analyze_rom on the image."""
+    class Info:
+        extra = {'roster_counts': [(2, 12, 7)]}
+
+    class P:
+        def analyze_rom(self, rom):
+            assert str(rom).endswith('Cart.sfc')
+            return Info()
+
+        def map_rosters(self, data, slot_mapping, *, roster_counts=None):
+            return roster_counts
+
+    class Plain:
+        def map_rosters(self, data, slot_mapping):
+            return 'plain'
+
+    assert main._map_rosters(P(), None, None, '/x/Cart.sfc') == [(2, 12, 7)]
+    assert main._map_rosters(Plain(), None, None, '/x/Cart.sfc') == 'plain'
 
 
 if __name__ == '__main__':
