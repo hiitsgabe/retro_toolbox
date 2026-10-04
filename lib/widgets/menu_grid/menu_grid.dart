@@ -51,7 +51,10 @@ class MenuGrid extends StatelessWidget {
   /// scroll and sizes to its content).
   final bool shrinkWrap;
 
-  const MenuGrid({super.key, required this.tiles, this.shrinkWrap = false});
+  /// Autofocus the first tile so a d-pad has somewhere to start.
+  final bool autofocusFirst;
+
+  const MenuGrid({super.key, required this.tiles, this.shrinkWrap = false, this.autofocusFirst = true});
 
   @override
   Widget build(BuildContext context) {
@@ -66,14 +69,19 @@ class MenuGrid extends StatelessWidget {
         childAspectRatio: 1,
       ),
       itemCount: tiles.length,
-      itemBuilder: (context, i) => _MenuTileCard(tile: tiles[i]),
+      itemBuilder: (context, i) => _MenuTileCard(
+        key: ValueKey(tiles[i].label),
+        tile: tiles[i],
+        autofocus: autofocusFirst && i == 0,
+      ),
     );
   }
 }
 
 class _MenuTileCard extends StatefulWidget {
   final MenuTile tile;
-  const _MenuTileCard({required this.tile});
+  final bool autofocus;
+  const _MenuTileCard({super.key, required this.tile, this.autofocus = false});
 
   @override
   State<_MenuTileCard> createState() => _MenuTileCardState();
@@ -81,18 +89,40 @@ class _MenuTileCard extends StatefulWidget {
 
 class _MenuTileCardState extends State<_MenuTileCard> {
   bool _pressed = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTap: widget.tile.onTap,
-      child: AnimatedScale(
-        scale: _pressed ? 0.94 : 1,
-        duration: const Duration(milliseconds: 90),
-        child: MenuTileFace(tile: widget.tile),
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: widget.tile.onTap,
+        autofocus: widget.autofocus,
+        onHighlightChanged: (v) => setState(() => _pressed = v),
+        onFocusChange: (v) => setState(() => _focused = v),
+        child: AnimatedScale(
+          scale: _pressed ? 0.94 : (_focused ? 1.05 : 1),
+          duration: const Duration(milliseconds: 90),
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              MenuTileFace(tile: widget.tile),
+              if (_focused)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: scheme.primary, width: 3),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -100,7 +130,7 @@ class _MenuTileCardState extends State<_MenuTileCard> {
 
 /// The visual face of a [MenuTile]: accent gradient (or neutral surface),
 /// optional background image, logo/icon and label. No interaction — wrap it in
-/// a gesture detector (see [MenuGrid]) or reuse it standalone (e.g. CoverFlow).
+/// an InkWell/gesture detector (see [MenuGrid]) or reuse it standalone (e.g. CoverFlow).
 class MenuTileFace extends StatelessWidget {
   final MenuTile tile;
 
