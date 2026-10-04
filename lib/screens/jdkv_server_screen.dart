@@ -187,13 +187,19 @@ class JdkvServerScreen extends ConsumerWidget {
                 if (path == null || !context.mounted) return;
                 // Only iOS' save dialog writes the bytes itself; everywhere else
                 // (desktop dialog, folder browser) we just got a path.
+                String? error;
                 if (!Platform.isIOS) {
                   try {
                     File(path).writeAsStringSync(json);
-                  } catch (_) {}
+                  } catch (e) {
+                    error = 'Could not save webdav.json: $e';
+                  }
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Saved webdav.json'), duration: Duration(seconds: 1)),
+                  SnackBar(
+                    content: Text(error ?? 'Saved webdav.json'),
+                    duration: Duration(seconds: error == null ? 1 : 4),
+                  ),
                 );
               },
             ),

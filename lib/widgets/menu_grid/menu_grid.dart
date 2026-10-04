@@ -92,8 +92,26 @@ class _MenuTileCardState extends State<_MenuTileCard> {
   bool _focused = false;
 
   @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addHighlightModeListener(_onHighlightMode);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeHighlightModeListener(_onHighlightMode);
+    super.dispose();
+  }
+
+  void _onHighlightMode(FocusHighlightMode _) {
+    if (mounted) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Touch users never see a focus look (taps don't move focus).
+    final showFocus = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
@@ -103,13 +121,13 @@ class _MenuTileCardState extends State<_MenuTileCard> {
         onHighlightChanged: (v) => setState(() => _pressed = v),
         onFocusChange: (v) => setState(() => _focused = v),
         child: AnimatedScale(
-          scale: _pressed ? 0.94 : (_focused ? 1.05 : 1),
+          scale: _pressed ? 0.94 : (showFocus ? 1.05 : 1),
           duration: const Duration(milliseconds: 90),
           child: Stack(
             fit: StackFit.passthrough,
             children: [
               MenuTileFace(tile: widget.tile),
-              if (_focused)
+              if (showFocus)
                 Positioned.fill(
                   child: IgnorePointer(
                     child: DecoratedBox(

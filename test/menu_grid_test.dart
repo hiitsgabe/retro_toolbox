@@ -61,4 +61,42 @@ void main() {
 
     expect(tapped, ['two']);
   });
+  for (final traditional in [false, true]) {
+    testWidgets('autofocused first tile ${traditional ? 'has' : 'lacks'} the focused look in ${traditional ? 'traditional' : 'touch'} mode', (tester) async {
+      FocusManager.instance.highlightStrategy =
+          traditional ? FocusHighlightStrategy.alwaysTraditional : FocusHighlightStrategy.alwaysTouch;
+      addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MenuGrid(tiles: [MenuTile(label: 'One', icon: Icons.download, onTap: () {})]),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale;
+      final border = find.byWidgetPredicate(
+        (w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).border?.top.width == 3,
+      );
+      expect(scale, traditional ? 1.05 : 1);
+      expect(border, traditional ? findsOneWidget : findsNothing);
+    });
+  }
+
+  testWidgets('focused look appears when highlight mode flips to traditional', (tester) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MenuGrid(tiles: [MenuTile(label: 'One', icon: Icons.download, onTap: () {})]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1);
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.05);
+  });
 }

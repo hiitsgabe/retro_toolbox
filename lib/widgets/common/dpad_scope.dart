@@ -9,6 +9,27 @@ class PageFocusIntent extends Intent {
   final bool forward;
 }
 
+/// Up/down: leave a text field unless it is multi-line (maxLines != 1); then
+/// disabled, so the key falls through to caret movement.
+class _VerticalIntent extends Intent {
+  const _VerticalIntent(this.direction);
+  final TraversalDirection direction;
+}
+
+class _VerticalAction extends Action<_VerticalIntent> {
+  @override
+  bool isEnabled(_VerticalIntent intent) {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    final t = ctx?.findAncestorStateOfType<EditableTextState>();
+    return t == null || t.widget.maxLines == 1;
+  }
+
+  @override
+  void invoke(_VerticalIntent intent) {
+    FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
+  }
+}
+
 /// Left/right: leave a text field only when the caret is collapsed at that
 /// edge (empty counts as both); otherwise disabled, so the key falls through
 /// to normal caret movement.
@@ -56,11 +77,8 @@ class _DpadScopeState extends State<DpadScope> {
   static const _pageSteps = 6;
 
   static final _shortcuts = <ShortcutActivator, Intent>{
-    for (final (key, dir) in [
-      (LogicalKeyboardKey.arrowUp, TraversalDirection.up),
-      (LogicalKeyboardKey.arrowDown, TraversalDirection.down),
-    ])
-      SingleActivator(key): DirectionalFocusIntent(dir, ignoreTextFields: false),
+    const SingleActivator(LogicalKeyboardKey.arrowUp): const _VerticalIntent(TraversalDirection.up),
+    const SingleActivator(LogicalKeyboardKey.arrowDown): const _VerticalIntent(TraversalDirection.down),
     const SingleActivator(LogicalKeyboardKey.arrowLeft): const _SideIntent(TraversalDirection.left),
     const SingleActivator(LogicalKeyboardKey.arrowRight): const _SideIntent(TraversalDirection.right),
     const SingleActivator(LogicalKeyboardKey.pageUp): const PageFocusIntent(false),
@@ -130,12 +148,22 @@ class _DpadScopeState extends State<DpadScope> {
 
   void _pageFocus(bool forward) {
     final dir = forward ? TraversalDirection.down : TraversalDirection.up;
+    var moved = false;
     for (var i = 0; i < _pageSteps; i++) {
       final node = FocusManager.instance.primaryFocus;
       if (node == null || !node.focusInDirection(dir)) break;
       // Focus changes are otherwise applied in a microtask, after this loop.
       FocusManager.instance.applyFocusChangesIfNeeded();
       if (FocusManager.instance.primaryFocus == node) break;
+      moved = true;
+    }
+    // Nothing to focus (text-only view): keep the stock page scroll.
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (!moved && ctx != null) {
+      Actions.maybeInvoke(
+        ctx,
+        ScrollIntent(direction: forward ? AxisDirection.down : AxisDirection.up, type: ScrollIncrementType.page),
+      );
     }
   }
 
@@ -149,6 +177,7 @@ class _DpadScopeState extends State<DpadScope> {
           PageFocusIntent: CallbackAction<PageFocusIntent>(
             onInvoke: (i) => _pageFocus(i.forward),
           ),
+          _VerticalIntent: _VerticalAction(),
           _SideIntent: _SideAction(),
           _BackIntent: CallbackAction<_BackIntent>(
             onInvoke: (_) => _back(),
@@ -161,9 +190,11 @@ class _DpadScopeState extends State<DpadScope> {
             widget.child,
             Positioned.fill(
               child: IgnorePointer(
-                child: CustomPaint(
-                  key: const ValueKey('dpad-focus-outline'),
-                  painter: _OutlinePainter(this, color, _repaint),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    key: const ValueKey('dpad-focus-outline'),
+                    painter: _OutlinePainter(this, color, _repaint),
+                  ),
                 ),
               ),
             ),
