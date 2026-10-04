@@ -55,9 +55,14 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('pb_test');
     Directory(p.join(tmp.path, 'alpha', 'inner')).createSync(recursive: true);
     Directory(p.join(tmp.path, 'beta')).createSync();
+    Directory(p.join(tmp.path, 'gamma', 'sub')).createSync(recursive: true);
     File(p.join(tmp.path, 'file.txt')).writeAsStringSync('x');
   });
-  tearDown(() => tmp.deleteSync(recursive: true));
+  tearDown(() {
+    // Make anything a test locked deletable again.
+    Process.runSync('chmod', ['-R', 'u+rwx', tmp.path]);
+    tmp.deleteSync(recursive: true);
+  });
 
   testWidgets('directory mode lists only folders and autofocuses the first', (t) async {
     await open(t);
@@ -94,6 +99,45 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(t);
     expect(focusedLabel(), 'beta');
+  });
+
+  testWidgets('going up from a folder with entries focuses that folder, not the first', (t) async {
+    await open(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // beta
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // gamma
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(t);
+    expect(focusedLabel(), 'sub');
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(), '..');
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(t);
+    expect(focusedLabel(), 'gamma');
+  });
+
+  testWidgets('going up focuses a folder that starts off-screen in a long list', (t) async {
+    for (var i = 0; i < 60; i++) {
+      Directory(p.join(tmp.path, 'z${i.toString().padLeft(2, '0')}')).createSync();
+    }
+    await open(t);
+    await t.scrollUntilVisible(find.text('z59'), 200, scrollable: find.byType(Scrollable).last);
+    await t.tap(find.text('z59'));
+    await settle(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter); // empty folder: ".." is focused
+    await settle(t);
+    expect(focusedLabel(), 'z59');
+  });
+
+  testWidgets('a folder that cannot be opened focuses Go up', (t) async {
+    Directory(p.join(tmp.path, 'locked')).createSync();
+    Process.runSync('chmod', ['000', p.join(tmp.path, 'locked')]);
+    await open(t);
+    await t.scrollUntilVisible(find.text('locked'), 50, scrollable: find.byType(Scrollable).last);
+    await t.tap(find.text('locked'));
+    await settle(t);
+    expect(find.textContaining("Can't open"), findsOneWidget);
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    expect(ctx?.findAncestorWidgetOfExactType<OutlinedButton>(), isNotNull);
   });
 
   testWidgets('Cancel returns null', (t) async {

@@ -120,11 +120,34 @@ class _PathBrowserState extends State<PathBrowser> {
   // Handed to whichever tile should get focus after a load. A fresh node per
   // load: a reused one keeps a stale context from its previous tile.
   FocusNode _target = FocusNode(debugLabel: 'path-browser-target');
+  // Goes to the first tile; used when the list is too long for _target to be
+  // built, so focus is never left nowhere.
+  FocusNode _fallback = FocusNode(debugLabel: 'path-browser-fallback');
+  // The list builds lazily with a fixed row height, so a fresh controller per
+  // load opens it already scrolled to the target row.
+  ScrollController _scroll = ScrollController();
+  final _goUp = FocusNode(debugLabel: 'path-browser-go-up');
+
+  static const _rowHeight = 48.0;
 
   @override
   void dispose() {
     _target.dispose();
+    _fallback.dispose();
+    _scroll.dispose();
+    _goUp.dispose();
     super.dispose();
+  }
+
+  /// Entry paths in row order (without the ".." row).
+  List<String> get _paths => [for (final d in _dirs) d.path, for (final f in _files) f.path];
+
+  /// Focus lands on the folder we just left, else the first real entry.
+  String? get _focusPath {
+    final paths = _paths;
+    final cameFrom = _cameFrom;
+    if (cameFrom != null && paths.contains(cameFrom)) return cameFrom;
+    return paths.firstOrNull;
   }
 
   @override
@@ -150,10 +173,6 @@ class _PathBrowserState extends State<PathBrowser> {
 
   /// [cameFrom]: the folder just left, so going up lands back on it.
   Future<void> _load(String path, {String? cameFrom}) async {
-    // The focused tile is about to be unmounted by the loader; release focus
-    // first so the focus outline never paints a defunct element.
-    final focused = FocusManager.instance.primaryFocus;
-    if (focused?.context?.findAncestorStateOfType<_PathBrowserState>() == this) focused!.unfocus();
     setState(() {
       _loading = true;
       _error = null;
@@ -166,25 +185,37 @@ class _PathBrowserState extends State<PathBrowser> {
       dirs.sort(byName);
       files.sort(byName);
       if (!mounted) return;
-      final previous = _target;
+      final old = (_target, _fallback, _scroll);
       _target = FocusNode(debugLabel: 'path-browser-target');
+      _fallback = FocusNode(debugLabel: 'path-browser-fallback');
       setState(() {
         _dir = path;
         _dirs = dirs;
         _files = files;
         _cameFrom = cameFrom;
         _loading = false;
+        final i = _paths.indexOf(_focusPath ?? '');
+        final up = p.dirname(path) != path ? 1 : 0;
+        _scroll = ScrollController(initialScrollOffset: i < 0 ? 0 : (i + up) * _rowHeight);
       });
-      // The tile only exists after this frame's build.
+      // The tiles only exist after this frame's build.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        previous.dispose();
-        if (mounted && _target.context != null) _target.requestFocus();
+        old.$1.dispose();
+        old.$2.dispose();
+        old.$3.dispose();
+        if (!mounted) return;
+        for (final n in [_target, _fallback]) {
+          if (n.context != null) return n.requestFocus();
+        }
       });
     } on FileSystemException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.osError?.message ?? e.message;
         _loading = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _error != null && p.dirname(_dir) != _dir) _goUp.requestFocus();
       });
     }
   }
@@ -276,29 +307,40 @@ class _PathBrowserState extends State<PathBrowser> {
             Text("Can't open this folder: $_error", textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
             if (canGoUp) ...[
               const SizedBox(height: 12),
-              OutlinedButton(onPressed: () => _load(parent), child: const Text('Go up')),
+              OutlinedButton(focusNode: _goUp, onPressed: () => _load(parent), child: const Text('Go up')),
             ],
           ],
         ),
       );
     }
 
-    final empty = _dirs.isEmpty && _files.isEmpty;
-    // Focus lands on the folder we just left, else the first real entry, else "..".
-    final cameFrom = _cameFrom;
-    final focusPath = (cameFrom != null && _dirs.any((d) => d.path == cameFrom))
-        ? cameFrom
-        : (_dirs.isNotEmpty ? _dirs.first.path : (_files.isNotEmpty ? _files.first.path : null));
+    final focusPath = _focusPath;
+    final String emptyText;
+    if (widget.selectDirectory) {
+      emptyText = 'No subfolders';
+    } else if (widget.allowedExtensions == null) {
+      emptyText = 'Empty folder';
+    } else {
+      emptyText = 'No matching files here';
+    }
+    // Row 0 takes _fallback unless it is the target itself.
+    var row = 0;
+    FocusNode? nodeFor(String? path) {
+      final first = row++ == 0;
+      return path == focusPath ? _target : (first ? _fallback : null);
+    }
     return ListView(
       key: ValueKey(_dir),
+      controller: _scroll,
       shrinkWrap: true,
+      itemExtent: _rowHeight,
       children: [
         if (canGoUp)
           ListTile(
             dense: true,
             leading: const Icon(Icons.arrow_upward, size: 20),
             title: const Text('..'),
-            focusNode: focusPath == null ? _target : null,
+            focusNode: nodeFor(null),
             onTap: () => _load(parent, cameFrom: _dir),
           ),
         for (final d in _dirs)
@@ -306,7 +348,7 @@ class _PathBrowserState extends State<PathBrowser> {
             dense: true,
             leading: const Icon(Icons.folder_outlined, size: 20),
             title: Text(p.basename(d.path), overflow: TextOverflow.ellipsis, maxLines: 1),
-            focusNode: d.path == focusPath ? _target : null,
+            focusNode: nodeFor(d.path),
             onTap: () => _load(d.path),
           ),
         for (final f in _files)
@@ -314,14 +356,13 @@ class _PathBrowserState extends State<PathBrowser> {
             dense: true,
             leading: const Icon(Icons.insert_drive_file_outlined, size: 20),
             title: Text(p.basename(f.path), overflow: TextOverflow.ellipsis, maxLines: 1),
-            focusNode: f.path == focusPath ? _target : null,
+            focusNode: nodeFor(f.path),
             onTap: () => Navigator.pop(context, f.path),
           ),
-        if (empty)
-          Padding(
-            padding: const EdgeInsets.all(24),
+        if (_dirs.isEmpty && _files.isEmpty)
+          Center(
             child: Text(
-              widget.selectDirectory ? 'No subfolders' : widget.allowedExtensions == null ? 'Empty folder' : 'No matching files here',
+              emptyText,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
