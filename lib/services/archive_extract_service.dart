@@ -5,7 +5,7 @@ import 'dart:math';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:rar/rar.dart';
-import 'package:roms_downloader/services/rar_header.dart';
+import 'package:retro_toolbox/services/rar_header.dart';
 
 enum ArchiveKind { zip, rar, unsupported }
 

@@ -5,7 +5,7 @@ import 'package:ftp_server/ftp_server.dart';
 import 'package:ftp_server/server_type.dart';
 import 'package:ftp_server/file_operations/physical_file_operations.dart';
 
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 typedef FtpProgress = void Function(int done, int total);
 

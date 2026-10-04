@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/widgets/game_list/game_row.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/widgets/game_list/game_row.dart';
 
 class GameList extends ConsumerStatefulWidget {
   const GameList({super.key});

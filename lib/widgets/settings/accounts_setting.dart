@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/widgets/settings/ia_credentials_setting.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/widgets/settings/ia_credentials_setting.dart';
 
 /// Connected accounts, one accordion per provider. Collapsed once connected so
 /// it stays out of the way; opens when the user still needs to log in. More

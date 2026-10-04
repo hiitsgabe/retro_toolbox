@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 
 class GameTitle extends StatelessWidget {
   final Game game;

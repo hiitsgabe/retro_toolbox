@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/utils/formatters.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
-import 'package:roms_downloader/widgets/game_list/game_title.dart';
-import 'package:roms_downloader/widgets/game_list/game_tags.dart';
-import 'package:roms_downloader/widgets/game_list/game_action_buttons.dart';
-import 'package:roms_downloader/widgets/game_list/game_progress_bar.dart';
-import 'package:roms_downloader/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/formatters.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/widgets/game_list/game_title.dart';
+import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
+import 'package:retro_toolbox/widgets/game_list/game_progress_bar.dart';
+import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
 class GameRow extends ConsumerStatefulWidget {
   final Game game;

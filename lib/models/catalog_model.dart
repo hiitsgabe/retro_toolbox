@@ -1,5 +1,5 @@
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/catalog_filter_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
 
 const int kDefaultCatalogDisplaySize = 64;
 

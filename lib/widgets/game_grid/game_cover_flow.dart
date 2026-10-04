@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/widgets/game_grid/game_grid_item.dart';
-import 'package:roms_downloader/widgets/menu_grid/cover_flow.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
+import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 
 /// Cover Flow view of the filtered games, reusing the interactive
 /// [GameGridItem] card as each face (selection/actions still work on center).

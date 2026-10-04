@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/python_worker.dart';
+import 'package:retro_toolbox/services/python_worker.dart';
 
 void main() {
   test('starts the embedded interpreter only once even though run() returns immediately', () async {

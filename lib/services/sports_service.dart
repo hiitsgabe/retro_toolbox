@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/models/roster_doc.dart';
-import 'package:roms_downloader/services/python_worker.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/services/python_worker.dart';
 
 /// Drives the retro_roster_patcher library over the shared [PythonWorker].
 ///

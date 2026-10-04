@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:roms_downloader/services/permission_service.dart';
+import 'package:retro_toolbox/services/permission_service.dart';
 
 class PermissionsSetting extends StatefulWidget {
   const PermissionsSetting({super.key});

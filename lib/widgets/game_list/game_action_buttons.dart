@@ -1,10 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
-import 'package:roms_downloader/providers/favorites_provider.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/providers/favorites_provider.dart';
 
 class GameActionButtons extends ConsumerWidget {
   final Game game;

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/app.dart';
-import 'package:roms_downloader/screens/jdkv_server_screen.dart';
-import 'package:roms_downloader/services/extraction_service.dart';
+import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/screens/jdkv_server_screen.dart';
+import 'package:retro_toolbox/services/extraction_service.dart';
 
 void main() {
   ExtractionService.initialize();
@@ -18,7 +18,7 @@ void main() {
   });
   runApp(
     const ProviderScope(
-      child: RomsDownloaderApp(),
+      child: RetroToolboxApp(),
     ),
   );
 }

@@ -1,5 +1,5 @@
 import 'package:background_downloader/background_downloader.dart';
-import 'package:roms_downloader/utils/network.dart';
+import 'package:retro_toolbox/utils/network.dart';
 
 class DownloadService {
   Future<FileDownloader> initialize() async {

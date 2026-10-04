@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
-import 'package:roms_downloader/widgets/game_list/game_action_buttons.dart';
-import 'package:roms_downloader/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
+import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
 class GameGridItem extends ConsumerStatefulWidget {
   final Game game;

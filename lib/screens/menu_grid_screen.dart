@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// Reusable grid page: an app bar title plus a [MenuGrid]. Used for the static
 /// leaf menus (Servers, Ferramentas).

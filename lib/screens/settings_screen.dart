@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/widgets/settings/settings_tab_selector.dart';
-import 'package:roms_downloader/widgets/settings/settings_content.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/widgets/settings/settings_tab_selector.dart';
+import 'package:retro_toolbox/widgets/settings/settings_content.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   final String? consoleId;

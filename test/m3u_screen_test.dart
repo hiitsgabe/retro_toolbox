@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/screens/m3u_screen.dart';
+import 'package:retro_toolbox/screens/m3u_screen.dart';
 
 void main() {
   testWidgets('renders the empty state until a folder is chosen', (tester) async {

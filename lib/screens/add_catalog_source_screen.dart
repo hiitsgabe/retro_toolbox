@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Adds a single console/system to the catalog from a URL. Toggle picks the
 /// source: an Internet Archive item (id or archive.org URL) or a plain HTTP

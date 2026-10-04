@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/providers/sports_provider.dart';
-import 'package:roms_downloader/screens/sport_games_grid_screen.dart';
-import 'package:roms_downloader/widgets/menu_grid/console_slug.dart';
-import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/providers/sports_provider.dart';
+import 'package:retro_toolbox/screens/sport_games_grid_screen.dart';
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Level 1 of the Sports flow: cards grouped by console (default) or by sport,
 /// toggled in the app bar. Tapping a card drills into that group's games.

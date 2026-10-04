@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/browser_layout_provider.dart';
+import 'package:retro_toolbox/providers/browser_layout_provider.dart';
 
 /// One row in a [FileBrowserView]. [id] must be unique within the listing
 /// (a path or a name) — it keys selection and maps back to the underlying

@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/m3u_service.dart';
+import 'package:retro_toolbox/services/m3u_service.dart';
 
 void main() {
   test('detectDiscSets groups multi-disc titles and orders by disc number', () {

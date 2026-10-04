@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/screens/add_catalog_source_screen.dart';
+import 'package:retro_toolbox/screens/add_catalog_source_screen.dart';
 
 void main() {
   Future<void> pump(WidgetTester tester) => tester.pumpWidget(

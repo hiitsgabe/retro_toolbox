@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/widgets/game_list/game_row.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/widgets/game_list/game_row.dart';
 
 class TaskListView extends StatelessWidget {
   final List<GameState> games;

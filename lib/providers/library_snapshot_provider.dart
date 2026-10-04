@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/library_snapshot_model.dart';
+import 'package:retro_toolbox/models/library_snapshot_model.dart';
 
 final librarySnapshotProvider = StateNotifierProvider.family<LibrarySnapshotNotifier, Map<String, LibrarySnapshot>, String>(
   (ref, libraryDir) => LibrarySnapshotNotifier(libraryDir),

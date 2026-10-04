@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/services/collection_clean_service.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/collection_clean_service.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Folder-scoped cleanup ported from console_utilities: dedupe game files,
 /// clean up filenames, and remove OS junk ("ghost") files. Each operation

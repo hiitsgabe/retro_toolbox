@@ -1,4 +1,4 @@
-import 'package:roms_downloader/models/console_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
 
 enum ViewMode { list, grid, coverflow }
 

@@ -1,4 +1,4 @@
-import 'package:roms_downloader/services/python_worker.dart';
+import 'package:retro_toolbox/services/python_worker.dart';
 
 /// NSZ decompression and 3DS→CIA conversion, run on the shared embedded-Python
 /// worker (see [PythonWorker] for the single-interpreter constraint).

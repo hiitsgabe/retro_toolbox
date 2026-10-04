@@ -2,9 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/services/steam_service.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/services/steam_service.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Search the Steam store, multi-select games, and write `.steam` shortcut
 /// files (ES-DE format) into a chosen folder.

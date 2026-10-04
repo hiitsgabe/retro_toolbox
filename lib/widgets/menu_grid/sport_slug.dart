@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
 
 /// Art (logo + color + icon) for sport and game cards.
 ///

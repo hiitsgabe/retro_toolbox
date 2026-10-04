@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/utils/formatters.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/formatters.dart';
 
 class GameBoxart extends StatelessWidget {
   final Game game;

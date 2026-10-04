@@ -3,10 +3,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_details_model.dart';
-import 'package:roms_downloader/utils/title_match.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/utils/title_match.dart';
 
 class BoxartService {
   static final Map<String, Map<String, String>> _boxartCache = {};

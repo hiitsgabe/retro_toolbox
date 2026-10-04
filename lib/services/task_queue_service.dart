@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/providers/download_provider.dart';
-import 'package:roms_downloader/providers/extraction_provider.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/services/file_ops.dart';
-import 'package:roms_downloader/utils/remote_tree.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/file_ops.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 class TaskQueueService {
   /// Returns a human-readable reason downloads can't start, or null when OK.

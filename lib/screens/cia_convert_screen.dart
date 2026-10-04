@@ -5,16 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/models/extraction_model.dart';
-import 'package:roms_downloader/providers/extraction_provider.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/services/directory_service.dart';
-import 'package:roms_downloader/widgets/common/path_browser.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/models/extraction_model.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
+import 'package:retro_toolbox/widgets/common/path_browser.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Converts 3DS cartridge images (.3ds/.cci) to installable .cia via the
 /// bundled 3dsconv. Needs a boot9.bin for encrypted dumps — blocks with a

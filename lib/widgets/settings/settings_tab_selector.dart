@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/widgets/header/console_dropdown.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
 
 class SettingsTabSelector extends StatelessWidget {
   final bool showGeneral;

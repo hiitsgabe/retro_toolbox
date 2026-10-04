@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/utils/remote_tree.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 class _Node {
   final String name;

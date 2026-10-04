@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/services/python_worker.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/services/python_worker.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
 void main() {
   group('parseWorkerLine', () {

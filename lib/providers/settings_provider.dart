@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/settings_model.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/services/settings_service.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/settings_service.dart';
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, AppSettings>((ref) {
   return SettingsNotifier();

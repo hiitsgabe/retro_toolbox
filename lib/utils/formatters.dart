@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 
 String formatBytes(int bytes, {int decimals = 1}) {
   if (bytes <= 0) return '0 B';

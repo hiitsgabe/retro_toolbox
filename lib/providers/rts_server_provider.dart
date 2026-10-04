@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/models/rts_folder_model.dart';
-import 'package:roms_downloader/services/rts_server_service.dart';
+import 'package:retro_toolbox/models/rts_folder_model.dart';
+import 'package:retro_toolbox/services/rts_server_service.dart';
 
 const _portKey = 'rts_server_port_v2';
 const _foldersKey = 'rts_server_folders';

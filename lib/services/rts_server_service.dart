@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/rts_folder_model.dart';
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/models/rts_folder_model.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 /// Serves local folders as a catalog another app can consume via New Catalog
 /// Source: a generated `consoles.json`, an HTML listing per folder (matching

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 
 final taskQueueProvider = StateNotifierProvider<TaskQueueNotifier, TaskQueueState>((ref) {
   return TaskQueueNotifier(ref);

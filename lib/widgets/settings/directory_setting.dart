@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/settings_model.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 
 class DirectorySetting extends StatelessWidget {
   final String settingKey;

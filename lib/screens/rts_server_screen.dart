@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/rts_folder_model.dart';
-import 'package:roms_downloader/providers/rts_server_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/utils/network.dart';
-import 'package:roms_downloader/widgets/common/advanced_port.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/rts_folder_model.dart';
+import 'package:retro_toolbox/providers/rts_server_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/widgets/common/advanced_port.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Turns local folders into a catalog other apps consume via New Catalog
 /// Source: add folders, tweak how each appears, flip the server on, and share

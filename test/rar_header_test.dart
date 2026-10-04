@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/rar_header.dart';
+import 'package:retro_toolbox/services/rar_header.dart';
 
 /// RAR5 variable-length integer: 7 bits per byte, high bit = more.
 List<int> vint(int v) {

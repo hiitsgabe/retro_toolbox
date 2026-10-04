@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
 
 void main() {
   Map<String, dynamic> obj(String name) => {'id': 'x', 'name': name, 'url': 'u', 'added': true};

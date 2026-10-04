@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/console_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
 
 /// Canonical platform slug for a catalog [Console], or null when unrecognized.
 ///

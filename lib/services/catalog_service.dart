@@ -4,11 +4,11 @@ import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/utils/network.dart';
-import 'package:roms_downloader/utils/title_metadata_parser.dart';
-import 'package:roms_downloader/services/boxart_service.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/utils/title_metadata_parser.dart';
+import 'package:retro_toolbox/services/boxart_service.dart';
 
 const _iaMetadataBase = 'https://archive.org/metadata/';
 const _iaDownloadBase = 'https://archive.org/download/';

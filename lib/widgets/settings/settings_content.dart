@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/settings_model.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/widgets/settings/directory_setting.dart';
-import 'package:roms_downloader/widgets/settings/boolean_setting.dart';
-import 'package:roms_downloader/widgets/settings/number_setting.dart';
-import 'package:roms_downloader/widgets/settings/permissions_setting.dart';
-import 'package:roms_downloader/widgets/settings/network_address_setting.dart';
-import 'package:roms_downloader/widgets/settings/tools_setting.dart';
-import 'package:roms_downloader/widgets/settings/favorites_settings.dart';
-import 'package:roms_downloader/widgets/settings/accounts_setting.dart';
-import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
-import 'package:roms_downloader/widgets/settings/nsz_setting.dart';
-import 'package:roms_downloader/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/widgets/settings/directory_setting.dart';
+import 'package:retro_toolbox/widgets/settings/boolean_setting.dart';
+import 'package:retro_toolbox/widgets/settings/number_setting.dart';
+import 'package:retro_toolbox/widgets/settings/permissions_setting.dart';
+import 'package:retro_toolbox/widgets/settings/network_address_setting.dart';
+import 'package:retro_toolbox/widgets/settings/tools_setting.dart';
+import 'package:retro_toolbox/widgets/settings/favorites_settings.dart';
+import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
+import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
+import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
+import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
 
 class SettingsContent extends StatelessWidget {
   final Console? selectedConsole;

@@ -1,4 +1,4 @@
-import 'package:roms_downloader/models/game_metadata_model.dart';
+import 'package:retro_toolbox/models/game_metadata_model.dart';
 
 class TitleMetadataParser {
   static final Map<String, String> _regionCodes = {
