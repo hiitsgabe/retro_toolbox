@@ -1,5 +1,6 @@
 name: roms_downloader
 description: ROMs Downloader
+publish_to: none
 version: 0.2.4+24
 
 environment:
@@ -31,8 +32,12 @@ dependencies:
   rapidfuzz: ^0.1.1
   photo_view: ^0.15.0
   disk_space_2: ^1.0.11
-  smb_connect: ^0.0.9
-  ftpconnect: ^2.0.10
+  # Vendored with a socket-reader fix: see third_party/smb_connect/RETRO_TOOLBOX_CHANGES.md
+  smb_connect:
+    path: third_party/smb_connect
+  # Vendored with a reply-polling fix: see third_party/ftpconnect/RETRO_TOOLBOX_CHANGES.md
+  ftpconnect:
+    path: third_party/ftpconnect
   ftp_server: ^2.3.2
 
 dev_dependencies:
