@@ -138,15 +138,35 @@ jobs:
           cp "$RUNNER_TEMP/icudtl.dat" "$PORT/icudtl.dat"
           cp linux/handheld/retrotoolbox.gptk "$PORT/"
           cp "linux/handheld/Retro Toolbox.sh" dist/ports/
-          # Fallback libs for firmware that lacks them.
           mkdir -p "$PORT/bundled_libs"
-          for l in libdrm.so.2 libgbm.so.1 libinput.so.10 libevdev.so.2 libmtdev.so.1 libudev.so.1 \
-                   libxkbcommon.so.0 libsqlite3.so.0 libffi.so.8 libexpat.so.1 libfontconfig.so.1 libfreetype.so.6; do
-            if [ -e "/usr/lib/aarch64-linux-gnu/$l" ]; then
-              cp -L "/usr/lib/aarch64-linux-gnu/$l" "$PORT/bundled_libs/$l"
-            else
-              echo "skip (not installed): $l"
-            fi
+          # Every shared library flutter-pi (and a few app extras) needs, found
+          # recursively with ldd. The launcher copies one only when the
+          # firmware lacks it. glibc, the C++ runtime and GPU drivers always
+          # come from the device.
+          SKIP='^(ld-linux.*|libc|libm|libdl|libpthread|librt|libresolv|libstdc\+\+|libgcc_s|libEGL|libGLES.*|libGL|libGLX|libGLdispatch|libmali)\.so'
+          # Extras: sqlite/ffi/fonts for the app; xcb-randr for GPU blobs
+          # that expect it (seen missing on Knulli).
+          SEEDS="libsqlite3.so.0 libffi.so.8 libfontconfig.so.1 libfreetype.so.6 libxcb-randr.so.0"
+          queue="$PORT/flutter-pi"
+          for l in $SEEDS; do
+            cp -L "/usr/lib/aarch64-linux-gnu/$l" "$PORT/bundled_libs/$l"
+            queue="$queue /usr/lib/aarch64-linux-gnu/$l"
+          done
+          seen=" "
+          while [ -n "$queue" ]; do
+            set -- $queue; f=$1; shift; queue="$*"
+            for dep in $(ldd "$f" | awk '/=> \//{print $3}'); do
+              name=$(basename "$dep")
+              echo "$name" | grep -Eq "$SKIP" && continue
+              case "$seen" in *" $name "*) continue;; esac
+              seen="$seen$name "
+              cp -L "$dep" "$PORT/bundled_libs/$name"
+              queue="$queue $dep"
+            done
+          done
+          echo "bundled: $(ls "$PORT/bundled_libs" | tr '\n' ' ')"
+          for l in libsystemd.so.0 libwayland-server.so.0 libxcb-randr.so.0 libinput.so.10; do
+            [ -e "$PORT/bundled_libs/$l" ] || { echo "::error::$l not bundled"; exit 1; }
           done
 
       - name: Verify package
