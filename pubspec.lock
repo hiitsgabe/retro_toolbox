@@ -371,10 +371,9 @@ packages:
   ftpconnect:
     dependency: "direct main"
     description:
-      name: ftpconnect
-      sha256: a9ebac24a50b17dc9a1101fff85c3729fd8c16ec41346b0fa6e549616e23b2f6
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/ftpconnect"
+      relative: true
+    source: path
     version: "2.0.10"
   glob:
     dependency: transitive
@@ -928,10 +927,9 @@ packages:
   smb_connect:
     dependency: "direct main"
     description:
-      name: smb_connect
-      sha256: "8d82b701f8ff8a736070f6eb5393fe983da1a0f4747a56c3a04bda68765b5e66"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/smb_connect"
+      relative: true
+    source: path
     version: "0.0.9"
   source_gen:
     dependency: transitive
