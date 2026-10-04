@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -106,10 +107,12 @@ class _DpadScopeState extends State<DpadScope> {
       return null;
     }
     final node = FocusManager.instance.primaryFocus;
-    if (node == null || node is FocusScopeNode || node.context == null) {
-      return null;
-    }
-    final box = node.context!.findRenderObject();
+    final ctx = node?.context;
+    if (node == null || node is FocusScopeNode || ctx is! Element) return null;
+    // Elements replaced during layout stay deactivated until the frame ends;
+    // findRenderObject() asserts on them (release builds fall to `attached`).
+    if (kDebugMode && !ctx.debugIsActive) return null;
+    final box = ctx.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     return node.rect;
   }
