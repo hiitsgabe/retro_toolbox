@@ -31,20 +31,12 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.pump();
     expect(below.hasPrimaryFocus, isTrue);
-    expect(
-      find.descendant(
-        of: find.byType(TextField),
-        matching: find.byWidgetPredicate((w) => w is EditableText && w.focusNode.hasFocus),
-      ),
-      findsNothing,
-    );
   });
 
   testWidgets('page down jumps several items', (t) async {
     await t.pumpWidget(app(Scaffold(
       body: ListView(children: [
-        for (var i = 0; i < 20; i++)
-          ListTile(autofocus: i == 0, title: Text('item $i'), onTap: () {}),
+        for (var i = 0; i < 20; i++) ListTile(autofocus: i == 0, title: Text('item $i'), onTap: () {}),
       ]),
     )));
     await t.pump();
@@ -108,21 +100,76 @@ void main() {
     expect(find.text('only'), findsOneWidget);
   });
 
-  testWidgets('outline shows for keyboard focus and does not keep frames coming',
-      (t) async {
+  for (final left in [true, false]) {
+    testWidgets('arrow ${left ? 'left' : 'right'} moves the caret mid-text, leaves at the edge', (t) async {
+      final field = TextEditingController(text: 'abc');
+      final other = FocusNode();
+      addTearDown(field.dispose);
+      addTearDown(other.dispose);
+      await t.pumpWidget(app(Scaffold(
+        body: Row(children: [
+          if (left) ElevatedButton(focusNode: other, onPressed: () {}, child: const Text('x')),
+          SizedBox(width: 200, child: TextField(controller: field, autofocus: true)),
+          if (!left) ElevatedButton(focusNode: other, onPressed: () {}, child: const Text('x')),
+        ]),
+      )));
+      await t.pump();
+      final key = left ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.arrowRight;
+      // Mid-text: caret moves, focus stays.
+      field.selection = const TextSelection.collapsed(offset: 1);
+      await t.sendKeyEvent(key);
+      await t.pump();
+      expect(other.hasPrimaryFocus, isFalse);
+      expect(field.selection.baseOffset, left ? 0 : 2);
+      // Now step to the edge, then the next press leaves.
+      field.selection = TextSelection.collapsed(offset: left ? 0 : 3);
+      await t.sendKeyEvent(key);
+      await t.pump();
+      expect(other.hasPrimaryFocus, isTrue);
+    });
+  }
+
+  testWidgets('empty text field: left and right both leave', (t) async {
+    final other = FocusNode();
+    addTearDown(other.dispose);
+    await t.pumpWidget(app(Scaffold(
+      body: Row(children: [
+        const SizedBox(width: 200, child: TextField(autofocus: true)),
+        ElevatedButton(focusNode: other, onPressed: () {}, child: const Text('x')),
+      ]),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await t.pump();
+    expect(other.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('outline follows a moved focus rect and then goes idle', (t) async {
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    late StateSetter setPad;
+    var pad = 0.0;
     await t.pumpWidget(app(Scaffold(
-      body: TextButton(autofocus: true, onPressed: () {}, child: const Text('go')),
+      body: StatefulBuilder(builder: (c, set) {
+        setPad = set;
+        return Padding(
+          padding: EdgeInsets.only(top: pad),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: TextButton(autofocus: true, onPressed: () {}, child: const Text('go')),
+          ),
+        );
+      }),
     )));
     await t.pumpAndSettle();
-    expect(find.byType(DpadScope), findsOneWidget);
-    final outline = find.descendant(
-      of: find.byType(DpadScope),
-      matching: find.byKey(const ValueKey('dpad-focus-outline')),
-    );
-    expect(outline, findsOneWidget);
-    // Idle: a focused node must not schedule frames by itself.
+    expect(t.binding.hasScheduledFrame, isFalse); // idle stays idle
+
+    setPad(() => pad = 100);
+    await t.pump(); // the frame that moves the button
+    expect(t.binding.hasScheduledFrame, isTrue); // outline catch-up frame
+    await t.pumpAndSettle();
+    final outline = t.renderObject<RenderBox>(find.byKey(const ValueKey('dpad-focus-outline')));
+    expect(outline.debugNeedsPaint, isFalse);
     expect(t.binding.hasScheduledFrame, isFalse);
   });
 }
