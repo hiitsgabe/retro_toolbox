@@ -172,4 +172,42 @@ void main() {
     expect(outline.debugNeedsPaint, isFalse);
     expect(t.binding.hasScheduledFrame, isFalse);
   });
+
+  testWidgets('outline survives the focused widget being replaced during layout', (t) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    late StateSetter resize;
+    var width = 200.0;
+    await t.pumpWidget(
+      app(
+        Scaffold(
+          body: StatefulBuilder(
+            builder: (c, set) {
+              resize = set;
+              return Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: width,
+                  // Rebuilt during layout: the old button is deactivated but
+                  // not yet unmounted when the outline paints.
+                  child: LayoutBuilder(
+                    builder: (c, box) => box.maxWidth > 100 ? TextButton(autofocus: true, onPressed: () {}, child: const Text('go')) : const Text('loading'),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await t.pumpAndSettle();
+    // Highlight flips to traditional in the same frame the layout swaps the
+    // focused button out, so the outline repaints while it is deactivated.
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    resize(() => width = 50);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(find.text('loading'), findsOneWidget);
+    expect(t.binding.hasScheduledFrame, isFalse);
+  });
 }
