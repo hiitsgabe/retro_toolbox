@@ -8,6 +8,32 @@ class PageFocusIntent extends Intent {
   final bool forward;
 }
 
+/// Left/right: leave a text field only when the caret is collapsed at that
+/// edge (empty counts as both); otherwise disabled, so the key falls through
+/// to normal caret movement.
+class _SideIntent extends Intent {
+  const _SideIntent(this.direction);
+  final TraversalDirection direction;
+}
+
+class _SideAction extends Action<_SideIntent> {
+  @override
+  bool isEnabled(_SideIntent intent) {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    final c = ctx?.findAncestorStateOfType<EditableTextState>()?.widget.controller;
+    if (c == null) return true;
+    final sel = c.selection;
+    if (!sel.isValid) return true;
+    final edge = intent.direction == TraversalDirection.left ? 0 : c.text.length;
+    return sel.isCollapsed && sel.baseOffset == edge;
+  }
+
+  @override
+  void invoke(_SideIntent intent) {
+    FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
+  }
+}
+
 class _BackIntent extends Intent {
   const _BackIntent();
 }
@@ -32,17 +58,18 @@ class _DpadScopeState extends State<DpadScope> {
     for (final (key, dir) in [
       (LogicalKeyboardKey.arrowUp, TraversalDirection.up),
       (LogicalKeyboardKey.arrowDown, TraversalDirection.down),
-      (LogicalKeyboardKey.arrowLeft, TraversalDirection.left),
-      (LogicalKeyboardKey.arrowRight, TraversalDirection.right),
     ])
       SingleActivator(key): DirectionalFocusIntent(dir, ignoreTextFields: false),
+    const SingleActivator(LogicalKeyboardKey.arrowLeft): const _SideIntent(TraversalDirection.left),
+    const SingleActivator(LogicalKeyboardKey.arrowRight): const _SideIntent(TraversalDirection.right),
     const SingleActivator(LogicalKeyboardKey.pageUp): const PageFocusIntent(false),
     const SingleActivator(LogicalKeyboardKey.pageDown): const PageFocusIntent(true),
     const SingleActivator(LogicalKeyboardKey.escape): const _BackIntent(),
   };
 
   final _repaint = _Repaint();
-  Rect? _painted;
+  Rect? _painted; // rect last drawn by the painter; the frame callback diffs against it
+
   bool _disposed = false;
 
   @override
@@ -55,7 +82,11 @@ class _DpadScopeState extends State<DpadScope> {
     // the focused rect moved (scrolling), so an idle app schedules no frames.
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
       if (_disposed) return;
-      if (_painted != _focusRect()) _repaint.ping();
+      if (_painted != _focusRect()) {
+        _repaint.ping();
+        // Persistent-callback phase: marking dirty alone schedules no frame.
+        SchedulerBinding.instance.scheduleFrame();
+      }
     });
   }
 
@@ -115,6 +146,7 @@ class _DpadScopeState extends State<DpadScope> {
           PageFocusIntent: CallbackAction<PageFocusIntent>(
             onInvoke: (i) => _pageFocus(i.forward),
           ),
+          _SideIntent: _SideAction(),
           _BackIntent: CallbackAction<_BackIntent>(
             onInvoke: (_) => _back(),
           ),
