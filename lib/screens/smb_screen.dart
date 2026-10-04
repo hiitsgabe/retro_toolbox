@@ -47,19 +47,24 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       _domain.text = state.domain;
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('SMB Share'),
-        actions: [
-          if (state.connected)
-            IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
-        ],
-      ),
-      body: state.connected ? _browser(context, state, notifier) : _connectForm(context, state, notifier),
-      floatingActionButton: state.connected && !state.atRoot && state.transfer == null && state.selected.isEmpty
-          ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
-          : null,
-    );
+    return PopScope(
+        // Back goes up a folder; only the shares root (or the connect form) leaves.
+        canPop: !state.connected || state.atRoot,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && !state.busy) notifier.goUp();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('SMB Share'),
+            actions: [
+              if (state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
+            ],
+          ),
+          body: state.connected ? _browser(context, state, notifier) : _connectForm(context, state, notifier),
+          floatingActionButton: state.connected && !state.atRoot && state.transfer == null && state.selected.isEmpty
+              ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
+              : null,
+        ));
   }
 
   // ---- Connect / scan ------------------------------------------------------
@@ -71,7 +76,8 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       children: [
         const ToolDescription(
           icon: Icons.folder_shared_rounded,
-          text: 'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network.',
+          text:
+              'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network.',
         ),
         const SizedBox(height: 20),
         SizedBox(
@@ -79,9 +85,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           child: FilledButton.icon(
             style: FilledButton.styleFrom(shape: const StadiumBorder()),
             onPressed: state.scanning ? null : () => notifier.scan(),
-            icon: state.scanning
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.wifi_find),
+            icon: state.scanning ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find),
             label: Text(state.scanning ? 'Scanning the network…' : 'Scan network', style: const TextStyle(fontSize: 16)),
           ),
         ),
@@ -89,8 +93,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           const SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text('FOUND ON YOUR NETWORK',
-                style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, letterSpacing: 1.2)),
+            child: Text('FOUND ON YOUR NETWORK', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, letterSpacing: 1.2)),
           ),
           for (final h in state.discovered) _hostTile(context, h),
         ] else if (!state.scanning) ...[
@@ -191,9 +194,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
             onPressed: state.busy || _host.text.trim().isEmpty
                 ? null
                 : () => notifier.connect(host: _host.text.trim(), username: _user.text.trim(), password: _pass.text, domain: _domain.text.trim()),
-            icon: state.busy
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.login),
+            icon: state.busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
             label: const Text('Connect'),
           ),
         ),

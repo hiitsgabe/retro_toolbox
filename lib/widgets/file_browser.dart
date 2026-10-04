@@ -47,7 +47,7 @@ class FileBrowserView extends ConsumerWidget {
   final Set<String> selectedIds;
   final BrowserTransfer? transfer;
 
-  /// When false, tapping an item opens it (no selection) — e.g. the SMB shares
+  /// When false, activating an item opens it (no selection, no checkboxes) — e.g. the SMB shares
   /// root, where entries are shares you can only enter.
   final bool selectable;
 
@@ -122,76 +122,99 @@ class FileBrowserView extends ConsumerWidget {
           child: items.isEmpty && !busy
               ? const Center(child: Text('Empty'))
               : asList
-              ? ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _row(context, items[i]),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 132,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.82,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => _tile(context, items[i]),
-                ),
+                  ? ListView.builder(
+                      key: ValueKey(locationLabel),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: items.length,
+                      itemBuilder: (context, i) => _row(context, items[i], i),
+                    )
+                  : GridView.builder(
+                      key: ValueKey(locationLabel),
+                      padding: const EdgeInsets.all(16),
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 132,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.75,
+                      ),
+                      itemCount: items.length,
+                      itemBuilder: (context, i) => _tile(context, items[i], i),
+                    ),
         ),
         if (selectedIds.isNotEmpty) _selectionBar(context),
       ],
     );
   }
 
-  Widget _tile(BuildContext context, BrowserItem e) {
+  /// Folders open (unless busy); files toggle selection. Where nothing is
+  /// selectable (the SMB shares root) every entry just opens.
+  VoidCallback? _activate(BrowserItem e) {
+    if (e.isDir || !selectable) return busy ? null : () => onOpen(e);
+    return () => onToggleSelect(e);
+  }
+
+  Widget _checkbox(BrowserItem e) => Checkbox(
+        value: selectedIds.contains(e.id),
+        onChanged: (_) => onToggleSelect(e),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      );
+
+  Widget _tile(BuildContext context, BrowserItem e, int index) {
     final theme = Theme.of(context);
     final selected = selectedIds.contains(e.id);
-    return GestureDetector(
-      onTap: () => selectable ? onToggleSelect(e) : onOpen(e),
-      onDoubleTap: e.isDir && selectable && !busy ? () => onOpen(e) : null,
-      child: Container(
-        decoration: BoxDecoration(
-          color: selected ? theme.colorScheme.primaryContainer : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: selected ? Border.all(color: theme.colorScheme.primary, width: 1.5) : null,
-        ),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        child: Column(
-          children: [
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                Icon(e.isDir ? Icons.folder : _fileIcon(e.name), size: 48, color: e.isDir ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
-                if (selected) Icon(Icons.check_circle, size: 18, color: theme.colorScheme.primary),
-              ],
+    // The checkbox is a sibling above the tile (not an overlay) so the d-pad's
+    // Up from the tile reaches it.
+    return Column(
+      children: [
+        if (selectable) Align(alignment: Alignment.centerLeft, child: _checkbox(e)),
+        Expanded(
+          child: InkWell(
+            autofocus: index == 0,
+            borderRadius: BorderRadius.circular(10),
+            onTap: _activate(e),
+            child: Container(
+              decoration: BoxDecoration(
+                color: selected ? theme.colorScheme.primaryContainer : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: selected ? Border.all(color: theme.colorScheme.primary, width: 1.5) : null,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              child: Column(
+                children: [
+                  Icon(e.isDir ? Icons.folder : _fileIcon(e.name), size: 48, color: e.isDir ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 6),
+                  Text(e.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
+                  if (!e.isDir) Text(_fmtSize(e.size), style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
             ),
-            const SizedBox(height: 6),
-            Text(e.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-            if (!e.isDir) Text(_fmtSize(e.size), style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
-  Widget _row(BuildContext context, BrowserItem e) {
+  Widget _row(BuildContext context, BrowserItem e, int index) {
     final theme = Theme.of(context);
     final selected = selectedIds.contains(e.id);
-    return GestureDetector(
-      onDoubleTap: e.isDir && selectable && !busy ? () => onOpen(e) : null,
-      child: ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        selected: selected,
-        selectedTileColor: theme.colorScheme.primaryContainer,
-        leading: Icon(e.isDir ? Icons.folder : _fileIcon(e.name), color: e.isDir ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
-        title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: selected
-            ? Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 20)
-            : (e.isDir ? null : Text(_fmtSize(e.size), style: theme.textTheme.labelSmall)),
-        onTap: () => selectable ? onToggleSelect(e) : onOpen(e),
-      ),
+    return Row(
+      children: [
+        if (selectable) _checkbox(e),
+        Expanded(
+          child: ListTile(
+            autofocus: index == 0,
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            selected: selected,
+            selectedTileColor: theme.colorScheme.primaryContainer,
+            leading: Icon(e.isDir ? Icons.folder : _fileIcon(e.name), color: e.isDir ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+            title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: e.isDir ? null : Text(_fmtSize(e.size), style: theme.textTheme.labelSmall),
+            onTap: _activate(e),
+          ),
+        ),
+      ],
     );
   }
 
@@ -218,21 +241,21 @@ class FileBrowserView extends ConsumerWidget {
                     onPressed: busyTransfer ? null : a.onPressed,
                   )
               else ...[
-              TextButton.icon(
-                onPressed: busyTransfer ? null : onDownload,
-                icon: const Icon(Icons.download),
-                label: const Text('Download'),
-              ),
-              TextButton.icon(
-                onPressed: busyTransfer ? null : onZip,
-                icon: const Icon(Icons.folder_zip),
-                label: const Text('Zip'),
-              ),
-              TextButton.icon(
-                onPressed: busyTransfer ? null : onDelete,
-                icon: Icon(Icons.delete, color: theme.colorScheme.error),
-                label: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
-              ),
+                TextButton.icon(
+                  onPressed: busyTransfer ? null : onDownload,
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download'),
+                ),
+                TextButton.icon(
+                  onPressed: busyTransfer ? null : onZip,
+                  icon: const Icon(Icons.folder_zip),
+                  label: const Text('Zip'),
+                ),
+                TextButton.icon(
+                  onPressed: busyTransfer ? null : onDelete,
+                  icon: Icon(Icons.delete, color: theme.colorScheme.error),
+                  label: Text('Delete', style: TextStyle(color: theme.colorScheme.error)),
+                ),
               ],
             ],
           ),

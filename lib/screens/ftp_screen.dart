@@ -53,38 +53,43 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     }
 
     final inClient = state.mode == FtpMode.client;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('FTP'),
-        actions: [
-          if (inClient && state.connected)
-            IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SegmentedButton<FtpMode>(
-              segments: const [
-                ButtonSegment(value: FtpMode.client, label: Text('Client'), icon: Icon(Icons.download)),
-                ButtonSegment(value: FtpMode.server, label: Text('Server'), icon: Icon(Icons.dns)),
-              ],
-              selected: {state.mode},
-              onSelectionChanged: (s) => notifier.setMode(s.first),
-            ),
+    return PopScope(
+        // Back goes up a folder; only the FTP root (or server mode) leaves.
+        canPop: !(inClient && state.connected) || state.path == '/' || state.path.isEmpty,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && !state.busy) notifier.goUp();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('FTP'),
+            actions: [
+              if (inClient && state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
+            ],
           ),
-          Expanded(
-            child: inClient
-                ? (state.connected ? _browser(context, state, notifier) : _clientForm(context, state, notifier))
-                : _serverView(context, state, notifier),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: SegmentedButton<FtpMode>(
+                  segments: const [
+                    ButtonSegment(value: FtpMode.client, label: Text('Client'), icon: Icon(Icons.download)),
+                    ButtonSegment(value: FtpMode.server, label: Text('Server'), icon: Icon(Icons.dns)),
+                  ],
+                  selected: {state.mode},
+                  onSelectionChanged: (s) => notifier.setMode(s.first),
+                ),
+              ),
+              Expanded(
+                child: inClient
+                    ? (state.connected ? _browser(context, state, notifier) : _clientForm(context, state, notifier))
+                    : _serverView(context, state, notifier),
+              ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: inClient && state.connected && state.transfer == null && state.selected.isEmpty
-          ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
-          : null,
-    );
+          floatingActionButton: inClient && state.connected && state.transfer == null && state.selected.isEmpty
+              ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
+              : null,
+        ));
   }
 
   // ---- Client --------------------------------------------------------------
@@ -131,9 +136,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
                       username: _user.text.trim(),
                       password: _pass.text,
                     ),
-            icon: state.busy
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.login),
+            icon: state.busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
             label: const Text('Connect'),
           ),
         ),
@@ -241,7 +244,8 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
                 enabled: !running,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true, helperText: 'Use a port > 1024 (21 needs root)'),
+                decoration:
+                    const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true, helperText: 'Use a port > 1024 (21 needs root)'),
                 onChanged: (v) {
                   final port = int.tryParse(v);
                   if (port != null && port > 0 && port < 65536) notifier.setServerPort(port);
@@ -300,7 +304,8 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
               children: [
                 Expanded(
                   child: SelectableText(url,
-                      style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer)),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer)),
                 ),
                 IconButton(
                   icon: const Icon(Icons.copy, size: 20),
