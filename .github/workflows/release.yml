@@ -543,8 +543,15 @@ jobs:
           path: retro_toolbox_windows_x64.zip
           retention-days: 30
 
+  build-handheld:
+    needs: [resolve-version, download-catalog]
+    uses: ./.github/workflows/handheld.yml
+    with:
+      ref: ${{ needs.resolve-version.outputs.version }}
+      with_catalog: true
+
   release:
-    needs: [resolve-version, build-android, build-macos, build-linux, build-windows]
+    needs: [resolve-version, build-android, build-macos, build-linux, build-windows, build-handheld]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -582,6 +589,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-zip
+          path: dist/
+
+      - name: Download Linux handheld ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: handheld-zip
           path: dist/
 
       - name: Generate release notes with AI
@@ -657,6 +670,7 @@ jobs:
             | 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |
             | 🐧 Linux | `retro_toolbox_linux_x64.tar.gz` | Linux x64 (GTK 3) |
             | 🪟 Windows | `retro_toolbox_windows_x64.zip` | Windows x64 |
+            | 🎮 Linux handheld | `retro_toolbox_handheld_arm64.zip` | PortMaster (ARM64 handhelds) |
 
             ### Android Installation
             1. Download the APK for your device (`arm64` for most modern phones)
@@ -676,6 +690,11 @@ jobs:
             ### Windows Installation
             1. Download and extract `retro_toolbox_windows_x64.zip`
             2. Run `retro_toolbox.exe`
+
+            ### Linux handheld (PortMaster)
+            1. Download and extract `retro_toolbox_handheld_arm64.zip`
+            2. Copy the contents of `ports/` (`Retro Toolbox.sh` and the `retrotoolbox/` folder) into the `ports` folder of your device's SD card
+            3. Launch **Retro Toolbox** from the Ports menu (requires PortMaster)
           files: |
             dist/retro_toolbox_arm64.apk
             dist/retro_toolbox_arm32.apk
@@ -685,6 +704,7 @@ jobs:
             dist/retro_toolbox_macos_arm64.dmg
             dist/retro_toolbox_linux_x64.tar.gz
             dist/retro_toolbox_windows_x64.zip
+            dist/retro_toolbox_handheld_arm64.zip
           draft: false
           prerelease: false
         env:
