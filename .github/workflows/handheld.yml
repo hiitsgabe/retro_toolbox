@@ -1,6 +1,8 @@
 name: Build Linux Handheld (PortMaster)
 
 on:
+  push:
+    branches: [feat/handheld-linux]
   workflow_call:
     inputs:
       ref:
