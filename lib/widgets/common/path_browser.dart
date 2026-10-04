@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Plain `dart:io` filesystem browser.
@@ -20,6 +21,7 @@ class PathBrowser extends StatefulWidget {
     required this.title,
     required this.initialDir,
     this.allowedExtensions,
+    this.selectDirectory = false,
   });
 
   final String title;
@@ -28,11 +30,16 @@ class PathBrowser extends StatefulWidget {
   /// Lowercase, no leading dot. Null shows every file.
   final List<String>? allowedExtensions;
 
+  /// Pick a folder instead of a file: files are hidden and a "Use this folder"
+  /// button returns the current folder.
+  final bool selectDirectory;
+
   static Future<String?> show(
     BuildContext context, {
     required String title,
     required String initialDir,
     List<String>? allowedExtensions,
+    bool selectDirectory = false,
   }) {
     return showDialog<String>(
       context: context,
@@ -40,6 +47,7 @@ class PathBrowser extends StatefulWidget {
         title: title,
         initialDir: initialDir,
         allowedExtensions: allowedExtensions,
+        selectDirectory: selectDirectory,
       ),
     );
   }
@@ -56,6 +64,7 @@ class PathBrowser extends StatefulWidget {
 /// removable card. `getExternalStorageDirectories` reports one app-specific
 /// dir per mounted volume — trimming `/Android/...` off each gives the roots.
 Future<Map<String, String>> storageVolumes() async {
+  if (Handheld.current) return handheldRoots();
   if (!Platform.isAndroid) return const {};
   var appDirs = <String>[];
   var storageEntries = <String>[];
@@ -68,6 +77,17 @@ Future<Map<String, String>> storageVolumes() async {
     storageEntries = [for (final e in Directory('/storage').listSync(followLinks: false)) if (e is Directory) e.path];
   } catch (_) {}
   return volumesFrom(appDirs: appDirs, storageEntries: storageEntries);
+}
+
+/// Where the handheld CFWs mount their ROM storage: Knulli `/userdata`, MuOS
+/// `/mnt/mmc` + `/mnt/sdcard`, ROCKNIX `/storage`, `/roms`.
+const _handheldRoots = ['/userdata', '/mnt/mmc', '/mnt/sdcard', '/storage', '/roms'];
+
+/// The [_handheldRoots] that exist, as `path -> label`. [exists] is injectable
+/// so tests don't depend on the host filesystem.
+Map<String, String> handheldRoots({bool Function(String)? exists}) {
+  final check = exists ?? (d) => Directory(d).existsSync();
+  return {for (final r in _handheldRoots) if (check(r)) r: r};
 }
 
 /// `root path -> label` from the app-specific dirs (one per mounted volume,
@@ -95,6 +115,17 @@ class _PathBrowserState extends State<PathBrowser> {
   Map<String, String> _volumes = const {};
   bool _loading = true;
   String? _error;
+  String? _cameFrom;
+
+  // Handed to whichever tile should get focus after a load. A fresh node per
+  // load: a reused one keeps a stale context from its previous tile.
+  FocusNode _target = FocusNode(debugLabel: 'path-browser-target');
+
+  @override
+  void dispose() {
+    _target.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -117,7 +148,12 @@ class _PathBrowserState extends State<PathBrowser> {
     return ext.isNotEmpty && exts.contains(ext.substring(1));
   }
 
-  Future<void> _load(String path) async {
+  /// [cameFrom]: the folder just left, so going up lands back on it.
+  Future<void> _load(String path, {String? cameFrom}) async {
+    // The focused tile is about to be unmounted by the loader; release focus
+    // first so the focus outline never paints a defunct element.
+    final focused = FocusManager.instance.primaryFocus;
+    if (focused?.context?.findAncestorStateOfType<_PathBrowserState>() == this) focused!.unfocus();
     setState(() {
       _loading = true;
       _error = null;
@@ -125,16 +161,24 @@ class _PathBrowserState extends State<PathBrowser> {
     try {
       final entries = await Directory(path).list(followLinks: false).toList();
       final dirs = entries.whereType<Directory>().toList();
-      final files = entries.whereType<File>().where(_allowed).toList();
+      final files = widget.selectDirectory ? <File>[] : entries.whereType<File>().where(_allowed).toList();
       int byName(FileSystemEntity a, FileSystemEntity b) => p.basename(a.path).toLowerCase().compareTo(p.basename(b.path).toLowerCase());
       dirs.sort(byName);
       files.sort(byName);
       if (!mounted) return;
+      final previous = _target;
+      _target = FocusNode(debugLabel: 'path-browser-target');
       setState(() {
         _dir = path;
         _dirs = dirs;
         _files = files;
+        _cameFrom = cameFrom;
         _loading = false;
+      });
+      // The tile only exists after this frame's build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        previous.dispose();
+        if (mounted && _target.context != null) _target.requestFocus();
       });
     } on FileSystemException catch (e) {
       if (!mounted) return;
@@ -204,6 +248,10 @@ class _PathBrowserState extends State<PathBrowser> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  if (widget.selectDirectory) ...[
+                    const SizedBox(width: 8),
+                    FilledButton(onPressed: () => Navigator.pop(context, _dir), child: const Text('Use this folder')),
+                  ],
                 ],
               ),
             ),
@@ -236,7 +284,13 @@ class _PathBrowserState extends State<PathBrowser> {
     }
 
     final empty = _dirs.isEmpty && _files.isEmpty;
+    // Focus lands on the folder we just left, else the first real entry, else "..".
+    final cameFrom = _cameFrom;
+    final focusPath = (cameFrom != null && _dirs.any((d) => d.path == cameFrom))
+        ? cameFrom
+        : (_dirs.isNotEmpty ? _dirs.first.path : (_files.isNotEmpty ? _files.first.path : null));
     return ListView(
+      key: ValueKey(_dir),
       shrinkWrap: true,
       children: [
         if (canGoUp)
@@ -244,13 +298,15 @@ class _PathBrowserState extends State<PathBrowser> {
             dense: true,
             leading: const Icon(Icons.arrow_upward, size: 20),
             title: const Text('..'),
-            onTap: () => _load(parent),
+            focusNode: focusPath == null ? _target : null,
+            onTap: () => _load(parent, cameFrom: _dir),
           ),
         for (final d in _dirs)
           ListTile(
             dense: true,
             leading: const Icon(Icons.folder_outlined, size: 20),
             title: Text(p.basename(d.path), overflow: TextOverflow.ellipsis, maxLines: 1),
+            focusNode: d.path == focusPath ? _target : null,
             onTap: () => _load(d.path),
           ),
         for (final f in _files)
@@ -258,13 +314,14 @@ class _PathBrowserState extends State<PathBrowser> {
             dense: true,
             leading: const Icon(Icons.insert_drive_file_outlined, size: 20),
             title: Text(p.basename(f.path), overflow: TextOverflow.ellipsis, maxLines: 1),
+            focusNode: f.path == focusPath ? _target : null,
             onTap: () => Navigator.pop(context, f.path),
           ),
         if (empty)
           Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              widget.allowedExtensions == null ? 'Empty folder' : 'No matching files here',
+              widget.selectDirectory ? 'No subfolders' : widget.allowedExtensions == null ? 'Empty folder' : 'No matching files here',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
