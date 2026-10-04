@@ -30,6 +30,10 @@ class ExtractionService {
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
         eventAction: ForegroundTaskEventAction.once(),
+        // Network transfers (SMB/FTP folder downloads) run under this service:
+        // without a Wi-Fi lock the radio sleeps once the screen locks.
+        allowWakeLock: true,
+        allowWifiLock: true,
       ),
     );
 

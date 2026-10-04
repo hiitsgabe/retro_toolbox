@@ -1,6 +1,4 @@
-import 'dart:io';
 
-import 'package:archive/archive_io.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -9,6 +7,7 @@ import 'package:smb_connect/smb_connect.dart';
 
 import 'package:roms_downloader/services/directory_service.dart';
 import 'package:roms_downloader/services/smb_service.dart';
+import 'package:roms_downloader/services/file_ops.dart';
 import 'package:roms_downloader/utils/remote_tree.dart';
 
 const _hostKey = 'smb_host';
@@ -183,62 +182,42 @@ class SmbNotifier extends StateNotifier<SmbState> {
     await _runTransfer(SmbTransfer(name: file.name, done: 0, total: file.size, upload: false), (report) => _service.download(file, localPath, report));
   }
 
-  /// Downloads the selection into [outputDir], one file after another.
-  /// Selected folders are downloaded whole, rebuilding their tree locally.
-  Future<void> downloadSelected(String outputDir) async {
-    await _downloadTree(outputDir);
-    clearSelection();
-  }
-
-  /// Downloads the selection (folders included, whole) to a temp dir, zips it
-  /// into [outputDir], then cleans up. The zip is streamed to disk, so multi-GB
-  /// ROMs are fine. A single selected folder names the zip.
-  Future<void> zipSelected(String outputDir) async {
+  /// A background job downloading the current selection into [outputDir]
+  /// (folders whole, their tree rebuilt), over parallel connections. The
+  /// selection is captured now, so browsing on doesn't change the job.
+  TransferJob downloadJob(String outputDir) {
     final sel = state.selectedEntries;
-    if (sel.isEmpty) return;
-    final base = sel.length == 1 && sel.single.isDirectory()
-        ? sel.single.name
-        : (state.path.isEmpty ? 'smb' : p.basename(state.path));
-    final tmp = await Directory.systemTemp.createTemp('smb_zip');
-    try {
-      if (!await _downloadTree(tmp.path)) return;
-      final outZip = p.join(outputDir, '$base.zip');
-      state = state.copyWith(transfer: SmbTransfer(name: 'Zipping $base.zip…', done: 0, total: 0, upload: false));
-      await ZipFileEncoder().zipDirectory(tmp, filename: outZip);
-      state = state.copyWith(clearTransfer: true);
-    } catch (e) {
-      state = state.copyWith(clearTransfer: true, error: '$e');
-    } finally {
-      await tmp.delete(recursive: true);
-      clearSelection();
-    }
+    clearSelection();
+    return (onProgress) => _downloadTree(sel, outputDir, onProgress);
   }
 
-  /// Expands the selection into every file inside it and downloads each to
-  /// [root] at its relative path. False when the folders couldn't be listed.
-  Future<bool> _downloadTree(String root) async {
-    state = state.copyWith(transfer: const SmbTransfer(name: 'Listing folders…', done: 0, total: 0, upload: false), clearError: true);
-    final List<RemoteFile<SmbFile>> files;
-    try {
-      files = await collectRemoteFiles<SmbFile>(
-        state.selectedEntries,
-        nameOf: (e) => e.name,
-        isDir: (e) => e.isDirectory(),
-        children: (dir, _) => _service.list(dir.path),
-      );
-    } catch (e) {
-      state = state.copyWith(clearTransfer: true, error: '$e');
-      return false;
-    }
-    state = state.copyWith(clearTransfer: true);
-    for (var i = 0; i < files.length; i++) {
-      final f = files[i];
-      final local = await localPathFor(root, f.relPath);
-      final label = files.length > 1 ? '(${i + 1}/${files.length}) ${f.relPath}' : f.relPath;
-      await _runTransfer(SmbTransfer(name: label, done: 0, total: f.entry.size, upload: false),
-          (report) => _service.download(f.entry, local, report));
-    }
-    return true;
+  /// Like [downloadJob], then zipped into one file in [outputDir]. A single
+  /// selected folder names the zip.
+  TransferJob zipJob(String outputDir) {
+    final sel = state.selectedEntries;
+    final base = sel.length == 1 && sel.single.isDirectory() ? sel.single.name : (state.path.isEmpty ? 'smb' : p.basename(state.path));
+    final outZip = p.join(outputDir, FileOps.uniqueName(outputDir, '$base.zip'));
+    clearSelection();
+    return (onProgress) => downloadThenZip((dir, pr) => _downloadTree(sel, dir, pr), outZip, onProgress);
+  }
+
+  /// A label for the task manager: the item's name, or how many items.
+  String selectionLabel() {
+    final sel = state.selectedEntries;
+    return sel.length == 1 ? sel.single.name : '${sel.length} items';
+  }
+
+  Future<void> _downloadTree(List<SmbFile> sel, String root, FileOpsProgress onProgress) async {
+    final files = await collectRemoteFiles<SmbFile>(
+      sel,
+      nameOf: (e) => e.name,
+      isDir: (e) => e.isDirectory(),
+      children: (dir, _) => _service.list(dir.path),
+    );
+    await _service.downloadParallel(
+      [for (final f in files) (file: f.entry, localPath: p.joinAll([root, ...f.relPath.split('/')]))],
+      onProgress,
+    );
   }
 
   /// Deletes the selected entries (files and folders — [SmbService] delete is

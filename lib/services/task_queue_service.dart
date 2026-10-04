@@ -4,11 +4,13 @@ import 'package:roms_downloader/models/task_queue_model.dart';
 import 'package:roms_downloader/providers/task_queue_provider.dart';
 import 'package:roms_downloader/providers/download_provider.dart';
 import 'package:roms_downloader/providers/extraction_provider.dart';
+import 'package:roms_downloader/providers/game_state_provider.dart';
 import 'package:roms_downloader/providers/settings_provider.dart';
 import 'package:roms_downloader/models/game_model.dart';
 import 'package:roms_downloader/models/game_state_model.dart';
 import 'package:roms_downloader/services/catalog_service.dart';
 import 'package:roms_downloader/services/file_ops.dart';
+import 'package:roms_downloader/utils/remote_tree.dart';
 
 class TaskQueueService {
   /// Returns a human-readable reason downloads can't start, or null when OK.
@@ -56,6 +58,29 @@ class TaskQueueService {
         'group': consoleId ?? 'default',
       });
     }
+  }
+
+  /// Queues a network transfer (SMB/FTP download or zip) as a background
+  /// task with a task-manager row titled [title]. [run] is held in memory
+  /// with the task; it isn't persisted.
+  static void enqueueTransfer(
+    WidgetRef ref,
+    BuildContext context, {
+    required String title,
+    required String verb,
+    required String label,
+    required TransferJob run,
+  }) {
+    // Unique per job: the task key comes from the URL's file name.
+    final game = Game(title: title, url: 'https://manual/net-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
+    ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.remoteTransfer, {
+      'taskId': game.gameId,
+      'verb': verb,
+      'label': label,
+      'run': run,
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
   }
 
   static void startExtraction(WidgetRef ref, String taskId) {
@@ -132,6 +157,14 @@ class TaskQueueService {
                   task.params['outZip'] as String,
                   onProgress: onProgress,
                 ),
+              );
+          break;
+        case TaskType.remoteTransfer:
+          ref.read(extractionProvider.notifier).fileTask(
+                taskId: task.params['taskId'] as String,
+                verb: task.params['verb'] as String,
+                label: task.params['label'] as String,
+                run: task.params['run'] as TransferJob,
               );
           break;
         case TaskType.archiveExtraction:

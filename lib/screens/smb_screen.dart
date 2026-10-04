@@ -5,6 +5,7 @@ import 'package:smb_connect/smb_connect.dart';
 
 import 'package:roms_downloader/providers/smb_provider.dart';
 import 'package:roms_downloader/services/smb_service.dart';
+import 'package:roms_downloader/services/task_queue_service.dart';
 import 'package:roms_downloader/widgets/file_browser.dart';
 import 'package:roms_downloader/widgets/tool_description.dart';
 
@@ -224,8 +225,16 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       onOpen: (item) => notifier.open(_entry(state, item.id)),
       onToggleSelect: (item) => notifier.toggleSelect(_entry(state, item.id)),
       onClearSelection: () => notifier.clearSelection(),
-      onDownload: () => _pickDirThen((d) => notifier.downloadSelected(d)),
-      onZip: () => _pickDirThen((d) => notifier.zipSelected(d)),
+      // Both run as background tasks (task manager + notification), so the
+      // transfer survives leaving this screen or locking the device.
+      onDownload: () => _pickDirThen((d) async {
+        final label = notifier.selectionLabel();
+        TaskQueueService.enqueueTransfer(ref, context, title: 'Download $label', verb: 'Downloading', label: label, run: notifier.downloadJob(d));
+      }),
+      onZip: () => _pickDirThen((d) async {
+        final label = notifier.selectionLabel();
+        TaskQueueService.enqueueTransfer(ref, context, title: 'Zip $label', verb: 'Downloading and zipping', label: label, run: notifier.zipJob(d));
+      }),
       onDelete: () => _confirmDelete(context, state, notifier),
     );
   }
