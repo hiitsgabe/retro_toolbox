@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/path_browser.dart';
@@ -33,13 +35,15 @@ Future<String?> pickFile(
     if (!context.mounted) return null;
     return PathBrowser.show(context, title: title, initialDir: dir, allowedExtensions: extensions);
   }
-  final result = await FilePicker.platform.pickFiles(
-    dialogTitle: title,
-    type: extensions == null ? FileType.any : FileType.custom,
-    allowedExtensions: extensions,
-    initialDirectory: initialDir,
-  );
-  return result?.files.firstOrNull?.path;
+  return _native(() async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: title,
+      type: extensions == null ? FileType.any : FileType.custom,
+      allowedExtensions: extensions,
+      initialDirectory: initialDir,
+    );
+    return result?.files.firstOrNull?.path;
+  });
 }
 
 Future<String?> pickDirectory(
@@ -53,5 +57,34 @@ Future<String?> pickDirectory(
     if (!context.mounted) return null;
     return PathBrowser.show(context, title: title, initialDir: dir, selectDirectory: true);
   }
-  return FilePicker.platform.getDirectoryPath(dialogTitle: title, initialDirectory: initialDir);
+  return _native(() => FilePicker.platform.getDirectoryPath(dialogTitle: title, initialDirectory: initialDir));
+}
+
+/// Where to save [fileName]. Browser mode has no save dialog, so it picks a
+/// folder and joins the name (the caller writes the file; the folder may
+/// already hold a file of that name). Desktop/iOS use the native save dialog;
+/// [bytes] is only for iOS, which needs them up front.
+Future<String?> pickSavePath(
+  BuildContext context, {
+  required String title,
+  required String fileName,
+  Uint8List? bytes,
+  String? initialDir,
+  @visibleForTesting bool? useBrowser,
+}) async {
+  if (useBrowser ?? _useBrowser) {
+    final dir = await pickDirectory(context, title: title, initialDir: initialDir, useBrowser: true);
+    return dir == null ? null : p.join(dir, fileName);
+  }
+  return _native(() => FilePicker.platform.saveFile(dialogTitle: title, fileName: fileName, bytes: bytes, initialDirectory: initialDir));
+}
+
+/// Native pickers can throw (e.g. Linux without zenity); treat as a cancel.
+Future<String?> _native(Future<String?> Function() pick) async {
+  try {
+    return await pick();
+  } catch (e) {
+    debugPrint('Native picker failed: $e');
+    return null;
+  }
 }

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -179,14 +178,16 @@ class JdkvServerScreen extends ConsumerWidget {
               tooltip: 'Save webdav.json',
               visualDensity: VisualDensity.compact,
               onPressed: () async {
-                final path = await FilePicker.platform.saveFile(
-                  dialogTitle: 'Save webdav.json',
+                final path = await pickSavePath(
+                  context,
+                  title: 'Save webdav.json',
                   fileName: 'webdav.json',
-                  bytes: utf8.encode(json),
+                  bytes: Uint8List.fromList(utf8.encode(json)),
                 );
                 if (path == null || !context.mounted) return;
-                // Desktop saveFile only returns the path — write the content.
-                if (!Platform.isAndroid && !Platform.isIOS) {
+                // Only iOS' save dialog writes the bytes itself; everywhere else
+                // (desktop dialog, folder browser) we just got a path.
+                if (!Platform.isIOS) {
                   try {
                     File(path).writeAsStringSync(json);
                   } catch (_) {}

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,8 @@ class _FakePicker extends FilePicker with MockPlatformInterfaceMixin {
   FileType? type;
   List<String>? exts;
   String? title;
+  String? savedName;
+  bool throws = false;
 
   @override
   Future<FilePickerResult?> pickFiles({
@@ -35,7 +38,23 @@ class _FakePicker extends FilePicker with MockPlatformInterfaceMixin {
   }
 
   @override
+  Future<String?> saveFile({
+    String? dialogTitle,
+    String? fileName,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Uint8List? bytes,
+    bool lockParentWindow = false,
+  }) async {
+    title = dialogTitle;
+    savedName = fileName;
+    return '/x/save/$fileName';
+  }
+
+  @override
   Future<String?> getDirectoryPath({String? dialogTitle, bool lockParentWindow = false, String? initialDirectory}) async {
+    if (throws) throw Exception('no zenity');
     title = dialogTitle;
     return '/x/dir';
   }
@@ -86,5 +105,32 @@ void main() {
     expect(done, isTrue);
     expect(out, p.normalize(tmp.path));
     expect(fake.title, isNull);
+  });
+
+  testWidgets('native: pickSavePath uses the save dialog with the file name', (t) async {
+    final c = await ctxOf(t);
+    expect(await pickSavePath(c, title: 'S', fileName: 'a.json', useBrowser: false), '/x/save/a.json');
+    expect(fake.title, 'S');
+    expect(fake.savedName, 'a.json');
+  });
+
+  testWidgets('browser: pickSavePath picks a folder and joins the file name', (t) async {
+    final tmp = Directory.systemTemp.createTempSync('pick_test');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final c = await ctxOf(t);
+    String? out;
+    unawaited(pickSavePath(c, title: 'S', fileName: 'a.json', initialDir: tmp.path, useBrowser: true).then((v) => out = v));
+    await t.pump();
+    await t.pump();
+    await t.tap(find.text('Use this folder'));
+    await t.pumpAndSettle();
+    expect(out, p.join(p.normalize(tmp.path), 'a.json'));
+    expect(fake.savedName, isNull);
+  });
+
+  testWidgets('native picker failure is a cancel, not an exception', (t) async {
+    final c = await ctxOf(t);
+    fake.throws = true;
+    expect(await pickDirectory(c, title: 'D', useBrowser: false), isNull);
   });
 }
