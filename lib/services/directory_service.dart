@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:disk_space_2/disk_space_2.dart';
@@ -37,20 +36,9 @@ class DirectoryService {
     return appDocDir.path;
   }
 
-  Future<String?> selectDownloadDirectory() async {
-    try {
-      final selectedDirectory = await FilePicker.platform.getDirectoryPath();
-      if (selectedDirectory == null) {
-        return null;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('downloadDir', selectedDirectory);
-      return selectedDirectory;
-    } catch (e) {
-      debugPrint('Error selecting directory: $e');
-      return null;
-    }
+  Future<void> saveDownloadDirectory(String dir) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('downloadDir', dir);
   }
 
   static Future<bool> deleteFile(String filePath) async {

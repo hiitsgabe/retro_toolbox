@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -12,9 +11,8 @@ import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
-import 'package:retro_toolbox/services/directory_service.dart';
-import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Converts 3DS cartridge images (.3ds/.cci) to installable .cia via the
 /// bundled 3dsconv. Needs a boot9.bin for encrypted dumps — blocks with a
@@ -31,12 +29,6 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
   String? _outputDir;
   String? _activeTaskId;
 
-  Future<String> _browseRoot() async {
-    if (_outputDir != null) return _outputDir!;
-    if (_inputPath != null) return p.dirname(_inputPath!);
-    return DirectoryService().getDownloadDir();
-  }
-
   void _snack(String m) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
@@ -44,9 +36,8 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
 
   Future<void> _pickBoot9() async {
     try {
-      final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select boot9.bin');
-      final src = result?.files.firstOrNull?.path;
-      if (src == null) return;
+      final src = await pickFile(context, title: 'Select boot9.bin');
+      if (src == null || !mounted) return;
       final supportDir = await getApplicationSupportDirectory();
       final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
       await dest.parent.create(recursive: true);
@@ -59,20 +50,16 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
 
   Future<void> _pickInput() async {
     try {
-      String? path;
-      const exts = ['3ds', 'cci'];
-      if (Platform.isAndroid) {
-        final root = await _browseRoot();
-        if (!mounted) return;
-        path = await PathBrowser.show(context, title: 'Select a .3ds/.cci file', initialDir: root, allowedExtensions: exts);
-      } else {
-        final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select a .3ds/.cci file', type: FileType.custom, allowedExtensions: exts);
-        path = result?.files.firstOrNull?.path;
-      }
+      final path = await pickFile(
+        context,
+        title: 'Select a .3ds/.cci file',
+        extensions: const ['3ds', 'cci'],
+        initialDir: _outputDir ?? (_inputPath != null ? p.dirname(_inputPath!) : null),
+      );
       if (path == null || !mounted) return;
       setState(() {
         _inputPath = path;
-        _outputDir ??= p.dirname(path!);
+        _outputDir ??= p.dirname(path);
       });
     } catch (e) {
       _snack('$e');
@@ -80,7 +67,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
   }
 
   Future<void> _pickOutput() async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
+    final dir = await pickDirectory(context, title: 'Select output folder');
     if (dir == null || !mounted) return;
     setState(() => _outputDir = dir);
   }

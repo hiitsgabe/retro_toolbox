@@ -1,10 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/services/steam_service.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Search the Steam store, multi-select games, and write `.steam` shortcut
 /// files (ES-DE format) into a chosen folder.
@@ -92,9 +92,11 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
 
   Future<void> _createFiles() async {
     final prefs = await SharedPreferences.getInstance();
-    final folder = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Select destination folder',
-      initialDirectory: prefs.getString(SteamShortcutScreen._lastDirKey),
+    if (!mounted) return;
+    final folder = await pickDirectory(
+      context,
+      title: 'Select destination folder',
+      initialDir: prefs.getString(SteamShortcutScreen._lastDirKey),
     );
     if (folder == null || !mounted) return;
     await prefs.setString(SteamShortcutScreen._lastDirKey, folder);

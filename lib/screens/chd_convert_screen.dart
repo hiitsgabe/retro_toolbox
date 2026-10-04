@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -12,10 +11,9 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/chd_service.dart';
-import 'package:retro_toolbox/services/directory_service.dart';
-import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Convert disc images to/from CHD via chdman. Compresses .cue/.gdi/.iso and
 /// extracts .chd back. Blocks with a "chdman required" card until a binary is
@@ -44,12 +42,6 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
     if (mounted) setState(() => _chdmanReady = ready);
   }
 
-  Future<String> _browseRoot() async {
-    if (_outputDir != null) return _outputDir!;
-    if (_inputPath != null) return p.dirname(_inputPath!);
-    return DirectoryService().getDownloadDir();
-  }
-
   void _snack(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -57,9 +49,8 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
 
   Future<void> _pickChdman() async {
     try {
-      final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select the chdman binary');
-      final path = result?.files.firstOrNull?.path;
-      if (path == null) return;
+      final path = await pickFile(context, title: 'Select the chdman binary');
+      if (path == null || !mounted) return;
       await ref.read(settingsProvider.notifier).setChdmanPath(path);
       ChdService.debugReset();
       await _checkChdman();
@@ -70,24 +61,16 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
 
   Future<void> _pickInput() async {
     try {
-      String? path;
-      const exts = ['cue', 'gdi', 'toc', 'iso', 'chd'];
-      if (Platform.isAndroid) {
-        final root = await _browseRoot();
-        if (!mounted) return;
-        path = await PathBrowser.show(context, title: 'Select a disc image', initialDir: root, allowedExtensions: exts);
-      } else {
-        final result = await FilePicker.platform.pickFiles(
-          dialogTitle: 'Select a disc image',
-          type: FileType.custom,
-          allowedExtensions: exts,
-        );
-        path = result?.files.firstOrNull?.path;
-      }
+      final path = await pickFile(
+        context,
+        title: 'Select a disc image',
+        extensions: const ['cue', 'gdi', 'toc', 'iso', 'chd'],
+        initialDir: _outputDir ?? (_inputPath != null ? p.dirname(_inputPath!) : null),
+      );
       if (path == null || !mounted) return;
       setState(() {
         _inputPath = path;
-        _outputDir ??= p.dirname(path!);
+        _outputDir ??= p.dirname(path);
       });
     } catch (e) {
       _snack('$e');
@@ -95,7 +78,7 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   }
 
   Future<void> _pickOutput() async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
+    final dir = await pickDirectory(context, title: 'Select output folder');
     if (dir == null || !mounted) return;
     setState(() => _outputDir = dir);
   }

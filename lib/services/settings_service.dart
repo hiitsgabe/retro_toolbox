@@ -55,7 +55,5 @@ class SettingsService {
     return getGeneralSetting<T>(settings, key);
   }
 
-  Future<String?> selectDownloadDirectory() async {
-    return await _directoryService.selectDownloadDirectory();
-  }
+  Future<void> saveDownloadDirectory(String dir) => _directoryService.saveDownloadDirectory(dir);
 }

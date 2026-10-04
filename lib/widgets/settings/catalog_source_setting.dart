@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 class CatalogSourceSetting extends ConsumerStatefulWidget {
   const CatalogSourceSetting({super.key});
@@ -63,13 +63,8 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
   }
 
   Future<void> _importFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select a catalog JSON file',
-      type: FileType.custom,
-      allowedExtensions: ['json'],
-    );
-    final path = result?.files.single.path;
-    if (path == null) return;
+    final path = await pickFile(context, title: 'Select a catalog JSON file', extensions: ['json']);
+    if (path == null || !mounted) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
     await _run(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()),
         'Catalog imported.');

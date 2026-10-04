@@ -1,14 +1,15 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retro_toolbox/providers/fbi_server_provider.dart';
 import 'package:retro_toolbox/services/fbi_server_service.dart';
 import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Serves 3DS titles as installable .cia and installs them on a console running
 /// FBI — pick a file you downloaded elsewhere, or a catalog title (downloaded
@@ -85,15 +86,11 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
   }
 
   Future<void> _installFile() async {
-    final picked = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select a .cia / .3ds / .zip to install',
-      type: FileType.custom,
-      allowedExtensions: ['cia', '3ds', 'cci', 'zip'],
-    );
-    final path = picked?.files.firstOrNull?.path;
+    final path = await pickFile(context, title: 'Select a .cia / .3ds / .zip to install', extensions: ['cia', '3ds', 'cci', 'zip']);
     if (path == null || !mounted) return;
-    final url = await _prepare(picked!.files.first.name, (op) => ref.read(fbiServerProvider.notifier).prepareLocalFile(path, op));
-    if (url != null && mounted) _afterPrepared(picked.files.first.name, url);
+    final name = p.basename(path);
+    final url = await _prepare(name, (op) => ref.read(fbiServerProvider.notifier).prepareLocalFile(path, op));
+    if (url != null && mounted) _afterPrepared(name, url);
   }
 
   Future<void> _sendCatalog(FbiGame g) async {

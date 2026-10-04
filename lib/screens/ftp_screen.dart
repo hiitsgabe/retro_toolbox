@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +9,7 @@ import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/widgets/file_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// FTP with two modes: a client that browses a remote server (same Finder-style
 /// browser as SMB), and a server that shares a local folder over the LAN.
@@ -89,7 +89,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
             ],
           ),
           floatingActionButton: inClient && state.connected && state.transfer == null && state.selected.isEmpty
-              ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
+              ? FloatingActionButton.extended(onPressed: () => _upload(notifier), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
               : null,
         ));
   }
@@ -179,9 +179,14 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
 
   FTPEntry _entry(FtpState state, String id) => state.entries.firstWhere((e) => e.name == id);
 
+  Future<void> _upload(FtpNotifier notifier) async {
+    final local = await pickFile(context, title: 'Select a file to upload');
+    if (local != null && mounted) await notifier.uploadFile(local);
+  }
+
   Future<void> _pickDirThen(Future<void> Function(String dir) run) async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Choose output folder');
-    if (dir != null) await run(dir);
+    final dir = await pickDirectory(context, title: 'Choose output folder');
+    if (dir != null && mounted) await run(dir);
   }
 
   Future<void> _confirmDelete(BuildContext context, FtpState state, FtpNotifier notifier) async {
@@ -225,7 +230,14 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
             leading: const Icon(Icons.folder),
             title: Text(state.serverDir.isEmpty ? 'No folder selected' : state.serverDir, maxLines: 2, overflow: TextOverflow.ellipsis),
             subtitle: const Text('Folder to share'),
-            trailing: TextButton(onPressed: running ? null : () => notifier.pickServerDir(), child: const Text('Choose')),
+            trailing: TextButton(
+                onPressed: running
+                    ? null
+                    : () async {
+                        final dir = await pickDirectory(context, title: 'Choose folder to share');
+                        if (dir != null) await notifier.setServerDir(dir);
+                      },
+                child: const Text('Choose')),
           ),
         ),
         const SizedBox(height: 12),
