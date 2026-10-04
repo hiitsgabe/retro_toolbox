@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:smb_connect/smb_connect.dart';
 
@@ -14,8 +15,14 @@ String smbParent(String path) {
 
 /// Thin SMB client wrapper over [smb_connect]: connect, browse, transfer.
 /// Holds a single live connection; the provider drives it and owns UI state.
+/// A remote file and the local path it downloads to.
+typedef SmbDownloadJob = ({SmbFile file, String localPath});
+
 class SmbService {
   SmbConnect? _c;
+  // Kept in memory only (never persisted) so parallel downloads can open
+  // extra connections to the same share.
+  ({String host, String username, String password, String domain})? _login;
 
   bool get connected => _c != null;
 
@@ -27,11 +34,86 @@ class SmbService {
   }) async {
     await disconnect();
     _c = await SmbConnect.connectAuth(host: host, username: username, password: password, domain: domain);
+    _login = (host: host, username: username, password: password, domain: domain);
+  }
+
+  /// Downloads [jobs] over [connections] parallel connections.
+  ///
+  /// smb_connect serialises requests per connection (one read in flight; its
+  /// openRead even goes in 4 KB steps), so a single connection is bound by
+  /// round trips. Each extra connection pulls 4 MB chunks — whole small files
+  /// or slices of a big one — from a shared queue, reading them in 64 KB
+  /// requests, and writes each chunk at its offset locally.
+  Future<void> downloadParallel(
+    List<SmbDownloadJob> jobs,
+    SmbProgress onProgress, {
+    int connections = 4,
+    int chunkSize = 4 << 20,
+  }) async {
+    final login = _login!;
+    final total = jobs.fold<int>(0, (a, j) => a + j.file.size);
+    final chunks = <({SmbDownloadJob job, int offset, int length})>[];
+    for (final j in jobs) {
+      final size = j.file.size;
+      final raf = await (await File(j.localPath).create(recursive: true)).open(mode: FileMode.write);
+      await raf.truncate(size); // pre-size so chunks land at any offset
+      await raf.close();
+      for (var off = 0; off < size; off += chunkSize) {
+        chunks.add((job: j, offset: off, length: size - off < chunkSize ? size - off : chunkSize));
+      }
+    }
+
+    var next = 0, done = 0;
+    Object? failure;
+    Future<void> worker() async {
+      SmbConnect? c;
+      final remote = <String, RandomAccessFile>{};
+      final local = <String, RandomAccessFile>{};
+      try {
+        c = await SmbConnect.connectAuth(host: login.host, username: login.username, password: login.password, domain: login.domain);
+        while (failure == null && next < chunks.length) {
+          final chunk = chunks[next++];
+          final job = chunk.job;
+          final r = remote[job.file.path] ??= await c.open(await c.file(job.file.path));
+          // append mode: no truncation, and setPosition still places writes.
+          final l = local[job.localPath] ??= await File(job.localPath).open(mode: FileMode.append);
+          final buf = Uint8List(chunk.length);
+          await r.setPosition(chunk.offset);
+          var got = 0;
+          while (got < chunk.length) {
+            final n = await r.readInto(buf, got, chunk.length);
+            if (n <= 0) throw FileSystemException('Unexpected end of file', job.file.path);
+            got += n;
+          }
+          await l.setPosition(chunk.offset);
+          await l.writeFrom(buf);
+          done += chunk.length;
+          onProgress(done, total);
+        }
+      } catch (e) {
+        failure ??= e;
+      } finally {
+        for (final h in [...remote.values, ...local.values]) {
+          try {
+            await h.close();
+          } catch (_) {}
+        }
+        try {
+          await c?.close();
+        } catch (_) {}
+      }
+    }
+
+    final workers = chunks.isEmpty ? 0 : (connections < chunks.length ? connections : chunks.length);
+    await Future.wait([for (var i = 0; i < workers; i++) worker()]);
+    if (failure != null) throw failure!;
+    onProgress(total, total);
   }
 
   Future<void> disconnect() async {
     final c = _c;
     _c = null;
+    _login = null;
     await c?.close();
   }
 
@@ -194,7 +276,10 @@ class SmbService {
     var sinceFlush = 0;
     try {
       await for (final chunk in await c.openRead(remote)) {
-        out.add(chunk);
+        // smb_connect reuses one buffer for every chunk, and IOSink keeps a
+        // reference until it writes: without a copy, later chunks overwrite
+        // earlier ones still queued, corrupting the file.
+        out.add(Uint8List.fromList(chunk));
         done += chunk.length;
         sinceFlush += chunk.length;
         // ponytail: bound buffered bytes on multi-GB ROMs; flush every ~8MB.

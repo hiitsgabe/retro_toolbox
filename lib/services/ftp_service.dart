@@ -13,6 +13,9 @@ typedef FtpProgress = void Function(int done, int total);
 /// [cd] changes the working directory, [list] returns its contents.
 class FtpClientService {
   FTPConnect? _c;
+  // Kept in memory only (never persisted) so a background transfer can open
+  // its own connection.
+  ({String host, int port, String user, String pass})? _login;
 
   bool get connected => _c != null;
 
@@ -22,11 +25,28 @@ class FtpClientService {
     if (!await c.connect()) throw 'Login failed';
     await c.setTransferType(TransferType.binary); // ROMs are binary, never ASCII
     _c = c;
+    _login = (host: host, port: port, user: user, pass: pass);
+  }
+
+  /// A separate connection to the same server, already in [path]. Background
+  /// transfers use one: FTP paths are relative to the working directory, which
+  /// moves as the user browses on the main connection.
+  Future<FtpClientService> openAt(String path) async {
+    final login = _login;
+    if (login == null) throw 'Not connected';
+    final other = FtpClientService();
+    await other.connect(host: login.host, port: login.port, user: login.user, pass: login.pass);
+    if (!await other.cd(path)) {
+      await other.disconnect();
+      throw 'Cannot open folder $path';
+    }
+    return other;
   }
 
   Future<void> disconnect() async {
     final c = _c;
     _c = null;
+    _login = null;
     try {
       await c?.disconnect();
     } catch (_) {}
