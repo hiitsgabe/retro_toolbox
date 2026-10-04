@@ -4,12 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 
-import 'package:roms_downloader/providers/ftp_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/utils/network.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
-import 'package:roms_downloader/widgets/file_browser.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/providers/ftp_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/widgets/file_browser.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// FTP with two modes: a client that browses a remote server (same Finder-style
 /// browser as SMB), and a server that shares a local folder over the LAN.

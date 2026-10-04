@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/models/app_state_model.dart';
-import 'package:roms_downloader/models/catalog_model.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/services/permission_service.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/models/catalog_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/permission_service.dart';
 
 const _viewModeKey = 'view_mode';
 const _consoleViewModeKey = 'console_view_mode';

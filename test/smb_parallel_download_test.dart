@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/smb_service.dart';
+import 'package:retro_toolbox/services/smb_service.dart';
 
 /// Needs a real SMB server; skipped unless SMB_TEST_HOST is set, e.g.
 ///   docker run -d --name rt-smb dperson/samba -u "tester;secret" -s "share;/share;yes;no;no;tester"

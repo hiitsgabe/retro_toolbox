@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/app_state_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/widgets/header/header.dart';
-import 'package:roms_downloader/widgets/game_list/game_list.dart';
-import 'package:roms_downloader/widgets/game_grid/game_grid.dart';
-import 'package:roms_downloader/widgets/game_grid/game_cover_flow.dart';
-import 'package:roms_downloader/widgets/footer/footer.dart';
-import 'package:roms_downloader/screens/settings_screen.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/widgets/header/header.dart';
+import 'package:retro_toolbox/widgets/game_list/game_list.dart';
+import 'package:retro_toolbox/widgets/game_grid/game_grid.dart';
+import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
+import 'package:retro_toolbox/widgets/footer/footer.dart';
+import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});

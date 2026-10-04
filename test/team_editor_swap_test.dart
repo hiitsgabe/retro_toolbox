@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/models/roster_doc.dart';
-import 'package:roms_downloader/screens/team_editor_screen.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/screens/team_editor_screen.dart';
 
 RosterTeam _team() => RosterTeam(
       teamRaw: {'id': 1, 'name': 'Team'},

@@ -1,15 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path/path.dart' as path;
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/models/extraction_model.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/models/settings_model.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/providers/library_snapshot_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/services/directory_service.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/extraction_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
 
 final gameStateProvider = Provider.family<GameState, Game>((ref, game) {
   final manager = ref.watch(gameStateManagerProvider.notifier);

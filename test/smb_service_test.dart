@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/smb_service.dart';
+import 'package:retro_toolbox/services/smb_service.dart';
 
 void main() {
   test('smbParent walks up the /share/dir/file model', () {

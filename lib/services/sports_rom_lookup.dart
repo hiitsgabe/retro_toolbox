@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/utils/rom_search.dart';
-import 'package:roms_downloader/widgets/menu_grid/console_slug.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/utils/rom_search.dart';
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
 /// A game found in the user's console catalog for a sports patcher.
 class RomCatalogMatch {

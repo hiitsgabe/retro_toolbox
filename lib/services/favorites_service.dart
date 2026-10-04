@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/models/favorites_model.dart';
-import 'package:roms_downloader/services/zerox0_service.dart';
+import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/services/zerox0_service.dart';
 
 class FavoritesService {
   static const String _exportSlugKey = 'favorites_export_slug';

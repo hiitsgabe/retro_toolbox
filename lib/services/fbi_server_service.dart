@@ -4,9 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 /// A 3DS title from the catalog, shown in the FBI list.
 typedef FbiGame = ({Game game, Console console});

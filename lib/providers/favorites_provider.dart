@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/favorites_model.dart';
-import 'package:roms_downloader/services/favorites_service.dart';
+import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/services/favorites_service.dart';
 
 class FavoritesNotifier extends StateNotifier<Favorites> {
   final FavoritesService _service = FavoritesService();

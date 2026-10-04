@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 /// Lets the user pin which local IP every server (Tinfoil, FBI, Retro Tools,
 /// FTP, JDKV) advertises, instead of each one guessing. "Automatic" keeps the

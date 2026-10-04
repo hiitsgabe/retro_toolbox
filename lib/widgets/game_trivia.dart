@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Rotating game-trivia loader: the swinging hammer, a big quoted curiosity that
 /// changes every few seconds, and the real status line small and dim

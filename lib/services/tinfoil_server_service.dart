@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/utils/network.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/network.dart';
 
 /// Serves a Tinfoil "shop": an index of the catalog's Switch games plus a
 /// streaming proxy that injects source auth (IA S3 / bearer / cookie).

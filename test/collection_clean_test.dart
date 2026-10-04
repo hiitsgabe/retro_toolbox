@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/collection_clean_service.dart';
+import 'package:retro_toolbox/services/collection_clean_service.dart';
 
 void main() {
   test('normalizeName strips tags, case, and punctuation', () {

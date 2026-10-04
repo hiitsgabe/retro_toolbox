@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/models/settings_model.dart';
-import 'package:roms_downloader/services/directory_service.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
 
 class SettingsService {
   static const String _settingsKey = 'app_settings';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 void main() {
   testWidgets('renders a tile per spec and fires onTap of the tapped tile', (tester) async {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/models/game_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 
 void main() {
   test('sanitizeForFat strips exFAT-illegal chars so SD writes succeed', () {

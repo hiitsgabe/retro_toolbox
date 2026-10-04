@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/services/m3u_service.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/m3u_service.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Generates .m3u playlists for multi-disc games in a folder: pick a folder,
 /// scan for disc sets, preview, and write one playlist per game.

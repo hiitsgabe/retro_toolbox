@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/jksv_backend.dart';
-import 'package:roms_downloader/services/jksv_meta.dart';
+import 'package:retro_toolbox/services/jksv_backend.dart';
+import 'package:retro_toolbox/services/jksv_meta.dart';
 
 /// A received Switch backup waiting for the user to confirm the pull.
 class IncomingSave {

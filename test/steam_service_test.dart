@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/steam_service.dart';
+import 'package:retro_toolbox/services/steam_service.dart';
 
 void main() {
   test('parseResults extracts appid, name and unescapes entities', () {

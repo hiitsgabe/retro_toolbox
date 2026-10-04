@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/providers/tinfoil_server_provider.dart';
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
-import 'package:roms_downloader/utils/network.dart';
-import 'package:roms_downloader/widgets/settings/console_auth_setting.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
-import 'package:roms_downloader/widgets/common/advanced_port.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/tinfoil_server_provider.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.

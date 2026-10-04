@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:roms_downloader/services/jksv_meta.dart';
+import 'package:retro_toolbox/services/jksv_meta.dart';
 
 /// Bridges a folder of **emulator export zips** (each a `<TitleID>/<raw files>`
 /// archive, exactly what Eden/Yuzu "Export Save" produces) to the JKSV backup

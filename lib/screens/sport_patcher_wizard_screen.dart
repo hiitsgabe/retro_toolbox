@@ -5,21 +5,21 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/models/roster_doc.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:background_downloader/background_downloader.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/download_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/screens/team_editor_screen.dart';
-import 'package:roms_downloader/services/directory_service.dart';
-import 'package:roms_downloader/services/sports_rom_lookup.dart';
-import 'package:roms_downloader/services/sports_service.dart';
-import 'package:roms_downloader/widgets/common/path_browser.dart';
-import 'package:roms_downloader/widgets/game_trivia.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/screens/team_editor_screen.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
+import 'package:retro_toolbox/services/sports_rom_lookup.dart';
+import 'package:retro_toolbox/services/sports_service.dart';
+import 'package:retro_toolbox/widgets/common/path_browser.dart';
+import 'package:retro_toolbox/widgets/game_trivia.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
 /// One patch flow per game, in the app's own wizard idiom: step dots up top,
 /// one focused step at a time, Back/Next footer.

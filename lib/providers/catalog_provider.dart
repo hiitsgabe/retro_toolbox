@@ -2,17 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/catalog_model.dart';
-import 'package:roms_downloader/models/catalog_filter_model.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/favorites_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/models/library_snapshot_model.dart';
-import 'package:roms_downloader/providers/library_snapshot_provider.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
-import 'package:roms_downloader/services/filtering_service.dart';
-import 'package:roms_downloader/providers/favorites_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
+import 'package:retro_toolbox/models/catalog_model.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/library_snapshot_model.dart';
+import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/filtering_service.dart';
+import 'package:retro_toolbox/providers/favorites_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 
 final gameSelectionProvider = Provider.family<bool, String>((ref, gameId) {
   final catalogState = ref.watch(catalogProvider);

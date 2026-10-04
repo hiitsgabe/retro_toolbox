@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/services/sports_service.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/services/sports_service.dart';
 
 /// The list of roster-patchable games, loaded once from the library and cached.
 /// Both the sports grid and the per-sport games grid read from this — level 2

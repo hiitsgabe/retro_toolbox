@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smb_connect/smb_connect.dart';
 
-import 'package:roms_downloader/providers/smb_provider.dart';
-import 'package:roms_downloader/services/smb_service.dart';
-import 'package:roms_downloader/services/task_queue_service.dart';
-import 'package:roms_downloader/widgets/file_browser.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/providers/smb_provider.dart';
+import 'package:retro_toolbox/services/smb_service.dart';
+import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/widgets/file_browser.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Connects to an SMB/Samba share on the local network to browse it (Finder-
 /// style), download or upload files, zip a selection, or delete files.

@@ -4,11 +4,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:roms_downloader/providers/fbi_server_provider.dart';
-import 'package:roms_downloader/services/fbi_server_service.dart';
-import 'package:roms_downloader/widgets/common/advanced_port.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/providers/fbi_server_provider.dart';
+import 'package:retro_toolbox/services/fbi_server_service.dart';
+import 'package:retro_toolbox/widgets/common/advanced_port.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Serves 3DS titles as installable .cia and installs them on a console running
 /// FBI — pick a file you downloaded elsewhere, or a catalog title (downloaded

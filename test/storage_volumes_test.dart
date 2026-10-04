@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/widgets/common/path_browser.dart';
+import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
 void main() {
   test('volumes come from app dirs and from /storage, internal first, deduplicated', () {

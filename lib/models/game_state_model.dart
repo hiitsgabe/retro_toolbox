@@ -1,4 +1,4 @@
-import 'package:roms_downloader/models/game_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 
 enum GameStatus {
   init,

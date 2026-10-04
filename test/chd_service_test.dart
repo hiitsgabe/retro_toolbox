@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/chd_service.dart';
+import 'package:retro_toolbox/services/chd_service.dart';
 
 void main() {
   test('modeForInput: .chd extracts, everything else compresses', () {

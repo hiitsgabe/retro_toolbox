@@ -420,7 +420,7 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE=build/linux/x64/release/bundle
-          for p in roms_downloader app/main.py app/nsz site-packages/zstandard site-packages/Crypto; do
+          for p in retro_toolbox app/main.py app/nsz site-packages/zstandard site-packages/Crypto; do
             if [ ! -e "$BUNDLE/$p" ]; then
               echo "::error::$p missing from the Linux bundle"
               exit 1
@@ -671,11 +671,11 @@ jobs:
             ### Linux Installation
             1. Install GTK 3 if your distribution does not ship it (`libgtk-3-0`)
             2. Extract: `tar -xzf retro_toolbox_linux_x64.tar.gz`
-            3. Run `./roms_downloader`
+            3. Run `./retro_toolbox`
 
             ### Windows Installation
             1. Download and extract `retro_toolbox_windows_x64.zip`
-            2. Run `roms_downloader.exe`
+            2. Run `retro_toolbox.exe`
           files: |
             dist/retro_toolbox_arm64.apk
             dist/retro_toolbox_arm32.apk

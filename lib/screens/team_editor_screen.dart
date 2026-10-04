@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/models/roster_doc.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
 /// Edits one team's squad: reorder, add, remove, edit players (incl. stats), and
 /// set the team color for games that use it. Player order is the ROM order, so

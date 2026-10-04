@@ -5,10 +5,10 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
 
-import 'package:roms_downloader/services/directory_service.dart';
-import 'package:roms_downloader/services/smb_service.dart';
-import 'package:roms_downloader/services/file_ops.dart';
-import 'package:roms_downloader/utils/remote_tree.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
+import 'package:retro_toolbox/services/smb_service.dart';
+import 'package:retro_toolbox/services/file_ops.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 const _hostKey = 'smb_host';
 const _userKey = 'smb_user';

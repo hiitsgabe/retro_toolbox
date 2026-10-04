@@ -1,6 +1,6 @@
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/game_state_model.dart';
-import 'package:roms_downloader/models/catalog_filter_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
 
 class FilteringService {
   static FilterResult filterAndPaginate(FilterInput input) {

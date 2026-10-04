@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/rts_folder_model.dart';
-import 'package:roms_downloader/services/rts_server_service.dart';
+import 'package:retro_toolbox/models/rts_folder_model.dart';
+import 'package:retro_toolbox/services/rts_server_service.dart';
 
 void main() {
   test('buildConsolesJson emits consumable console entries', () {

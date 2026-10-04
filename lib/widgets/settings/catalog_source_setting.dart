@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/settings_provider.dart';
-import 'package:roms_downloader/services/catalog_service.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
 
 class CatalogSourceSetting extends ConsumerStatefulWidget {
   const CatalogSourceSetting({super.key});

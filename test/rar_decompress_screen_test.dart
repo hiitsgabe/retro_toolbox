@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/screens/rar_decompress_screen.dart';
+import 'package:retro_toolbox/screens/rar_decompress_screen.dart';
 
 void main() {
   testWidgets('renders with extract disabled until a file and folder are picked', (tester) async {

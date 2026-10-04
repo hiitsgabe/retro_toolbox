@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/patcher_info.dart';
-import 'package:roms_downloader/providers/sports_provider.dart';
-import 'package:roms_downloader/screens/sport_patcher_wizard_screen.dart';
-import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
-import 'package:roms_downloader/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/providers/sports_provider.dart';
+import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
 /// Level 2 of the Sports flow: the games for one group — either a [platform] or
 /// a [sport], whichever the level-1 toggle drilled in by. Reads the cached

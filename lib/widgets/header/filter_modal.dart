@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/catalog_filter_model.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
 
 class FilterModal extends ConsumerWidget {
   const FilterModal({super.key});

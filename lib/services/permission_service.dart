@@ -2,7 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:roms_downloader/app.dart';
+import 'package:retro_toolbox/app.dart';
 
 class PermissionService {
   static const String _lastPermissionRequestKey = 'last_permission_request';

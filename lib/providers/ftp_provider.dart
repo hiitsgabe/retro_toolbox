@@ -6,9 +6,9 @@ import 'package:ftpconnect/ftpconnect.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:roms_downloader/services/ftp_service.dart';
-import 'package:roms_downloader/services/file_ops.dart';
-import 'package:roms_downloader/utils/remote_tree.dart';
+import 'package:retro_toolbox/services/ftp_service.dart';
+import 'package:retro_toolbox/services/file_ops.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 enum FtpMode { client, server }
 

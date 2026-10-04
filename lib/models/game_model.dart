@@ -1,5 +1,5 @@
-import 'package:roms_downloader/models/game_metadata_model.dart';
-import 'package:roms_downloader/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_metadata_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 
 class Game {
   final String title;

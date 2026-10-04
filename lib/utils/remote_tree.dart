@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/file_ops.dart';
+import 'package:retro_toolbox/services/file_ops.dart';
 
 /// A remote file plus its path relative to the browsed folder, '/'-separated.
 typedef RemoteFile<T> = ({T entry, String relPath});

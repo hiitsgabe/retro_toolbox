@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 void main() {
   late HttpServer upstream;

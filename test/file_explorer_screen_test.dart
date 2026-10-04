@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/screens/file_explorer_screen.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/screens/file_explorer_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

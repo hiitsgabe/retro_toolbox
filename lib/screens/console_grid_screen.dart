@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:roms_downloader/models/console_model.dart';
-import 'package:roms_downloader/providers/app_state_provider.dart';
-import 'package:roms_downloader/providers/catalog_provider.dart';
-import 'package:roms_downloader/screens/home_screen.dart';
-import 'package:roms_downloader/screens/settings_screen.dart';
-import 'package:roms_downloader/models/app_state_model.dart';
-import 'package:roms_downloader/widgets/menu_grid/menu_grid.dart';
-import 'package:roms_downloader/widgets/menu_grid/cover_flow.dart';
-import 'package:roms_downloader/widgets/menu_grid/console_slug.dart';
-import 'package:roms_downloader/widgets/game_trivia.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/screens/home_screen.dart';
+import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
+import 'package:retro_toolbox/widgets/game_trivia.dart';
 
 /// Grid of consoles. Tapping a console selects it and opens the game list
 /// (HomeScreen). Handles the loading / empty-catalog / error states that used

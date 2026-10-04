@@ -4,14 +4,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/game_model.dart';
-import 'package:roms_downloader/models/task_queue_model.dart';
-import 'package:roms_downloader/providers/game_state_provider.dart';
-import 'package:roms_downloader/providers/task_queue_provider.dart';
-import 'package:roms_downloader/services/archive_extract_service.dart';
-import 'package:roms_downloader/services/directory_service.dart';
-import 'package:roms_downloader/widgets/common/path_browser.dart';
-import 'package:roms_downloader/widgets/tool_description.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/services/archive_extract_service.dart';
+import 'package:retro_toolbox/services/directory_service.dart';
+import 'package:retro_toolbox/widgets/common/path_browser.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Standalone archive extraction: pick a .rar or .zip and an output folder,
 /// then extract. The work runs as a background task (task manager + Android

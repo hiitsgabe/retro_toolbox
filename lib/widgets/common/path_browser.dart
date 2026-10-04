@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:roms_downloader/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Plain `dart:io` filesystem browser.
 ///

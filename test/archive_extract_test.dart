@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/services/archive_extract_service.dart';
+import 'package:retro_toolbox/services/archive_extract_service.dart';
 
 void main() {
   final service = ArchiveExtractService();

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/jksv_meta.dart';
+import 'package:retro_toolbox/services/jksv_meta.dart';
 
 void main() {
   test('encode produces the 86-byte packed struct with JKSV magic', () {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:roms_downloader/screens/menu_screen.dart';
+import 'package:retro_toolbox/screens/menu_screen.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class RomsDownloaderApp extends StatelessWidget {
-  const RomsDownloaderApp({super.key});
+class RetroToolboxApp extends StatelessWidget {
+  const RetroToolboxApp({super.key});
 
   @override
   Widget build(BuildContext context) {

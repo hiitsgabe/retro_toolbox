@@ -1,5 +1,5 @@
 import 'package:path/path.dart' as p;
-import 'package:roms_downloader/models/game_state_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 
 enum LibraryPresence {
   none,

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/services/fbi_server_service.dart';
+import 'package:retro_toolbox/services/fbi_server_service.dart';
 
 void main() {
   test('buildPushPayload = 4-byte big-endian length + newline-joined URLs', () {

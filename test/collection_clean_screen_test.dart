@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:roms_downloader/screens/collection_clean_screen.dart';
+import 'package:retro_toolbox/screens/collection_clean_screen.dart';
 
 void main() {
   testWidgets('renders the empty state until a folder is chosen', (tester) async {
