@@ -65,12 +65,8 @@ void main() {
     expect(find.textContaining('open the destination and paste'), findsOneWidget);
 
     await tester.runAsync(() async {
-      // Double tap opens a folder (single tap selects), as in the SMB/FTP browsers.
-      tester
-          .widget<GestureDetector>(find
-              .ancestor(of: find.text('Saves'), matching: find.byWidgetPredicate((w) => w is GestureDetector && w.onDoubleTap != null))
-              .first)
-          .onDoubleTap!();
+      // Tapping a folder opens it (a file's tap selects), as in the SMB/FTP browsers.
+      await tester.tap(find.text('Saves'));
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pump();
