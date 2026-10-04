@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -209,5 +210,67 @@ void main() {
     expect(t.takeException(), isNull);
     expect(find.text('loading'), findsOneWidget);
     expect(t.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('arrow down moves the caret in a multi-line field, up/down leave a single-line one', (t) async {
+    final multi = TextEditingController(text: 'one\ntwo\nthree');
+    final below = FocusNode();
+    addTearDown(multi.dispose);
+    addTearDown(below.dispose);
+    await t.pumpWidget(app(Scaffold(
+      body: Column(children: [
+        TextField(controller: multi, autofocus: true, maxLines: null),
+        ElevatedButton(focusNode: below, onPressed: () {}, child: const Text('Below')),
+      ]),
+    )));
+    await t.pump();
+    multi.selection = const TextSelection.collapsed(offset: 1);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.pump();
+    expect(below.hasPrimaryFocus, isFalse);
+    final afterDown = multi.selection.baseOffset;
+    expect(afterDown, greaterThan(3)); // moved to the next line
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.pump();
+    expect(below.hasPrimaryFocus, isFalse);
+    expect(multi.selection.baseOffset, lessThan(afterDown)); // and back
+  });
+
+  testWidgets('arrow up leaves a single-line field', (t) async {
+    final above = FocusNode();
+    addTearDown(above.dispose);
+    await t.pumpWidget(app(Scaffold(
+      body: Column(children: [
+        ElevatedButton(focusNode: above, onPressed: () {}, child: const Text('Above')),
+        const TextField(autofocus: true),
+      ]),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.pump();
+    expect(above.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('page down scrolls content that has nothing to focus', (t) async {
+    double offset() => t.state<ScrollableState>(find.byType(Scrollable)).position.pixels;
+    await t.pumpWidget(app(const Scaffold(
+      body: SingleChildScrollView(
+        primary: true, // the route's PrimaryScrollController, as on mobile
+        child: SizedBox(height: 5000, child: Text('long text')),
+      ),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.pageDown);
+    await t.pumpAndSettle();
+    expect(offset(), greaterThan(0));
+    await t.sendKeyEvent(LogicalKeyboardKey.pageUp);
+    await t.pumpAndSettle();
+    expect(offset(), 0);
+  });
+
+  testWidgets('outline is wrapped in a RepaintBoundary', (t) async {
+    await t.pumpWidget(app(const Scaffold(body: SizedBox())));
+    final outline = t.renderObject<RenderBox>(find.byKey(const ValueKey('dpad-focus-outline')));
+    expect(outline.parent, isA<RenderRepaintBoundary>());
   });
 }
