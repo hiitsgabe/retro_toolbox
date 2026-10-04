@@ -49,9 +49,11 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
 
     return PopScope(
         // Back goes up a folder; only the shares root (or the connect form) leaves.
-        canPop: !state.connected || state.atRoot,
+        canPop: (!state.connected || state.atRoot) && state.selected.isEmpty,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && !state.busy) notifier.goUp();
+          if (didPop || state.busy) return;
+          // Back first clears a selection, then goes up.
+          state.selected.isNotEmpty ? notifier.clearSelection() : notifier.goUp();
         },
         child: Scaffold(
           appBar: AppBar(
