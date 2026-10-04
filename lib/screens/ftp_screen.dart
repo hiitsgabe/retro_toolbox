@@ -55,9 +55,11 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     final inClient = state.mode == FtpMode.client;
     return PopScope(
         // Back goes up a folder; only the FTP root (or server mode) leaves.
-        canPop: !(inClient && state.connected) || state.path == '/' || state.path.isEmpty,
+        canPop: (!(inClient && state.connected) || state.path == '/' || state.path.isEmpty) && state.selected.isEmpty,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && !state.busy) notifier.goUp();
+          if (didPop || state.busy) return;
+          // Back first clears a selection, then goes up.
+          state.selected.isNotEmpty ? notifier.clearSelection() : notifier.goUp();
         },
         child: Scaffold(
           appBar: AppBar(

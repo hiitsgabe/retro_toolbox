@@ -146,10 +146,15 @@ class FileBrowserView extends ConsumerWidget {
     );
   }
 
-  /// Folders open (unless busy); files toggle selection. Where nothing is
-  /// selectable (the SMB shares root) every entry just opens.
-  VoidCallback? _activate(BrowserItem e) {
-    if (e.isDir || !selectable) return busy ? null : () => onOpen(e);
+  /// Folders open (ignored while busy); files toggle selection. Where nothing
+  /// is selectable (the SMB shares root) every entry just opens. Never null, so
+  /// the row keeps focus while busy (a null onTap would make it unfocusable).
+  VoidCallback _activate(BrowserItem e) {
+    if (e.isDir || !selectable) {
+      return () {
+        if (!busy) onOpen(e);
+      };
+    }
     return () => onToggleSelect(e);
   }
 

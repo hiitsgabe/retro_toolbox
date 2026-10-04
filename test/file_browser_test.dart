@@ -76,7 +76,7 @@ void main() {
 
       testWidgets('the checkbox is reachable by d-pad and selects a folder', (tester) async {
         final r = await pump(tester, layout: layout, items: const [folder]);
-        // List: checkbox sits left of the row. Grid: it overlays the tile's top-left corner.
+        // List: checkbox sits left of the row. Grid: it sits in a row above the tile.
         await key(tester, layout == BrowserLayout.list ? LogicalKeyboardKey.arrowLeft : LogicalKeyboardKey.arrowUp);
         await key(tester, LogicalKeyboardKey.enter);
         expect(r.selected, {'/Saves'});
@@ -93,11 +93,15 @@ void main() {
         expect(r.selected, {'/notes.txt'});
       });
 
-      testWidgets('while busy, a folder cannot be opened', (tester) async {
+      testWidgets('while busy, a folder keeps focus and cannot be opened', (tester) async {
         final r = await pump(tester, layout: layout, busy: true);
+        final focus = FocusManager.instance.primaryFocus;
+        expect(focus, isNotNull);
+        expect(find.descendant(of: find.byWidget(focus!.context!.widget), matching: find.text('Saves')), findsOneWidget);
         await tester.tap(find.text('Saves'));
         await key(tester, LogicalKeyboardKey.enter);
         expect(r.opened, isEmpty);
+        expect(FocusManager.instance.primaryFocus, same(focus));
       });
 
       testWidgets('not selectable: no checkboxes, activating opens', (tester) async {
