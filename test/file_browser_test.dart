@@ -97,6 +97,8 @@ void main() {
         final r = await pump(tester, layout: layout, busy: true);
         final focus = FocusManager.instance.primaryFocus;
         expect(focus, isNotNull);
+        // The tile's own focus node holds focus, not a surrounding scope (whose context also contains 'Saves').
+        expect(focus, isNot(isA<FocusScopeNode>()));
         expect(find.descendant(of: find.byWidget(focus!.context!.widget), matching: find.text('Saves')), findsOneWidget);
         await tester.tap(find.text('Saves'));
         await key(tester, LogicalKeyboardKey.enter);
