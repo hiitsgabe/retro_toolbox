@@ -1,5 +1,4 @@
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -233,12 +232,9 @@ class SmbNotifier extends StateNotifier<SmbState> {
     await refresh();
   }
 
-  /// Picks a local file and uploads it into the current directory.
-  Future<void> uploadPick() async {
+  /// Uploads a local file into the current directory.
+  Future<void> uploadFile(String local) async {
     if (state.atRoot) return; // can't write to the shares list
-    final picked = await FilePicker.platform.pickFiles();
-    final local = picked?.files.single.path;
-    if (local == null) return;
     final name = p.basename(local);
     final remotePath = '${state.path}/$name';
     await _runTransfer(SmbTransfer(name: name, done: 0, total: 0, upload: true), (report) => _service.upload(local, remotePath, report));

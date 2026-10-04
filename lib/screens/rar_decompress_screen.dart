@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -9,9 +8,8 @@ import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/archive_extract_service.dart';
-import 'package:retro_toolbox/services/directory_service.dart';
-import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Standalone archive extraction: pick a .rar or .zip and an output folder,
 /// then extract. The work runs as a background task (task manager + Android
@@ -29,12 +27,6 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
   String? _result;
   bool _failed = false;
 
-  Future<String> _browseRoot() async {
-    if (_outputDir != null) return _outputDir!;
-    if (_archivePath != null) return p.dirname(_archivePath!);
-    return DirectoryService().getDownloadDir();
-  }
-
   void _setError(Object e) {
     if (!mounted) return;
     setState(() {
@@ -45,30 +37,16 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
 
   Future<void> _pickArchive() async {
     try {
-      String? path;
-      if (Platform.isAndroid) {
-        // Mirror NSZ: the SAF file picker copies the pick into cache, which is
-        // wasteful for large archives — browse the real path instead.
-        final root = await _browseRoot();
-        if (!mounted) return;
-        path = await PathBrowser.show(
-          context,
-          title: 'Select a .rar or .zip file',
-          initialDir: root,
-          allowedExtensions: const ['rar', 'zip'],
-        );
-      } else {
-        final result = await FilePicker.platform.pickFiles(
-          dialogTitle: 'Select a .rar or .zip file',
-          type: FileType.custom,
-          allowedExtensions: ['rar', 'zip'],
-        );
-        path = result?.files.firstOrNull?.path;
-      }
+      final path = await pickFile(
+        context,
+        title: 'Select a .rar or .zip file',
+        extensions: const ['rar', 'zip'],
+        initialDir: _outputDir ?? (_archivePath != null ? p.dirname(_archivePath!) : null),
+      );
       if (path == null || !mounted) return;
       setState(() {
         _archivePath = path;
-        _outputDir ??= p.dirname(path!);
+        _outputDir ??= p.dirname(path);
         _result = null;
         _failed = false;
       });
@@ -79,7 +57,7 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
 
   Future<void> _pickOutput() async {
     try {
-      final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
+      final dir = await pickDirectory(context, title: 'Select output folder');
       if (dir == null || !mounted) return;
       setState(() {
         _outputDir = dir;

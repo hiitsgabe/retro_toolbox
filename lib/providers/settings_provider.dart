@@ -120,9 +120,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return getGeneralSetting(AppSettings.maxParallelExtractions) ?? 2;
   }
 
-  Future<String?> selectDownloadDirectory() async {
-    return await _settingsService.selectDownloadDirectory();
-  }
+  Future<void> saveDownloadDirectory(String dir) => _settingsService.saveDownloadDirectory(dir);
 
   Future<void> setConsoleAuthToken(String consoleId, String token) async {
     final current = state.consoleSettings[consoleId] ?? const BaseSettings();

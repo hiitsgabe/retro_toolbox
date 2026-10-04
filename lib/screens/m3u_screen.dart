@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/services/m3u_service.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Generates .m3u playlists for multi-disc games in a folder: pick a folder,
 /// scan for disc sets, preview, and write one playlist per game.
@@ -22,8 +22,8 @@ class _M3uScreenState extends State<M3uScreen> {
   bool _busy = false;
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select a folder to scan');
-    if (path == null) return;
+    final path = await pickDirectory(context, title: 'Select a folder to scan');
+    if (path == null || !mounted) return;
     setState(() {
       _folder = path;
       _sets = null;

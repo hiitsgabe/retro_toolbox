@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 import 'package:path/path.dart' as p;
@@ -276,10 +275,7 @@ class FtpNotifier extends StateNotifier<FtpState> {
     await refresh();
   }
 
-  Future<void> uploadPick() async {
-    final picked = await FilePicker.platform.pickFiles();
-    final local = picked?.files.single.path;
-    if (local == null) return;
+  Future<void> uploadFile(String local) async {
     final total = await File(local).length();
     await _runTransfer(FtpTransfer(name: p.basename(local), done: 0, total: total, upload: true), (report) => _client.upload(local, report));
     await refresh();
@@ -304,9 +300,7 @@ class FtpNotifier extends StateNotifier<FtpState> {
 
   // ---- Server --------------------------------------------------------------
 
-  Future<void> pickServerDir() async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Choose folder to share');
-    if (dir == null) return;
+  Future<void> setServerDir(String dir) async {
     state = state.copyWith(serverDir: dir);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_srvDirKey, dir);

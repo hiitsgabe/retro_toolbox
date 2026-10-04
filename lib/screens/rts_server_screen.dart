@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +10,7 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Turns local folders into a catalog other apps consume via New Catalog
 /// Source: add folders, tweak how each appears, flip the server on, and share
@@ -199,7 +199,7 @@ class RtsServerScreen extends ConsumerWidget {
       );
 
   Future<void> _addFolder(BuildContext context, WidgetRef ref) async {
-    final path = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Pick a folder to share');
+    final path = await pickDirectory(context, title: 'Pick a folder to share');
     if (path == null || !context.mounted) return;
     final name = p.basename(path);
 

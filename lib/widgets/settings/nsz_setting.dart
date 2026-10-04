@@ -1,22 +1,17 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 class NszSetting extends ConsumerWidget {
   const NszSetting({super.key});
 
-  Future<void> _pickKeysFile(WidgetRef ref) async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select prod.keys or title.keys',
-      type: FileType.any,
-      allowMultiple: false,
-    );
-    final src = result?.files.single.path;
+  Future<void> _pickKeysFile(BuildContext context, WidgetRef ref) async {
+    final src = await pickFile(context, title: 'Select prod.keys or title.keys');
     if (src == null) return;
     // Copy into app support: on Android the picker hands out a temp cache copy
     // that gets cleaned up; a stable path is also required by the Python process.
@@ -102,7 +97,7 @@ class NszSetting extends ConsumerWidget {
                     onPressed: () => _clearKeysFile(ref),
                   ),
                 OutlinedButton(
-                  onPressed: () => _pickKeysFile(ref),
+                  onPressed: () => _pickKeysFile(context, ref),
                   style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
                   child: Text(hasKeys ? 'Change' : 'Browse'),
                 ),

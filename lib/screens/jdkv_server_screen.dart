@@ -12,6 +12,7 @@ import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/services/webdav_server_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Controls the embedded WebDAV server that syncs emulator saves with JKSV on
 /// a Switch. Android→Switch (JKSV restores) and Switch→Android (confirm-to-pull).
@@ -111,7 +112,7 @@ class JdkvServerScreen extends ConsumerWidget {
               onPressed: state.running
                   ? null
                   : () async {
-                      final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select save exports folder');
+                      final dir = await pickDirectory(context, title: 'Select save exports folder');
                       if (dir != null) notifier.setFolder(dir);
                     },
               child: Text(has ? 'Change' : 'Choose'),

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -14,12 +13,11 @@ import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
-import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/services/sports_rom_lookup.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
-import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/game_trivia.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// One patch flow per game, in the app's own wizard idiom: step dots up top,
 /// one focused step at a time, Back/Next footer.
@@ -176,13 +174,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   Future<void> _importCustomLeagues() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        dialogTitle: 'Select a leagues JSON file',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-      final path = result?.files.firstOrNull?.path;
-      if (path == null) return;
+      final path = await pickFile(context, title: 'Select a leagues JSON file', extensions: ['json']);
+      if (path == null || !mounted) return;
       await SportsService.importCustomLeagues(path);
       await _loadLeagues();
     } catch (e) {
@@ -221,18 +214,13 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _pickRom() async {
-    String? path;
-    if (Platform.isAndroid) {
-      // Not the SAF picker: it copies the file into the app cache first (slow,
-      // no feedback for a disc image) and the copy sits alone, so a .cue/.bin
-      // set loses its sibling tracks and the output ships only the data track.
-      final root = _romPath != null ? p.dirname(_romPath!) : await DirectoryService().getDownloadDir();
-      if (!mounted) return;
-      path = await PathBrowser.show(context, title: 'Select the ROM to patch', initialDir: root);
-    } else {
-      final result = await FilePicker.platform.pickFiles(dialogTitle: 'Select the ROM to patch');
-      path = result?.files.firstOrNull?.path;
-    }
+    // pickFile browses real paths on Android/handhelds (the SAF picker copies
+    // the file alone into cache, so a .cue/.bin set would lose its tracks).
+    final path = await pickFile(
+      context,
+      title: 'Select the ROM to patch',
+      initialDir: _romPath != null ? p.dirname(_romPath!) : null,
+    );
     if (path == null || !mounted) return;
     setState(() => _romPath = path);
   }
@@ -701,8 +689,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
                           onPressed: () async {
-                            final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
-                            final path = r?.files.firstOrNull?.path;
+                            final path = await pickFile(ctx, title: 'Select a team JSON file', extensions: ['json']);
                             if (path != null) jsonCtrl.text = await File(path).readAsString();
                           },
                           icon: const Icon(Icons.upload_file, size: 18),
@@ -919,7 +906,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               Expanded(child: Text(outDir.isEmpty ? 'No folder' : outDir, overflow: TextOverflow.ellipsis)),
               OutlinedButton(
                 onPressed: () async {
-                  final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select output folder');
+                  final dir = await pickDirectory(context, title: 'Select output folder');
                   if (dir != null) setState(() => _outputDir = dir);
                 },
                 child: const Text('Change'),

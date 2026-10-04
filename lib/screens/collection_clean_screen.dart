@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/services/collection_clean_service.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Folder-scoped cleanup ported from console_utilities: dedupe game files,
 /// clean up filenames, and remove OS junk ("ghost") files. Each operation
@@ -23,8 +23,8 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
   Directory? get _dir => _folder == null ? null : Directory(_folder!);
 
   Future<void> _pickFolder() async {
-    final path = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select a folder to clean');
-    if (path != null) setState(() => _folder = path);
+    final path = await pickDirectory(context, title: 'Select a folder to clean');
+    if (path != null && mounted) setState(() => _folder = path);
   }
 
   @override

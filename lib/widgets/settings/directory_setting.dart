@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 class DirectorySetting extends StatelessWidget {
   final String settingKey;
@@ -80,8 +81,9 @@ class DirectorySetting extends StatelessWidget {
             ),
           IconButton(
             onPressed: () async {
-              final newDir = await settingsNotifier.selectDownloadDirectory();
+              final newDir = await pickDirectory(context, title: 'Select download folder');
               if (newDir != null) {
+                await settingsNotifier.saveDownloadDirectory(newDir);
                 if (console == null) {
                   await settingsNotifier.setGeneralSetting(settingKey, newDir);
                 } else {

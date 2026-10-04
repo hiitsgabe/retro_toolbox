@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smb_connect/smb_connect.dart';
@@ -8,6 +7,7 @@ import 'package:retro_toolbox/services/smb_service.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/widgets/file_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/services/pick.dart';
 
 /// Connects to an SMB/Samba share on the local network to browse it (Finder-
 /// style), download or upload files, zip a selection, or delete files.
@@ -64,7 +64,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           ),
           body: state.connected ? _browser(context, state, notifier) : _connectForm(context, state, notifier),
           floatingActionButton: state.connected && !state.atRoot && state.transfer == null && state.selected.isEmpty
-              ? FloatingActionButton.extended(onPressed: () => notifier.uploadPick(), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
+              ? FloatingActionButton.extended(onPressed: () => _upload(notifier), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
               : null,
         ));
   }
@@ -244,9 +244,14 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
 
   SmbFile _entry(SmbState state, String id) => state.entries.firstWhere((e) => e.path == id);
 
+  Future<void> _upload(SmbNotifier notifier) async {
+    final local = await pickFile(context, title: 'Select a file to upload');
+    if (local != null && mounted) await notifier.uploadFile(local);
+  }
+
   Future<void> _pickDirThen(Future<void> Function(String dir) run) async {
-    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Choose output folder');
-    if (dir != null) await run(dir);
+    final dir = await pickDirectory(context, title: 'Choose output folder');
+    if (dir != null && mounted) await run(dir);
   }
 
   Future<void> _confirmDelete(BuildContext context, SmbState state, SmbNotifier notifier) async {
