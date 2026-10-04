@@ -20,9 +20,12 @@ ports/
       flutter_assets/       # Flutter engine assets
     lib/                    # Runtime libraries
     bundled_libs/           # Fallback system libraries
+    runtime_libs/           # System library overrides (created at runtime)
     config/                 # XDG config dir (runtime)
     cache/                  # XDG cache dir (runtime)
     data/home/              # XDG data home (runtime)
+    Documents/              # Standard user folder (created at runtime)
+    Downloads/              # Standard user folder (created at runtime)
     log.txt                 # launcher output
 ```
 
@@ -41,7 +44,7 @@ The app reads these to adapt UI and input handling.
 
 ## Physical Dimensions
 
-Adjust display pixel ratio via `RT_DISPLAY_MM` env var (default: 71×53 mm for ~3.5" screens):
+Adjust display pixel ratio via `RT_DISPLAY_MM` env var (format: `width,height` in mm; default: `71,53` for ~3.5" screens):
 
 ```bash
 export RT_DISPLAY_MM="80,60"
@@ -70,8 +73,14 @@ Handled by gptokeyb (included in PortMaster).
 
 The bundled `flutter-pi-fbdev.patch` enables framebuffer rendering when DRM/KMS is unavailable. Patch origin: [rafaismyname](https://github.com/rafaismyname).
 
+**Pin:** ardera/flutter-pi @ `c81869e033cd5b4c819c620e9124114a559b2067`
+
 To apply to a flutter-pi source tree:
 ```bash
+git clone https://github.com/ardera/flutter-pi.git
 cd flutter-pi
-patch -p1 < flutter-pi-fbdev.patch
+git checkout c81869e033cd5b4c819c620e9124114a559b2067
+patch -p1 -l < ../path/to/flutter-pi-fbdev.patch
 ```
+
+Adjust the path to `flutter-pi-fbdev.patch` relative to the flutter-pi working directory.
