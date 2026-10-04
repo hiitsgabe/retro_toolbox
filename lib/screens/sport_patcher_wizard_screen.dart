@@ -907,7 +907,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               OutlinedButton(
                 onPressed: () async {
                   final dir = await pickDirectory(context, title: 'Select output folder');
-                  if (dir != null) setState(() => _outputDir = dir);
+                  if (dir != null && mounted) setState(() => _outputDir = dir);
                 },
                 child: const Text('Change'),
               ),
