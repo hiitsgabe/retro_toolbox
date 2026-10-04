@@ -1,6 +1,8 @@
 name: Build Linux Handheld (PortMaster)
 
 on:
+  # Build the package on PRs so it can be tried on a device before release.
+  pull_request:
   workflow_call:
     inputs:
       ref:
