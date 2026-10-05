@@ -356,4 +356,21 @@ void main() {
     expect(await matchBoxartUrlsParallel(c.games.take(10).toList(), c.boxarts), matchBoxartUrls(c.games.take(10).toList(), c.boxarts));
     expect(await matchBoxartUrlsParallel([], c.boxarts), isEmpty);
   });
+
+  test('a failing worker is retried once in a single isolate', () async {
+    final c = buildCorpus(boxartCount: 1500, gameCount: 1200, seed: 5);
+    final saved = matchInIsolate;
+    addTearDown(() => matchInIsolate = saved);
+    final calls = <int>[];
+    matchInIsolate = (chunk, boxarts) {
+      calls.add(chunk.length);
+      if (calls.length == 1) throw StateError('worker died');
+      return saved(chunk, boxarts);
+    };
+    expect(await matchBoxartUrlsParallel(c.games, c.boxarts), matchBoxartUrls(c.games, c.boxarts));
+    expect(calls.last, c.games.length); // the retry ran the whole list at once
+
+    matchInIsolate = (_, __) async => throw StateError('worker died');
+    expect(matchBoxartUrlsParallel(c.games, c.boxarts), throwsStateError);
+  });
 }

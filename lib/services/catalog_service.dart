@@ -215,8 +215,12 @@ class CatalogService {
           if (!hasBoxarts && console.boxarts != null) {
             await _status(onStatus, 'Matching box art');
             final enrichedResult = await _boxartService.mutateGamesWithBoxarts(cachedResult, console);
-            await _status(onStatus, 'Saving catalog');
-            await cacheFile.writeAsString(await compute(_encodeGamesIsolate, enrichedResult));
+            // The same list back means no art was added (matching failed or no
+            // listing): the saved catalog is already that, keep it as is.
+            if (!identical(enrichedResult, cachedResult)) {
+              await _status(onStatus, 'Saving catalog');
+              await cacheFile.writeAsString(await compute(_encodeGamesIsolate, enrichedResult));
+            }
             return enrichedResult;
           }
           return cachedResult;
@@ -361,12 +365,16 @@ class CatalogService {
           if (await cacheFile.exists()) {
             await cacheFile.delete();
           }
+          // Users clear the cache when art or games are missing: re-read the
+          // box art listing too.
+          if (console.boxarts != null) await BoxartService.clearListingCache(console.boxarts!);
         }
       } else {
         final consoles = await getConsoles();
         for (final consoleId in consoles.keys) {
           await clearCatalogCache(consoleId);
         }
+        await BoxartService.clearAllListingCaches();
       }
     } catch (e) {
       debugPrint('Error clearing catalog cache: $e');
