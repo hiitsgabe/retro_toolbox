@@ -131,4 +131,14 @@ void main() {
     await pump(t);
     expect(find.byIcon(Icons.drag_handle), findsNothing);
   });
+
+  testWidgets('an armed swap turns off long-press drag (phones)', (t) async {
+    Handheld.current = false;
+    await pump(t);
+    bool dragOn() => t.widget<ReorderableListView>(find.byType(ReorderableListView)).buildDefaultDragHandles;
+    expect(dragOn(), isTrue);
+    await t.tap(find.byIcon(Icons.swap_vert).first);
+    await t.pump();
+    expect(dragOn(), isFalse);
+  });
 }

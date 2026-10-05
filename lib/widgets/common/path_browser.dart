@@ -288,12 +288,13 @@ class _PathBrowserState extends State<PathBrowser> {
       ),
     );
     if (!widget.selectDirectory) return dialog;
-    // Start == "Use this folder".
+    // Start == "Use this folder", once the folder has listed.
     return Actions(
       actions: {
-        PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
-          onInvoke: (_) => Navigator.pop(context, _dir),
-        ),
+        if (!_loading && _error == null)
+          PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
+            onInvoke: (_) => Navigator.pop(context, _dir),
+          ),
       },
       child: dialog,
     );

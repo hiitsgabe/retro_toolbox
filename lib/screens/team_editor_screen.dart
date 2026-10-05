@@ -190,6 +190,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
             for (final (n, c) in _palette.indexed)
               InkWell(
                 customBorder: const CircleBorder(),
+                focusColor: Colors.transparent, // DpadScope draws the one outline
                 autofocus: n == 0,
                 onTap: () => Navigator.pop(ctx, c),
                 child: Container(
