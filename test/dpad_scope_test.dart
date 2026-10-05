@@ -338,6 +338,103 @@ void main() {
     });
   }
 
+  // Button intents: a closer Actions widget wins over DpadScope's fallbacks.
+  final intentKeys = <Intent, List<LogicalKeyboardKey>>{
+    const MarkIntent(): [LogicalKeyboardKey.f2, LogicalKeyboardKey.gameButtonX],
+    const ItemActionsIntent(): [LogicalKeyboardKey.f3, LogicalKeyboardKey.gameButtonY],
+    const OptionsIntent(): [LogicalKeyboardKey.f4, LogicalKeyboardKey.gameButtonSelect],
+    const PrimaryActionIntent(): [LogicalKeyboardKey.f5, LogicalKeyboardKey.gameButtonStart],
+  };
+  Widget bound(Type type, Intent intent, void Function() onInvoke, {VoidCallback? onPressed}) => app(Scaffold(
+        body: Actions(
+          actions: {type: CallbackAction<Intent>(onInvoke: (_) => onInvoke())},
+          child: ElevatedButton(autofocus: true, onPressed: onPressed ?? () {}, child: const Text('go')),
+        ),
+      ));
+  for (final e in intentKeys.entries) {
+    for (final k in e.value) {
+      testWidgets('${k.debugName} reaches a bound ${e.key.runtimeType} once even when held', (t) async {
+        var n = 0;
+        await t.pumpWidget(bound(e.key.runtimeType, e.key, () => n++));
+        await t.pump();
+        await t.sendKeyDownEvent(k);
+        for (var i = 0; i < 3; i++) {
+          await t.sendKeyRepeatEvent(k);
+        }
+        await t.sendKeyUpEvent(k);
+        await t.pump();
+        expect(n, 1);
+      });
+    }
+  }
+
+  testWidgets('unbound X/Y/Select do nothing', (t) async {
+    var pressed = 0;
+    await t.pumpWidget(app(Scaffold(body: ElevatedButton(autofocus: true, onPressed: () => pressed++, child: const Text('go')))));
+    await t.pump();
+    for (final k in [LogicalKeyboardKey.f2, LogicalKeyboardKey.f3, LogicalKeyboardKey.f4, LogicalKeyboardKey.gameButtonX]) {
+      await t.sendKeyEvent(k);
+    }
+    await t.pump();
+    expect(pressed, 0);
+  });
+
+  testWidgets('Start with a screen binding runs the binding, not the button', (t) async {
+    var ran = 0, pressed = 0;
+    await t.pumpWidget(bound(PrimaryActionIntent, const PrimaryActionIntent(), () => ran++, onPressed: () => pressed++));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pump();
+    expect([ran, pressed], [1, 0]);
+  });
+
+  testWidgets('F5 without a binding presses the focused button', (t) async {
+    var pressed = 0;
+    await t.pumpWidget(app(Scaffold(body: ElevatedButton(autofocus: true, onPressed: () => pressed++, child: const Text('go')))));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pump();
+    expect(pressed, 1);
+  });
+
+  for (final end in [false, true]) {
+    for (final k in end ? [LogicalKeyboardKey.end, LogicalKeyboardKey.gameButtonRight2] : [LogicalKeyboardKey.home, LogicalKeyboardKey.gameButtonLeft2]) {
+      testWidgets('${k.debugName} focuses the ${end ? 'last' : 'first'} item of a long list', (t) async {
+        await t.pumpWidget(app(Scaffold(
+          body: ListView(children: [
+            for (var i = 0; i < 30; i++) ListTile(autofocus: i == (end ? 0 : 15), title: Text('item $i'), onTap: () {}),
+          ]),
+        )));
+        await t.pumpAndSettle();
+        await t.sendKeyEvent(k);
+        await t.pumpAndSettle();
+        final want = end ? 'item 29' : 'item 0';
+        expect(Focus.of(t.element(find.text(want))).hasFocus, isTrue);
+      });
+    }
+  }
+
+  testWidgets('Home/End move the caret in a text field; F2 still dispatches', (t) async {
+    final c = TextEditingController(text: 'hello');
+    addTearDown(c.dispose);
+    var marks = 0;
+    await t.pumpWidget(app(Scaffold(
+      body: Actions(
+        actions: {MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) => marks++)},
+        child: TextField(autofocus: true, controller: c),
+      ),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.home);
+    await t.pump();
+    expect(c.selection.baseOffset, 0);
+    await t.sendKeyEvent(LogicalKeyboardKey.end);
+    await t.pump();
+    expect(c.selection.baseOffset, 5);
+    await t.sendKeyEvent(LogicalKeyboardKey.f2);
+    expect(marks, 1);
+  });
+
   for (final touch in [false, true]) {
     testWidgets('built-in keyboard ${touch ? 'keeps' : 'hides'} the system IME on field focus when highlight is ${touch ? 'touch' : 'traditional'}',
         (t) async {

@@ -58,14 +58,14 @@ Runtime output written to `ports/retrotoolbox/log.txt`.
 
 Key map in `retrotoolbox.gptk`:
 - D-pad: Arrow keys
-- A button: Enter
-- B button: Escape
-- X button: Space
-- Y button: Tab
-- L1/R1: PageUp / PageDown
-- L2/R2: Home / End
-- Start: Enter
-- Back: Escape
+- A button: Enter (open / confirm)
+- B button: Escape (back / close)
+- X button: F2 (mark / unmark)
+- Y button: F3 (actions for the focused item)
+- Start: F5 (the screen's primary action)
+- Select (back): F4 (filters / options)
+- L1/R1: PageUp / PageDown (page)
+- L2/R2: Home / End (top / bottom of the list)
 
 Handled by gptokeyb (included in PortMaster).
 
