@@ -80,7 +80,10 @@ rt_apply_update() {
   rm -f "$game/UPDATE_FAILED.txt"
   echo "Update: done"
 }
-# test_update_swap.sh sources this file for the function alone.
+# Don't start a port that a part-way failure left mixed: rc 1 now, or rc 2
+# (this start's check failed) while an earlier part-way failure's note remains.
+rt_must_stop() { [ "$1" -eq 1 ] || { [ "$1" -eq 2 ] && [ -f "$2/UPDATE_FAILED.txt" ]; }; }
+# test_update_swap.sh sources this file for the functions alone.
 [ -n "$RT_UPDATE_FUNCTION_ONLY" ] && return 0
 
 XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
@@ -97,7 +100,7 @@ cd "$GAMEDIR" || exit 1
 exec > >(tee "$GAMEDIR/log.txt") 2>&1
 echo "--- Retro Toolbox --- $(date)"
 rt_apply_update "$GAMEDIR" "/$directory/ports"
-if [ $? -eq 1 ]; then
+if rt_must_stop $? "$GAMEDIR"; then
   echo "Update failed part-way; not starting. Free some space and start Retro Toolbox again to retry."
   # pm_message lives in PortMaster's funcs.txt (sourced by control.txt).
   type pm_message >/dev/null 2>&1 &&
