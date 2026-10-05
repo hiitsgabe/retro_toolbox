@@ -65,9 +65,11 @@ class DirectoryService {
   }
 
   static Future<int> getFreeSpace(String dirPath) async {
-    if (Platform.isMacOS) {
+    // disk_space_2 is a GTK plugin: flutter-pi (handheld Linux) doesn't load
+    // it, so Linux reads `df` too. -P keeps each filesystem on one line.
+    if (Platform.isMacOS || Platform.isLinux) {
       try {
-        final result = await Process.run('df', ['-k', dirPath]);
+        final result = await Process.run('df', ['-Pk', dirPath]);
         if (result.exitCode != 0) return 0;
         final output = result.stdout.toString().trim();
         final lines = output.split('\n');
