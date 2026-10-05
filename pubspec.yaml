@@ -39,6 +39,7 @@ dependencies:
   ftpconnect:
     path: third_party/ftpconnect
   ftp_server: ^2.3.2
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:
