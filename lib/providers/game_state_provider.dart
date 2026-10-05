@@ -107,14 +107,24 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
         isInteractable: false,
         availableActions: {GameAction.loading},
       );
+    } else if (status == ExtractionStatus.completed && current.isTransfer) {
+      // Nothing on disk to resolve against: the output went wherever the user chose.
+      updated = current.copyWith(
+        status: GameStatus.downloaded,
+        hasJustCompleted: true,
+        isInteractable: true,
+        showProgressBar: false,
+        currentProgress: 1.0,
+        availableActions: const {},
+      );
     } else if (status == ExtractionStatus.completed) {
       resolveState(gameId, true);
     } else if (status == ExtractionStatus.failed) {
       updated = current.copyWith(
-        status: GameStatus.extractionFailed,
+        status: current.isTransfer ? GameStatus.downloadFailed : GameStatus.extractionFailed,
         isInteractable: true,
         showProgressBar: false,
-        availableActions: {GameAction.retryExtraction, GameAction.cancel},
+        availableActions: {current.isTransfer ? GameAction.retryDownload : GameAction.retryExtraction, GameAction.cancel},
       );
     }
 
@@ -196,9 +206,9 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
 
   /// Register a state for a one-off task (e.g. a manual NSZ decompression) that
   /// isn't part of the loaded catalog, so it shows up in the task manager.
-  void registerTransientGame(Game game) {
+  void registerTransientGame(Game game, {bool isTransfer = false}) {
     if (state.containsKey(game.gameId)) return;
-    state = {...state, game.gameId: GameState(game: game)};
+    state = {...state, game.gameId: GameState(game: game, isTransfer: isTransfer)};
   }
 
   void _initGames(List<Game> games) {
@@ -224,7 +234,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     final updated = <String, GameState>{};
     for (final entry in state.entries) {
       final game = entry.value.game;
-      updated[entry.key] = GameState(game: game);
+      updated[entry.key] = GameState(game: game, isTransfer: entry.value.isTransfer);
     }
     state = updated;
   }

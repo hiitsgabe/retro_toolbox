@@ -43,6 +43,10 @@ class GameState {
   final String? errorMessage;
   final bool hasJustCompleted;
 
+  /// A network transfer (SMB/FTP download or zip) run as a file task. It
+  /// reports through the extraction states but reads and files as a download.
+  final bool isTransfer;
+
   const GameState({
     required this.game,
     this.status = GameStatus.init,
@@ -56,6 +60,7 @@ class GameState {
     this.currentProgress = 0.0,
     this.errorMessage,
     this.hasJustCompleted = false,
+    this.isTransfer = false,
   });
 
   GameState copyWith({
@@ -85,6 +90,7 @@ class GameState {
       currentProgress: currentProgress ?? this.currentProgress,
       errorMessage: errorMessage ?? this.errorMessage,
       hasJustCompleted: hasJustCompleted ?? this.hasJustCompleted,
+      isTransfer: isTransfer,
     );
   }
 
@@ -104,9 +110,9 @@ class GameState {
       case GameStatus.downloaded:
         return 'Downloaded';
       case GameStatus.extractionQueued:
-        return 'Ex. Queued';
+        return isTransfer ? 'Dl. Queued' : 'Ex. Queued';
       case GameStatus.extracting:
-        return 'Extracting';
+        return isTransfer ? 'Downloading' : 'Extracting';
       case GameStatus.extracted:
         return 'Extracted';
       case GameStatus.downloadFailed:

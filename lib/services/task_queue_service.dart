@@ -75,7 +75,7 @@ class TaskQueueService {
   }) {
     // Unique per job: the task key comes from the URL's file name.
     final game = Game(title: title, url: 'https://manual/net-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
-    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game, isTransfer: true);
     ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.remoteTransfer, {
       'taskId': game.gameId,
       'source': source,
@@ -86,6 +86,13 @@ class TaskQueueService {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
   }
 
+  /// Runs a failed transfer again from its original task (same job, same
+  /// source), which stays in memory for the session.
+  static void retryTransfer(WidgetRef ref, String taskId) {
+    final task = ref.read(taskQueueProvider).tasks.lastWhere((t) => t.id == taskId && t.type == TaskType.remoteTransfer);
+    ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.remoteTransfer, task.params);
+  }
+
   static void startExtraction(WidgetRef ref, String taskId) {
     final queueNotifier = ref.read(taskQueueProvider.notifier);
     queueNotifier.enqueue(taskId, TaskType.extraction, {'taskId': taskId});
@@ -94,7 +101,8 @@ class TaskQueueService {
   static void cancelTask(WidgetRef ref, Game game, GameState gameState) {
     final taskId = game.gameId;
 
-    if (gameState.status == GameStatus.downloading || gameState.status == GameStatus.downloadPaused || gameState.status == GameStatus.downloadFailed) {
+    if (!gameState.isTransfer &&
+        (gameState.status == GameStatus.downloading || gameState.status == GameStatus.downloadPaused || gameState.status == GameStatus.downloadFailed)) {
       final downloadNotifier = ref.read(downloadProvider.notifier);
       downloadNotifier.cancelTask(taskId);
       return;

@@ -1,26 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
-import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
-import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_list_view.dart';
 
 /// Splits task states over the task manager's tabs. A running network transfer
-/// ([transferIds]) reports as `extracting` (it shares the file-task machinery),
-/// but belongs under Downloads, not Extractions.
+/// ([GameState.isTransfer]) reports as `extracting` (it shares the file-task
+/// machinery), but belongs under Downloads, not Extractions.
 ({List<GameState> downloading, List<GameState> extracting, List<GameState> queued, List<GameState> completed, List<GameState> failed}) classifyTasks(
-  Iterable<GameState> states, {
-  Set<String> transferIds = const {},
-}) {
+  Iterable<GameState> states,
+) {
   final downloading = <GameState>[], extracting = <GameState>[], queued = <GameState>[], completed = <GameState>[], failed = <GameState>[];
   for (final state in states) {
-    final isTransfer = transferIds.contains(state.game.gameId);
     if (state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused || state.status == GameStatus.downloadQueued) {
       downloading.add(state);
     }
     if (state.status == GameStatus.extracting || state.status == GameStatus.extractionQueued) {
-      if (state.status == GameStatus.extracting && isTransfer) {
+      if (state.status == GameStatus.extracting && state.isTransfer) {
         downloading.add(state);
       } else {
         extracting.add(state);
@@ -81,8 +77,7 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
   Widget build(BuildContext context) {
     final gameStateManager = ref.watch(gameStateManagerProvider);
 
-    final transferIds = {for (final t in ref.watch(taskQueueProvider).tasks) if (t.type == TaskType.remoteTransfer) t.id};
-    final tabs = classifyTasks(gameStateManager.values, transferIds: transferIds);
+    final tabs = classifyTasks(gameStateManager.values);
     final downloadingGames = tabs.downloading;
     final extractingGames = tabs.extracting;
     final queuedGames = tabs.queued;

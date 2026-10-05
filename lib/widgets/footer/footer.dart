@@ -23,8 +23,10 @@ class Footer extends ConsumerWidget {
 
     final activeGames = gameStateManager.values.where((gameState) => gameState.isActive).toList();
 
-    final downloadingGames = activeGames.where((state) => state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused).length;
-    final extractingGames = activeGames.where((state) => state.status == GameStatus.extracting).length;
+    final downloadingGames = activeGames
+        .where((state) => state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused || (state.isTransfer && state.status == GameStatus.extracting))
+        .length;
+    final extractingGames = activeGames.where((state) => !state.isTransfer && state.status == GameStatus.extracting).length;
 
     final hasActiveTasks = downloadingGames > 0 || extractingGames > 0;
 

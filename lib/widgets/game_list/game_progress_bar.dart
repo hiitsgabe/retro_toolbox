@@ -66,11 +66,11 @@ class GameProgressBar extends StatelessWidget {
         }
         return speed;
       case GameStatus.extracting:
-        return 'Extracting...';
+        return gameState.isTransfer ? 'Downloading...' : 'Extracting...';
       case GameStatus.downloadQueued:
         return 'Queued for download';
       case GameStatus.extractionQueued:
-        return 'Queued for extraction';
+        return gameState.isTransfer ? 'Queued for download' : 'Queued for extraction';
       case GameStatus.downloadPaused:
         return 'Download paused';
       case GameStatus.processing:
