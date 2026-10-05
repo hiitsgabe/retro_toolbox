@@ -51,11 +51,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
 
     _listenToLoadingNotifications();
-
-    // No catalog configured yet (fresh install without a bundled catalog).
-    if (state.selectedConsole != null) {
-      catalogNotifier.loadCatalog(state.selectedConsole!);
-    }
+    // The saved console is only a highlight: a catalog loads when the user
+    // opens a console (selectConsole), never on startup.
   }
 
   /// Re-reads the console list after the catalog source changes.
@@ -74,7 +71,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
       selectedConsole: selectedConsole,
       clearSelectedConsole: selectedConsole == null,
     );
-    if (selectedConsole != null) {
+    // Refresh the open games screen only; nothing loads from the console list.
+    final c = catalogNotifier.state;
+    if (selectedConsole != null && (c.loading || c.games.isNotEmpty || c.errorMessage.isNotEmpty)) {
       catalogNotifier.loadCatalog(selectedConsole);
     }
   }

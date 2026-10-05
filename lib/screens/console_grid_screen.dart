@@ -2,33 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
-import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
-import 'package:retro_toolbox/widgets/game_trivia.dart';
 
-/// Grid of consoles. Tapping a console selects it and opens the game list
-/// (HomeScreen). Handles the loading / empty-catalog / error states that used
-/// to live on HomeScreen's console-less entry.
+/// Grid of consoles. Tapping a console selects it (which starts its catalog
+/// load) and opens the game list (HomeScreen).
 class ConsoleGridScreen extends ConsumerWidget {
   const ConsoleGridScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
-    final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
-    final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
 
+    // Always the console list: a catalog loads (and can fail) on the games
+    // screen, never here.
     Widget body;
-    if (appState.loading) {
-      body = GameTriviaLoader(
-        status: loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...',
-      );
-    } else if (appState.consolesList.isEmpty) {
+    if (appState.consolesList.isEmpty) {
       body = Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -55,29 +48,6 @@ class ConsoleGridScreen extends ConsumerWidget {
           ),
         ),
       );
-    } else if (errorMessage.isNotEmpty) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
-              const SizedBox(height: 12),
-              Text(errorMessage, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () {
-                  final console = appState.selectedConsole;
-                  if (console != null) ref.read(catalogProvider.notifier).loadCatalog(console);
-                },
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
     } else {
       final tiles = [
         for (final console in appState.consolesList) _consoleTile(context, ref, console),
@@ -85,7 +55,7 @@ class ConsoleGridScreen extends ConsumerWidget {
       body = _viewFor(appState.consoleViewMode, tiles);
     }
 
-    final showToggle = !appState.loading && appState.consolesList.isNotEmpty && errorMessage.isEmpty;
+    final showToggle = appState.consolesList.isNotEmpty;
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(96),
