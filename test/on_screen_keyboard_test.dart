@@ -139,6 +139,46 @@ void main() {
     expect(calls, contains('TextInput.hide'));
   });
 
+  for (final k in [LogicalKeyboardKey.gameButtonA, LogicalKeyboardKey.select]) {
+    testWidgets('${k.keyLabel.isEmpty ? k.debugName : k.keyLabel} on a focused text field opens the keyboard only when enabled', (t) async {
+      for (final enabled in [true, false]) {
+        await t.pumpWidget(app(form(), onScreenKeyboard: enabled));
+        await t.pump();
+        await press(t, LogicalKeyboardKey.arrowDown);
+        expect(field.hasPrimaryFocus, isTrue);
+        await press(t, k);
+        expect(find.byKey(osk), enabled ? findsOneWidget : findsNothing);
+        await t.pumpWidget(const SizedBox());
+      }
+    });
+  }
+
+  testWidgets('B with a text field focused pops the page exactly once', (t) async {
+    final nav = GlobalKey<NavigatorState>();
+    var pops = 0;
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      navigatorObservers: [_Pops(() => pops++)],
+      builder: (c, child) => DpadScope(navigatorKey: nav, onScreenKeyboard: true, child: child!),
+      home: Builder(
+        builder: (c) => TextButton(
+          autofocus: true,
+          onPressed: () => Navigator.of(c).push(MaterialPageRoute(
+            builder: (_) => Scaffold(body: TextField(autofocus: true, controller: text, focusNode: field)),
+          )),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    expect(field.hasPrimaryFocus, isTrue);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+    await t.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(pops, 1);
+  });
+
   testWidgets('Escape hides the keyboard and keeps focus on the field', (t) async {
     await t.pumpWidget(app(form()));
     await t.pump();
@@ -277,4 +317,11 @@ void main() {
     await press(t, LogicalKeyboardKey.enter);
     expect(find.byKey(osk), findsNothing);
   });
+}
+
+class _Pops extends NavigatorObserver {
+  _Pops(this.onPop);
+  final VoidCallback onPop;
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onPop();
 }
