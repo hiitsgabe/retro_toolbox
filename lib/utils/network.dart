@@ -134,7 +134,7 @@ Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra
     'Pragma': 'no-cache',
     'Cache-Control': 'no-cache',
     // 'Host': Uri.tryParse(url)?.host ?? 'localhost', // Dont set 'Host', it can lead to 404 errors in Android
-    // No 'Referer': redirect targets (e.g. Yandex storage behind ultranx) reject
+    // No 'Referer': redirect targets (e.g. some storage hosts) reject
     // requests carrying one ("Invalid Referer"); downloaders forward it on redirect.
     'sec-ch-ua': randomSecChUa(),
     'sec-ch-ua-mobile': randomSecChUaMobile(),
