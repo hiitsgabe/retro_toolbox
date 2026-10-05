@@ -117,7 +117,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     await _installCatalog(() => _catalogService.setCatalogFromJson(json));
   }
 
+  // B on step 0 and Finish both leave; a second press before markSeen
+  // returns must not pop the route below.
+  bool _leaving = false;
+
   Future<void> _finish() async {
+    if (_leaving) return;
+    _leaving = true;
     await SetupWizardScreen.markSeen();
     if (mounted) Navigator.of(context).pop();
   }

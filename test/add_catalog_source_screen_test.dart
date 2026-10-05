@@ -35,10 +35,21 @@ void main() {
     expect(find.text('Enter a name.'), findsOneWidget);
   });
 
-  testWidgets('Start runs Add (validation snackbar proves it ran)', (tester) async {
-    await pump(tester);
-    await tester.tap(find.byType(TextField).first); // focus inside the screen
-    await tester.pump();
+  testWidgets('Start runs Add on a cold route (validation snackbar proves it ran)', (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        navigatorKey: key,
+        builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
+        home: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => Navigator.of(ctx).push(MaterialPageRoute<void>(builder: (_) => const AddCatalogSourceScreen())),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.f5);
     await tester.pump();
     expect(find.text('Enter a name.'), findsOneWidget);

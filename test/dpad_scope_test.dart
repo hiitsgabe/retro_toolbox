@@ -397,6 +397,49 @@ void main() {
     expect(pressed, 1);
   });
 
+  // A pushed route starts with focus on its scope (above the page's Actions).
+  Future<void> pushCold(WidgetTester t, Widget page) async {
+    await t.pumpWidget(app(Builder(
+      builder: (c) => TextButton(
+        onPressed: () => Navigator.of(c).push(MaterialPageRoute<void>(builder: (_) => page)),
+        child: const Text('open'),
+      ),
+    )));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, isA<FocusScopeNode>());
+  }
+
+  testWidgets('Start on a cold route reaches the screen binding', (t) async {
+    var ran = 0;
+    await pushCold(
+      t,
+      Actions(
+        actions: {PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => ran++)},
+        child: Scaffold(body: ElevatedButton(onPressed: () {}, child: const Text('go'))),
+      ),
+    );
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pump();
+    expect(ran, 1);
+  });
+
+  testWidgets('Start on a cold route without a binding presses nothing (not the back button)', (t) async {
+    var pressed = 0;
+    await pushCold(
+      t,
+      Scaffold(
+        appBar: AppBar(title: const Text('second')),
+        body: ElevatedButton(onPressed: () => pressed++, child: const Text('go')),
+      ),
+    );
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(find.text('second'), findsOneWidget);
+    expect(pressed, 0);
+    expect(FocusManager.instance.primaryFocus, isNot(isA<FocusScopeNode>())); // woke focus
+  });
+
   for (final end in [false, true]) {
     for (final k in end ? [LogicalKeyboardKey.end, LogicalKeyboardKey.gameButtonRight2] : [LogicalKeyboardKey.home, LogicalKeyboardKey.gameButtonLeft2]) {
       testWidgets('${k.debugName} focuses the ${end ? 'last' : 'first'} item of a long list', (t) async {
