@@ -1,3 +1,5 @@
+enum CatalogSort { name, sizeDesc, sizeAsc, newest, popular }
+
 class CatalogFilter {
   final Set<String> regions;
   final Set<String> languages;
@@ -10,6 +12,7 @@ class CatalogFilter {
   final bool showLatestRevisionOnly;
   final bool showFavoritesOnly;
   final bool showInLibraryOnly;
+  final CatalogSort sort;
 
   const CatalogFilter({
     this.regions = const {'USA'},
@@ -23,6 +26,7 @@ class CatalogFilter {
     this.showLatestRevisionOnly = true,
     this.showFavoritesOnly = false,
     this.showInLibraryOnly = false,
+    this.sort = CatalogSort.name,
   });
 
   CatalogFilter copyWith({
@@ -39,6 +43,7 @@ class CatalogFilter {
     bool? showLatestRevisionOnly,
     bool? showFavoritesOnly,
     bool? showInLibraryOnly,
+    CatalogSort? sort,
     String? version,
     int? minYear,
     int? maxYear,
@@ -55,6 +60,7 @@ class CatalogFilter {
       showLatestRevisionOnly: showLatestRevisionOnly ?? this.showLatestRevisionOnly,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       showInLibraryOnly: showInLibraryOnly ?? this.showInLibraryOnly,
+      sort: sort ?? this.sort,
     );
   }
 

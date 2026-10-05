@@ -129,7 +129,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       if (gen == _loadGeneration && mounted &&
           games.isNotEmpty && state.filteredGamesCount == 0) {
         state = state.copyWith(
-          filter: const CatalogFilter(
+          filter: CatalogFilter(
             regions: {},
             languages: {},
             dumpQualities: {},
@@ -139,6 +139,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             showLatestRevisionOnly: false,
             showFavoritesOnly: false,
             showInLibraryOnly: false,
+            sort: state.filter.sort,
           ),
         );
         await updateFilteredGames(immediate: true);
@@ -364,6 +365,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       showInLibraryOnly: !state.filter.showInLibraryOnly,
     );
     updateFilter(newFilter);
+  }
+
+  void setSort(CatalogSort sort) {
+    updateFilter(state.filter.copyWith(sort: sort));
   }
 
   void clearFilters() async {

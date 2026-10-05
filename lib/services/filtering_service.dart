@@ -24,6 +24,21 @@ class FilteringService {
       allMatched = _filterLatestRevisions(allMatched);
     }
 
+    final key = _sortKey(filter.sort);
+    if (key != null) {
+      // Games without the key go last; equal keys keep name order (the sort
+      // isn't stable, so the name is compared explicitly).
+      allMatched.sort((a, b) {
+        final ka = key(a), kb = key(b);
+        if (ka != kb) {
+          if (ka == null) return 1;
+          if (kb == null) return -1;
+          return kb.compareTo(ka);
+        }
+        return a.displayTitle.toLowerCase().compareTo(b.displayTitle.toLowerCase());
+      });
+    }
+
     final paginatedGames = allMatched.skip(skip).take(limit).toList();
 
     return FilterResult(
@@ -32,6 +47,16 @@ class FilteringService {
       hasMore: skip + limit < allMatched.length,
     );
   }
+
+  /// The value [sort] orders by, largest first (null: a game lacks it), or
+  /// null for the name order the list already has.
+  static int? Function(Game)? _sortKey(CatalogSort sort) => switch (sort) {
+        CatalogSort.name => null,
+        CatalogSort.sizeDesc => (g) => g.size > 0 ? g.size : null,
+        CatalogSort.sizeAsc => (g) => g.size > 0 ? -g.size : null,
+        CatalogSort.newest => (g) => g.details?.releaseDate,
+        CatalogSort.popular => (g) => g.details?.popularity,
+      };
 
   static bool _matchesFilter(Game game, FilterInput input) {
     final filterText = input.filterText.toLowerCase();

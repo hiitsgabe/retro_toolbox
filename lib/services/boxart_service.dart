@@ -78,7 +78,7 @@ class BoxartService {
 
       final urls = await matchBoxartUrlsParallel([for (final g in games) path.basenameWithoutExtension(g.filename)], boxarts);
       return [
-        for (var i = 0; i < games.length; i++) urls[i] != null ? games[i].copyWith(details: GameDetails(boxart: urls[i])) : games[i],
+        for (var i = 0; i < games.length; i++) urls[i] != null ? games[i].copyWith(details: (games[i].details ?? const GameDetails()).copyWith(boxart: urls[i])) : games[i],
       ];
     } catch (e) {
       debugPrint('mutateGamesWithBoxarts error: $e');
