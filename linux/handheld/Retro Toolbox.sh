@@ -70,10 +70,23 @@ fi
 
 # Physical size (mm) drives flutter-pi's pixel ratio (10*px / (mm*38)).
 # Default: ~1.2x, whatever the panel resolution. RT_DISPLAY_MM overrides.
-if [ -z "$RT_DISPLAY_MM" ] && [ -r "$FB/virtual_size" ]; then
-  PX_W=$(cut -d, -f1 "$FB/virtual_size"); PX_H=$(cut -d, -f2 "$FB/virtual_size")
+# The panel's resolution: the connected DRM mode on DRM firmwares (fb0 may
+# be missing or double height there), else the framebuffer's current mode.
+PX=""
+if [ -z "$RETRO_TOOLBOX_FBDEV" ]; then
+  for c in /sys/class/drm/card*-*; do
+    [ "$(cat "$c/status" 2>/dev/null)" = connected ] || continue
+    PX=$(head -1 "$c/modes" 2>/dev/null | grep -o '^[0-9]*x[0-9]*')
+    [ -n "$PX" ] && break
+  done
+fi
+[ -z "$PX" ] && PX=$(head -1 "$FB/modes" 2>/dev/null | grep -o '[0-9]*x[0-9]*' | head -1)
+[ -z "$PX" ] && [ -r "$FB/virtual_size" ] && PX=$(tr ',' x < "$FB/virtual_size")
+if [ -z "$RT_DISPLAY_MM" ] && [ -n "$PX" ]; then
+  PX_W=${PX%x*}; PX_H=${PX#*x}
   RT_DISPLAY_MM="$(( PX_W * 10 / 46 )),$(( PX_H * 10 / 46 ))"
 fi
+echo "Display: ${PX:-unknown} px"
 echo "Display mm: ${RT_DISPLAY_MM:-71,53}"
 
 chmod +x ./flutter-pi
