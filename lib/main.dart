@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/screens/jdkv_server_screen.dart';
 import 'package:retro_toolbox/services/extraction_service.dart';
+import 'package:retro_toolbox/utils/focus_debug.dart';
 
 void main() {
   ExtractionService.initialize();
   WidgetsFlutterBinding.ensureInitialized();
+  installFocusDebug();
   // Tapping the JDKV notification asks the app to open the JDKV screen.
   FlutterForegroundTask.addTaskDataCallback((data) {
     if (data is Map && data['action'] == 'open_jdkv') {
