@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:rapidfuzz/rapidfuzz.dart';
 
+final _apostrophes = RegExp(r"['\u2019]");
 final _separators = RegExp(r'[_\W]+');
 final _numeric = RegExp(r'^\d+$');
 final _mixedToken = RegExp(r'^[a-z]+\d+$');
@@ -12,18 +13,39 @@ final _mixedInName = RegExp(r'\b[a-z]+\d+\b');
 final _bracketedId = RegExp(r'[\[(]([A-Za-z0-9-]{4,12})[\])]');
 final _bracketGroups = RegExp(r'\s*[\[(][^\])]*[\])]');
 
-String normalizeTitle(String name) {
-  return _separators
-      .allMatches(name.toLowerCase())
-      .fold<StringBuffer>(StringBuffer(), (b, m) {
-        b
-          ..write(name.substring(b.length, m.start).replaceAll('_', ' '))
-          ..write(' ');
-        return b;
-      })
-      .toString()
-      .trim();
+/// Lowercase words separated by single spaces: apostrophes dropped
+/// ("it's" -> "its"), any other punctuation a word break ("a: b-c" -> "a b c").
+String normalizeTitle(String name) =>
+    name.toLowerCase().replaceAll(_apostrophes, '').replaceAll(_separators, ' ').trim();
+
+final _roman = RegExp(r'^(?=[ivxl])l?x{0,3}(ix|iv|v?i{0,3})$');
+const _romanValue = {'i': 1, 'v': 5, 'x': 10, 'l': 50};
+
+/// The sequel numbers in a normalized name, arabic or roman ("2" = "ii"):
+/// a game and its box art must agree on them.
+Set<int> sequelMarkers(String normalized) {
+  final out = <int>{};
+  for (final t in normalized.split(' ')) {
+    if (_numeric.hasMatch(t)) {
+      out.add(int.parse(t));
+    } else if (_roman.hasMatch(t)) {
+      var v = 0;
+      for (var i = 0; i < t.length; i++) {
+        final c = _romanValue[t[i]]!;
+        final next = i + 1 < t.length ? _romanValue[t[i + 1]]! : 0;
+        v += c < next ? -c : c;
+      }
+      out.add(v);
+    }
+  }
+  return out;
 }
+
+/// Edition and filler words: a title may carry them on top of the box art
+/// name ("x game of the year edition" still gets "x"'s art).
+const _noise = {'the', 'of', 'game', 'year', 'goty', 'edition', 'special', 'collectors', 'limited', 'platinum', 'hits', 'classics', 'essentials', 'complete'};
+
+bool _sameMarkers(Set<int> a, Set<int> b) => a.length == b.length && a.containsAll(b);
 
 /// Box art names (normalized, plus "id:xxx" keys) tokenized once so each
 /// [matchTitle] call only touches the names sharing its rarest tokens.
@@ -37,13 +59,17 @@ class BoxartIndex {
   /// Per name: holds a letters+digits word ("abc2").
   final List<bool> hasMixed;
 
+  /// Per name: its [sequelMarkers].
+  final List<Set<int>> markers;
+
   /// Token -> ids of the names holding it, ascending (= listing order).
   final Map<String, List<int>> postings = {};
 
   BoxartIndex(this.boxarts)
       : names = boxarts.keys.toList(),
         tokens = [for (final n in boxarts.keys) n.split(' ').where((t) => t.length > 1).toSet()],
-        hasMixed = [for (final n in boxarts.keys) _mixedInName.hasMatch(n)] {
+        hasMixed = [for (final n in boxarts.keys) _mixedInName.hasMatch(n)],
+        markers = [for (final n in boxarts.keys) sequelMarkers(n)] {
     for (var id = 0; id < names.length; id++) {
       for (final t in tokens[id]) {
         postings.putIfAbsent(t, () => []).add(id);
@@ -64,15 +90,17 @@ String? matchTitle(String titleToMatch, BoxartIndex index) {
   final meaningful = [
     ...{
       for (final t in titleTokens)
-        if (!_numeric.hasMatch(t)) t
+        if (!_numeric.hasMatch(t) && !_noise.contains(t)) t
     },
   ];
   final titleHasMixed = titleTokens.any(_mixedToken.hasMatch);
+  final titleMarkers = sequelMarkers(normalizedTitle);
 
-  // A name survives when it has no stray "abc2" word and shares >= 70% of the
-  // title's non-numeric tokens.
+  // A name survives when it has no stray "abc2" word, the same sequel numbers
+  // and >= 70% of the title's non-numeric tokens.
   bool keep(int id) {
     if (!titleHasMixed && index.hasMixed[id]) return false;
+    if (!_sameMarkers(titleMarkers, index.markers[id])) return false;
     if (meaningful.isEmpty) return true;
     final nameTokens = index.tokens[id];
     return meaningful.where(nameTokens.contains).length >= meaningful.length * 0.7;
@@ -117,14 +145,18 @@ String? matchTitle(String titleToMatch, BoxartIndex index) {
     candidates = ids;
   }
 
+  // Token-set >= 90 admits a name; the closest whole name (token-sort) wins,
+  // so "a b" beats "a b c" for title "a b" instead of whichever came first.
   String? bestMatchName;
-  int highestScore = 0;
+  var best = -1;
   for (final id in candidates) {
-    final score = tokenSetRatio(normalizedTitle, index.names[id]).toInt();
-    if (score > highestScore && score >= 90) {
-      highestScore = score;
-      bestMatchName = index.names[id];
-      if (score >= 100) break; // nothing later can score strictly higher
+    final name = index.names[id];
+    if (tokenSetRatio(normalizedTitle, name) < 90) continue;
+    final score = tokenSortRatio(normalizedTitle, name).toInt();
+    if (score > best) {
+      best = score;
+      bestMatchName = name;
+      if (score >= 100) break;
     }
   }
   return bestMatchName == null ? null : index.boxarts[bestMatchName];
@@ -143,16 +175,13 @@ List<String?> matchBoxartUrls(List<String> names, Map<String, String> boxarts) {
       if (boxartUrl != null) break;
     }
 
-    boxartUrl ??= matchTitle(gameNameWithoutExt, index);
-
-    // ponytail: fallback strips "(...)"/"[...]" groups so decorated names like
-    // "Game (1982) (Mattel)" or "Game [ABCD12]" match plain boxart names.
-    // May pick a wrong region variant; better than no art.
+    // Exact full name (some listings keep the tags), else the name without its
+    // "(...)"/"[...]" groups: region, language, disc and date tags add words
+    // and numbers the box art name lacks.
+    boxartUrl ??= index.boxarts[normalizeTitle(gameNameWithoutExt)];
     if (boxartUrl == null) {
       final stripped = gameNameWithoutExt.replaceAll(_bracketGroups, '').trim();
-      if (stripped.isNotEmpty && stripped != gameNameWithoutExt) {
-        boxartUrl = matchTitle(stripped, index);
-      }
+      boxartUrl = matchTitle(stripped.isEmpty ? gameNameWithoutExt : stripped, index);
     }
     return boxartUrl;
   }).toList();
