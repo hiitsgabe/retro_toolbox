@@ -107,4 +107,12 @@ fi
 # --- nothing staged: no-op ---
 check "no update is a no-op" 'rt_apply_update "$G" "$P" >/dev/null && [ "$(cat "$G/flutter-pi")" = new ]'
 
+# --- a mixed port never starts ---
+check "rc 1 stops" 'rt_must_stop 1 "$T"'
+check "rc 0 starts" '! rt_must_stop 0 "$T"'
+check "rc 2 starts when the port is untouched" '! rt_must_stop 2 "$T"'
+touch "$T/UPDATE_FAILED.txt"
+check "rc 2 stops after an earlier part-way failure" 'rt_must_stop 2 "$T"'
+rm -f "$T/UPDATE_FAILED.txt"
+
 [ "$fails" -eq 0 ] && echo "all passed" || { echo "$fails failed"; exit 1; }
