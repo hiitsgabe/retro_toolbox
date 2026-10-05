@@ -161,7 +161,7 @@ void main() {
       await key(tester, LogicalKeyboardKey.f3);
       await tester.pump();
       expect(r.selected, {'/notes.txt'});
-      expect([for (final t in tester.widgetList<ListTile>(find.byType(ListTile))) (t.title as Text).data].skip(2), [
+      expect([for (final t in tester.widgetList<ListTile>(find.descendant(of: find.byType(BottomSheet), matching: find.byType(ListTile)))) (t.title as Text).data], [
         'Download',
         'Zip',
         'Delete',
@@ -191,6 +191,15 @@ void main() {
       expect(ran, ['copy']);
       expect(r.selected, {'/notes.txt'});
       expect(find.widgetWithText(ListTile, 'Copy'), findsNothing); // sheet closed
+    });
+
+    testWidgets('a fast double Y opens one sheet and leaves the entry selected', (tester) async {
+      final r = await pump(tester, defaultActions: true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(r.selected, {'/Saves'});
     });
 
     testWidgets('Clear selection in the sheet clears', (tester) async {

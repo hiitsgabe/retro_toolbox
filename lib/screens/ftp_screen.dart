@@ -175,7 +175,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
       }),
       onDelete: () => _confirmDelete(context, state, notifier),
       extraActions: () => [
-        BrowserAction(icon: Icons.upload_file, label: 'Upload', onPressed: state.transfer == null ? () => _upload(notifier) : null),
+        BrowserAction(icon: Icons.upload_file, label: 'Upload', onPressed: state.transfer == null && state.selected.isEmpty ? () => _upload(notifier) : null),
       ],
     );
   }

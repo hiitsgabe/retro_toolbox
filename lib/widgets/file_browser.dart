@@ -204,6 +204,20 @@ class FileBrowserView extends ConsumerWidget {
   /// With nothing selected, the focused [entry] is selected first so the list
   /// is the same one the selection bar would show.
   Future<void> _showActions(BuildContext context, BrowserItem? entry) async {
+    final nav = Navigator.of(context);
+    if (_sheetOpen[nav] == true) return; // a fast double press must not toggle twice or stack sheets
+    _sheetOpen[nav] = true;
+    try {
+      await _openActions(context, entry);
+    } finally {
+      _sheetOpen[nav] = false;
+    }
+  }
+
+  // Per navigator, so a sheet that never closes (a test ending) can't block another app.
+  static final _sheetOpen = Expando<bool>();
+
+  Future<void> _openActions(BuildContext context, BrowserItem? entry) async {
     var view = this;
     if (entry != null && selectable && selectedIds.isEmpty) {
       onToggleSelect(entry);
@@ -257,12 +271,14 @@ class FileBrowserView extends ConsumerWidget {
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       );
 
-  Widget _tile(BuildContext context, BrowserItem e, int index) {
+  Widget _tile(BuildContext context, BrowserItem e, int index) => _gamepad(context, e, _tileBody(context, e, index));
+
+  Widget _tileBody(BuildContext context, BrowserItem e, int index) {
     final theme = Theme.of(context);
     final selected = selectedIds.contains(e.id);
     // The checkbox is a sibling above the tile (not an overlay) so the d-pad's
     // Up from the tile reaches it.
-    return _gamepad(context, e, Column(
+    return Column(
       children: [
         if (selectable) Align(alignment: Alignment.centerLeft, child: _checkbox(e)),
         Expanded(
@@ -289,13 +305,15 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
       ],
-    ));
+    );
   }
 
-  Widget _row(BuildContext context, BrowserItem e, int index) {
+  Widget _row(BuildContext context, BrowserItem e, int index) => _gamepad(context, e, _rowBody(context, e, index));
+
+  Widget _rowBody(BuildContext context, BrowserItem e, int index) {
     final theme = Theme.of(context);
     final selected = selectedIds.contains(e.id);
-    return _gamepad(context, e, Row(
+    return Row(
       children: [
         if (selectable) _checkbox(e),
         Expanded(
@@ -312,7 +330,7 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
       ],
-    ));
+    );
   }
 
   Widget _selectionBar(BuildContext context) {

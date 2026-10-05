@@ -112,7 +112,7 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown); // game.zip
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    final labels = [for (final t in tester.widgetList<ListTile>(find.byType(ListTile))) (t.title as Text).data].skip(3).toList();
+    final labels = [for (final t in tester.widgetList<ListTile>(find.descendant(of: find.byType(BottomSheet), matching: find.byType(ListTile)))) (t.title as Text).data];
     expect(labels, ['Copy', 'Move', 'Rename', 'Zip', 'Extract here', 'Delete', 'Clear selection', 'New folder']);
 
     await tester.tap(find.widgetWithText(ListTile, 'Delete'));
@@ -197,5 +197,27 @@ void main() {
     expect(find.text('Empty'), findsOneWidget);
     await press(tester, LogicalKeyboardKey.f5);
     expect(container.read(taskQueueProvider).tasks.single.params['destDir'], p.join(root.path, 'Saves'));
+  });
+
+  testWidgets('at the storage list Y offers no New folder or Paste here', (tester) async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    await tester.runAsync(() async {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          navigatorKey: navKey,
+          builder: (c, child) => DpadScope(navigatorKey: navKey, child: child!),
+          home: const FileExplorerScreen(),
+        ),
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing); // nothing to offer at the roots
+    expect(find.text('New folder'), findsNothing);
+    expect(find.text('Paste here'), findsNothing);
   });
 }

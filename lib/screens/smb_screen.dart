@@ -240,7 +240,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       }),
       onDelete: () => _confirmDelete(context, state, notifier),
       extraActions: () => [
-        BrowserAction(icon: Icons.upload_file, label: 'Upload', onPressed: state.transfer == null && !state.atRoot ? () => _upload(notifier) : null),
+        BrowserAction(icon: Icons.upload_file, label: 'Upload', onPressed: state.transfer == null && !state.atRoot && state.selected.isEmpty ? () => _upload(notifier) : null),
       ],
     );
   }
