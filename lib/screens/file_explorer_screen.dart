@@ -10,6 +10,7 @@ import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/archive_extract_service.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/services/file_ops.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/file_browser.dart';
 
@@ -233,7 +234,7 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
         title: const Text('Delete?'),
         content: Text('Delete ${_labelFor(paths)}? Folders are deleted with everything inside. This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
         ],
       ),
@@ -288,57 +289,78 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _up();
       },
-      child: Scaffold(
-        appBar: AppBar(title: const Text('File Explorer'), toolbarHeight: compact ? 48 : null),
-        body: Column(
-          children: [
-            Expanded(
-              child: FileBrowserView(
-                locationLabel: _dir ?? 'Storage',
-                canGoUp: !atRoots,
-                busy: _busy,
-                error: _error,
-                items: items,
-                selectedIds: _selected,
-                selectable: !atRoots,
-                onUp: _up,
-                onRefresh: atRoots ? _loadRoots : _refresh,
-                onOpen: (item) => _load(item.id),
-                onToggleSelect: (item) => setState(() {
-                  _selected = {..._selected};
-                  _selected.contains(item.id) ? _selected.remove(item.id) : _selected.add(item.id);
-                }),
-                onClearSelection: () => setState(() => _selected = {}),
-                toolbarActions: [
-                  if (!atRoots) IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: 'New folder', onPressed: _busy ? null : _newFolder),
-                  if (_roots.isNotEmpty) _storagePicker(),
-                ],
-                selectionActions: [
-                  BrowserAction(
-                    icon: Icons.copy,
-                    label: 'Copy',
-                    onPressed: () => setState(() {
-                      _clipboard = _Clipboard(selected, false);
-                      _selected = {};
+      // Start pastes when something is waiting to be pasted here.
+      child: Actions(
+        actions: {
+          if (_clipboard != null && !atRoots)
+            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) {
+              _paste();
+              return null;
+            }),
+        },
+        // Own scope, so focus lost with a closed folder's rows lands here (under
+        // the Actions above) instead of the route.
+        child: FocusScope(
+          child: Scaffold(
+            appBar: AppBar(title: const Text('File Explorer'), toolbarHeight: compact ? 48 : null),
+            body: Column(
+              children: [
+                Expanded(
+                  child: FileBrowserView(
+                    locationLabel: _dir ?? 'Storage',
+                    canGoUp: !atRoots,
+                    busy: _busy,
+                    error: _error,
+                    items: items,
+                    selectedIds: _selected,
+                    selectable: !atRoots,
+                    onUp: _up,
+                    onRefresh: atRoots ? _loadRoots : _refresh,
+                    onOpen: (item) => _load(item.id),
+                    onToggleSelect: (item) => setState(() {
+                      _selected = {..._selected};
+                      _selected.contains(item.id) ? _selected.remove(item.id) : _selected.add(item.id);
                     }),
+                    onClearSelection: () => setState(() => _selected = {}),
+                    extraActions: () => [
+                      if (!atRoots) BrowserAction(icon: Icons.create_new_folder_outlined, label: 'New folder', onPressed: _busy ? null : _newFolder),
+                      if (_clipboard != null) ...[
+                        BrowserAction(icon: Icons.content_paste, label: 'Paste here', onPressed: atRoots ? null : _paste),
+                        BrowserAction(icon: Icons.content_paste_off, label: 'Cancel paste', onPressed: () => setState(() => _clipboard = null)),
+                      ],
+                    ],
+                    toolbarActions: [
+                      if (!atRoots) IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: 'New folder', onPressed: _busy ? null : _newFolder),
+                      if (_roots.isNotEmpty) _storagePicker(),
+                    ],
+                    selectionActions: [
+                      BrowserAction(
+                        icon: Icons.copy,
+                        label: 'Copy',
+                        onPressed: () => setState(() {
+                          _clipboard = _Clipboard(selected, false);
+                          _selected = {};
+                        }),
+                      ),
+                      BrowserAction(
+                        icon: Icons.drive_file_move_outline,
+                        label: 'Move',
+                        onPressed: () => setState(() {
+                          _clipboard = _Clipboard(selected, true);
+                          _selected = {};
+                        }),
+                      ),
+                      BrowserAction(icon: Icons.drive_file_rename_outline, label: 'Rename', onPressed: single == null ? null : _rename),
+                      BrowserAction(icon: Icons.folder_zip_outlined, label: 'Zip', onPressed: _zip),
+                      BrowserAction(icon: Icons.unarchive_outlined, label: 'Extract here', onPressed: archive ? _extract : null),
+                      BrowserAction(icon: Icons.delete_outline, label: 'Delete', onPressed: _delete, destructive: true),
+                    ],
                   ),
-                  BrowserAction(
-                    icon: Icons.drive_file_move_outline,
-                    label: 'Move',
-                    onPressed: () => setState(() {
-                      _clipboard = _Clipboard(selected, true);
-                      _selected = {};
-                    }),
-                  ),
-                  BrowserAction(icon: Icons.drive_file_rename_outline, label: 'Rename', onPressed: single == null ? null : _rename),
-                  BrowserAction(icon: Icons.folder_zip_outlined, label: 'Zip', onPressed: _zip),
-                  BrowserAction(icon: Icons.unarchive_outlined, label: 'Extract here', onPressed: archive ? _extract : null),
-                  BrowserAction(icon: Icons.delete_outline, label: 'Delete', onPressed: _delete, destructive: true),
-                ],
-              ),
+                ),
+                if (_clipboard != null) _pasteBar(Theme.of(context), atRoots),
+              ],
             ),
-            if (_clipboard != null) _pasteBar(Theme.of(context), atRoots),
-          ],
+          ),
         ),
       ),
     );

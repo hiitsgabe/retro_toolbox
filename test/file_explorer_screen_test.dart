@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/file_explorer_screen.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -23,13 +24,19 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
+  final navKey = GlobalKey<NavigatorState>();
+
   Future<ProviderContainer> open(WidgetTester tester) async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
     await tester.runAsync(() async {
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(home: FileExplorerScreen(initialPath: root.path)),
+        child: MaterialApp(
+          navigatorKey: navKey,
+          builder: (c, child) => DpadScope(navigatorKey: navKey, child: child!),
+          home: FileExplorerScreen(initialPath: root.path),
+        ),
       ));
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
@@ -92,5 +99,103 @@ void main() {
 
     expect(find.byType(GridView), findsOneWidget);
     expect((await SharedPreferences.getInstance()).getString('file_browser_layout'), 'grid');
+  });
+
+  Future<void> press(WidgetTester tester, LogicalKeyboardKey k) async {
+    await tester.sendKeyEvent(k);
+    await tester.pump();
+  }
+
+  // Sorted: Saves, game.zip, notes.txt. Focus starts on Saves.
+  testWidgets('Y marks the focused entry and lists the explorer actions; Delete asks with Cancel focused', (tester) async {
+    await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown); // game.zip
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    final labels = [for (final t in tester.widgetList<ListTile>(find.byType(ListTile))) (t.title as Text).data].skip(3).toList();
+    expect(labels, ['Copy', 'Move', 'Rename', 'Zip', 'Extract here', 'Delete', 'Clear selection', 'New folder']);
+
+    await tester.tap(find.widgetWithText(ListTile, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete?'), findsOneWidget);
+    final focus = FocusManager.instance.primaryFocus!;
+    expect(find.descendant(of: find.byWidget(focus.context!.widget), matching: find.text('Cancel')), findsOneWidget);
+    expect(File(p.join(root.path, 'game.zip')).existsSync(), isTrue);
+  });
+
+  testWidgets('X marks, so Y lists Rename only for one item and not Extract for a plain file', (tester) async {
+    await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown); // notes.txt
+    await press(tester, LogicalKeyboardKey.f2);
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Rename'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Extract here'), findsNothing);
+  });
+
+  testWidgets('with a clipboard, Y offers Paste here and Cancel paste', (tester) async {
+    final container = await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown); // notes.txt
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('open the destination and paste'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.f3); // nothing selected: acts on the focused entry
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Paste here'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Cancel paste'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(ListTile, 'Cancel paste'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(ListTile, 'Cancel paste'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('open the destination and paste'), findsNothing);
+    expect(container.read(taskQueueProvider).tasks, isEmpty);
+  });
+
+  testWidgets('Start pastes the clipboard into the current folder', (tester) async {
+    final container = await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.f5);
+    final task = container.read(taskQueueProvider).tasks.single;
+    expect(task.type, TaskType.fileCopy);
+    expect(task.params['destDir'], root.path);
+    expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
+    expect(find.textContaining('open the destination and paste'), findsNothing);
+  });
+
+  testWidgets('Start without a clipboard activates the focused row as before', (tester) async {
+    await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown); // game.zip: activating selects it
+    await press(tester, LogicalKeyboardKey.f5);
+    expect(action(tester, 'Extract here').onPressed, isNotNull);
+  });
+
+  testWidgets('Start pastes into an empty folder just opened with A', (tester) async {
+    final container = await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowDown); // notes.txt
+    await press(tester, LogicalKeyboardKey.f3);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    await press(tester, LogicalKeyboardKey.arrowUp); // Saves (empty)
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    expect(find.text('Empty'), findsOneWidget);
+    await press(tester, LogicalKeyboardKey.f5);
+    expect(container.read(taskQueueProvider).tasks.single.params['destDir'], p.join(root.path, 'Saves'));
   });
 }

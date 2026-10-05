@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/browser_layout_provider.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 /// One row in a [FileBrowserView]. [id] must be unique within the listing
 /// (a path or a name) — it keys selection and maps back to the underlying
@@ -68,6 +69,11 @@ class FileBrowserView extends ConsumerWidget {
   /// Extra buttons at the right of the location bar (e.g. New folder).
   final List<Widget> toolbarActions;
 
+  /// Screen-level actions (New folder, Paste, Upload) added to the Y actions
+  /// sheet. Called when the sheet opens; entries with a null `onPressed` are
+  /// left out.
+  final List<BrowserAction> Function()? extraActions;
+
   const FileBrowserView({
     super.key,
     required this.locationLabel,
@@ -88,6 +94,7 @@ class FileBrowserView extends ConsumerWidget {
     this.onDelete,
     this.selectionActions,
     this.toolbarActions = const [],
+    this.extraActions,
   });
 
   @override
@@ -97,6 +104,21 @@ class FileBrowserView extends ConsumerWidget {
     // dense list (more entries) and the rest the icon grid.
     final layout = ref.watch(browserLayoutProvider) ?? (MediaQuery.sizeOf(context).height < 640 ? BrowserLayout.list : BrowserLayout.grid);
     final asList = layout == BrowserLayout.list;
+    // Y outside a row (toolbar, selection bar); rows bind their own, with the entry.
+    return Builder(
+      builder: (ctx) => Actions(
+        actions: {
+          ItemActionsIntent: CallbackAction<ItemActionsIntent>(onInvoke: (_) {
+            _showActions(ctx, null);
+            return null;
+          }),
+        },
+        child: _body(context, ref, theme, asList),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, WidgetRef ref, ThemeData theme, bool asList) {
     return Column(
       children: [
         Material(
@@ -146,6 +168,76 @@ class FileBrowserView extends ConsumerWidget {
     );
   }
 
+  /// X marks the entry, Y opens the actions sheet for it.
+  Widget _gamepad(BuildContext context, BrowserItem e, Widget child) => Actions(
+        actions: {
+          if (selectable)
+            MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) {
+              onToggleSelect(e);
+              return null;
+            }),
+          ItemActionsIntent: CallbackAction<ItemActionsIntent>(onInvoke: (_) {
+            _showActions(context, e);
+            return null;
+          }),
+        },
+        child: child,
+      );
+
+  /// What the selection bar offers right now, plus Clear and the screen extras.
+  List<BrowserAction> _sheetActions() {
+    final hasSelection = selectedIds.isNotEmpty;
+    final all = <BrowserAction>[
+      if (hasSelection && transfer == null)
+        ...(selectionActions ??
+            [
+              BrowserAction(icon: Icons.download, label: 'Download', onPressed: onDownload),
+              BrowserAction(icon: Icons.folder_zip, label: 'Zip', onPressed: onZip),
+              BrowserAction(icon: Icons.delete, label: 'Delete', onPressed: onDelete, destructive: true),
+            ]),
+      if (hasSelection) BrowserAction(icon: Icons.close, label: 'Clear selection', onPressed: onClearSelection),
+      ...?extraActions?.call(),
+    ];
+    return [for (final a in all) if (a.onPressed != null) a];
+  }
+
+  /// With nothing selected, the focused [entry] is selected first so the list
+  /// is the same one the selection bar would show.
+  Future<void> _showActions(BuildContext context, BrowserItem? entry) async {
+    var view = this;
+    if (entry != null && selectable && selectedIds.isEmpty) {
+      onToggleSelect(entry);
+      await WidgetsBinding.instance.endOfFrame; // the parent rebuilds with the new selection
+      if (!context.mounted) return;
+      view = context.findAncestorWidgetOfExactType<FileBrowserView>() ?? this;
+    }
+    final actions = view._sheetActions();
+    if (actions.isEmpty) return;
+    final error = Theme.of(context).colorScheme.error;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < actions.length; i++)
+                ListTile(
+                  autofocus: i == 0,
+                  leading: Icon(actions[i].icon, color: actions[i].destructive ? error : null),
+                  title: Text(actions[i].label, style: actions[i].destructive ? TextStyle(color: error) : null),
+                  onTap: () {
+                    Navigator.pop(sheet);
+                    actions[i].onPressed!();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Folders open (ignored while busy); files toggle selection. Where nothing
   /// is selectable (the SMB shares root) every entry just opens. Never null, so
   /// the row keeps focus while busy (a null onTap would make it unfocusable).
@@ -170,7 +262,7 @@ class FileBrowserView extends ConsumerWidget {
     final selected = selectedIds.contains(e.id);
     // The checkbox is a sibling above the tile (not an overlay) so the d-pad's
     // Up from the tile reaches it.
-    return Column(
+    return _gamepad(context, e, Column(
       children: [
         if (selectable) Align(alignment: Alignment.centerLeft, child: _checkbox(e)),
         Expanded(
@@ -197,13 +289,13 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
       ],
-    );
+    ));
   }
 
   Widget _row(BuildContext context, BrowserItem e, int index) {
     final theme = Theme.of(context);
     final selected = selectedIds.contains(e.id);
-    return Row(
+    return _gamepad(context, e, Row(
       children: [
         if (selectable) _checkbox(e),
         Expanded(
@@ -220,7 +312,7 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
       ],
-    );
+    ));
   }
 
   Widget _selectionBar(BuildContext context) {
