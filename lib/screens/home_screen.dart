@@ -83,6 +83,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
                               const SizedBox(height: 12),
                               Text(errorMessage, textAlign: TextAlign.center),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 12,
+                                runSpacing: 8,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: appState.selectedConsole == null
+                                        ? null
+                                        : () => ref.read(catalogProvider.notifier).loadCatalog(appState.selectedConsole!),
+                                    icon: const Icon(Icons.refresh),
+                                    label: const Text('Retry'),
+                                  ),
+                                  // Never a dead end: a console that fails to load
+                                  // leads back to the console list.
+                                  OutlinedButton.icon(
+                                    autofocus: true,
+                                    onPressed: () => Navigator.maybePop(context),
+                                    icon: const Icon(Icons.arrow_back),
+                                    label: const Text('Choose another console'),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
