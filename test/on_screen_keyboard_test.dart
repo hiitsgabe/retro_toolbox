@@ -89,20 +89,23 @@ void main() {
     expect(field.hasPrimaryFocus, isFalse, reason: 'the keyboard owns the d-pad');
   });
 
-  testWidgets('gamepad shortcuts: X space, Y backspace, L1/R1 caret', (t) async {
+  testWidgets('handheld keys: X (F2) space, Y (F3) backspace, L1/R1 caret, Select (F4) hides', (t) async {
     text.text = 'ab';
     await t.pumpWidget(app(form()));
     await t.pump();
     await press(t, LogicalKeyboardKey.arrowDown);
     await press(t, LogicalKeyboardKey.enter);
     await press(t, LogicalKeyboardKey.pageUp); // caret between a|b
-    await press(t, LogicalKeyboardKey.space);
+    await press(t, LogicalKeyboardKey.f2);
     expect(text.text, 'a b');
-    await press(t, LogicalKeyboardKey.tab);
+    await press(t, LogicalKeyboardKey.f3);
     expect(text.text, 'ab');
     await press(t, LogicalKeyboardKey.pageDown);
-    await press(t, LogicalKeyboardKey.space);
+    await press(t, LogicalKeyboardKey.space); // a physical keyboard's space still types
     expect(text.text, 'ab ');
+    await press(t, LogicalKeyboardKey.f4);
+    expect(find.byKey(osk), findsNothing);
+    expect(field.hasPrimaryFocus, isTrue);
   });
 
   testWidgets('gamepad buttons in the keyboard: X space, Y backspace, L1/R1 caret, B hides', (t) async {
@@ -324,7 +327,7 @@ void main() {
     await t.pumpWidget(app(form(keyboardType: TextInputType.number)));
     await t.pump();
     await open(t);
-    await press(t, LogicalKeyboardKey.space);
+    await press(t, LogicalKeyboardKey.f2);
     expect(text.text, '');
   });
 
