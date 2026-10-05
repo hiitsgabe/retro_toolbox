@@ -4,6 +4,72 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 
+/// Full-screen box art viewer; closes on tap, and on B (it is a popup route).
+Future<void> showBoxartViewer(BuildContext context, Game game) {
+  final boxart = game.boxart;
+  if (boxart == null) return Future.value();
+  return showDialog(
+    context: context,
+    builder: (_) => Dialog(
+      insetPadding: EdgeInsets.zero,
+      backgroundColor: Colors.transparent,
+      child: Stack(
+        children: [
+          PhotoView(
+            imageProvider: CachedNetworkImageProvider(boxart),
+            backgroundDecoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
+            minScale: PhotoViewComputedScale.contained,
+            maxScale: PhotoViewComputedScale.covered * 3.0,
+            onTapUp: (context, details, controllerValue) => Navigator.of(context).pop(),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            // IgnorePointer so taps still reach PhotoView to dismiss.
+            child: IgnorePointer(child: _boxartInfoOverlay(game)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _boxartInfoOverlay(Game game) {
+  return Container(
+    padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.transparent, Colors.black87],
+      ),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          game.displayTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (game.size > 0) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.sd_storage_outlined, size: 14, color: Colors.white70),
+              const SizedBox(width: 6),
+              Text(formatBytes(game.size), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class GameBoxart extends StatelessWidget {
   final Game game;
   final double size;
@@ -15,41 +81,6 @@ class GameBoxart extends StatelessWidget {
     this.size = 40,
     this.placeholder,
   });
-
-  Widget _infoOverlay(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.transparent, Colors.black87],
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            game.displayTitle,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (game.size > 0) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                const Icon(Icons.sd_storage_outlined, size: 14, color: Colors.white70),
-                const SizedBox(width: 6),
-                Text(formatBytes(game.size), style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,33 +103,7 @@ class GameBoxart extends StatelessWidget {
       ),
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (_) => Dialog(
-              insetPadding: EdgeInsets.zero,
-              backgroundColor: Colors.transparent,
-              child: Stack(
-                children: [
-                  PhotoView(
-                    imageProvider: CachedNetworkImageProvider(boxart),
-                    backgroundDecoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
-                    minScale: PhotoViewComputedScale.contained,
-                    maxScale: PhotoViewComputedScale.covered * 3.0,
-                    onTapUp: (context, details, controllerValue) => Navigator.of(context).pop(),
-                  ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    // IgnorePointer so taps still reach PhotoView to dismiss.
-                    child: IgnorePointer(child: _infoOverlay(context)),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+        onTap: () => showBoxartViewer(context, game),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(1),
           child: CachedNetworkImage(

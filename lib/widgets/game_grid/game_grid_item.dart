@@ -6,15 +6,18 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 
 class GameGridItem extends ConsumerStatefulWidget {
   final Game game;
   final double aspectRatio;
+  final bool selectable;
 
   const GameGridItem({
     super.key,
     required this.game,
     this.aspectRatio = 0.75,
+    this.selectable = true,
   });
 
   @override
@@ -45,6 +48,20 @@ class _GameGridItemState extends ConsumerState<GameGridItem> {
       borderColor = Theme.of(context).colorScheme.inversePrimary;
     }
 
+    // One focus stop per card (A opens the menu); inner controls are
+    // ExcludeFocus'd so the d-pad skips them but touch still hits them.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        focusColor: Colors.transparent, // DpadScope draws the one outline
+        borderRadius: BorderRadius.circular(4),
+        onTap: () => showGameActionMenu(context, game, selectable: widget.selectable),
+        child: _card(context, game, aspectRatio, catalogNotifier, gameState, isSelected, borderColor),
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context, Game game, double aspectRatio, CatalogNotifier catalogNotifier, GameState gameState, bool isSelected, Color? borderColor) {
     return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
@@ -73,12 +90,14 @@ class _GameGridItemState extends ConsumerState<GameGridItem> {
                     child: SizedBox(
                       width: 24,
                       height: 24,
-                      child: Checkbox(
-                        value: isSelected,
-                        onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(game.gameId) : null,
-                        shape: CircleBorder(),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
+                      child: ExcludeFocus(
+                        child: Checkbox(
+                          value: isSelected,
+                          onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(game.gameId) : null,
+                          shape: CircleBorder(),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
                     ),
                   ),
@@ -221,10 +240,12 @@ class _GameGridItemState extends ConsumerState<GameGridItem> {
                         width: 1,
                       ),
                     ),
-                    child: GameActionButtons(
-                      game: game,
-                      gameState: gameState,
-                      isNarrow: true,
+                    child: ExcludeFocus(
+                      child: GameActionButtons(
+                        game: game,
+                        gameState: gameState,
+                        isNarrow: true,
+                      ),
                     ),
                   ),
                 ),
