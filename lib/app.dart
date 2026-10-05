@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -34,7 +35,7 @@ class RetroToolboxApp extends StatelessWidget {
         ),
       ),
       builder: (context, child) =>
-          DpadScope(navigatorKey: navigatorKey, child: child!),
+          DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current, child: child!),
       home: const MenuScreen(),
     );
   }
