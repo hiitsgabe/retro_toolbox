@@ -71,6 +71,55 @@ void main() {
     expect(find.text('second'), findsNothing);
   });
 
+  testWidgets('gamepad B pops the top page exactly once', (t) async {
+    final nav = GlobalKey<NavigatorState>();
+    final observer = _PopCounter();
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      navigatorObservers: [observer],
+      builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
+      home: Builder(
+        builder: (c) => TextButton(
+          autofocus: true,
+          onPressed: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('second')))),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+    await t.pumpAndSettle();
+    expect(find.text('second'), findsNothing);
+    expect(observer.pops, 1);
+  });
+
+  testWidgets('gamepad R1/L1 page focus like PageDown/PageUp', (t) async {
+    await t.pumpWidget(app(Scaffold(
+      body: ListView(children: [
+        for (var i = 0; i < 20; i++) ListTile(autofocus: i == 0, title: Text('item $i'), onTap: () {}),
+      ]),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonRight1);
+    await t.pump();
+    expect(Focus.of(t.element(find.text('item 6'))).hasFocus, isTrue);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonLeft1);
+    await t.pump();
+    expect(Focus.of(t.element(find.text('item 0'))).hasFocus, isTrue);
+  });
+
+  testWidgets('gamepad Start activates the focused button', (t) async {
+    var pressed = 0;
+    await t.pumpWidget(app(Scaffold(
+      body: ElevatedButton(autofocus: true, onPressed: () => pressed++, child: const Text('go')),
+    )));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pump();
+    expect(pressed, 1);
+  });
+
   testWidgets('escape closes a dialog without popping the page below', (t) async {
     await t.pumpWidget(app(Builder(
       builder: (c) => TextButton(
@@ -273,4 +322,10 @@ void main() {
     final outline = t.renderObject<RenderBox>(find.byKey(const ValueKey('dpad-focus-outline')));
     expect(outline.parent, isA<RenderRepaintBoundary>());
   });
+}
+
+class _PopCounter extends NavigatorObserver {
+  int pops = 0;
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => pops++;
 }

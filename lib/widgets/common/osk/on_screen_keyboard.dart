@@ -5,7 +5,7 @@ import 'package:retro_toolbox/widgets/common/osk/osk_controller.dart';
 
 /// Docks the on-screen keyboard at the bottom of [overlay], typing into
 /// [field]. While open it owns the d-pad: arrows move between keys, A types,
-/// B hides, Y = backspace, X = space, L1/R1 = caret. At most one is open;
+/// B hides (Android: gameButtonB), Y = backspace, X = space, L1/R1 = caret. At most one is open;
 /// it closes itself when the field leaves the tree or its route stops being
 /// the top one.
 void showOnScreenKeyboard(OverlayState overlay, EditableTextState field) {
@@ -19,6 +19,8 @@ void showOnScreenKeyboard(OverlayState overlay, EditableTextState field) {
       SelectionChangedCause.keyboard,
     );
   }
+  // Android: keep Gboard from opening over the built-in keyboard.
+  SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   late final OverlayEntry entry;
   final route = ModalRoute.of(field.context);
   entry = _open = OverlayEntry(
@@ -225,6 +227,12 @@ class _OskState extends State<_Osk> {
           const SingleActivator(LogicalKeyboardKey.space): () => _numeric ? null : _type(' '),
           const SingleActivator(LogicalKeyboardKey.pageUp): () => _caret(-1),
           const SingleActivator(LogicalKeyboardKey.pageDown): () => _caret(1),
+          // Android gamepad buttons.
+          const SingleActivator(LogicalKeyboardKey.gameButtonB): _hide,
+          const SingleActivator(LogicalKeyboardKey.gameButtonY): _backspace,
+          const SingleActivator(LogicalKeyboardKey.gameButtonX): () => _numeric ? null : _type(' '),
+          const SingleActivator(LogicalKeyboardKey.gameButtonLeft1): () => _caret(-1),
+          const SingleActivator(LogicalKeyboardKey.gameButtonRight1): () => _caret(1),
         },
         child: FocusScope(
           node: _scope,

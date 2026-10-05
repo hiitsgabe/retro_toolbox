@@ -110,6 +110,12 @@ class _DpadScopeState extends State<DpadScope> {
     const SingleActivator(LogicalKeyboardKey.pageUp): const PageFocusIntent(false),
     const SingleActivator(LogicalKeyboardKey.pageDown): const PageFocusIntent(true),
     const SingleActivator(LogicalKeyboardKey.escape): const _BackIntent(),
+    // Android gamepads (Linux handhelds get keys from gptokeyb). Handling B
+    // here stops Android from also synthesizing a system Back.
+    const SingleActivator(LogicalKeyboardKey.gameButtonB): const _BackIntent(),
+    const SingleActivator(LogicalKeyboardKey.gameButtonLeft1): const PageFocusIntent(false),
+    const SingleActivator(LogicalKeyboardKey.gameButtonRight1): const PageFocusIntent(true),
+    const SingleActivator(LogicalKeyboardKey.gameButtonStart): const ActivateIntent(),
     const SingleActivator(LogicalKeyboardKey.enter): const _OskIntent(),
   };
 

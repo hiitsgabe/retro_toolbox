@@ -19,6 +19,7 @@ class AppSettings {
   final String? iaSecretKey;
   final String? iaCookies; // "logged-in-user=..; logged-in-sig=.." for restricted downloads
   final bool nszDecompressEnabled;
+  final bool useOnScreenKeyboard; // built-in keyboard instead of the platform IME (gamepads)
   final String? nszKeysPath;
   final String? chdmanPath; // user-set path to a chdman binary, if any
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
@@ -32,6 +33,7 @@ class AppSettings {
     this.iaSecretKey,
     this.iaCookies,
     this.nszDecompressEnabled = true,
+    this.useOnScreenKeyboard = false,
     this.nszKeysPath,
     this.chdmanPath,
     this.catalogSourceUrl,
@@ -53,6 +55,7 @@ class AppSettings {
     String? iaCookies,
     bool clearIaCredentials = false,
     bool? nszDecompressEnabled,
+    bool? useOnScreenKeyboard,
     String? nszKeysPath,
     bool clearNszKeysPath = false,
     String? chdmanPath,
@@ -71,6 +74,7 @@ class AppSettings {
       iaSecretKey: clearIaCredentials ? null : (iaSecretKey ?? this.iaSecretKey),
       iaCookies: clearIaCredentials ? null : (iaCookies ?? this.iaCookies),
       nszDecompressEnabled: nszDecompressEnabled ?? this.nszDecompressEnabled,
+      useOnScreenKeyboard: useOnScreenKeyboard ?? this.useOnScreenKeyboard,
       nszKeysPath: clearNszKeysPath ? null : (nszKeysPath ?? this.nszKeysPath),
       chdmanPath: clearChdmanPath ? null : (chdmanPath ?? this.chdmanPath),
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
@@ -87,6 +91,7 @@ class AppSettings {
       if (iaSecretKey != null) 'iaSecretKey': iaSecretKey,
       if (iaCookies != null) 'iaCookies': iaCookies,
       'nszDecompressEnabled': nszDecompressEnabled,
+      'useOnScreenKeyboard': useOnScreenKeyboard,
       if (nszKeysPath != null) 'nszKeysPath': nszKeysPath,
       if (chdmanPath != null) 'chdmanPath': chdmanPath,
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
@@ -103,6 +108,7 @@ class AppSettings {
       iaSecretKey: json['iaSecretKey'] as String?,
       iaCookies: json['iaCookies'] as String?,
       nszDecompressEnabled: json['nszDecompressEnabled'] as bool? ?? true,
+      useOnScreenKeyboard: json['useOnScreenKeyboard'] as bool? ?? false,
       nszKeysPath: json['nszKeysPath'] as String?,
       chdmanPath: json['chdmanPath'] as String?,
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
