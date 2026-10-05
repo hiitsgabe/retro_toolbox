@@ -38,16 +38,28 @@ class BrowserTransfer {
   double get fraction => total > 0 ? done / total : 0;
 }
 
-/// The next unfinished background download/zip that [source] ('smb' / 'ftp')
-/// queued: the running one, else the first waiting. Null when none. Progress
-/// is the task's fraction (0 while it hasn't started, which reads as unknown).
-BrowserTransfer? queuedTransfer(WidgetRef ref, String source) {
-  final tasks = ref.watch(taskQueueProvider).tasks.where((t) => t.type == TaskType.remoteTransfer && t.params['source'] == source && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running));
-  final task = tasks.where((t) => t.status == TaskQueueStatus.running).firstOrNull ?? tasks.firstOrNull;
-  if (task == null) return null;
-  final progress = ref.watch(extractionProvider).tasks[task.id]?.progress ?? 0;
-  // ponytail: a fraction in fixed units; the bar only needs done/total.
-  return BrowserTransfer(name: '${task.params['verb']} ${task.params['label']}', done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false);
+/// The bar for [source]'s ('smb' / 'ftp') next unfinished background download
+/// or zip: the running task, else the first waiting. Progress comes from the
+/// extraction provider because transfers share its file-task machinery.
+/// Watches only that task, so it alone rebuilds on progress.
+class _QueuedTransferBar extends ConsumerWidget {
+  final String source;
+  const _QueuedTransferBar(this.source);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final task = ref.watch(taskQueueProvider.select((s) {
+      final open = s.tasks.where((t) => t.type == TaskType.remoteTransfer && t.params['source'] == source && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running));
+      return open.where((t) => t.status == TaskQueueStatus.running).firstOrNull ?? open.firstOrNull;
+    }));
+    if (task == null) return const SizedBox.shrink();
+    final progress = ref.watch(extractionProvider.select((s) => s.tasks[task.id]?.progress)) ?? 0;
+    // ponytail: a fraction in fixed units; the bar only needs done/total.
+    return FileBrowserView._transferBar(
+      context,
+      BrowserTransfer(name: '${task.params['verb']} ${task.params['label']}', done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false),
+    );
+  }
 }
 
 /// Finder-style file browser: toolbar + icon grid + multi-select action bar +
@@ -158,9 +170,7 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
         if (transfer != null) _transferBar(context, transfer!),
-        if (queuedSource != null) ...[
-          if (queuedTransfer(ref, queuedSource!) case final q?) _transferBar(context, q),
-        ],
+        if (queuedSource != null) _QueuedTransferBar(queuedSource!),
         if (error != null) Padding(padding: const EdgeInsets.all(12), child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
         if (busy) const LinearProgressIndicator(),
         Expanded(
@@ -402,7 +412,7 @@ class FileBrowserView extends ConsumerWidget {
     );
   }
 
-  Widget _transferBar(BuildContext context, BrowserTransfer t) {
+  static Widget _transferBar(BuildContext context, BrowserTransfer t) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(12),

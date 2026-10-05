@@ -15,6 +15,8 @@ Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState 
 Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameState gameState, GameAction action) async {
   if (debugRunGameAction != null) return debugRunGameAction!(ref, context, game, gameState, action);
   switch (action) {
+    case GameAction.retryDownload when gameState.isTransfer:
+      TaskQueueService.retryTransfer(ref, game.gameId);
     case GameAction.download:
     case GameAction.retryDownload:
       await TaskQueueService.startDownloads(ref, context, [game], game.consoleId);

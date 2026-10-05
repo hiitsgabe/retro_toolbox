@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
@@ -35,7 +36,7 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
 }
 
 class _FakeGames extends StateNotifier<Map<String, GameState>> implements GameStateManager {
-  _FakeGames() : super({});
+  _FakeGames([super.state = const {}]);
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -76,5 +77,37 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
     expect(find.byType(TaskPanelModal), findsNothing);
+  });
+
+  testWidgets('a running network transfer counts as downloading in the footer, not extracting', (t) async {
+    GameState st(String n, bool transfer) =>
+        GameState(game: Game(title: n, url: 'https://x/$n.bin', size: 0, consoleId: 'manual'), status: GameStatus.extracting, isTransfer: transfer);
+    final net = st('net', true);
+    await t.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        appStateProvider.overrideWith((ref) => _FakeApp()),
+        catalogProvider.overrideWith((ref) => _FakeCatalog()),
+        settingsProvider.overrideWith((ref) => _FakeSettings()),
+        gameStateManagerProvider.overrideWith((ref) => _FakeGames({net.game.gameId: net})),
+      ],
+      child: const MaterialApp(home: Scaffold(body: Footer())),
+    ));
+    await t.pump();
+    expect(find.text('Downloading 1'), findsOneWidget);
+
+    final conv = st('conv', false);
+    await t.pumpWidget(ProviderScope(
+      key: UniqueKey(),
+      overrides: [
+        appStateProvider.overrideWith((ref) => _FakeApp()),
+        catalogProvider.overrideWith((ref) => _FakeCatalog()),
+        settingsProvider.overrideWith((ref) => _FakeSettings()),
+        gameStateManagerProvider.overrideWith((ref) => _FakeGames({net.game.gameId: net, conv.game.gameId: conv})),
+      ],
+      child: const MaterialApp(home: Scaffold(body: Footer())),
+    ));
+    await t.pump();
+    expect(find.text('Downloading 1 • Extracting 1'), findsOneWidget);
   });
 }
