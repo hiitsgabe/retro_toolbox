@@ -6,6 +6,33 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 
+/// Test seam: replaces [runGameAction] so tests can observe the dispatch.
+@visibleForTesting
+Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState gameState, GameAction action)? debugRunGameAction;
+
+/// The one place a [GameAction] turns into a task-queue call; used by the row
+/// buttons and the game action menu.
+Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameState gameState, GameAction action) async {
+  if (debugRunGameAction != null) return debugRunGameAction!(ref, context, game, gameState, action);
+  switch (action) {
+    case GameAction.download:
+    case GameAction.retryDownload:
+      await TaskQueueService.startDownloads(ref, context, [game], game.consoleId);
+    case GameAction.pause:
+      TaskQueueService.pauseDownloadTask(ref, game.gameId);
+    case GameAction.resume:
+      TaskQueueService.resumeDownloadTask(ref, game.gameId);
+    case GameAction.cancel:
+      TaskQueueService.cancelTask(ref, game, gameState);
+    case GameAction.extract:
+    case GameAction.retryExtraction:
+      TaskQueueService.startExtraction(ref, game.gameId);
+    case GameAction.loading:
+    case GameAction.none:
+      break;
+  }
+}
+
 class GameActionButtons extends ConsumerWidget {
   final Game game;
   final GameState gameState;
@@ -76,7 +103,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Download',
               child: IconButton(
                 icon: Icon(Icons.download, size: buttonSize),
-                onPressed: () => TaskQueueService.startDownloads(ref, context, [game], game.consoleId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.download),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -90,7 +117,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Pause',
               child: IconButton(
                 icon: Icon(Icons.pause, size: buttonSize),
-                onPressed: () => TaskQueueService.pauseDownloadTask(ref, game.gameId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.pause),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -104,7 +131,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Resume',
               child: IconButton(
                 icon: Icon(Icons.play_arrow, size: buttonSize),
-                onPressed: () => TaskQueueService.resumeDownloadTask(ref, game.gameId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.resume),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -118,7 +145,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Cancel',
               child: IconButton(
                 icon: Icon(Icons.close, size: buttonSize),
-                onPressed: () => TaskQueueService.cancelTask(ref, game, gameState),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.cancel),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -132,7 +159,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Extract',
               child: IconButton(
                 icon: Icon(Icons.archive, size: buttonSize),
-                onPressed: () => TaskQueueService.startExtraction(ref, game.gameId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.extract),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -146,7 +173,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Retry Download',
               child: IconButton(
                 icon: Icon(Icons.refresh, size: buttonSize),
-                onPressed: () => TaskQueueService.startDownloads(ref, context, [game], game.consoleId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.retryDownload),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
@@ -160,7 +187,7 @@ class GameActionButtons extends ConsumerWidget {
               message: 'Retry Extraction',
               child: IconButton(
                 icon: Icon(Icons.refresh, size: buttonSize),
-                onPressed: () => TaskQueueService.startExtraction(ref, game.gameId),
+                onPressed: () => runGameAction(ref, context, game, gameState, GameAction.retryExtraction),
                 constraints: buttonConstraints,
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,

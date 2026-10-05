@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -9,6 +10,7 @@ import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_progress_bar.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 
 class GameRow extends ConsumerStatefulWidget {
   final Game game;
@@ -41,6 +43,19 @@ class _GameRowState extends ConsumerState<GameRow> {
     final gameState = ref.watch(gameStateProvider(widget.game));
     final isSelected = ref.watch(gameSelectionProvider(gameId));
 
+    // One focus stop per card (A opens the menu); inner controls are
+    // ExcludeFocus'd so the d-pad skips them but touch still hits them.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        focusColor: Colors.transparent, // DpadScope draws the one outline
+        onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),
+        child: _card(context, gameState, isSelected, catalogNotifier, gameId),
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context, GameState gameState, bool isSelected, CatalogNotifier catalogNotifier, String gameId) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
@@ -58,9 +73,11 @@ class _GameRowState extends ConsumerState<GameRow> {
           if (widget.selectable) ...[
             SizedBox(
               width: 20,
-              child: Checkbox(
-                value: isSelected,
-                onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(gameId) : null,
+              child: ExcludeFocus(
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(gameId) : null,
+                ),
               ),
             ),
             SizedBox(width: 6),
@@ -132,10 +149,12 @@ class _GameRowState extends ConsumerState<GameRow> {
                       ),
                       SizedBox(
                         width: widget.actionsColumnWidth,
-                        child: GameActionButtons(
-                          game: widget.game,
-                          gameState: gameState,
-                          isNarrow: widget.isNarrow,
+                        child: ExcludeFocus(
+                          child: GameActionButtons(
+                            game: widget.game,
+                            gameState: gameState,
+                            isNarrow: widget.isNarrow,
+                          ),
                         ),
                       ),
                     ],
