@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// One card in a [CoverFlow]: a visual [face], a [label] shown under the
 /// centered card, and an optional [onTap] fired when the centered card is
@@ -52,11 +53,28 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   int get _last => widget.items.length - 1;
 
   void _animateTo(int target) {
-    _snapAnim = Tween<double>(begin: _position, end: target.clamp(0, _last).toDouble())
-        .animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic));
+    _snapAnim = Tween<double>(begin: _position, end: target.clamp(0, _last).toDouble()).animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic));
     _snap
       ..reset()
       ..forward();
+  }
+
+  // One focus stop for the whole flow: faces (and their reflections) are
+  // ExcludeFocus'd, so Left/Right browse, Enter/Space opens, Up/Down leave.
+  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
+    if (e is KeyUpEvent) return KeyEventResult.ignored;
+    final centre = _position.round().clamp(0, _last);
+    final k = e.logicalKey;
+    if (k == LogicalKeyboardKey.arrowLeft && centre > 0) {
+      _animateTo(centre - 1);
+    } else if (k == LogicalKeyboardKey.arrowRight && centre < _last) {
+      _animateTo(centre + 1);
+    } else if (e is KeyDownEvent && (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.space)) {
+      widget.items[centre].onTap?.call();
+    } else {
+      return KeyEventResult.ignored;
+    }
+    return KeyEventResult.handled;
   }
 
   void _onEnd(double velocity) {
@@ -87,32 +105,35 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
         // Paint far-to-near so the centered card ends up on top.
         visible.sort((a, b) => (b - _position).abs().compareTo((a - _position).abs()));
 
-        return GestureDetector(
-          onHorizontalDragUpdate: (d) {
-            _snap.stop();
-            setState(() => _position = (_position - d.delta.dx / step).clamp(0.0, _last.toDouble()));
-          },
-          onHorizontalDragEnd: (d) => _onEnd(d.primaryVelocity ?? 0),
-          child: Column(
-            children: [
-              Expanded(
-                child: ClipRect(
-                  child: SizedBox.expand(
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        for (final i in visible) _card(i, cardW, cardH, nearGap, farStep),
-                      ],
+        return Focus(
+            autofocus: true,
+            onKeyEvent: _onKey,
+            child: GestureDetector(
+              onHorizontalDragUpdate: (d) {
+                _snap.stop();
+                setState(() => _position = (_position - d.delta.dx / step).clamp(0.0, _last.toDouble()));
+              },
+              onHorizontalDragEnd: (d) => _onEnd(d.primaryVelocity ?? 0),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: ClipRect(
+                      child: SizedBox.expand(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            for (final i in visible) _card(i, cardW, cardH, nearGap, farStep),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  _label(),
+                  const SizedBox(height: 20),
+                ],
               ),
-              const SizedBox(height: 8),
-              _label(),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
+            ));
       },
     );
   }
@@ -137,7 +158,7 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
           _animateTo(i);
         }
       },
-      child: _cardWithReflection(cardW, cardH, widget.items[i].face),
+      child: ExcludeFocus(child: _cardWithReflection(cardW, cardH, widget.items[i].face)),
     );
 
     // Horizontal placement kept separate from the perspective tilt/scale so the
