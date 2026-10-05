@@ -173,8 +173,9 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
       color: Colors.transparent,
       child: InkWell(
         onTap: () => _tabController.animateTo(index),
+        autofocus: isSelected,
         borderRadius: BorderRadius.circular(16),
-        focusColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+        focusColor: Colors.transparent,
         child: AnimatedContainer(
           duration: Duration(milliseconds: 150),
           padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),

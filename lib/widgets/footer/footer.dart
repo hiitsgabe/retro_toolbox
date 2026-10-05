@@ -42,8 +42,12 @@ class Footer extends ConsumerWidget {
         AnimatedContainer(
           duration: Duration(milliseconds: 200),
           height: hasActiveTasks ? 50 : 40,
-          child: GestureDetector(
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
             onTap: () => TaskPanelModal.show(context),
+            // The global DpadScope outline is the only focus indicator.
+            focusColor: Colors.transparent,
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -144,11 +148,12 @@ class Footer extends ConsumerWidget {
                 ),
               ),
             ),
+            ),
           ),
         ),
+        // The bar's InkWell handles taps on the arrow too.
         Center(
-          child: GestureDetector(
-            onTap: () => TaskPanelModal.show(context),
+          child: IgnorePointer(
             child: Container(
               padding: EdgeInsets.all(8),
               child: Icon(
