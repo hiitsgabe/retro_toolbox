@@ -92,6 +92,10 @@ class DpadScope extends StatefulWidget {
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;
 
+  /// Add to `MaterialApp.navigatorObservers` so focus can be kept on the top
+  /// route (pages below stay in the focus tree while covered).
+  static final routeObserver = TopRouteObserver();
+
   /// Enter on a text field opens the in-app keyboard (no platform IME).
   final bool onScreenKeyboard;
 
@@ -137,6 +141,7 @@ class _DpadScopeState extends State<DpadScope> {
     FocusManager.instance.addListener(_repaint.ping);
     FocusManager.instance.addHighlightModeListener(_onHighlight);
     FocusManager.instance.addListener(_hideImeOnField);
+    FocusManager.instance.addListener(_keepFocusOnTopRoute);
     // Persistent callbacks can't be removed, hence the _disposed guard.
     // ponytail: runs only after frames that render anyway; repaints just when
     // the focused rect moved (scrolling), so an idle app schedules no frames.
@@ -155,9 +160,33 @@ class _DpadScopeState extends State<DpadScope> {
     _disposed = true;
     FocusManager.instance.removeListener(_repaint.ping);
     FocusManager.instance.removeListener(_hideImeOnField);
+    FocusManager.instance.removeListener(_keepFocusOnTopRoute);
     FocusManager.instance.removeHighlightModeListener(_onHighlight);
     _repaint.dispose();
     super.dispose();
+  }
+
+  // Covered pages keep their focus nodes, so focus can end up on a page below
+  // the one on screen (seen on device: the d-pad drove the hidden main menu
+  // and A opened Settings). Pull it back to the top route's first control.
+  void _keepFocusOnTopRoute() {
+    final top = DpadScope.routeObserver.top;
+    if (top is! ModalRoute) return;
+    bool offTop() {
+      final ctx = FocusManager.instance.primaryFocus?.context;
+      if (ctx == null || !ctx.mounted) return false;
+      final route = ModalRoute.of(ctx);
+      return route != null && !route.isCurrent && !identical(route, top);
+    }
+
+    if (!offTop()) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      final pageCtx = top.subtreeContext;
+      if (_disposed || !offTop() || !top.isActive || pageCtx == null) return;
+      final scope = FocusScope.of(pageCtx);
+      final first = scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull;
+      (first ?? scope).requestFocus();
+    });
   }
 
   // Built-in keyboard on: keep the system IME down when a field takes focus
@@ -307,4 +336,30 @@ class _OutlinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_OutlinePainter old) => old._color != _color;
+}
+
+/// Tracks the top route of the app's navigator for [DpadScope].
+class TopRouteObserver extends NavigatorObserver {
+  final _stack = <Route<dynamic>>[];
+  Route<dynamic>? get top => _stack.isEmpty ? null : _stack.last;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.add(route);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.remove(route);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.remove(route);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final i = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
+    if (newRoute == null) return;
+    if (i < 0) {
+      _stack.add(newRoute);
+    } else {
+      _stack[i] = newRoute;
+    }
+  }
 }

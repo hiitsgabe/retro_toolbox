@@ -137,6 +137,7 @@ class _GameListState extends ConsumerState<GameList> {
                   sizeColumnWidth: sizeColumnWidth,
                   statusColumnWidth: statusColumnWidth,
                   actionsColumnWidth: actionsColumnWidth,
+                  autofocus: index == 0,
                 );
               },
             ),
