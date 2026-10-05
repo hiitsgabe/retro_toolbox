@@ -24,7 +24,13 @@ void installFocusDebug() {
     final size = view == null ? null : MediaQuery.sizeOf(ctx);
     // Release builds print Rect/Size as "Instance of ...": format by hand.
     String f(double v) => v.toStringAsFixed(1);
-    final r = node.rect;
+    final Rect r;
+    try {
+      r = node.rect;
+    } catch (_) {
+      debugPrint('[focus] ${ctx.widget.runtimeType} (not laid out yet)');
+      return;
+    }
     debugPrint('[focus] ${ctx.widget.runtimeType} label=${node.debugLabel} '
         'rect=${f(r.left)},${f(r.top)} ${f(r.width)}x${f(r.height)} '
         'scroll=${scroll == null ? '-' : '${f(scroll.pixels)}/${f(scroll.maxScrollExtent)}'} '
