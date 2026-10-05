@@ -1,0 +1,7 @@
+#!/bin/sh
+# Minimal stand-in for xdg-user-dir (path_provider calls it on Linux).
+case "$1" in
+  DOCUMENTS) echo "$HOME/Documents" ;;
+  DOWNLOAD) echo "$HOME/Downloads" ;;
+  *) echo "$HOME" ;;
+esac

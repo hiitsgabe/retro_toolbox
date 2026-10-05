@@ -137,6 +137,19 @@ jobs:
           cp "$RUNNER_TEMP/icudtl.dat" "$PORT/data/flutter_assets/icudtl.dat"
           cp "$RUNNER_TEMP/icudtl.dat" "$PORT/icudtl.dat"
           cp linux/handheld/retrotoolbox.gptk "$PORT/"
+          mkdir -p "$PORT/bin"
+          cp linux/handheld/xdg-user-dir "$PORT/bin/"
+          # Minimal xkb data (rules evdev, us layout) — the firmwares ship
+          # none, and flutter-pi drops keyboard input without it. -L because
+          # exFAT can't hold symlinks.
+          X=/usr/share/X11/xkb; K="$PORT/xkb"
+          mkdir -p "$K/symbols" "$K/rules"
+          cp -RL "$X/keycodes" "$X/types" "$X/compat" "$K/"
+          cp -L "$X/rules/evdev" "$X/rules/evdev.lst" "$K/rules/"
+          for s in pc us inet keypad altwin level3 level5 ctrl capslock compose srvr_ctrl group shift kpdl terminate eurosign latin nbsp typo; do
+            cp -L "$X/symbols/$s" "$K/symbols/"
+          done
+          echo "# No compose sequences." > "$K/Compose"
           cp "linux/handheld/Retro Toolbox.sh" dist/ports/
           mkdir -p "$PORT/bundled_libs"
           # Every shared library flutter-pi (and a few app extras) needs, found
@@ -173,7 +186,7 @@ jobs:
         run: |
           set -euo pipefail
           PORT=dist/ports/retrotoolbox
-          for p in flutter-pi libflutter_engine.so data/flutter_assets/app.so app/main.py site-packages/zstandard; do
+          for p in flutter-pi libflutter_engine.so data/flutter_assets/app.so app/main.py site-packages/zstandard bin/xdg-user-dir xkb/rules/evdev xkb/symbols/us xkb/Compose; do
             [ -e "$PORT/$p" ] || { echo "::error::$p missing from the package"; exit 1; }
             echo "  ok    $p"
           done
