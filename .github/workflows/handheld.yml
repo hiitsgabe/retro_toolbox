@@ -57,7 +57,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git curl unzip xz-utils zip clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libdrm-dev libgbm-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libsystemd-dev libinput-dev libudev-dev libxkbcommon-dev patchelf python3 python3-venv
+            libsystemd-dev libinput-dev libudev-dev libxkbcommon-dev patchelf python3 python3-venv \
+            libarchive-dev
 
       - name: Setup Flutter
         run: |
@@ -103,6 +104,20 @@ jobs:
 
       - name: Build Linux bundle (arm64)
         run: flutter build linux --release
+
+      # The rar plugin ships no Linux build: compile its libarchive-backed C
+      # source into the bundle's lib/. The app loads it by path at runtime;
+      # the soname lets the plugin's by-name open find that loaded copy.
+      - name: Build librar_native
+        run: |
+          set -euo pipefail
+          RAR=$(python3 -c "import json; print(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='rar').removeprefix('file://'))")
+          gcc -O2 -shared -fPIC -Wl,-soname,librar_native.so -Wl,-rpath,'$ORIGIN' \
+            "$RAR/src/rar_native.c" -I"$RAR/src" -larchive -o build/linux/arm64/release/bundle/lib/librar_native.so
+          ldd build/linux/arm64/release/bundle/lib/librar_native.so
+
+      - name: Test RAR extraction
+        run: RAR_NATIVE_LIB="$PWD/build/linux/arm64/release/bundle/lib/librar_native.so" flutter test test/archive_extract_test.dart
 
       - name: Fetch flutter-pi engine
         run: |
@@ -160,7 +175,7 @@ jobs:
           # Extras: sqlite/ffi/fonts for the app; xcb-randr for GPU blobs
           # that expect it (seen missing on Knulli).
           SEEDS="libsqlite3.so.0 libffi.so.8 libfontconfig.so.1 libfreetype.so.6 libxcb-randr.so.0"
-          queue="$PORT/flutter-pi"
+          queue="$PORT/flutter-pi $PORT/lib/librar_native.so"
           for l in $SEEDS; do
             cp -L "/usr/lib/aarch64-linux-gnu/$l" "$PORT/bundled_libs/$l"
             queue="$queue /usr/lib/aarch64-linux-gnu/$l"
@@ -178,7 +193,7 @@ jobs:
             done
           done
           echo "bundled: $(ls "$PORT/bundled_libs" | tr '\n' ' ')"
-          for l in libsystemd.so.0 libwayland-server.so.0 libxcb-randr.so.0 libinput.so.10; do
+          for l in libsystemd.so.0 libwayland-server.so.0 libxcb-randr.so.0 libinput.so.10 libarchive.so.13; do
             [ -e "$PORT/bundled_libs/$l" ] || { echo "::error::$l not bundled"; exit 1; }
           done
 
@@ -186,7 +201,7 @@ jobs:
         run: |
           set -euo pipefail
           PORT=dist/ports/retrotoolbox
-          for p in flutter-pi libflutter_engine.so data/flutter_assets/app.so app/main.py site-packages/zstandard bin/xdg-user-dir xkb/rules/evdev xkb/symbols/us xkb/Compose; do
+          for p in flutter-pi libflutter_engine.so lib/librar_native.so data/flutter_assets/app.so app/main.py site-packages/zstandard bin/xdg-user-dir xkb/rules/evdev xkb/symbols/us xkb/Compose; do
             [ -e "$PORT/$p" ] || { echo "::error::$p missing from the package"; exit 1; }
             echo "  ok    $p"
           done
