@@ -53,7 +53,8 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   int get _last => widget.items.length - 1;
 
   void _animateTo(int target) {
-    _snapAnim = Tween<double>(begin: _position, end: target.clamp(0, _last).toDouble()).animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic));
+    _snapAnim = Tween<double>(begin: _position, end: target.clamp(0, _last).toDouble())
+        .animate(CurvedAnimation(parent: _snap, curve: Curves.easeOutCubic));
     _snap
       ..reset()
       ..forward();
@@ -61,13 +62,14 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
 
   // One focus stop for the whole flow: faces (and their reflections) are
   // ExcludeFocus'd, so Left/Right browse, Enter/Space opens, Up/Down leave.
+  // Left/Right at the ends are swallowed so a held arrow can't spill over.
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
-    if (e is KeyUpEvent) return KeyEventResult.ignored;
+    if (e is KeyUpEvent || widget.items.isEmpty) return KeyEventResult.ignored;
     final centre = _position.round().clamp(0, _last);
     final k = e.logicalKey;
-    if (k == LogicalKeyboardKey.arrowLeft && centre > 0) {
+    if (k == LogicalKeyboardKey.arrowLeft) {
       _animateTo(centre - 1);
-    } else if (k == LogicalKeyboardKey.arrowRight && centre < _last) {
+    } else if (k == LogicalKeyboardKey.arrowRight) {
       _animateTo(centre + 1);
     } else if (e is KeyDownEvent && (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.space)) {
       widget.items[centre].onTap?.call();
@@ -105,35 +107,33 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
         // Paint far-to-near so the centered card ends up on top.
         visible.sort((a, b) => (b - _position).abs().compareTo((a - _position).abs()));
 
-        return Focus(
-            autofocus: true,
-            onKeyEvent: _onKey,
-            child: GestureDetector(
-              onHorizontalDragUpdate: (d) {
-                _snap.stop();
-                setState(() => _position = (_position - d.delta.dx / step).clamp(0.0, _last.toDouble()));
-              },
-              onHorizontalDragEnd: (d) => _onEnd(d.primaryVelocity ?? 0),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: ClipRect(
-                      child: SizedBox.expand(
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            for (final i in visible) _card(i, cardW, cardH, nearGap, farStep),
-                          ],
-                        ),
-                      ),
+        final flow = GestureDetector(
+          onHorizontalDragUpdate: (d) {
+            _snap.stop();
+            setState(() => _position = (_position - d.delta.dx / step).clamp(0.0, _last.toDouble()));
+          },
+          onHorizontalDragEnd: (d) => _onEnd(d.primaryVelocity ?? 0),
+          child: Column(
+            children: [
+              Expanded(
+                child: ClipRect(
+                  child: SizedBox.expand(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (final i in visible) _card(i, cardW, cardH, nearGap, farStep),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  _label(),
-                  const SizedBox(height: 20),
-                ],
+                ),
               ),
-            ));
+              const SizedBox(height: 8),
+              _label(),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+        return Focus(autofocus: true, onKeyEvent: _onKey, child: flow);
       },
     );
   }
