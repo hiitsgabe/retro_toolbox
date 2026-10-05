@@ -19,11 +19,10 @@ const _labels = {
 };
 
 /// The per-game menu a card opens: everything the row's small buttons and
-/// checkbox do, as big focusable tiles. Call it with the card's own context
-/// (a Consumer's) so actions keep a live `ref` after the sheet closes.
+/// checkbox do, as big focusable tiles. Actions run with the sheet's own ref
+/// and context (the card may unmount while the sheet is open) and the sheet
+/// closes once they finish.
 Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectable = true}) {
-  // ponytail: a Consumer element is itself a WidgetRef; outlives the sheet.
-  final cardRef = context is WidgetRef ? context as WidgetRef : null;
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -33,8 +32,8 @@ Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectabl
         final isFavorite = ref.watch(favoritesProvider).isFavorite(game.gameId);
         final isSelected = ref.watch(gameSelectionProvider(game.gameId));
         final actions = [
-          for (final a in GameAction.values)
-            if (gameState.availableActions.contains(a) && _labels.containsKey(a)) a,
+          for (final a in gameState.availableActions)
+            if (_labels.containsKey(a)) a,
         ];
         return ListView(
           shrinkWrap: true,
@@ -59,9 +58,9 @@ Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectabl
               ListTile(
                 autofocus: a == actions.first,
                 title: Text(_labels[a]!),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  runGameAction(cardRef ?? ref, context, game, gameState, a);
+                onTap: () async {
+                  await runGameAction(ref, sheetContext, game, gameState, a);
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
                 },
               ),
             ListTile(
