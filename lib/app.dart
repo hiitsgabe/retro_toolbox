@@ -7,6 +7,21 @@ import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+/// A PageTransitionsBuilder that returns the child unchanged (no animation).
+/// Used in framebuffer mode where every frame is a CPU readback.
+class _NoOpPageTransitionsBuilder extends PageTransitionsBuilder {
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return child;
+  }
+}
+
 class RetroToolboxApp extends ConsumerWidget {
   const RetroToolboxApp({super.key});
 
@@ -37,6 +52,18 @@ class RetroToolboxApp extends ConsumerWidget {
           elevation: 0,
           scrolledUnderElevation: 0,
         ),
+        pageTransitionsTheme: Handheld.framebuffer
+            ? PageTransitionsTheme(
+                builders: {
+                  TargetPlatform.android: _NoOpPageTransitionsBuilder(),
+                  TargetPlatform.iOS: _NoOpPageTransitionsBuilder(),
+                  TargetPlatform.linux: _NoOpPageTransitionsBuilder(),
+                  TargetPlatform.macOS: _NoOpPageTransitionsBuilder(),
+                  TargetPlatform.windows: _NoOpPageTransitionsBuilder(),
+                  TargetPlatform.fuchsia: _NoOpPageTransitionsBuilder(),
+                },
+              )
+            : null,
       ),
       builder: (context, child) =>
           DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current || builtInKeyboard, child: child!),
