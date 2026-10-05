@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -127,15 +128,17 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
-            const SizedBox(width: 12),
-            TextButton.icon(
-              onPressed: () => launchUrl(
-                Uri.parse('https://github.com/hiitsgabe/retro_roster_patcher'),
-                mode: LaunchMode.externalApplication,
+            if (!Handheld.current) ...[
+              const SizedBox(width: 12),
+              TextButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse('https://github.com/hiitsgabe/retro_roster_patcher'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.code, size: 16),
+                label: const Text('Contribute'),
               ),
-              icon: const Icon(Icons.code, size: 16),
-              label: const Text('Contribute'),
-            ),
+            ],
           ],
         ),
       ),

@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -108,7 +109,7 @@ class _ExpandableInfoCardState extends State<ExpandableInfoCard> {
                       color: theme.colorScheme.surfaceContainer,
                       borderRadius: BorderRadius.circular(8),
                       child: InkWell(
-                        onTap: () => widget.onItemTap(item.url),
+                        onTap: Handheld.current ? null : () => widget.onItemTap(item.url),
                         borderRadius: BorderRadius.circular(8),
                         child: Padding(
                           padding: EdgeInsets.all(12),
@@ -135,6 +136,7 @@ class _ExpandableInfoCardState extends State<ExpandableInfoCard> {
                                   ],
                                 ),
                               ),
+                              if (!Handheld.current) ...[
                               SizedBox(width: 8),
                               IconButton(
                                 icon: Icon(Icons.open_in_new_rounded, size: 14, color: theme.colorScheme.onSurfaceVariant),
@@ -151,6 +153,7 @@ class _ExpandableInfoCardState extends State<ExpandableInfoCard> {
                                 tooltip: 'Copy link',
                                 onPressed: () => widget.onItemTap(item.url),
                               ),
+                              ],
                             ],
                           ),
                         ),

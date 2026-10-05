@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -540,21 +541,24 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _leaguePasteCtrl,
-            maxLines: 4,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Paste league JSON here'),
-          ),
-          const SizedBox(height: 8),
+          if (!Handheld.current) ...[
+            TextField(
+              controller: _leaguePasteCtrl,
+              maxLines: 4,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Paste league JSON here'),
+            ),
+            const SizedBox(height: 8),
+          ],
           Wrap(
             spacing: 8,
             children: [
-              FilledButton.tonalIcon(
-                onPressed: _pasteCustomLeagues,
-                icon: const Icon(Icons.playlist_add, size: 18),
-                label: const Text('Add pasted'),
-              ),
+              if (!Handheld.current)
+                FilledButton.tonalIcon(
+                  onPressed: _pasteCustomLeagues,
+                  icon: const Icon(Icons.playlist_add, size: 18),
+                  label: const Text('Add pasted'),
+                ),
               OutlinedButton.icon(
                 onPressed: _importCustomLeagues,
                 icon: const Icon(Icons.upload_file, size: 18),
@@ -678,13 +682,15 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                         style: Theme.of(ctx).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
-                      TextField(
-                        controller: jsonCtrl,
-                        maxLines: 6,
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                        decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '{ "name": "...", "players": [...] }'),
-                      ),
-                      const SizedBox(height: 8),
+                      if (!Handheld.current) ...[
+                        TextField(
+                          controller: jsonCtrl,
+                          maxLines: 6,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                          decoration: const InputDecoration(border: OutlineInputBorder(), hintText: '{ "name": "...", "players": [...] }'),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Align(
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(

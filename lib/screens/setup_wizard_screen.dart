@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -330,6 +331,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             icon: const Icon(Icons.upload_file, size: 18),
             label: const Text('Import from file'),
           ),
+          if (!Handheld.current) ...[
           const SizedBox(height: 16),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
@@ -352,6 +354,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
               ),
             ],
           ),
+          ],
           const SizedBox(height: 16),
           if (_busy) const LinearProgressIndicator(),
           if (_catalogError != null)
