@@ -31,15 +31,21 @@ void main() {
     (_) async => tmp.path,
   );
 
+  HttpOverrides? savedOverrides;
+  setUp(() => savedOverrides = HttpOverrides.current);
+  tearDown(() => HttpOverrides.global = savedOverrides);
+
   test('service reports sorting, box art and saving after the pages load, then a saved catalog on reload', () async {
     // Loopback server standing in for the catalog source: two JSON listings.
     HttpOverrides.global = null; // the test binding stubs HTTP with 400s; loopback only here
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
     server.listen((req) {
-      final items = req.uri.path == '/p1/'
-          ? [{'name': 'a.bin', 'size': 1}, {'name': 'b.bin', 'size': 2}]
-          : [{'name': 'c.bin', 'size': 3}];
+      final items = switch (req.uri.path) {
+        '/p1/' => [{'name': 'a.bin', 'size': 1}, {'name': 'b.bin', 'size': 2}],
+        '/empty/' => <Map<String, Object>>[],
+        _ => [{'name': 'c.bin', 'size': 3}],
+      };
       req.response
         ..headers.contentType = ContentType.json
         ..write(jsonEncode(items))
@@ -51,6 +57,11 @@ void main() {
       {
         'name': 'Status Test',
         'url': ['$base/p1/', '$base/p2/'],
+        'file_format': ['.bin'],
+      },
+      {
+        'name': 'Empty Test',
+        'url': ['$base/empty/'],
         'file_format': ['.bin'],
       }
     ]));
@@ -67,6 +78,11 @@ void main() {
     final cached = <String>[];
     await service.loadCatalog(id, onStatus: cached.add);
     expect(cached, ['Loading saved catalog']);
+
+    // A source that lists nothing is not cached: the next load must retry.
+    final emptyId = CatalogService.consoleId('Empty Test');
+    expect(await service.loadCatalog(emptyId), isEmpty);
+    expect(Directory(tmp.path).listSync(recursive: true).whereType<File>().where((f) => f.path.contains('empty_test')), isEmpty);
   });
 
   test('provider shows the service status as loadingStatus', () async {

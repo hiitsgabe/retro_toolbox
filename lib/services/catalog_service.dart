@@ -213,10 +213,10 @@ class CatalogService {
         if (cachedResult.isNotEmpty && cachedResult.first.metadata != null) {
           final hasBoxarts = cachedResult.any((game) => game.details?.boxart != null);
           if (!hasBoxarts && console.boxarts != null) {
-            onStatus?.call('Matching box art');
+            await _status(onStatus, 'Matching box art');
             final enrichedResult = await _boxartService.mutateGamesWithBoxarts(cachedResult, console);
-            onStatus?.call('Saving catalog');
-            await cacheFile.writeAsString(jsonEncode(enrichedResult.map((g) => g.toJson()).toList()));
+            await _status(onStatus, 'Saving catalog');
+            await cacheFile.writeAsString(await compute(_encodeGamesIsolate, enrichedResult));
             return enrichedResult;
           }
           return cachedResult;
@@ -261,14 +261,18 @@ class CatalogService {
 
       // Merge all results, sort alphabetically by title.
       catalog = results.expand((games) => games).toList();
-      onStatus?.call('Sorting ${catalog.length} games');
+      await _status(onStatus, 'Sorting ${catalog.length} games');
       catalog.sort((a, b) => a.title.compareTo(b.title));
 
-      onStatus?.call('Matching box art');
+      await _status(onStatus, 'Matching box art');
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
-      onStatus?.call('Saving catalog');
-      final cacheFile = await _getCacheFile(console.cacheFile);
-      await cacheFile.writeAsString(jsonEncode(catalog.map((g) => g.toJson()).toList()));
+      // An empty list would be cached as a "catalog" and hide the failure
+      // until the user clears the cache.
+      if (catalog.isNotEmpty) {
+        await _status(onStatus, 'Saving catalog');
+        final cacheFile = await _getCacheFile(console.cacheFile);
+        await cacheFile.writeAsString(await compute(_encodeGamesIsolate, catalog));
+      }
     } catch (e) {
       debugPrint('Error fetching catalog: $e');
       rethrow;
@@ -277,6 +281,14 @@ class CatalogService {
     }
 
     return catalog;
+  }
+
+  /// Reports a status, then yields a frame so it is painted before the next
+  /// synchronous chunk of work blocks the UI isolate (slow handheld CPUs).
+  Future<void> _status(void Function(String status)? onStatus, String status) async {
+    if (onStatus == null) return;
+    onStatus(status);
+    await Future<void>.delayed(const Duration(milliseconds: 16));
   }
 
   Future<List<Game>> _fetchFromUrl(HttpClient client, String url, Console console, {String? iaAccessKey, String? iaSecretKey, String? authToken}) async {
@@ -593,3 +605,5 @@ List<Map<String, dynamic>> _decodeGamesIsolate(String jsonStr) {
   final list = jsonDecode(jsonStr) as List<dynamic>;
   return list.whereType<Map<String, dynamic>>().toList();
 }
+
+String _encodeGamesIsolate(List<Game> games) => jsonEncode(games.map((g) => g.toJson()).toList());

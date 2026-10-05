@@ -40,7 +40,8 @@ class BoxartService {
     }
     final html = await _fetchBody(boxartBaseUrl);
     if (html == null) return {};
-    final boxartMap = _parseBoxartHtml(html, boxartBaseUrl);
+    // A multi-MB listing: regex over it must not run on the UI isolate.
+    final boxartMap = await compute(_parseBoxartHtml, [html, boxartBaseUrl]);
     _boxartCache[boxartBaseUrl] = boxartMap;
     return boxartMap;
   }
@@ -107,23 +108,6 @@ class BoxartService {
       client.close();
     }
   }
-
-  Map<String, String> _parseBoxartHtml(String html, String baseUrl) {
-    final regExp = RegExp(r'<a href="([^"]+\.(png|jpg|jpeg|gif|webp))"[^>]*>', caseSensitive: false);
-    final matches = regExp.allMatches(html);
-    final boxartMap = <String, String>{};
-
-    for (final match in matches) {
-      final filename = match.group(1)!;
-      final decodedFilename = Uri.decodeComponent(filename);
-      final nameWithoutExt = path.basenameWithoutExtension(decodedFilename);
-      final normalizedName = normalizeTitle(nameWithoutExt);
-      final fullUrl = baseUrl.endsWith('/') ? '$baseUrl$filename' : '$baseUrl/$filename';
-      boxartMap[normalizedName] = fullUrl;
-    }
-
-    return boxartMap;
-  }
 }
 
 List<Game> _process(List<dynamic> data) {
@@ -163,4 +147,22 @@ List<Game> _process(List<dynamic> data) {
 
     return game;
   }).toList();
+}
+
+Map<String, String> _parseBoxartHtml(List<String> args) {
+  final html = args[0], baseUrl = args[1];
+  final regExp = RegExp(r'<a href="([^"]+\.(png|jpg|jpeg|gif|webp))"[^>]*>', caseSensitive: false);
+  final matches = regExp.allMatches(html);
+  final boxartMap = <String, String>{};
+
+  for (final match in matches) {
+    final filename = match.group(1)!;
+    final decodedFilename = Uri.decodeComponent(filename);
+    final nameWithoutExt = path.basenameWithoutExtension(decodedFilename);
+    final normalizedName = normalizeTitle(nameWithoutExt);
+    final fullUrl = baseUrl.endsWith('/') ? '$baseUrl$filename' : '$baseUrl/$filename';
+    boxartMap[normalizedName] = fullUrl;
+  }
+
+  return boxartMap;
 }
