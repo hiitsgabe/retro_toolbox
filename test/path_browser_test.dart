@@ -77,16 +77,42 @@ void main() {
     expect(find.text('file.txt'), findsOneWidget);
   });
 
-  testWidgets('Enter enters the focused folder, "Use this folder" returns it', (t) async {
+  testWidgets('Enter enters the focused folder, "Use this folder" (one Up away) returns it', (t) async {
     await open(t);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(t);
     expect(find.text('inner'), findsOneWidget);
     expect(focusedLabel(), 'inner');
-    await t.tap(find.text('Use this folder'));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp); // ".."
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp); // "Use this folder"
+    expect(focusedLabel(), 'Use this folder');
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(closed, isTrue);
     expect(result, p.join(tmp.path, 'alpha'));
+  });
+
+  testWidgets('in a long list, "Use this folder" is two Ups (past "..") from the first entry', (t) async {
+    for (var i = 0; i < 60; i++) {
+      Directory(p.join(tmp.path, 'a${i.toString().padLeft(2, '0')}')).createSync();
+    }
+    await open(t);
+    expect(focusedLabel(), 'a00');
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    expect(focusedLabel(), '..');
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.pump();
+    expect(focusedLabel(), 'Use this folder');
+    expect(find.text(tmp.path), findsWidgets);
+  });
+
+  testWidgets('an empty folder focuses "Use this folder"', (t) async {
+    await open(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(t);
+    expect(find.text('No subfolders'), findsOneWidget);
+    expect(focusedLabel(), 'Use this folder');
   });
 
   testWidgets('going up focuses the folder you came from', (t) async {
@@ -95,7 +121,7 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(t);
     expect(find.text('..'), findsOneWidget);
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(t);
     expect(focusedLabel(), 'beta');
@@ -123,7 +149,8 @@ void main() {
     await t.scrollUntilVisible(find.text('z59'), 200, scrollable: find.byType(Scrollable).last);
     await t.tap(find.text('z59'));
     await settle(t);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter); // empty folder: ".." is focused
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // empty folder: "Use this folder" -> ".."
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await settle(t);
     expect(focusedLabel(), 'z59');
   });

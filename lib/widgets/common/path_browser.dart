@@ -31,7 +31,7 @@ class PathBrowser extends StatefulWidget {
   final List<String>? allowedExtensions;
 
   /// Pick a folder instead of a file: files are hidden and a "Use this folder"
-  /// button returns the current folder.
+  /// row at the top of the list returns the current folder.
   final bool selectDirectory;
 
   static Future<String?> show(
@@ -195,8 +195,8 @@ class _PathBrowserState extends State<PathBrowser> {
         _cameFrom = cameFrom;
         _loading = false;
         final i = _paths.indexOf(_focusPath ?? '');
-        final up = p.dirname(path) != path ? 1 : 0;
-        _scroll = ScrollController(initialScrollOffset: i < 0 ? 0 : (i + up) * _rowHeight);
+        final lead = (p.dirname(path) != path ? 1 : 0) + (widget.selectDirectory ? 1 : 0);
+        _scroll = ScrollController(initialScrollOffset: i <= 0 ? 0 : (i + lead) * _rowHeight);
       });
       // The tiles only exist after this frame's build.
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -279,10 +279,6 @@ class _PathBrowserState extends State<PathBrowser> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                  if (widget.selectDirectory) ...[
-                    const SizedBox(width: 8),
-                    FilledButton(onPressed: () => Navigator.pop(context, _dir), child: const Text('Use this folder')),
-                  ],
                 ],
               ),
             ),
@@ -323,11 +319,14 @@ class _PathBrowserState extends State<PathBrowser> {
     } else {
       emptyText = 'No matching files here';
     }
-    // Row 0 takes _fallback unless it is the target itself.
+    // Row 0 takes _fallback unless it is the target itself. The fixed rows
+    // ("Use this folder", "..") pass a null path; with no entries to focus the
+    // target is then the first of them ("Use this folder" in directory mode).
     var row = 0;
     FocusNode? nodeFor(String? path) {
       final first = row++ == 0;
-      return path == focusPath ? _target : (first ? _fallback : null);
+      final isTarget = path != null ? path == focusPath : focusPath == null && first;
+      return isTarget ? _target : (first ? _fallback : null);
     }
     return ListView(
       key: ValueKey(_dir),
@@ -335,6 +334,15 @@ class _PathBrowserState extends State<PathBrowser> {
       shrinkWrap: true,
       itemExtent: _rowHeight,
       children: [
+        if (widget.selectDirectory)
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.check_circle, size: 20),
+            title: const Text('Use this folder'),
+            subtitle: Text(_dir, overflow: TextOverflow.ellipsis, maxLines: 1),
+            focusNode: nodeFor(null),
+            onTap: () => Navigator.pop(context, _dir),
+          ),
         if (canGoUp)
           ListTile(
             dense: true,
