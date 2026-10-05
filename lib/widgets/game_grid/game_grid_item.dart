@@ -12,12 +12,14 @@ class GameGridItem extends ConsumerStatefulWidget {
   final Game game;
   final double aspectRatio;
   final bool selectable;
+  final bool autofocus;
 
   const GameGridItem({
     super.key,
     required this.game,
     this.aspectRatio = 0.75,
     this.selectable = true,
+    this.autofocus = false,
   });
 
   @override
@@ -54,6 +56,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> {
       type: MaterialType.transparency,
       child: InkWell(
         focusColor: Colors.transparent, // DpadScope draws the one outline
+        autofocus: widget.autofocus,
         borderRadius: BorderRadius.circular(4),
         onTap: () => showGameActionMenu(context, game, selectable: widget.selectable),
         child: _card(context, game, aspectRatio, catalogNotifier, gameState, isSelected, borderColor),

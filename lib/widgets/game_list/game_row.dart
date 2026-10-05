@@ -19,6 +19,7 @@ class GameRow extends ConsumerStatefulWidget {
   final double statusColumnWidth;
   final double actionsColumnWidth;
   final bool selectable;
+  final bool autofocus;
 
   const GameRow({
     super.key,
@@ -28,6 +29,7 @@ class GameRow extends ConsumerStatefulWidget {
     this.statusColumnWidth = 100,
     this.actionsColumnWidth = 100,
     this.selectable = true,
+    this.autofocus = false,
   });
 
   @override
@@ -49,6 +51,7 @@ class _GameRowState extends ConsumerState<GameRow> {
       type: MaterialType.transparency,
       child: InkWell(
         focusColor: Colors.transparent, // DpadScope draws the one outline
+        autofocus: widget.autofocus,
         onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),
         child: _card(context, gameState, isSelected, catalogNotifier, gameId),
       ),

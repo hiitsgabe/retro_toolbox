@@ -136,6 +136,8 @@ class _GameGridState extends ConsumerState<GameGrid> {
               key: ValueKey(game.gameId),
               game: game,
               aspectRatio: _aspectRatio,
+              // First card takes focus when the list appears (d-pad start).
+              autofocus: index == 0,
             );
           },
         ),

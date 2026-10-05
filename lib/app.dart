@@ -19,6 +19,7 @@ class RetroToolboxApp extends ConsumerWidget {
     );
     return MaterialApp(
       navigatorKey: navigatorKey,
+      navigatorObservers: [DpadScope.routeObserver],
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
       // Always dark: screens are designed for the dark palette and look broken
