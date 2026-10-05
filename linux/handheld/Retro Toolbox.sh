@@ -4,11 +4,16 @@
 # data/flutter_assets, lib/, app/, site-packages/, bundled_libs/).
 
 # In-app updater: the app stages a new port in $1/.update/ (retrotoolbox/ +
-# Retro Toolbox.sh) and writes READY last. Swap it in over the port folder $1;
-# user data (config/, cache/, data/home/, Documents/, Downloads/, log.txt)
-# isn't in the update so it stays. $2 is the ports folder (new launcher).
+# Retro Toolbox.sh), synced, and writes READY last. Swap it in over the port
+# folder $1; user data (config/, cache/, data/home/, Documents/, Downloads/,
+# log.txt) isn't in the update so it stays. $2 is the ports folder (new
+# launcher). Returns 0 when there was nothing to do or it applied; 2 when it
+# failed before touching the port (the old one still runs); 1 when it failed
+# part-way (the port is mixed: don't start it). Failures leave .update/ and
+# READY for a retry next start, plus a FAILED note.
+RT_UPDATE_WIPE="bundled_libs xkb data/flutter_assets app site-packages"
 rt_apply_update() {
-  local game="$1" ports="$2" up="$1/.update"
+  local game="$1" ports="$2" up="$1/.update" d
   [ -d "$up" ] || return 0
   if [ ! -f "$up/READY" ]; then
     echo "Update: incomplete, removing $up"
@@ -16,24 +21,46 @@ rt_apply_update() {
     return 0
   fi
   echo "Update: applying"
-  local d
-  for d in bundled_libs xkb data/flutter_assets; do
+  rm -f "$up/FAILED"
+  if [ ! -f "$up/retrotoolbox/flutter-pi" ] || [ ! -d "$up/retrotoolbox/data/flutter_assets" ]; then
+    echo "Update: staged files incomplete, keeping the current version"
+    echo "staged files incomplete" > "$up/FAILED"
+    return 2
+  fi
+  # Wiped folders free their space before the copy; the rest is overwritten.
+  local need avail
+  need=$(du -sk "$up/retrotoolbox" | awk '{print $1}')
+  for d in $RT_UPDATE_WIPE; do
+    [ -d "$game/$d" ] && need=$((need - $(du -sk "$game/$d" | awk '{print $1}')))
+  done
+  avail=$(df -Pk "$game" 2>/dev/null | awk 'NR==2{print $4}')
+  if [ -n "$avail" ] && [ "$avail" -lt "$need" ]; then
+    echo "Update: not enough space (need ${need} KB, ${avail} KB free), keeping the current version"
+    echo "not enough space: need ${need} KB, ${avail} KB free" > "$up/FAILED"
+    return 2
+  fi
+  for d in $RT_UPDATE_WIPE; do
     [ -d "$up/retrotoolbox/$d" ] || continue
     echo "Update: replacing $d"
-    rm -rf "${game:?}/$d"
+    rm -rf "${game:?}/$d" || { echo "copy failed: rm $d" > "$up/FAILED"; return 1; }
   done
   echo "Update: copying files"
-  # READY stays on failure, so the next start retries.
-  cp -rf "$up/retrotoolbox/." "$game/" || { echo "Update: copy failed"; return 1; }
+  cp -rf "$up/retrotoolbox/." "$game/" || { echo "Update: copy failed"; echo "copy failed" > "$up/FAILED"; return 1; }
   if [ -f "$up/Retro Toolbox.sh" ]; then
     echo "Update: replacing launcher"
     # Copy then rename: this script is the one running, and bash reads it as
     # it goes — overwriting it in place would corrupt the rest of this run.
-    cp -f "$up/Retro Toolbox.sh" "$ports/.Retro Toolbox.sh.new" &&
-      mv -f "$ports/.Retro Toolbox.sh.new" "$ports/Retro Toolbox.sh" &&
-      chmod +x "$ports/Retro Toolbox.sh"
+    { cp -f "$up/Retro Toolbox.sh" "$ports/.Retro Toolbox.sh.new" &&
+      mv -f "$ports/.Retro Toolbox.sh.new" "$ports/Retro Toolbox.sh"; } ||
+      { echo "Update: launcher copy failed"; echo "launcher copy failed" > "$up/FAILED"; return 1; }
+    chmod +x "$ports/Retro Toolbox.sh" 2>/dev/null || true
   fi
-  chmod +x "$game/flutter-pi" "$game"/bin/* 2>/dev/null
+  chmod +x "$game/flutter-pi" "$game"/bin/* 2>/dev/null || true
+  # Flush the copy before dropping READY, and READY before the staged tree:
+  # a power cut must never leave READY next to a half-deleted .update/.
+  sync
+  rm -f "$up/READY"
+  sync
   rm -rf "$up"
   echo "Update: done"
 }
@@ -54,6 +81,11 @@ cd "$GAMEDIR" || exit 1
 exec > >(tee "$GAMEDIR/log.txt") 2>&1
 echo "--- Retro Toolbox --- $(date)"
 rt_apply_update "$GAMEDIR" "/$directory/ports"
+if [ $? -eq 1 ]; then
+  echo "Update failed part-way; not starting. Free some space and start Retro Toolbox again to retry."
+  pm_finish
+  exit 1
+fi
 
 # Bundled libraries only where the firmware lacks them.
 mkdir -p "$GAMEDIR/runtime_libs"; rm -f "$GAMEDIR/runtime_libs"/*

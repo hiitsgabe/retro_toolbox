@@ -22,8 +22,8 @@ final _release = ReleaseInfo(
   htmlUrl: 'https://github.com/hiitsgabe/retro_toolbox/releases/tag/v0.3.0',
   notes: '## Retro Toolbox v0.3.0\n### New Features\n- Shiny thing\n---\n### Downloads',
   assets: const [
-    ReleaseAsset(name: 'retro_toolbox_arm64.apk', url: 'u', size: 31457280),
-    ReleaseAsset(name: 'retro_toolbox_handheld_arm64.zip', url: 'u', size: 1024),
+    ReleaseAsset(name: 'retro_toolbox_arm64.apk', url: 'u', size: 31457280, sha256: 'ab'),
+    ReleaseAsset(name: 'retro_toolbox_handheld_arm64.zip', url: 'u', size: 1024, sha256: 'cd'),
   ],
 );
 
@@ -34,6 +34,7 @@ class _FakeService extends UpdateService {
   bool staged = false;
   bool installResult = true;
   int installs = 0;
+  UpdateException? noSpace;
 
   @override
   Future<ReleaseInfo> fetchLatest() => fetch();
@@ -44,6 +45,14 @@ class _FakeService extends UpdateService {
     await downloadGate.future;
     return File('/nowhere/${asset.name}');
   }
+
+  @override
+  Future<void> ensureSpace(ReleaseAsset asset, {required bool handheld}) async {
+    if (noSpace != null) throw noSpace!;
+  }
+
+  @override
+  Future<String?> installerPackage() async => null;
 
   @override
   Future<void> stageHandheld(File zip) async => staged = true;
@@ -179,5 +188,17 @@ void main() {
     await t.tap(_button('Check for updates'));
     await t.pumpAndSettle();
     expect(find.text('Version 0.3.0 available'), findsOneWidget);
+  });
+
+  testWidgets('a download that cannot start says "Update failed" with the reason', (t) async {
+    _mockVersion(t, '0.2.8');
+    final service = _FakeService()..noSpace = const UpdateException('Not enough free space: the update needs 120.0 MB, 10.0 MB free.');
+    await _pumpAbout(t, service);
+
+    await t.tap(_button('Download update'));
+    await t.pumpAndSettle();
+    expect(find.text('Update failed'), findsOneWidget);
+    expect(find.textContaining('Not enough free space'), findsOneWidget);
+    expect(t.widget<FilledButton>(_button('Check for updates')).focusNode!.hasFocus, isTrue);
   });
 }
