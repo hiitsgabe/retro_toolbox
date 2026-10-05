@@ -61,12 +61,14 @@ class TaskQueueService {
   }
 
   /// Queues a network transfer (SMB/FTP download or zip) as a background
-  /// task with a task-manager row titled [title]. [run] is held in memory
+  /// task with a task-manager row titled [title]. [source] ('smb' / 'ftp')
+  /// lets that screen show the task's progress. [run] is held in memory
   /// with the task; it isn't persisted.
   static void enqueueTransfer(
     WidgetRef ref,
     BuildContext context, {
     required String title,
+    required String source,
     required String verb,
     required String label,
     required TransferJob run,
@@ -76,6 +78,7 @@ class TaskQueueService {
     ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
     ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.remoteTransfer, {
       'taskId': game.gameId,
+      'source': source,
       'verb': verb,
       'label': label,
       'run': run,

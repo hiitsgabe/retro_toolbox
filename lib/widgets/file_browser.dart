@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/browser_layout_provider.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 /// One row in a [FileBrowserView]. [id] must be unique within the listing
@@ -35,6 +38,18 @@ class BrowserTransfer {
   double get fraction => total > 0 ? done / total : 0;
 }
 
+/// The next unfinished background download/zip that [source] ('smb' / 'ftp')
+/// queued: the running one, else the first waiting. Null when none. Progress
+/// is the task's fraction (0 while it hasn't started, which reads as unknown).
+BrowserTransfer? queuedTransfer(WidgetRef ref, String source) {
+  final tasks = ref.watch(taskQueueProvider).tasks.where((t) => t.type == TaskType.remoteTransfer && t.params['source'] == source && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running));
+  final task = tasks.where((t) => t.status == TaskQueueStatus.running).firstOrNull ?? tasks.firstOrNull;
+  if (task == null) return null;
+  final progress = ref.watch(extractionProvider).tasks[task.id]?.progress ?? 0;
+  // ponytail: a fraction in fixed units; the bar only needs done/total.
+  return BrowserTransfer(name: '${task.params['verb']} ${task.params['label']}', done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false);
+}
+
 /// Finder-style file browser: toolbar + icon grid + multi-select action bar +
 /// transfer bar. Presentation only — the parent owns the connection, supplies
 /// [items]/[selectedIds]/[transfer] and reacts to the callbacks. Shared by the
@@ -47,6 +62,10 @@ class FileBrowserView extends ConsumerWidget {
   final List<BrowserItem> items;
   final Set<String> selectedIds;
   final BrowserTransfer? transfer;
+
+  /// 'smb' / 'ftp': also shows that screen's queued background downloads as a
+  /// bar. Unlike [transfer] it never blocks selecting or starting more.
+  final String? queuedSource;
 
   /// When false, activating an item opens it (no selection, no checkboxes) — e.g. the SMB shares
   /// root, where entries are shares you can only enter.
@@ -83,6 +102,7 @@ class FileBrowserView extends ConsumerWidget {
     required this.items,
     required this.selectedIds,
     this.transfer,
+    this.queuedSource,
     this.selectable = true,
     this.onUp,
     required this.onRefresh,
@@ -138,6 +158,9 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
         if (transfer != null) _transferBar(context, transfer!),
+        if (queuedSource != null) ...[
+          if (queuedTransfer(ref, queuedSource!) case final q?) _transferBar(context, q),
+        ],
         if (error != null) Padding(padding: const EdgeInsets.all(12), child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
         if (busy) const LinearProgressIndicator(),
         Expanded(

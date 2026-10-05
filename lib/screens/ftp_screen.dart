@@ -159,6 +159,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
       ],
       selectedIds: state.selected,
       transfer: t == null ? null : BrowserTransfer(name: t.name, done: t.done, total: t.total, upload: t.upload),
+      queuedSource: 'ftp',
       onUp: () => notifier.goUp(),
       onRefresh: () => notifier.refresh(),
       onOpen: (item) => notifier.open(_entry(state, item.id)),
@@ -168,11 +169,11 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
       // transfer survives leaving this screen or locking the device.
       onDownload: () => _pickDirThen((d) async {
         final label = notifier.selectionLabel();
-        TaskQueueService.enqueueTransfer(ref, context, title: 'Download $label', verb: 'Downloading', label: label, run: notifier.downloadJob(d));
+        TaskQueueService.enqueueTransfer(ref, context, source: 'ftp', title: 'Download $label', verb: 'Downloading', label: label, run: notifier.downloadJob(d));
       }),
       onZip: () => _pickDirThen((d) async {
         final label = notifier.selectionLabel();
-        TaskQueueService.enqueueTransfer(ref, context, title: 'Zip $label', verb: 'Downloading and zipping', label: label, run: notifier.zipJob(d));
+        TaskQueueService.enqueueTransfer(ref, context, source: 'ftp', title: 'Zip $label', verb: 'Downloading and zipping', label: label, run: notifier.zipJob(d));
       }),
       onDelete: () => _confirmDelete(context, state, notifier),
       extraActions: () => [
