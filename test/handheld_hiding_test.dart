@@ -20,10 +20,25 @@ void main() {
     await t.pump(const Duration(milliseconds: 300));
   }
 
-  testWidgets('handheld: no Servers tile, no unsupported tools', (t) async {
+  testWidgets('handheld: Servers holds only SMB, FTP and Retro Tools Server', (t) async {
     Handheld.current = true;
     await pumpMenu(t);
-    expect(find.text('Servers'), findsNothing);
+    // Cover flow: first tap centres the card, second opens it.
+    await t.tap(find.text('Servers'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Servers'));
+    await t.pumpAndSettle();
+    for (final l in ['SMB Share', 'FTP', 'Retro Tools Server']) {
+      expect(find.text(l), findsOneWidget, reason: l);
+    }
+    for (final l in ['Tinfoil Server', 'JDKV Server', 'FBI Server']) {
+      expect(find.text(l), findsNothing, reason: l);
+    }
+  });
+
+  testWidgets('handheld: no unsupported tools', (t) async {
+    Handheld.current = true;
+    await pumpMenu(t);
     // Cover flow: first tap centres the card, second opens it.
     await t.tap(find.text('Tools'));
     await t.pumpAndSettle();

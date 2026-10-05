@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/rts_folder_model.dart';
 import 'package:retro_toolbox/providers/rts_server_provider.dart';
@@ -123,6 +124,8 @@ class RtsServerScreen extends ConsumerWidget {
                         fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer),
                   ),
                 ),
+                // No clipboard on the handheld.
+                if (!Handheld.current)
                 IconButton(
                   icon: const Icon(Icons.copy, size: 20),
                   color: theme.colorScheme.onPrimaryContainer,
