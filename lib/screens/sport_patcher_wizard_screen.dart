@@ -658,6 +658,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final nameCtrl = TextEditingController();
     final jsonCtrl = TextEditingController();
     String? err;
+    String? importedName;
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -674,7 +675,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   const SizedBox(height: 8),
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
-                    title: const Text('Or paste / import team JSON'),
+                    title: Text(Handheld.current ? 'Or import team JSON' : 'Or paste / import team JSON'),
                     children: [
                       Text(
                         'A team object: {"name": "...", "players": [{"name","position","number"}]} '
@@ -696,12 +697,19 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                         child: OutlinedButton.icon(
                           onPressed: () async {
                             final path = await pickFile(ctx, title: 'Select a team JSON file', extensions: ['json']);
-                            if (path != null) jsonCtrl.text = await File(path).readAsString();
+                            if (path == null) return;
+                            jsonCtrl.text = await File(path).readAsString();
+                            setLocal(() => importedName = p.basename(path));
                           },
                           icon: const Icon(Icons.upload_file, size: 18),
                           label: const Text('Import from file'),
                         ),
                       ),
+                      if (importedName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text('Loaded $importedName', style: Theme.of(ctx).textTheme.bodySmall),
+                        ),
                     ],
                   ),
                   if (err != null) Padding(
@@ -728,7 +736,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 } else if (nameCtrl.text.trim().isNotEmpty) {
                   _doc!.addTeam(nameCtrl.text.trim());
                 } else {
-                  setLocal(() => err = 'Enter a name or paste JSON');
+                  setLocal(() => err = Handheld.current ? 'Enter a name or import a file' : 'Enter a name or paste JSON');
                   return;
                 }
                 Navigator.pop(ctx, true);
