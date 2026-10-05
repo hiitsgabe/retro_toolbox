@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Adds a single console/system to the catalog from a URL. Toggle picks the
@@ -87,6 +88,16 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
 
   @override
   Widget build(BuildContext context) {
+    return Actions(
+      actions: {
+        // Start == "Add to catalog".
+        if (!_busy) PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => _add()),
+      },
+      child: _scaffold(),
+    );
+  }
+
+  Widget _scaffold() {
     return Scaffold(
       appBar: AppBar(title: const Text('New Catalog Source')),
       body: SafeArea(

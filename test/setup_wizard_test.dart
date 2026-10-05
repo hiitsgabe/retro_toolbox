@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/screens/setup_wizard_screen.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -26,5 +27,72 @@ void main() {
 
     expect(find.text('Internet Archive'), findsNothing);
     expect(find.text('No accounts needed for this catalog.'), findsOneWidget);
+  });
+
+  Future<List<String>> pumpWizard(WidgetTester tester, {required int step, required List<bool> popped}) async {
+    SharedPreferences.setMockInitialValues({});
+    final tmp = Directory.systemTemp.createTempSync('setup');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => tmp.path);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1200, 600);
+    addTearDown(tester.view.reset);
+    final key = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        navigatorKey: key,
+        builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
+        home: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () async {
+              await Navigator.of(ctx).push(
+                  MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
+              popped.add(true);
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    return [];
+  }
+
+  testWidgets('Start advances a step; B goes back; B on step 0 marks seen and leaves', (tester) async {
+    final popped = <bool>[];
+    await pumpWizard(tester, step: 1, popped: popped);
+    expect(find.text('2/3 · Downloads'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // focus lands in the screen
+    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    await tester.pumpAndSettle();
+    expect(find.text('3/3 · Connections'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('2/3 · Downloads'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('1/3 · Catalog'), findsOneWidget);
+    expect(popped, isEmpty);
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+    expect(popped, [true]);
+    expect((await SharedPreferences.getInstance()).getBool(SetupWizardScreen.seenKey), isTrue);
+  });
+
+  testWidgets('Start on the last step finishes (marks seen)', (tester) async {
+    final popped = <bool>[];
+    await pumpWizard(tester, step: 2, popped: popped);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+    expect(popped, [true]);
+    expect((await SharedPreferences.getInstance()).getBool(SetupWizardScreen.seenKey), isTrue);
   });
 }

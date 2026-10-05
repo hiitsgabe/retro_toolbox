@@ -16,6 +16,7 @@ import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
 import 'package:retro_toolbox/services/sports_rom_lookup.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_trivia.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 import 'package:retro_toolbox/services/pick.dart';
@@ -291,8 +292,46 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     }
   }
 
+  /// The enabled primary of [_navButtons]; what Start does.
+  VoidCallback? get _primary {
+    if (_step == _Step.patch) {
+      if (_result != null) return () => Navigator.of(context).pop();
+      return (_busy || _romPath == null) ? null : _patch;
+    }
+    return (_canAdvance && !_busy) ? _next : null;
+  }
+
+  // On the rosters step Next runs the fetch (which advances on success);
+  // elsewhere it just moves forward.
+  void _next() {
+    if (_step == _Step.rosters && _doc == null) {
+      _fetch();
+    } else {
+      setState(() => _index++);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final primary = _primary;
+    // B steps back; on the first step (nothing to lose yet) it leaves. Never
+    // while busy.
+    return PopScope(
+      canPop: _index == 0 && !_busy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_busy && _index > 0) setState(() => _index--);
+      },
+      child: Actions(
+        actions: {
+          if (primary != null)
+            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
+        },
+        child: _scaffold(),
+      ),
+    );
+  }
+
+  Widget _scaffold() {
     final theme = Theme.of(context);
     final accent = sportBrandColor(info.sport);
     return Scaffold(
@@ -980,17 +1019,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       else
         FilledButton(
           style: FilledButton.styleFrom(visualDensity: dense),
-          // On the rosters step Next runs the fetch (which advances on
-          // success); elsewhere it just moves forward.
-          onPressed: (_canAdvance && !_busy)
-              ? () {
-                  if (_step == _Step.rosters && _doc == null) {
-                    _fetch();
-                  } else {
-                    setState(() => _index++);
-                  }
-                }
-              : null,
+          onPressed: (_canAdvance && !_busy) ? _next : null,
           child: const Text('Next'),
         ),
     ];
