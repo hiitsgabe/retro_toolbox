@@ -200,6 +200,43 @@ void main() {
     }
   });
 
+  group('failed install note', () {
+    late Directory port;
+    setUp(() => port = Directory.systemTemp.createTempSync('rt_note'));
+    tearDown(() => port.deleteSync(recursive: true));
+
+    test('failedInstallReason reads the first line of .update/FAILED, else null', () async {
+      final service = UpdateService(portRoot: port.path);
+      expect(service.failedInstallReason(), isNull);
+      Directory('${port.path}/.update').createSync();
+      expect(service.failedInstallReason(), isNull);
+      File('${port.path}/.update/FAILED').writeAsStringSync('copy failed: rm xkb\nmore');
+      expect(service.failedInstallReason(), 'copy failed: rm xkb');
+      File('${port.path}/.update/FAILED').writeAsStringSync('\n');
+      expect(service.failedInstallReason(), 'unknown reason');
+    });
+
+    test('discardStaged removes .update and UPDATE_FAILED.txt, nothing else', () async {
+      Directory('${port.path}/.update/retrotoolbox').createSync(recursive: true);
+      File('${port.path}/UPDATE_FAILED.txt').writeAsStringSync('x');
+      File('${port.path}/flutter-pi').writeAsStringSync('bin');
+      final service = UpdateService(portRoot: port.path);
+      await service.discardStaged();
+      await service.discardStaged(); // already gone: fine
+      expect(Directory('${port.path}/.update').existsSync(), isFalse);
+      expect(File('${port.path}/UPDATE_FAILED.txt').existsSync(), isFalse);
+      expect(File('${port.path}/flutter-pi').existsSync(), isTrue);
+    });
+
+    test('only copy failures are called partial', () {
+      expect(installFailedMessage('staged files incomplete'),
+          "The last update couldn't be installed: staged files incomplete.");
+      for (final r in ['copy failed', 'copy failed: rm app', 'launcher copy failed']) {
+        expect(installFailedMessage(r), allOf(contains('reinstalled partially'), contains('release zip')));
+      }
+    });
+  });
+
   group('network', () {
     late HttpServer server;
     late Directory cache;
@@ -289,6 +326,14 @@ void main() {
         service().download(ReleaseAsset(name: 'none.apk', url: url, size: bytes.length), (_) {}),
         throwsA(predicate((e) => '$e' == cantVerifyMessage)),
       );
+    });
+
+    test('ensureSpace proceeds when the free space is unknown, but still blocks on a real 0', () async {
+      const asset = ReleaseAsset(name: 'a', url: '', size: 100, sha256: 'x');
+      UpdateService unknown() => UpdateService(cacheDir: () async => cache, portRoot: cache.path, freeSpace: (_) async => null);
+      await unknown().ensureSpace(asset, handheld: true);
+      await unknown().ensureSpace(asset, handheld: false);
+      await expectLater(service(free: 0).ensureSpace(asset, handheld: true), throwsA(isA<UpdateException>()));
     });
 
     test('ensureSpace wants 4x on the handheld and 2x on Android', () async {

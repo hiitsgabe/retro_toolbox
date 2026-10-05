@@ -28,7 +28,7 @@ final _release = ReleaseInfo(
 );
 
 class _FakeService extends UpdateService {
-  _FakeService() : super(portRoot: '/nowhere');
+  _FakeService({String portRoot = '/nowhere'}) : super(portRoot: portRoot);
   Future<ReleaseInfo> Function() fetch = () async => _release;
   final downloadGate = Completer<void>();
   bool staged = false;
@@ -165,6 +165,53 @@ void main() {
     expect(service.staged, isTrue);
     expect(find.text('Restart Retro Toolbox to finish the update'), findsOneWidget);
     expect(_button('Close app'), findsOneWidget);
+  });
+
+  group('handheld: the launcher could not install a staged update', () {
+    late Directory port;
+    setUp(() {
+      port = Directory.systemTemp.createTempSync('rt_port');
+      Directory('${port.path}/.update').createSync();
+    });
+    tearDown(() => port.deleteSync(recursive: true));
+
+    File failed(String reason) => File('${port.path}/.update/FAILED')..writeAsStringSync('$reason\n');
+
+    testWidgets('says why; "Try again on next start" keeps .update and moves on to the check', (t) async {
+      _mockVersion(t, '0.3.0');
+      failed('not enough space: need 9 KB, 1 KB free');
+      await _pumpAbout(t, _FakeService(portRoot: port.path), handheld: true, os: 'linux');
+
+      expect(find.text('Update not installed'), findsOneWidget);
+      expect(find.text("The last update couldn't be installed: not enough space: need 9 KB, 1 KB free."), findsOneWidget);
+      expect(find.textContaining('partially'), findsNothing);
+      expect(t.widget<FilledButton>(_button('Try again on next start')).focusNode!.hasFocus, isTrue);
+      expect(find.text('Up to date'), findsNothing, reason: 'no check until the notice is answered');
+
+      await t.tap(_button('Try again on next start'));
+      await t.pumpAndSettle();
+      expect(find.text('Up to date'), findsOneWidget);
+      expect(File('${port.path}/.update/FAILED').existsSync(), isTrue);
+    });
+
+    testWidgets('a part-way failure recommends retrying or reinstalling; "Discard update" deletes .update', (t) async {
+      _mockVersion(t, '0.3.0');
+      failed('launcher copy failed');
+      File('${port.path}/UPDATE_FAILED.txt').writeAsStringSync('x');
+      await _pumpAbout(t, _FakeService(portRoot: port.path), handheld: true, os: 'linux');
+
+      expect(find.textContaining("The last update couldn't be installed: launcher copy failed."), findsOneWidget);
+      expect(find.textContaining('reinstall from the release zip'), findsOneWidget);
+
+      await t.tap(_button('Discard update'));
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200))); // real file IO
+      await t.pumpAndSettle();
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await t.pumpAndSettle();
+      expect(Directory('${port.path}/.update').existsSync(), isFalse);
+      expect(File('${port.path}/UPDATE_FAILED.txt').existsSync(), isFalse);
+      expect(find.text('Up to date'), findsOneWidget);
+    });
   });
 
   testWidgets('desktop: offers the release page instead of a download', (t) async {
