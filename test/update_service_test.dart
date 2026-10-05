@@ -46,7 +46,7 @@ void main() {
     });
     test('android picks by ABI', () {
       expect(updateAssetName(handheld: false, os: 'android', abi: Abi.androidArm64), 'retro_toolbox_arm64.apk');
-      expect(updateAssetName(handheld: false, os: 'android', abi: Abi.androidX64), 'retro_toolbox_arm64.apk');
+      expect(updateAssetName(handheld: false, os: 'android', abi: Abi.androidX64), 'retro_toolbox_universal.apk');
       expect(updateAssetName(handheld: false, os: 'android', abi: Abi.androidArm), 'retro_toolbox_arm32.apk');
       expect(updateAssetName(handheld: false, os: 'android', abi: Abi.androidIA32), 'retro_toolbox_universal.apk');
     });

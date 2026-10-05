@@ -110,7 +110,7 @@ bool isNewerVersion(String release, String current) => compareVersions(release, 
 String? updateAssetName({required bool handheld, required String os, required Abi abi}) {
   if (handheld) return 'retro_toolbox_handheld_arm64.zip';
   if (os != 'android') return null;
-  if (abi == Abi.androidArm64 || abi == Abi.androidX64) return 'retro_toolbox_arm64.apk';
+  if (abi == Abi.androidArm64) return 'retro_toolbox_arm64.apk';
   if (abi == Abi.androidArm) return 'retro_toolbox_arm32.apk';
   return 'retro_toolbox_universal.apk';
 }
