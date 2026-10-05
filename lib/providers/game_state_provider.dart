@@ -215,7 +215,9 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
       state = {...state}..remove(gameId);
       return;
     }
-    // Fresh state also drops the stale error text.
+    // Fresh state also drops the stale error text. A post-download resolve may
+    // still be in flight; its result is stale now, and it would block ours.
+    _resolving.remove(gameId);
     state = {...state, gameId: GameState(game: current.game)};
     final dir = _ref.read(settingsProvider.notifier).getDownloadDir(current.game.consoleId);
     if (dir.isEmpty) {

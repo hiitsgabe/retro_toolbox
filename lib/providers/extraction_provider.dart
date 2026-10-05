@@ -456,7 +456,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       }
     } catch (_) {}
 
-    gameStateManager.updateExtractionState(taskId, ExtractionStatus.failed, 0.0);
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.failed, 0.0, error: error);
   }
 
   bool _hasActiveExtractions(Map<String, ExtractionTaskState> tasks) {

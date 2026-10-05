@@ -88,7 +88,8 @@ class GameState {
       availableActions: availableActions ?? this.availableActions,
       showProgressBar: showProgressBar ?? this.showProgressBar,
       currentProgress: currentProgress ?? this.currentProgress,
-      errorMessage: errorMessage ?? this.errorMessage,
+      // A move to any non-failed status (retry queued, running, done) drops the old error.
+      errorMessage: errorMessage ?? (status == null || status == GameStatus.downloadFailed || status == GameStatus.extractionFailed ? this.errorMessage : null),
       hasJustCompleted: hasJustCompleted ?? this.hasJustCompleted,
       isTransfer: isTransfer,
     );
