@@ -109,7 +109,6 @@ class _MenuTileCardState extends State<_MenuTileCard> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     // Touch users never see a focus look (taps don't move focus).
     final showFocus = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
     return Material(
@@ -123,23 +122,7 @@ class _MenuTileCardState extends State<_MenuTileCard> {
         child: AnimatedScale(
           scale: _pressed ? 0.94 : (showFocus ? 1.05 : 1),
           duration: const Duration(milliseconds: 90),
-          child: Stack(
-            fit: StackFit.passthrough,
-            children: [
-              MenuTileFace(tile: widget.tile),
-              if (showFocus)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: scheme.primary, width: 3),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+          child: MenuTileFace(tile: widget.tile),
         ),
       ),
     );
