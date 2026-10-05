@@ -35,6 +35,8 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
   @override
   String getDownloadDir(String? consoleId) => dir;
   @override
+  bool getExtractToFolder(String? consoleId) => false;
+  @override
   int getMaxParallelDownloads() => 5;
   @override
   int getMaxParallelExtractions() => 2;
@@ -208,6 +210,55 @@ void main() {
     await settled(t);
     expect(tasksOf(_zip.gameId), isEmpty);
     expect(stateOf(_zip.gameId)!.status, GameStatus.ready);
+    await teardown(t);
+  });
+
+  testWidgets('fail then retry then succeed leaves no error text', (t) async {
+    await pump(t);
+    final games = c.read(gameStateManagerProvider.notifier);
+    final id = _transfer.gameId;
+    games.registerTransientGame(_transfer, isTransfer: true);
+    games.updateExtractionState(id, ExtractionStatus.failed, 0, error: 'boom');
+    expect(stateOf(id)!.errorMessage, 'boom');
+    games.updateQueueState(id, TaskType.remoteTransfer);
+    expect(stateOf(id)!.errorMessage, isNull);
+    games.updateExtractionState(id, ExtractionStatus.extracting, 0.5);
+    games.updateExtractionState(id, ExtractionStatus.failed, 0, error: 'again');
+    expect(stateOf(id)!.errorMessage, 'again');
+    games.updateExtractionState(id, ExtractionStatus.extracting, 0.1);
+    expect(stateOf(id)!.errorMessage, isNull);
+    games.updateExtractionState(id, ExtractionStatus.completed, 1);
+    expect(stateOf(id)!.status, GameStatus.downloaded);
+    expect(stateOf(id)!.errorMessage, isNull);
+    await teardown(t);
+  });
+
+  testWidgets('a plain extraction failure carries its message', (t) async {
+    await pump(t);
+    const big = Game(title: 'huge', url: 'https://x/huge.zip', size: 1 << 60, consoleId: 'manual');
+    File('${dir.path}/${big.filename}').writeAsStringSync('zip');
+    c.read(gameStateManagerProvider.notifier).registerTransientGame(big);
+    await t.runAsync(() => c.read(extractionProvider.notifier).extractFile(big.gameId));
+    await settle(t);
+    expect(stateOf(big.gameId)!.status, GameStatus.extractionFailed);
+    expect(stateOf(big.gameId)!.errorMessage, 'Insufficient disk space');
+    await teardown(t);
+  });
+
+  testWidgets('cancelling while a post-download resolve is in flight does not stick on Loading', (t) async {
+    await pump(t);
+    File('${dir.path}/${_zip.filename}').writeAsStringSync('zip');
+    occupySlot();
+    queueZip();
+    c.read(taskQueueProvider.notifier).updateTaskStatus(_zip.gameId, TaskQueueStatus.failed, error: 'boom');
+    final games = c.read(gameStateManagerProvider.notifier);
+    games.updateExtractionState(_zip.gameId, ExtractionStatus.failed, 0, error: 'boom');
+    games.resolveState(_zip.gameId, true); // in flight: awaits the library scan
+    expect(stateOf(_zip.gameId)!.status, GameStatus.loading);
+    TaskQueueService.cancelTask(ref, _zip, stateOf(_zip.gameId)!);
+    await settled(t);
+    await settle(t);
+    expect(stateOf(_zip.gameId)!.status, GameStatus.downloaded);
     await teardown(t);
   });
 }
