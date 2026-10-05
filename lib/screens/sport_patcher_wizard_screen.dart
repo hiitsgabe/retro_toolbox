@@ -47,7 +47,13 @@ enum _Step { rosters, teams, rom, patch }
 
 class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   final List<_Step> _steps = const [_Step.rosters, _Step.teams, _Step.rom, _Step.patch];
-  late int _index = widget.initialStep;
+  late int _stepIndex = widget.initialStep;
+  int get _index => _stepIndex;
+  // A swap armed on the teams step must not outlive the step.
+  set _index(int v) {
+    _stepIndex = v;
+    _teamSwapFrom = null;
+  }
 
   late String _provider = widget.info.defaultProvider;
   late int _season = defaultSeason(_provider);
@@ -105,7 +111,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ],
       ),
     );
-    if (ok == true && mounted) setState(() => teams.removeAt(i));
+    if (ok != true || !mounted) return;
+    setState(() => teams.removeAt(i));
+    if (teams.isNotEmpty) _focusTeam(i < teams.length ? i : teams.length - 1);
   }
 
   bool _busy = false;

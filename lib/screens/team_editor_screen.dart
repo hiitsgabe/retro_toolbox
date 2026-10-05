@@ -86,7 +86,10 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         ],
       ),
     );
-    if (ok == true && mounted) setState(() => team.players.removeAt(i));
+    if (ok != true || !mounted) return;
+    setState(() => team.players.removeAt(i));
+    final n = team.players.length;
+    if (n > 0) _focusOn(i < n ? i : n - 1);
   }
 
   Future<void> _editPlayer(RosterPlayer? player) async {
