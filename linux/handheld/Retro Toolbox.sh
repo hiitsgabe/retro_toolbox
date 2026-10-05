@@ -38,19 +38,51 @@ mkdir -p "$XDG_DATA_HOME" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$GAMEDIR/Documen
 printf 'XDG_DOCUMENTS_DIR="$HOME/Documents"\nXDG_DOWNLOAD_DIR="$HOME/Downloads"\n' > "$XDG_CONFIG_HOME/user-dirs.dirs"
 
 export RETRO_TOOLBOX_HANDHELD=1
+# path_provider asks `xdg-user-dir`, which these firmwares lack.
+export PATH="$GAMEDIR/bin:$PATH"
+# Keyboard layouts for xkbcommon (gptokeyb sends key events).
+export XKB_CONFIG_ROOT="$GAMEDIR/xkb"
+# No X11 locale data either: without a Compose file flutter-pi drops all
+# keyboard input. An (almost) empty one is enough — it can't be zero bytes.
+export XCOMPOSEFILE="$GAMEDIR/xkb/Compose"
+[ -s "$XCOMPOSEFILE" ] || echo "# No compose sequences." > "$XCOMPOSEFILE"
+
 MODE_ARGS=""
+FB=/sys/class/graphics/fb0
+FB_VIRTUAL=""
 if ls /dev/dri/card* >/dev/null 2>&1; then
   echo "Display: DRM/KMS"
 else
   echo "Display: framebuffer"
   export RETRO_TOOLBOX_FBDEV=1
   MODE_ARGS="--fbdev"
+  # flutter-pi draws into the first page only; a double-height (page
+  # flipping) framebuffer would alternate with the frontend's old frame.
+  if [ -w "$FB/virtual_size" ]; then
+    FB_VIRTUAL=$(cat "$FB/virtual_size")
+    W=$(cut -d, -f1 "$FB/virtual_size")
+    H=$(cat "$FB/modes" 2>/dev/null | head -1 | sed -n 's/.*:\([0-9]*\)x\([0-9]*\).*/\2/p')
+    [ -z "$H" ] && H=$(( $(cut -d, -f2 "$FB/virtual_size") / 2 ))
+    echo "$W,$H" > "$FB/virtual_size" 2>/dev/null
+    echo "0,0" > "$FB/pan" 2>/dev/null
+  fi
 fi
+
+# Physical size (mm) drives flutter-pi's pixel ratio (10*px / (mm*38)).
+# Default: ~1.2x, whatever the panel resolution. RT_DISPLAY_MM overrides.
+if [ -z "$RT_DISPLAY_MM" ] && [ -r "$FB/virtual_size" ]; then
+  PX_W=$(cut -d, -f1 "$FB/virtual_size"); PX_H=$(cut -d, -f2 "$FB/virtual_size")
+  RT_DISPLAY_MM="$(( PX_W * 10 / 46 )),$(( PX_H * 10 / 46 ))"
+fi
+echo "Display mm: ${RT_DISPLAY_MM:-71,53}"
 
 chmod +x ./flutter-pi
 $GPTOKEYB "flutter-pi" -c "$GAMEDIR/retrotoolbox.gptk" &
 pm_platform_helper "$GAMEDIR/flutter-pi"
-# -d: physical size in mm so flutter-pi computes a sane pixel ratio on ~3.5" screens.
+# Something in the stack writes to a closed pipe at startup; ignore SIGPIPE
+# (the write then fails with EPIPE instead of killing flutter-pi).
+trap '' PIPE
 ./flutter-pi --release $MODE_ARGS -d "${RT_DISPLAY_MM:-71,53}" ./data/flutter_assets
 echo "flutter-pi exited with $?"
+[ -n "$FB_VIRTUAL" ] && echo "$FB_VIRTUAL" > "$FB/virtual_size" 2>/dev/null
 pm_finish
