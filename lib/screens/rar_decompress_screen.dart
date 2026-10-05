@@ -113,7 +113,7 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
             const ToolDescription(
               icon: Icons.folder_zip_outlined,
               text: 'Extracts .rar and .zip archives to a folder. Pick an archive and an output '
-                  'folder, then extract. RAR support is available on Android and macOS.',
+                  'folder, then extract. RAR support is available on Android, macOS and Linux.',
             ),
             const SizedBox(height: 16),
             _fileRow(theme, Icons.insert_drive_file_outlined, 'Archive',
