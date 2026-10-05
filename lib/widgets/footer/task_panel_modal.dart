@@ -1,8 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_list_view.dart';
+
+/// Splits task states over the task manager's tabs. A running network transfer
+/// ([transferIds]) reports as `extracting` (it shares the file-task machinery),
+/// but belongs under Downloads, not Extractions.
+({List<GameState> downloading, List<GameState> extracting, List<GameState> queued, List<GameState> completed, List<GameState> failed}) classifyTasks(
+  Iterable<GameState> states, {
+  Set<String> transferIds = const {},
+}) {
+  final downloading = <GameState>[], extracting = <GameState>[], queued = <GameState>[], completed = <GameState>[], failed = <GameState>[];
+  for (final state in states) {
+    final isTransfer = transferIds.contains(state.game.gameId);
+    if (state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused || state.status == GameStatus.downloadQueued) {
+      downloading.add(state);
+    }
+    if (state.status == GameStatus.extracting || state.status == GameStatus.extractionQueued) {
+      if (state.status == GameStatus.extracting && isTransfer) {
+        downloading.add(state);
+      } else {
+        extracting.add(state);
+      }
+    }
+    if (state.status == GameStatus.downloadQueued || state.status == GameStatus.extractionQueued) {
+      queued.add(state);
+    }
+    if (state.hasJustCompleted && (state.status == GameStatus.downloaded || state.status == GameStatus.extracted)) {
+      completed.add(state);
+    }
+    if (state.status == GameStatus.downloadFailed || state.status == GameStatus.extractionFailed) {
+      failed.add(state);
+    }
+  }
+  return (downloading: downloading, extracting: extracting, queued: queued, completed: completed, failed: failed);
+}
 
 class TaskPanelModal extends ConsumerStatefulWidget {
   const TaskPanelModal({super.key});
@@ -46,29 +81,13 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
   Widget build(BuildContext context) {
     final gameStateManager = ref.watch(gameStateManagerProvider);
 
-    final downloadingGames = <GameState>[];
-    final extractingGames = <GameState>[];
-    final queuedGames = <GameState>[];
-    final completedGames = <GameState>[];
-    final failedGames = <GameState>[];
-
-    for (final state in gameStateManager.values) {
-      if (state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused || state.status == GameStatus.downloadQueued) {
-        downloadingGames.add(state);
-      }
-      if (state.status == GameStatus.extracting || state.status == GameStatus.extractionQueued) {
-        extractingGames.add(state);
-      }
-      if (state.status == GameStatus.downloadQueued || state.status == GameStatus.extractionQueued) {
-        queuedGames.add(state);
-      }
-      if (state.hasJustCompleted && (state.status == GameStatus.downloaded || state.status == GameStatus.extracted)) {
-        completedGames.add(state);
-      }
-      if (state.status == GameStatus.downloadFailed || state.status == GameStatus.extractionFailed) {
-        failedGames.add(state);
-      }
-    }
+    final transferIds = {for (final t in ref.watch(taskQueueProvider).tasks) if (t.type == TaskType.remoteTransfer) t.id};
+    final tabs = classifyTasks(gameStateManager.values, transferIds: transferIds);
+    final downloadingGames = tabs.downloading;
+    final extractingGames = tabs.extracting;
+    final queuedGames = tabs.queued;
+    final completedGames = tabs.completed;
+    final failedGames = tabs.failed;
 
     return Container(
       decoration: BoxDecoration(
