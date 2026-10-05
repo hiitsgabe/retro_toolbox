@@ -86,6 +86,12 @@ void main() {
     await t.tap(find.text('Remove'));
     await t.pumpAndSettle();
     expect(team.players.map((p) => p.name), ['Ben', 'Cal']);
+    var inRow = false;
+    FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+      inRow = e.widget is ListTile;
+      return !inRow;
+    });
+    expect(inRow, isTrue);
   });
 
   testWidgets('drag handles are hidden on handhelds', (t) async {

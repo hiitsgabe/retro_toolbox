@@ -72,6 +72,44 @@ void main() {
     expect(find.byIcon(Icons.swap_vert), findsWidgets); // back to normal rows
   });
 
+  bool focusInRow() {
+    var inRow = false;
+    FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
+      inRow = e.widget is ListTile;
+      return !inRow;
+    });
+    return inRow;
+  }
+
+  testWidgets('Y on a team row starts a swap', (t) async {
+    await pump(t);
+    await t.tap(find.byIcon(Icons.swap_vert).first); // lands focus on a row
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape); // back to normal, focus stays on the row
+    await t.pumpAndSettle();
+    expect(find.byIcon(Icons.swap_vert), findsWidgets);
+    await t.sendKeyEvent(LogicalKeyboardKey.f3);
+    await t.pumpAndSettle();
+    expect(find.byIcon(Icons.swap_vert), findsNothing); // swap mode hides row actions
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(names(), ['Team Two', 'Team One', 'Team Three']);
+  });
+
+  testWidgets('changing step drops an armed swap, so B steps back at once', (t) async {
+    await pump(t);
+    await t.tap(find.byIcon(Icons.swap_vert).first);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.f5); // Start: on to the ROM step
+    await t.pumpAndSettle();
+    expect(find.text('Add team'), findsNothing);
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(find.text('Add team'), findsOneWidget);
+    expect(find.byIcon(Icons.swap_vert), findsWidgets); // not armed
+  });
+
   testWidgets('deleting a team asks first', (t) async {
     await pump(t);
     await t.tap(find.byIcon(Icons.delete_outline).first);
@@ -85,6 +123,7 @@ void main() {
     await t.tap(find.text('Remove'));
     await t.pumpAndSettle();
     expect(names(), ['Team Two', 'Team Three']);
+    expect(focusInRow(), isTrue);
   });
 
   testWidgets('drag handles are hidden on handhelds', (t) async {
