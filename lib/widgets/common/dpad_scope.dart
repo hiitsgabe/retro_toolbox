@@ -50,8 +50,7 @@ class _EdgeAction extends Action<ListEdgeIntent> {
   void invoke(ListEdgeIntent intent) => _run(intent.end);
 }
 
-EditableTextState? _focusedField() =>
-    FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
+EditableTextState? _focusedField() => FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
 
 /// Up/down: leave a text field unless it is multi-line (maxLines != 1); then
 /// disabled, so the key falls through to caret movement.
@@ -152,7 +151,7 @@ class _OskAction extends Action<_OskIntent> {
 /// Handheld gamepads reach the app as keys: D-pad=arrows, A=Enter, B=Escape,
 /// L1/R1=PageUp/PageDown, L2/R2=Home/End, X/Y/Select/Start=F2/F3/F4/F5.
 class DpadScope extends StatefulWidget {
-  const DpadScope({super.key, required this.child, required this.navigatorKey, this.onScreenKeyboard = false});
+  const DpadScope({super.key, required this.child, required this.navigatorKey, this.onScreenKeyboard = false, this.onOptions});
 
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;
@@ -163,6 +162,9 @@ class DpadScope extends StatefulWidget {
 
   /// Enter on a text field opens the in-app keyboard (no platform IME).
   final bool onScreenKeyboard;
+
+  /// Select/F4 where no screen handles it. Not while a dialog or sheet is up.
+  final VoidCallback? onOptions;
 
   @override
   State<DpadScope> createState() => _DpadScopeState();
@@ -318,9 +320,7 @@ class _DpadScopeState extends State<DpadScope> {
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is KeyDownEvent && _wakeKeys.contains(e.logicalKey)) {
       final scope = FocusManager.instance.primaryFocus;
-      final first = scope is FocusScopeNode
-          ? scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull
-          : null;
+      final first = scope is FocusScopeNode ? scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull : null;
       _woke = first != null;
       if (first != null) {
         first.requestFocus();
@@ -462,7 +462,10 @@ class _DpadScopeState extends State<DpadScope> {
             ),
             MarkIntent: DoNothingAction(),
             ItemActionsIntent: DoNothingAction(),
-            OptionsIntent: DoNothingAction(),
+            OptionsIntent: CallbackAction<OptionsIntent>(onInvoke: (_) {
+              if (DpadScope.routeObserver.top is! PopupRoute) widget.onOptions?.call();
+              return null;
+            }),
             ListEdgeIntent: _EdgeAction(_listEdge),
             _OskIntent: _OskAction(widget.onScreenKeyboard ? widget.navigatorKey : null),
           },

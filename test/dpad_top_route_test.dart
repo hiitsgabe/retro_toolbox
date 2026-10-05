@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
@@ -74,5 +75,24 @@ void main() {
 
     await t.pumpAndSettle();
     expect(outline(), paints..rrect());
+  });
+
+  testWidgets('Select calls onOptions, but not over a dialog', (t) async {
+    final nav = GlobalKey<NavigatorState>();
+    var options = 0;
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      navigatorObservers: [DpadScope.routeObserver],
+      builder: (c, child) => DpadScope(navigatorKey: nav, onOptions: () => options++, child: child!),
+      home: Scaffold(body: TextButton(autofocus: true, onPressed: () {}, child: const Text('page'))),
+    ));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonSelect);
+    expect(options, 1);
+
+    showDialog<void>(context: nav.currentContext!, builder: (_) => AlertDialog(actions: [TextButton(autofocus: true, onPressed: () {}, child: const Text('OK'))]));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.f4);
+    expect(options, 1);
   });
 }
