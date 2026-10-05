@@ -20,6 +20,9 @@ setup() {
   echo stale > "$G/bundled_libs/libgone.so"; echo stale > "$G/xkb/gone"; echo stale > "$G/data/flutter_assets/gone"
   echo stale > "$G/app/gone.py"; echo stale > "$G/site-packages/oldmod/x.py"
   echo "old launcher" > "$P/Retro Toolbox.sh"
+  # Other ports and the PortMaster folder share ports/: they must never be touched.
+  mkdir -p "$P/otherport/data" "$P/PortMaster"; echo other > "$P/otherport/data/save"
+  echo "other launcher" > "$P/Other Port.sh"; echo pm > "$P/PortMaster/control.txt"
 
   mkdir -p "$N"/{data/flutter_assets,bundled_libs,xkb,lib,bin,app,site-packages/newmod}
   echo new > "$N/flutter-pi"; echo new > "$N/lib/libapp.so"; echo new > "$N/bundled_libs/libnew.so"
@@ -53,6 +56,10 @@ check "flutter-pi executable" '[ -x "$G/flutter-pi" ]'
 check "bin executable" '[ -x "$G/bin/xdg-user-dir" ]'
 check ".update removed" '[ ! -e "$U" ]'
 check "steps logged" 'echo "$out" | grep -q "Update: done"'
+check "other port untouched" '[ "$(cat "$P/otherport/data/save")" = other ]'
+check "other launcher untouched" '[ "$(cat "$P/Other Port.sh")" = "other launcher" ]'
+check "PortMaster untouched" '[ "$(cat "$P/PortMaster/control.txt")" = pm ]'
+check "ports/ holds nothing new" '[ "$(ls -A "$P" | sort | tr "\n" " ")" = "Other Port.sh PortMaster Retro Toolbox.sh otherport retrotoolbox " ]'
 
 # --- interrupted download, or a power cut after READY was dropped ---
 setup; rm "$U/READY"; rm -rf "$N/bundled_libs"
