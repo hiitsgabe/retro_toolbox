@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
@@ -43,9 +44,7 @@ ThemeData appTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
     ),
-    pageTransitionsTheme: Handheld.framebuffer
-        ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoOpPageTransitionsBuilder()})
-        : null,
+    pageTransitionsTheme: Handheld.framebuffer ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoOpPageTransitionsBuilder()}) : null,
   );
 }
 
@@ -61,8 +60,16 @@ class RetroToolboxApp extends ConsumerWidget {
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
-      builder: (context, child) =>
-          DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current || builtInKeyboard, child: child!),
+      builder: (context, child) => DpadScope(
+        navigatorKey: navigatorKey,
+        onScreenKeyboard: Handheld.current || builtInKeyboard,
+        // Select opens the task manager anywhere.
+        onOptions: () {
+          final c = navigatorKey.currentContext;
+          if (c != null) TaskPanelModal.show(c);
+        },
+        child: child!,
+      ),
       home: const MenuScreen(),
     );
   }

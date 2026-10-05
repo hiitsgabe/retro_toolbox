@@ -7,6 +7,7 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
@@ -17,6 +18,7 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
@@ -158,10 +160,27 @@ void main() {
     await focusCard(t);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
+    expect(find.text('Download 2 games?'), findsOneWidget);
+    expect(started, isEmpty);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter); // A on the focused "Download"
+    await t.pumpAndSettle();
     expect(started, hasLength(1));
     expect(started.single.$1, [_a, _b]);
     expect(started.single.$2, 'con');
     expect(find.byType(BottomSheet), findsNothing);
+  });
+
+  testWidgets('B on the confirmation downloads nothing', (t) async {
+    catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/a.zip'});
+    await pump(t, const GameRow(game: _a));
+    await focusCard(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(find.text('Download 1 game?'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(find.text('Download 1 game?'), findsNothing);
+    expect(started, isEmpty);
   });
 
   testWidgets('Start with nothing selected presses the focused card', (t) async {
@@ -177,22 +196,50 @@ void main() {
     catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/a.zip'});
     await pump(t, const GameRow(game: _a));
     await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart); // focus is on "Above"
-    await t.pump();
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart); // Start again presses "Download"
+    await t.pumpAndSettle();
     expect(started.single.$1, [_a]);
   });
 
-  testWidgets('Select opens the filter sheet', (t) async {
+  testWidgets('the Y menu opens the filters', (t) async {
     await pump(t, const GameRow(game: _a));
     await focusCard(t);
-    await t.sendKeyEvent(LogicalKeyboardKey.f4);
+    await t.sendKeyEvent(LogicalKeyboardKey.f3);
+    await t.pumpAndSettle();
+    await t.tap(find.text('Filters'));
     await t.pumpAndSettle();
     expect(find.byType(FilterModal), findsOneWidget);
+  });
+
+  testWidgets('holding A opens the box art; a tap still presses the card', (t) async {
+    const withArt = Game(title: 'Art', url: 'https://example.com/files/art.zip', size: 1, consoleId: 'con', details: GameDetails(boxart: 'https://example.com/art.png'));
+    final shown = <Game>[];
+    debugShowBoxart = (_, g) => shown.add(g);
+    addTearDown(() => debugShowBoxart = null);
+    var pressed = 0;
+    await pump(t, GameCardActions(game: withArt, selectable: true, child: TextButton(onPressed: () => pressed++, child: const Text('card'))));
+    await focusCard(t);
+
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pump();
+    expect(pressed, 1);
+    expect(shown, isEmpty);
+
+    await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await t.pump(const Duration(milliseconds: 600));
+    await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await t.pump();
+    expect(shown, [withArt]);
+    expect(pressed, 1);
   });
 
   testWidgets('cover flow: Start downloads the selection, X marks and Y opens the centre game', (t) async {
     catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/b.zip'}, cachedFilteredGames: [_a, _b]);
     await pump(t, const GameCoverFlow(), above: false);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(started.single.$1, [_b]);
     expect(find.byType(BottomSheet), findsNothing);

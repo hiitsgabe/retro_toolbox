@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/screens/about_screen.dart';
 import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
@@ -23,11 +24,26 @@ Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, Str
 bool canDownloadSelected(WidgetRef ref) =>
     !ref.read(appStateProvider).loading && ref.read(downloadProvider.notifier).hasDownloadableSelectedGames();
 
-/// What the "Download Selected" button does; Start runs the same call.
-void downloadSelected(WidgetRef ref, BuildContext context, String? consoleId) {
+/// What the "Download Selected" button does; Start runs the same call. Asks
+/// first: a stray Start press must not queue a whole selection.
+Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? consoleId) async {
   final catalogState = ref.read(catalogProvider);
   final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-  (debugStartDownloads ?? TaskQueueService.startDownloads)(ref, context, selectedGames, consoleId);
+  final n = selectedGames.length;
+  final bytes = selectedGames.fold<int>(0, (sum, g) => sum + g.size);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: Text(n == 1 ? 'Download 1 game?' : 'Download $n games?'),
+      content: bytes > 0 ? Text('${formatBytes(bytes)} in total.') : null,
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+        FilledButton(autofocus: true, onPressed: () => Navigator.pop(c, true), child: const Text('Download')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  await (debugStartDownloads ?? TaskQueueService.startDownloads)(ref, context, selectedGames, consoleId);
 }
 
 class Header extends ConsumerStatefulWidget {

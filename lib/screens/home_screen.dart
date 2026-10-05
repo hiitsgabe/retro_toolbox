@@ -4,7 +4,6 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
-import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_list.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid.dart';
@@ -93,9 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       runSpacing: 8,
                                       children: [
                                         FilledButton.icon(
-                                          onPressed: appState.selectedConsole == null
-                                              ? null
-                                              : () => ref.read(catalogProvider.notifier).loadCatalog(appState.selectedConsole!),
+                                          onPressed: appState.selectedConsole == null ? null : () => ref.read(catalogProvider.notifier).loadCatalog(appState.selectedConsole!),
                                           icon: const Icon(Icons.refresh),
                                           label: const Text('Retry'),
                                         ),
@@ -130,7 +127,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 /// Gamepad buttons for the games screen, wherever focus is on it: Start
 /// downloads the selected games (only when the header button would be enabled;
 /// otherwise it defers to the enclosing Start action, DpadScope's press of the
-/// focused control), Select opens the filters.
+/// focused control). Filters are in the Y menu; Select opens the task manager
+/// (app-wide, see DpadScope.onOptions).
 class GamesButtons extends ConsumerWidget {
   const GamesButtons({super.key, required this.child});
 
@@ -147,7 +145,6 @@ class GamesButtons extends ConsumerWidget {
           downloadSelected(ref, context, ref.read(appStateProvider).selectedConsole?.id);
           return null;
         }),
-        OptionsIntent: CallbackAction<OptionsIntent>(onInvoke: (_) => FilterModal.show(context)),
       },
       child: child,
     );

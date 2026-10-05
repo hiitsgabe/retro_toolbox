@@ -263,7 +263,7 @@ void main() {
     final node = FocusManager.instance.primaryFocus;
     expect(node, isNot(isA<FocusScopeNode>()));
     expect(node?.context?.findAncestorWidgetOfExactType<BottomSheet>(), isNotNull);
-    expect(Focus.of(t.element(inSheet(find.text('Add to favourites')))).hasFocus, isTrue);
+    expect(Focus.of(t.element(inSheet(find.text('Filters')))).hasFocus, isTrue); // the tile that moved up
   });
 
   testWidgets('escape while an action runs does not drop it', (t) async {
