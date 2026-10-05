@@ -32,7 +32,8 @@ class PathBrowser extends StatefulWidget {
   final List<String>? allowedExtensions;
 
   /// Pick a folder instead of a file: files are hidden and a "Use this folder"
-  /// row at the top of the list returns the current folder.
+  /// button in the footer returns the current folder (on a handheld also a row
+  /// at the top of the list, one d-pad Up from the entries).
   final bool selectDirectory;
 
   static Future<String?> show(
@@ -131,6 +132,11 @@ class _PathBrowserState extends State<PathBrowser> {
 
   static const _rowHeight = 48.0;
 
+  /// The "Use this folder" list row is for d-pad users; touch has the footer button.
+  bool get _topRow => widget.selectDirectory && Handheld.current;
+
+  bool get _listed => !_loading && _error == null;
+
   @override
   void dispose() {
     _target.dispose();
@@ -196,7 +202,7 @@ class _PathBrowserState extends State<PathBrowser> {
         _cameFrom = cameFrom;
         _loading = false;
         final i = _paths.indexOf(_focusPath ?? '');
-        final lead = (p.dirname(path) != path ? 1 : 0) + (widget.selectDirectory ? 1 : 0);
+        final lead = (p.dirname(path) != path ? 1 : 0) + (_topRow ? 1 : 0);
         _scroll = ScrollController(initialScrollOffset: i <= 0 ? 0 : (i + lead) * _rowHeight);
       });
       // The tiles only exist after this frame's build.
@@ -280,6 +286,10 @@ class _PathBrowserState extends State<PathBrowser> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  if (widget.selectDirectory) ...[
+                    const SizedBox(width: 8),
+                    FilledButton(onPressed: _listed ? () => Navigator.pop(context, _dir) : null, child: const Text('Use this folder')),
+                  ],
                 ],
               ),
             ),
@@ -291,7 +301,7 @@ class _PathBrowserState extends State<PathBrowser> {
     // Start == "Use this folder", once the folder has listed.
     return Actions(
       actions: {
-        if (!_loading && _error == null)
+        if (_listed)
           PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
             onInvoke: (_) => Navigator.pop(context, _dir),
           ),
@@ -332,8 +342,8 @@ class _PathBrowserState extends State<PathBrowser> {
       emptyText = 'No matching files here';
     }
     // Row 0 takes _fallback unless it is the target itself. The fixed rows
-    // ("Use this folder", "..") pass a null path; with no entries to focus the
-    // target is then the first of them ("Use this folder" in directory mode).
+    // ("Use this folder" on a handheld, "..") pass a null path; with no entries
+    // to focus the target is then the first of them.
     var row = 0;
     FocusNode? nodeFor(String? path) {
       final first = row++ == 0;
@@ -346,7 +356,7 @@ class _PathBrowserState extends State<PathBrowser> {
       shrinkWrap: true,
       itemExtent: _rowHeight,
       children: [
-        if (widget.selectDirectory)
+        if (_topRow)
           ListTile(
             dense: true,
             leading: const Icon(Icons.check_circle, size: 20),
