@@ -195,4 +195,17 @@ void main() {
     await t.pump();
     expect(closed, isFalse);
   });
+
+  testWidgets('Start does not return a folder that failed to open', (t) async {
+    Directory(p.join(tmp.path, 'locked')).createSync();
+    Process.runSync('chmod', ['000', p.join(tmp.path, 'locked')]);
+    await open(t);
+    await t.scrollUntilVisible(find.text('locked'), 50, scrollable: find.byType(Scrollable).last);
+    await t.tap(find.text('locked'));
+    await settle(t);
+    expect(find.textContaining("Can't open"), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await settle(t);
+    expect(closed, isFalse);
+  });
 }

@@ -22,49 +22,45 @@ class _NoOpPageTransitionsBuilder extends PageTransitionsBuilder {
   }
 }
 
+/// The app's theme. Always dark: screens are designed for the dark palette and
+/// look broken when a device's system theme is light. Framebuffer mode drops
+/// page transitions.
+ThemeData appTheme() {
+  final colorScheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF7C4DEF),
+    brightness: Brightness.dark,
+  );
+  return ThemeData(
+    colorScheme: colorScheme,
+    focusColor: colorScheme.primary.withValues(alpha: 0.24),
+    useMaterial3: true,
+    fontFamily: 'ChakraPetch',
+    scaffoldBackgroundColor: const Color(0xFF17102B),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    pageTransitionsTheme: Handheld.framebuffer
+        ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoOpPageTransitionsBuilder()})
+        : null,
+  );
+}
+
 class RetroToolboxApp extends ConsumerWidget {
   const RetroToolboxApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final builtInKeyboard = ref.watch(settingsProvider.select((s) => s.useOnScreenKeyboard));
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF7C4DEF),
-      brightness: Brightness.dark,
-    );
     return MaterialApp(
       navigatorKey: navigatorKey,
       navigatorObservers: [DpadScope.routeObserver],
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
-      // Always dark: screens are designed for the dark palette and look broken
-      // when a device's system theme is light.
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        focusColor: colorScheme.primary.withValues(alpha: 0.24),
-        useMaterial3: true,
-        fontFamily: 'ChakraPetch',
-        scaffoldBackgroundColor: const Color(0xFF17102B),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-        ),
-        pageTransitionsTheme: Handheld.framebuffer
-            ? PageTransitionsTheme(
-                builders: {
-                  TargetPlatform.android: _NoOpPageTransitionsBuilder(),
-                  TargetPlatform.iOS: _NoOpPageTransitionsBuilder(),
-                  TargetPlatform.linux: _NoOpPageTransitionsBuilder(),
-                  TargetPlatform.macOS: _NoOpPageTransitionsBuilder(),
-                  TargetPlatform.windows: _NoOpPageTransitionsBuilder(),
-                  TargetPlatform.fuchsia: _NoOpPageTransitionsBuilder(),
-                },
-              )
-            : null,
-      ),
+      theme: appTheme(),
       builder: (context, child) =>
           DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current || builtInKeyboard, child: child!),
       home: const MenuScreen(),

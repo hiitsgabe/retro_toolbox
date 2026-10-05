@@ -692,9 +692,11 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ),
         Expanded(
           child: ReorderableListView.builder(
-            buildDefaultDragHandles: !Handheld.current,
+            // Off while a swap is armed: a drag would shift the armed index.
+            buildDefaultDragHandles: !Handheld.current && _teamSwapFrom == null,
             itemCount: teams.length,
             onReorder: (oldI, newI) => setState(() {
+              _teamSwapFrom = null;
               if (newI > oldI) newI--;
               teams.insert(newI, teams.removeAt(oldI));
             }),
