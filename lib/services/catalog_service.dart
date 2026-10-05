@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/utils/title_match.dart';
 import 'package:retro_toolbox/utils/title_metadata_parser.dart';
 import 'package:retro_toolbox/services/boxart_service.dart';
 
@@ -270,6 +272,11 @@ class CatalogService {
       await _status(onStatus, 'Sorting ${catalog.length} games');
       catalog.sort((a, b) => a.title.compareTo(b.title));
 
+      if (console.releaseDates.isNotEmpty) {
+        await _status(onStatus, 'Matching release dates');
+        catalog = await _withReleaseDates(client, catalog, console.releaseDates);
+      }
+
       await _status(onStatus, 'Matching box art');
       final boxartStart = sw.elapsedMilliseconds;
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
@@ -290,6 +297,26 @@ class CatalogService {
     }
 
     return catalog;
+  }
+
+  /// Dates [games] from the release_dates DAT files. A DAT that fails to load
+  /// is skipped; a date the listing itself gave is kept.
+  Future<List<Game>> _withReleaseDates(HttpClient client, List<Game> games, List<String> urls) async {
+    final bodies = await Future.wait(urls.map((url) async {
+      try {
+        final response = await (await client.getUrl(Uri.parse(url))).close();
+        if (response.statusCode != 200) {
+          debugPrint('Failed to fetch release dates: ${response.statusCode}');
+          return '';
+        }
+        return await response.transform(utf8.decoder).join();
+      } catch (e) {
+        debugPrint('Failed to fetch release dates: $e');
+        return '';
+      }
+    }));
+    final dates = await compute(parseDatReleaseDates, bodies);
+    return matchReleaseDates(games, dates);
   }
 
   /// Reports a status, then yields a frame so it is painted before the next
@@ -563,13 +590,18 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     // Some configs capture a banner_url group — use it as the
     // boxart, resolving relative paths against the catalog host.
     final banner = _tryNamedGroup(match, 'banner_url');
+    final details = {
+      if (banner != null && banner.isNotEmpty) 'boxart': Uri.parse(baseUrl).resolve(banner).toString(),
+      'releaseDate': _parseReleaseDate(_tryNamedGroup(match, 'date')),
+      'popularity': int.tryParse(_tryNamedGroup(match, 'popularity') ?? ''),
+    }..removeWhere((_, v) => v == null);
     out.add({
       'title': title,
       'url': fullUrl,
       'size': size,
       'consoleId': console['id'],
       'metadata': metadata,
-      if (banner != null && banner.isNotEmpty) 'details': {'boxart': Uri.parse(baseUrl).resolve(banner).toString()},
+      if (details.isNotEmpty) 'details': details,
     });
   }
 
@@ -584,6 +616,66 @@ String? _tryNamedGroup(RegExpMatch match, String name) {
   } catch (_) {
     return null;
   }
+}
+
+/// A date group's digits as yyyymmdd: 8 digits as is, yyyymm and yyyy padded
+/// with 00 for the unknown parts; anything else is no date.
+int? _parseReleaseDate(String? raw) {
+  final digits = raw?.replaceAll(RegExp(r'\D'), '') ?? '';
+  final n = int.tryParse(digits);
+  if (n == null) return null;
+  return switch (digits.length) { 8 => n, 6 => n * 100, 4 => n * 10000, _ => null };
+}
+
+final _datGame = RegExp(r'^\s*game\s*\((.*?)^\s*\)', multiLine: true, dotAll: true);
+final _datName = RegExp(r'^\s*(?:name|comment)\s+"([^"]+)"', multiLine: true);
+final _extension = RegExp(r'\.[^.\s()\[\]]+$');
+
+int? _datField(String block, String key) =>
+    int.tryParse(RegExp('^\\s*$key\\s+"?(\\d+)(?=["\\s]|\$)', multiLine: true).firstMatch(block)?.group(1) ?? '');
+
+/// Release dates (yyyymmdd) by game name from clrmamepro-format DAT [bodies].
+/// Each `game ( ... )` block's name and comment both key it; releaseyear,
+/// releasemonth and releaseday may each come from a different file, merged
+/// per name. A name with no year gets no date.
+Map<String, int> parseDatReleaseDates(List<String> bodies) {
+  final parts = <String, List<int?>>{}; // name -> [year, month, day]
+  for (final body in bodies) {
+    for (final game in _datGame.allMatches(body)) {
+      final block = game.group(1)!;
+      final fields = [_datField(block, 'releaseyear'), _datField(block, 'releasemonth'), _datField(block, 'releaseday')];
+      if (fields.every((f) => f == null)) continue;
+      for (final name in _datName.allMatches(block)) {
+        final merged = parts.putIfAbsent(name.group(1)!, () => [null, null, null]);
+        for (var i = 0; i < 3; i++) {
+          merged[i] ??= fields[i];
+        }
+      }
+    }
+  }
+  return {
+    for (final MapEntry(key: name, value: [year, month, day]) in parts.entries)
+      if (year != null) name: year * 10000 + (month ?? 0) * 100 + (day ?? 0),
+  };
+}
+
+/// Sets each game's release date from [dates] (by DAT name): the title without
+/// its extension must equal a name, else their normalized forms must. Games
+/// already dated keep their date.
+List<Game> matchReleaseDates(List<Game> games, Map<String, int> dates) {
+  if (dates.isEmpty) return games;
+  final normalized = <String, int>{};
+  dates.forEach((name, date) => normalized.putIfAbsent(normalizeTitle(name), () => date));
+  return [
+    for (final g in games)
+      if (g.details?.releaseDate != null)
+        g
+      else
+        switch (dates[g.title.replaceFirst(_extension, '')] ?? normalized[normalizeTitle(g.title.replaceFirst(_extension, ''))]) {
+          null => g,
+          final date => g.copyWith(details: (g.details ?? const GameDetails()).copyWith(releaseDate: date)),
+        },
+  ];
 }
 
 int _parseSizeBytesIsolate(String sizeStr) {

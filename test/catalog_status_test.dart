@@ -117,6 +117,76 @@ void main() {
     expect(games.first.url, '$base/dl/0100000000001000');
   });
 
+  test('date and popularity groups in a regex fill the game details', () async {
+    HttpOverrides.global = null;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) {
+      req.response
+        ..write([
+          '<i href="a.bin" d="1999-07-04" p="12"></i>',
+          '<i href="b.bin" d="2001" p=""></i>',
+          '<i href="c.bin" d="soon" p="3"></i>',
+          '<i href="d.bin" d="200105" p="x"></i>',
+        ].join('\n'))
+        ..close();
+    });
+    final base = 'http://127.0.0.1:${server.port}';
+    await CatalogService().resetCatalog();
+    final configDir = Directory('${tmp.path}/config')..createSync(recursive: true);
+    File('${configDir.path}/consoles.json').writeAsStringSync(jsonEncode([
+      {
+        'name': 'Regex Date Test',
+        'url': ['$base/'],
+        'regex': r'<i href="(?P<href>[^"]+)" d="(?P<date>[^"]*)" p="(?P<popularity>[^"]*)"></i>',
+        'file_format': ['.bin'],
+      }
+    ]));
+
+    final games = await CatalogService().loadCatalog(CatalogService.consoleId('Regex Date Test'));
+    expect([for (final g in games) (g.title, g.details?.releaseDate, g.details?.popularity)], [
+      ('a.bin', 19990704, 12),
+      ('b.bin', 20010000, null),
+      ('c.bin', null, 3),
+      ('d.bin', 20010500, null),
+    ]);
+    expect(games.every((g) => g.details?.boxart == null), isTrue);
+  });
+
+  test('release dates come from DAT files on the console', () async {
+    HttpOverrides.global = null;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) {
+      req.response
+        ..statusCode = req.uri.path == '/missing.dat' ? 404 : 200
+        ..write(switch (req.uri.path) {
+          '/list/' => '<a href="Alpha Title (USA).bin">x</a>\n<a href="Beta Title (USA).bin">x</a>',
+          '/years.dat' => 'game (\n\tcomment "Alpha Title (USA)"\n\treleaseyear "1999"\n)\n',
+          '/months.dat' => 'game (\n\tcomment "Alpha Title (USA)"\n\treleasemonth "07"\n)\n',
+          _ => '',
+        })
+        ..close();
+    });
+    final base = 'http://127.0.0.1:${server.port}';
+    await CatalogService().resetCatalog();
+    final configDir = Directory('${tmp.path}/config')..createSync(recursive: true);
+    File('${configDir.path}/consoles.json').writeAsStringSync(jsonEncode([
+      {
+        'name': 'Dat Date Test',
+        'url': ['$base/list/'],
+        'regex': r'<a href="(?P<href>[^"]+)">',
+        'file_format': ['.bin'],
+        'release_dates': ['$base/years.dat', '$base/missing.dat', '$base/months.dat'],
+      }
+    ]));
+
+    final statuses = <String>[];
+    final games = await CatalogService().loadCatalog(CatalogService.consoleId('Dat Date Test'), onStatus: statuses.add);
+    expect([for (final g in games) g.details?.releaseDate], [19990700, null]);
+    expect(statuses, contains('Matching release dates'));
+  });
+
   test('provider shows the service status as loadingStatus', () async {
     SharedPreferences.setMockInitialValues({});
     const a = Console(id: 'a', name: 'A', urls: []);

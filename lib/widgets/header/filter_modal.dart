@@ -21,6 +21,15 @@ class FilterModal extends ConsumerWidget {
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final filter = catalogState.filter;
+    final games = catalogState.games;
+    final hasSize = games.any((g) => g.size > 0);
+    final sorts = {
+      CatalogSort.name: 'Name',
+      if (hasSize) CatalogSort.sizeDesc: 'Largest',
+      if (hasSize) CatalogSort.sizeAsc: 'Smallest',
+      if (games.any((g) => g.details?.releaseDate != null)) CatalogSort.newest: 'Newest',
+      if (games.any((g) => g.details?.popularity != null)) CatalogSort.popular: 'Most popular',
+    };
 
     return Container(
       constraints: BoxConstraints(
@@ -82,6 +91,15 @@ class FilterModal extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  _FilterSection(
+                    title: 'Sort by',
+                    icon: Icons.sort,
+                    items: [for (final sort in sorts.keys) sort.name],
+                    labels: sorts.values.toList(),
+                    selectedItems: {filter.sort.name},
+                    onToggle: (name) => catalogNotifier.setSort(CatalogSort.values.byName(name)),
+                  ),
+                  const SizedBox(height: 20),
                   if (catalogState.availableRegions.isNotEmpty) ...[
                     _FilterSection(
                       title: 'Regions',

@@ -6,6 +6,9 @@ class Console {
   /// Boxart source: either an HTML-listing URL (String) or a JSON-map
   /// descriptor ({url, list?, name, image}). See README.
   final Object? boxarts;
+  /// clrmamepro-format DAT files whose release years/months date the games
+  /// (config key release_dates: one URL or a list).
+  final List<String> releaseDates;
   final List<String>? fileFormat;
   final String? romsFolder;
   final bool shouldUnzip;
@@ -29,6 +32,7 @@ class Console {
     required this.urls,
     this.regex,
     this.boxarts,
+    this.releaseDates = const [],
     this.fileFormat,
     this.romsFolder,
     this.shouldUnzip = false,
@@ -85,6 +89,7 @@ class Console {
     } else {
       urls = [];
     }
+    final rawDates = json['release_dates'];
 
     return Console(
       id: json['id'] as String,
@@ -92,6 +97,7 @@ class Console {
       urls: urls,
       regex: json['regex'] as String?,
       boxarts: json['boxarts'],
+      releaseDates: rawDates is List ? List<String>.from(rawDates) : [if (rawDates is String && rawDates.isNotEmpty) rawDates],
       fileFormat: json['file_format'] != null ? List<String>.from(json['file_format'] as List) : null,
       romsFolder: json['roms_folder'] as String?,
       shouldUnzip: json['should_unzip'] as bool? ?? false,
@@ -118,6 +124,7 @@ class Console {
       'url': urls.length == 1 ? urls.first : urls,
       if (regex != null) 'regex': regex,
       if (boxarts != null) 'boxarts': boxarts,
+      if (releaseDates.isNotEmpty) 'release_dates': releaseDates,
       if (fileFormat != null) 'file_format': fileFormat,
       if (romsFolder != null) 'roms_folder': romsFolder,
       'should_unzip': shouldUnzip,
