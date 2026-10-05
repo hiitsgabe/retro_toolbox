@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:smb_connect/smb_connect.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 typedef SmbProgress = void Function(int done, int total);
 
@@ -25,6 +26,9 @@ class SmbService {
   ({String host, String username, String password, String domain})? _login;
 
   bool get connected => _c != null;
+
+  // A retried transfer can outlive the connection (user pressed Disconnect).
+  SmbConnect get _conn => _c ?? (throw StateError(notConnectedMessage));
 
   Future<void> connect({
     required String host,
@@ -50,7 +54,7 @@ class SmbService {
     int connections = 4,
     int chunkSize = 4 << 20,
   }) async {
-    final login = _login!;
+    final login = _login ?? (throw StateError(notConnectedMessage));
     final total = jobs.fold<int>(0, (a, j) => a + j.file.size);
     final chunks = <({SmbDownloadJob job, int offset, int length})>[];
     for (final j in jobs) {
@@ -261,16 +265,16 @@ class SmbService {
   /// caller navigates by rebuilding the path string and re-entering, never by
   /// passing a share entry back to a file op.
   Future<List<SmbFile>> list(String path) async {
-    final c = _c!;
+    final c = _conn;
     if (path.isEmpty) return c.listShares();
     return c.listFiles(await c.file(path));
   }
 
   /// Deletes [file]. Recursive for directories (handled by smb_connect).
-  Future<void> delete(SmbFile file) async => _c!.delete(file);
+  Future<void> delete(SmbFile file) async => _conn.delete(file);
 
   Future<void> download(SmbFile remote, String localPath, SmbProgress onProgress) async {
-    final c = _c!;
+    final c = _conn;
     final out = File(localPath).openWrite();
     var done = 0;
     var sinceFlush = 0;
@@ -296,7 +300,7 @@ class SmbService {
   }
 
   Future<void> upload(String localPath, String remotePath, SmbProgress onProgress) async {
-    final c = _c!;
+    final c = _conn;
     final local = File(localPath);
     final total = await local.length();
     final sink = await c.openWrite(await c.createFile(remotePath));

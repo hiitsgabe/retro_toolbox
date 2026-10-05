@@ -6,6 +6,7 @@ import 'package:ftp_server/server_type.dart';
 import 'package:ftp_server/file_operations/physical_file_operations.dart';
 
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/utils/remote_tree.dart';
 
 typedef FtpProgress = void Function(int done, int total);
 
@@ -18,6 +19,8 @@ class FtpClientService {
   ({String host, int port, String user, String pass})? _login;
 
   bool get connected => _c != null;
+
+  FTPConnect get _conn => _c ?? (throw StateError(notConnectedMessage));
 
   Future<void> connect({required String host, required int port, required String user, required String pass}) async {
     await disconnect();
@@ -33,7 +36,7 @@ class FtpClientService {
   /// moves as the user browses on the main connection.
   Future<FtpClientService> openAt(String path) async {
     final login = _login;
-    if (login == null) throw 'Not connected';
+    if (login == null) throw StateError(notConnectedMessage);
     final other = FtpClientService();
     await other.connect(host: login.host, port: login.port, user: login.user, pass: login.pass);
     if (!await other.cd(path)) {
@@ -52,9 +55,9 @@ class FtpClientService {
     } catch (_) {}
   }
 
-  Future<String> pwd() => _c!.currentDirectory();
-  Future<List<FTPEntry>> list() => _c!.listDirectoryContent();
-  Future<bool> cd(String dir) => _c!.changeDirectory(dir);
+  Future<String> pwd() => _conn.currentDirectory();
+  Future<List<FTPEntry>> list() => _conn.listDirectoryContent();
+  Future<bool> cd(String dir) => _conn.changeDirectory(dir);
 
   /// Lists [relDir] (relative to the current directory) and returns to where
   /// it started, since FTP listing only covers the working directory.
@@ -69,18 +72,18 @@ class FtpClientService {
   }
 
   Future<void> download(String name, String localPath, FtpProgress onProgress) async {
-    await _c!.downloadFile(name, File(localPath), onProgress: (_, received, total) => onProgress(received, total));
+    await _conn.downloadFile(name, File(localPath), onProgress: (_, received, total) => onProgress(received, total));
   }
 
   Future<void> upload(String localPath, FtpProgress onProgress) async {
-    await _c!.uploadFile(File(localPath), onProgress: (_, sent, total) => onProgress(sent, total));
+    await _conn.uploadFile(File(localPath), onProgress: (_, sent, total) => onProgress(sent, total));
   }
 
   Future<void> delete(FTPEntry e) async {
     if (e.type == FTPEntryType.dir) {
-      await _c!.deleteDirectory(e.name);
+      await _conn.deleteDirectory(e.name);
     } else {
-      await _c!.deleteFile(e.name);
+      await _conn.deleteFile(e.name);
     }
   }
 }

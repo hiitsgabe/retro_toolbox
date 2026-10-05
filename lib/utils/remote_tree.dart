@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/file_ops.dart';
 
+/// What a retried transfer says when its SMB/FTP connection was closed since.
+const notConnectedMessage = 'Not connected — reconnect and try again';
+
 /// A remote file plus its path relative to the browsed folder, '/'-separated.
 typedef RemoteFile<T> = ({T entry, String relPath});
 

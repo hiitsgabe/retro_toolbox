@@ -114,6 +114,7 @@ class TaskQueueService {
 
     final queueNotifier = ref.read(taskQueueProvider.notifier);
     queueNotifier.cancelQueuedTask(taskId);
+    ref.read(extractionProvider.notifier).removeTask(taskId);
   }
 
   static void pauseDownloadTask(WidgetRef ref, String taskId) {

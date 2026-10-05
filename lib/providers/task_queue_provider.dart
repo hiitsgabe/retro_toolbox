@@ -26,7 +26,8 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
       createdAt: DateTime.now(),
     );
 
-    final updatedTasks = [...state.tasks, task];
+    // A retry supersedes the failed attempt; don't leave it lingering.
+    final updatedTasks = [...state.tasks.where((t) => !(t.id == taskId && t.status == TaskQueueStatus.failed)), task];
     state = state.copyWith(tasks: updatedTasks);
 
     final gameStateManager = _ref.read(gameStateManagerProvider.notifier);
@@ -123,13 +124,13 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
   }
 
   void cancelQueuedTask(String taskId) {
-    final remaining = state.tasks.where((t) => !(t.id == taskId && t.status == TaskQueueStatus.waiting)).toList();
+    final remaining = state.tasks.where((t) => !(t.id == taskId && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.failed))).toList();
     final runningCounts = Map<TaskType, int>.from(state.runningCounts);
 
     state = state.copyWith(tasks: remaining, runningCounts: runningCounts);
 
     final gameStateManager = _ref.read(gameStateManagerProvider.notifier);
-    gameStateManager.resolveState(taskId);
+    gameStateManager.resetAfterCancel(taskId);
 
     if (_hasPendingTasks()) {
       _startTimerIfNeeded();

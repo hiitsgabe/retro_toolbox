@@ -266,10 +266,16 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       _onConversionCompleted(taskId);
     } catch (e) {
       debugPrint('$verb failed: $e');
-      _onNszError(taskId, e.toString());
+      _onNszError(taskId, e is StateError ? e.message : e.toString());
     } finally {
       ExtractionService.endNotification(taskId);
     }
+  }
+
+  /// Forgets a task's progress entry (a cancelled failed task).
+  void removeTask(String taskId) {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks)..remove(taskId);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
   }
 
   void _onConversionCompleted(String taskId) {
@@ -329,7 +335,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     final queueNotifier = _ref.read(taskQueueProvider.notifier);
     queueNotifier.updateTaskStatus(taskId, TaskQueueStatus.failed, error: error);
 
-    gameStateManager.updateExtractionState(taskId, ExtractionStatus.failed, 0.0);
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.failed, 0.0, error: error);
   }
 
   void retryExtraction(String taskId) {
