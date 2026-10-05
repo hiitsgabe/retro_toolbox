@@ -240,6 +240,7 @@ class CatalogService {
     client.connectionTimeout = const Duration(seconds: 30);
 
     List<Game> catalog = [];
+    final sw = Stopwatch()..start();
 
     try {
       final total = console.urls.length;
@@ -263,13 +264,16 @@ class CatalogService {
         throw firstError!;
       }
 
+      debugPrint('Catalog ${console.id}: ${console.urls.length} pages in ${sw.elapsedMilliseconds} ms');
       // Merge all results, sort alphabetically by title.
       catalog = results.expand((games) => games).toList();
       await _status(onStatus, 'Sorting ${catalog.length} games');
       catalog.sort((a, b) => a.title.compareTo(b.title));
 
       await _status(onStatus, 'Matching box art');
+      final boxartStart = sw.elapsedMilliseconds;
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
+      debugPrint('Catalog ${console.id}: box art in ${sw.elapsedMilliseconds - boxartStart} ms');
       // An empty list would be cached as a "catalog" and hide the failure
       // until the user clears the cache.
       if (catalog.isNotEmpty) {
@@ -277,6 +281,7 @@ class CatalogService {
         final cacheFile = await _getCacheFile(console.cacheFile);
         await cacheFile.writeAsString(await compute(_encodeGamesIsolate, catalog));
       }
+      debugPrint('Catalog ${console.id}: ${catalog.length} games, ${sw.elapsedMilliseconds} ms total');
     } catch (e) {
       debugPrint('Error fetching catalog: $e');
       rethrow;
