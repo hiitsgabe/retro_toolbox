@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
@@ -13,6 +14,21 @@ import 'package:retro_toolbox/screens/about_screen.dart';
 import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
 import 'package:retro_toolbox/widgets/header/search_field.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
+
+/// Test seam for [downloadSelected].
+@visibleForTesting
+Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId)? debugStartDownloads;
+
+/// Whether the "Download Selected" button (and Start) is usable.
+bool canDownloadSelected(WidgetRef ref) =>
+    !ref.read(appStateProvider).loading && ref.read(downloadProvider.notifier).hasDownloadableSelectedGames();
+
+/// What the "Download Selected" button does; Start runs the same call.
+void downloadSelected(WidgetRef ref, BuildContext context, String? consoleId) {
+  final catalogState = ref.read(catalogProvider);
+  final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
+  (debugStartDownloads ?? TaskQueueService.startDownloads)(ref, context, selectedGames, consoleId);
+}
 
 class Header extends ConsumerStatefulWidget {
   final List<Console> consoles;
@@ -34,7 +50,6 @@ class _HeaderState extends ConsumerState<Header> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    final downloadNotifier = ref.read(downloadProvider.notifier);
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final taskQueueState = ref.watch(taskQueueProvider);
@@ -47,7 +62,7 @@ class _HeaderState extends ConsumerState<Header> {
     // lock it, so changing consoles looked broken.
 
     final canAccessSettings = !appState.loading && !taskQueueState.hasRunningTasks;
-    final canDownload = !appState.loading && downloadNotifier.hasDownloadableSelectedGames();
+    final canDownload = canDownloadSelected(ref);
 
     return Container(
       height: !isMobile ? (kToolbarHeight - 5) + MediaQuery.of(context).padding.top : null,
@@ -186,12 +201,7 @@ class _HeaderState extends ConsumerState<Header> {
         context: context,
         icon: Icons.download_rounded,
         isActive: canDownload,
-        onPressed: canDownload
-            ? () {
-                final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
-                TaskQueueService.startDownloads(ref, context, selectedGames, widget.selectedConsole?.id);
-              }
-            : null,
+        onPressed: canDownload ? () => downloadSelected(ref, context, widget.selectedConsole?.id) : null,
         tooltip: 'Download Selected',
       ),
       SizedBox(width: 4),
