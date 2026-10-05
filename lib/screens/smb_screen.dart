@@ -239,6 +239,9 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
         TaskQueueService.enqueueTransfer(ref, context, title: 'Zip $label', verb: 'Downloading and zipping', label: label, run: notifier.zipJob(d));
       }),
       onDelete: () => _confirmDelete(context, state, notifier),
+      extraActions: () => [
+        BrowserAction(icon: Icons.upload_file, label: 'Upload', onPressed: state.transfer == null && !state.atRoot ? () => _upload(notifier) : null),
+      ],
     );
   }
 
@@ -257,12 +260,12 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
   Future<void> _confirmDelete(BuildContext context, SmbState state, SmbNotifier notifier) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialog) => AlertDialog(
         title: const Text('Delete?'),
         content: Text('Delete ${state.selected.length} item(s) from the share? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(dialog, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('Delete')),
         ],
       ),
     );
