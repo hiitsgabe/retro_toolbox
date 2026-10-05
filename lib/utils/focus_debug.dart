@@ -21,9 +21,14 @@ void installFocusDebug() {
     });
     final scroll = Scrollable.maybeOf(ctx)?.position;
     final view = View.maybeOf(ctx);
-    debugPrint('[focus] ${ctx.widget.runtimeType} label=${node.debugLabel} rect=${node.rect} '
-        'scroll=${scroll?.pixels.toStringAsFixed(1)}/${scroll?.maxScrollExtent.toStringAsFixed(1)} '
-        'dpr=${view?.devicePixelRatio} size=${view == null ? null : MediaQuery.sizeOf(ctx)} '
+    final size = view == null ? null : MediaQuery.sizeOf(ctx);
+    // Release builds print Rect/Size as "Instance of ...": format by hand.
+    String f(double v) => v.toStringAsFixed(1);
+    final r = node.rect;
+    debugPrint('[focus] ${ctx.widget.runtimeType} label=${node.debugLabel} '
+        'rect=${f(r.left)},${f(r.top)} ${f(r.width)}x${f(r.height)} '
+        'scroll=${scroll == null ? '-' : '${f(scroll.pixels)}/${f(scroll.maxScrollExtent)}'} '
+        'dpr=${view?.devicePixelRatio} size=${size == null ? '-' : '${f(size.width)}x${f(size.height)}'} '
         'path=${path.join('<')}');
   });
 }
