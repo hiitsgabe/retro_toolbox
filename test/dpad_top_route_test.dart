@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
@@ -47,5 +48,32 @@ void main() {
     );
     await t.pumpAndSettle();
     expect(inDialog.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('back: the outline waits for the closing page to finish', (t) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    final nav = GlobalKey<NavigatorState>();
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      navigatorObservers: [DpadScope.routeObserver],
+      builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
+      home: Scaffold(body: TextButton(autofocus: true, onPressed: () {}, child: const Text('menu'))),
+    ));
+    await t.pump();
+    nav.currentState!.push(MaterialPageRoute(
+      builder: (_) => Scaffold(body: TextButton(autofocus: true, onPressed: () {}, child: const Text('page'))),
+    ));
+    await t.pumpAndSettle();
+    RenderBox outline() => t.renderObject<RenderBox>(find.byKey(const ValueKey('dpad-focus-outline')));
+    expect(outline(), paints..rrect());
+
+    nav.currentState!.pop();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 50));
+    expect(outline(), isNot(paints..rrect())); // page above still closing
+
+    await t.pumpAndSettle();
+    expect(outline(), paints..rrect());
   });
 }

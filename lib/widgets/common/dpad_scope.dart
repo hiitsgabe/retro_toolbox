@@ -341,6 +341,9 @@ class _DpadScopeState extends State<DpadScope> {
     if (FocusManager.instance.highlightMode != FocusHighlightMode.traditional) {
       return null;
     }
+    // Not mid-transition: on back, focus returns to the page below at once
+    // and the outline would show over the page still closing above it.
+    if (DpadScope.routeObserver.transitioning) return null;
     final node = FocusManager.instance.primaryFocus;
     final ctx = node?.context;
     if (node == null || node is FocusScopeNode || ctx is! Element) return null;
@@ -518,11 +521,33 @@ class TopRouteObserver extends NavigatorObserver {
   final _stack = <Route<dynamic>>[];
   Route<dynamic>? get top => _stack.isEmpty ? null : _stack.last;
 
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.add(route);
+  // Routes pushed or popped whose transition may still be running.
+  final _moving = <TransitionRoute<dynamic>>{};
+
+  /// A page or dialog is still sliding/fading in or out.
+  bool get transitioning {
+    _moving.removeWhere((r) {
+      final s = r.animation?.status;
+      return s != AnimationStatus.forward && s != AnimationStatus.reverse;
+    });
+    return _moving.isNotEmpty;
+  }
+
+  void _track(Route<dynamic>? r) {
+    if (r is TransitionRoute) _moving.add(r);
+  }
 
   @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.remove(route);
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.add(route);
+    _track(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _stack.remove(route);
+    _track(route);
+  }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _stack.remove(route);
