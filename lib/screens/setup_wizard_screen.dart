@@ -253,7 +253,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionTitle(theme, Icons.dataset_outlined, 'Catalog source',
-            'Provide a console catalog. Import a JSON file, load one from a URL, or paste it directly.'),
+            Handheld.current
+                ? 'Provide a console catalog. Import a JSON file or load one from a URL.'
+                : 'Provide a console catalog. Import a JSON file, load one from a URL, or paste it directly.'),
         if (_catalogReady && _usingExample) ...[
           Card(
             color: theme.colorScheme.primaryContainer,
