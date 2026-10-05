@@ -70,6 +70,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             state = state.copyWith(loadingStatus: 'Reading page $done of $total');
           }
         },
+        onStatus: (status) {
+          if (mounted && gen == _loadGeneration) {
+            state = state.copyWith(loadingStatus: status);
+          }
+        },
       );
 
       if (gen != _loadGeneration || !mounted) return;

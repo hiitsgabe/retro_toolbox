@@ -193,7 +193,7 @@ class CatalogService {
   Future<bool> hasUserCatalog() async => (await _userConsolesFile()).exists();
 
   Future<List<Game>> loadCatalog(String consoleId,
-      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
+      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress, void Function(String status)? onStatus}) async {
     final consoles = await getConsoles();
 
     if (!consoles.containsKey(consoleId)) {
@@ -206,13 +206,16 @@ class CatalogService {
     final cacheFile = await _getCacheFile(console.cacheFile);
     if (await cacheFile.exists()) {
       try {
+        onStatus?.call('Loading saved catalog');
         final jsonStr = await cacheFile.readAsString();
         final List<Map<String, dynamic>> jsonList = await compute(_decodeGamesIsolate, jsonStr);
         final cachedResult = jsonList.map((json) => Game.fromJson(json)).toList();
         if (cachedResult.isNotEmpty && cachedResult.first.metadata != null) {
           final hasBoxarts = cachedResult.any((game) => game.details?.boxart != null);
           if (!hasBoxarts && console.boxarts != null) {
+            onStatus?.call('Matching box art');
             final enrichedResult = await _boxartService.mutateGamesWithBoxarts(cachedResult, console);
+            onStatus?.call('Saving catalog');
             await cacheFile.writeAsString(jsonEncode(enrichedResult.map((g) => g.toJson()).toList()));
             return enrichedResult;
           }
@@ -224,11 +227,11 @@ class CatalogService {
       }
     }
 
-    return _fetchCatalog(console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken, onProgress: onProgress);
+    return _fetchCatalog(console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken, onProgress: onProgress, onStatus: onStatus);
   }
 
   Future<List<Game>> _fetchCatalog(Console console,
-      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async {
+      {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress, void Function(String status)? onStatus}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
 
@@ -257,10 +260,13 @@ class CatalogService {
       }
 
       // Merge all results, sort alphabetically by title.
-      catalog = results.expand((games) => games).toList()
-        ..sort((a, b) => a.title.compareTo(b.title));
+      catalog = results.expand((games) => games).toList();
+      onStatus?.call('Sorting ${catalog.length} games');
+      catalog.sort((a, b) => a.title.compareTo(b.title));
 
+      onStatus?.call('Matching box art');
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
+      onStatus?.call('Saving catalog');
       final cacheFile = await _getCacheFile(console.cacheFile);
       await cacheFile.writeAsString(jsonEncode(catalog.map((g) => g.toJson()).toList()));
     } catch (e) {

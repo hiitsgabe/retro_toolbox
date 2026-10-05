@@ -15,7 +15,7 @@ class _FakeCatalogService extends CatalogService {
 
   @override
   Future<List<Game>> loadCatalog(String consoleId,
-          {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress}) async =>
+          {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress, void Function(String status)? onStatus}) async =>
       byConsole[consoleId] ?? [];
 }
 
