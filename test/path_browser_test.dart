@@ -180,4 +180,19 @@ void main() {
     expect(roots.keys, ['/userdata', '/roms']);
     expect(handheldRoots(exists: (_) => false), isEmpty);
   });
+
+  testWidgets('Start in directory mode returns the current folder', (t) async {
+    await open(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(closed, isTrue);
+    expect(result, tmp.path);
+  });
+
+  testWidgets('Start does nothing special in file mode', (t) async {
+    await open(t, selectDirectory: false);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pump();
+    expect(closed, isFalse);
+  });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
 /// Plain `dart:io` filesystem browser.
@@ -226,7 +227,7 @@ class _PathBrowserState extends State<PathBrowser> {
     final parent = p.dirname(_dir);
     final canGoUp = parent != _dir;
 
-    return Dialog(
+    final dialog = Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 560),
         child: Column(
@@ -285,6 +286,16 @@ class _PathBrowserState extends State<PathBrowser> {
           ],
         ),
       ),
+    );
+    if (!widget.selectDirectory) return dialog;
+    // Start == "Use this folder".
+    return Actions(
+      actions: {
+        PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
+          onInvoke: (_) => Navigator.pop(context, _dir),
+        ),
+      },
+      child: dialog,
     );
   }
 

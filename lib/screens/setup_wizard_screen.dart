@@ -10,6 +10,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 
@@ -121,6 +122,23 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// What Start does: the enabled primary nav action of this step.
+  VoidCallback? get _primary {
+    if (_busy) return null;
+    if (_step == _steps.length - 1) return _finish;
+    return () => setState(() => _step += 1); // Next, or Skip for now on step 0
+  }
+
+  /// B: previous step; on the first step, leave as skipped.
+  void _back() {
+    if (_busy) return;
+    if (_step > 0) {
+      setState(() => _step -= 1);
+    } else {
+      _finish();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // A bundled catalog loads asynchronously at startup and may only arrive
@@ -132,6 +150,23 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
       _catalogSummary = '$bundledCount console${bundledCount == 1 ? '' : 's'} already available';
     }
     final theme = Theme.of(context);
+    final primary = _primary;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Actions(
+        actions: {
+          if (primary != null)
+            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
+        },
+        child: _scaffold(theme),
+      ),
+    );
+  }
+
+  Widget _scaffold(ThemeData theme) {
     return Scaffold(
       body: SafeArea(
         child: Column(
