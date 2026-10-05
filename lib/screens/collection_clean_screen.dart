@@ -55,7 +55,7 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
               )
             else ...[
               const SizedBox(height: 16),
-              _CleanSection(
+              CleanSection(
                 title: 'Dedupe Games',
                 icon: Icons.copy_all,
                 description: 'Finds game files that match after stripping region/version tags and keeps '
@@ -70,7 +70,7 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
                     .toList(),
                 apply: (rows) async => _service.applyDelete(dir, rows.map((r) => r.path)),
               ),
-              _CleanSection(
+              CleanSection(
                 title: 'Clean File Names',
                 icon: Icons.drive_file_rename_outline,
                 description: 'Removes (parenthetical) and [bracketed] tags from game filenames and '
@@ -89,7 +89,7 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
                   rows.map<RenameEntry>((r) => (path: r.path, from: r.title, to: r.to!)).toList(),
                 ),
               ),
-              _CleanSection(
+              CleanSection(
                 title: 'Ghost File Cleaner',
                 icon: Icons.cleaning_services,
                 description: 'Finds OS junk (.DS_Store, ._* files, __MACOSX, Thumbs.db, desktop.ini) '
@@ -121,7 +121,9 @@ class CleanRow {
   CleanRow({required this.path, required this.title, required this.subtitle, this.to, this.selected = true});
 }
 
-class _CleanSection extends StatefulWidget {
+/// One cleanup (scan, preview with checkboxes, confirm, apply). Public for tests.
+@visibleForTesting
+class CleanSection extends StatefulWidget {
   final String title;
   final IconData icon;
   final String description;
@@ -129,7 +131,7 @@ class _CleanSection extends StatefulWidget {
   final Future<List<CleanRow>> Function() scan;
   final Future<int> Function(List<CleanRow> selected) apply;
 
-  const _CleanSection({
+  const CleanSection({
     required this.title,
     required this.icon,
     required this.description,
@@ -139,10 +141,10 @@ class _CleanSection extends StatefulWidget {
   });
 
   @override
-  State<_CleanSection> createState() => _CleanSectionState();
+  State<CleanSection> createState() => _CleanSectionState();
 }
 
-class _CleanSectionState extends State<_CleanSection> {
+class _CleanSectionState extends State<CleanSection> {
   List<CleanRow>? _rows;
   bool _busy = false;
 
@@ -174,6 +176,18 @@ class _CleanSectionState extends State<_CleanSection> {
   Future<void> _apply() async {
     final selected = _rows!.where((r) => r.selected).toList();
     if (selected.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(widget.title),
+        content: Text('${widget.applyLabel}: ${selected.length} item(s). This cannot be undone.'),
+        actions: [
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(widget.applyLabel)),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
       final n = await widget.apply(selected);

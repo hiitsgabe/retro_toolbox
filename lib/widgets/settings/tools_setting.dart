@@ -45,6 +45,7 @@ class ToolsSetting extends ConsumerWidget {
         ),
         actions: [
           TextButton(
+            autofocus: true,
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
