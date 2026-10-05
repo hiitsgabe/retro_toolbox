@@ -162,7 +162,7 @@ index abc352a..33b6a3b 100644
      gl_renderer_unref(egl_surface->renderer);
      render_surface_deinit(s);
  }
-@@ -626,7 +711,38 @@ static int egl_gbm_render_surface_queue_present(struct render_surface *s, const
+@@ -626,7 +711,39 @@ static int egl_gbm_render_surface_queue_present(struct render_surface *s, const
          locked_fb_unrefp(&egl_surface->locked_front_fb);
      }
  
@@ -193,8 +193,9 @@ index abc352a..33b6a3b 100644
 +            egl_surface->pbo_index++;
 +        }
 +        
-+        // Ensure rendering is flushed
-+        eglSwapBuffers(egl_surface->egl_display, egl_surface->egl_surface);
++        // Wait for rendering without swapping: on Mali a pbuffer swap leaves
++        // the colour buffer undefined, so the readback got stale tiles.
++        glFinish();
 +        
 +        surface_unlock(CAST_SURFACE(s));
 +        return 0;
