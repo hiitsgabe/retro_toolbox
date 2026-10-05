@@ -54,6 +54,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
       UpdatePhase.ready => notifier.handheld
           ? ('Update ready', 'Restart Retro Toolbox to finish the update')
           : ('Update downloaded', 'Install version ${release?.version}'),
+      UpdatePhase.installFailed => ('Update not installed', state.message ?? ''),
       UpdatePhase.error => (release == null ? 'Update check failed' : 'Update failed', state.message ?? ''),
     };
 
@@ -90,9 +91,9 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                    state.phase == UpdatePhase.error ? Icons.error_outline_rounded : Icons.system_update_rounded,
+                    state.phase == UpdatePhase.error || state.installFailed ? Icons.error_outline_rounded : Icons.system_update_rounded,
                     size: 20,
-                    color: state.phase == UpdatePhase.error ? theme.colorScheme.error : theme.colorScheme.primary,
+                    color: state.phase == UpdatePhase.error || state.installFailed ? theme.colorScheme.error : theme.colorScheme.primary,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -132,7 +133,25 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.tonal(focusNode: _action, onPressed: onPressed, child: Text(label)),
+              child: state.installFailed
+                  ? Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
+                      children: [
+                        FilledButton.tonal(
+                          focusNode: _action,
+                          autofocus: true,
+                          onPressed: () => notifier.keepFailedUpdate(widget.currentVersion),
+                          child: const Text('Try again on next start'),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: () => notifier.discardFailedUpdate(widget.currentVersion),
+                          child: const Text('Discard update'),
+                        ),
+                      ],
+                    )
+                  : FilledButton.tonal(focusNode: _action, onPressed: onPressed, child: Text(label)),
             ),
           ],
         ),

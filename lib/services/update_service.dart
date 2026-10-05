@@ -6,6 +6,7 @@ import 'dart:isolate';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -143,6 +144,15 @@ Future<void> verifyDownload(File file, ReleaseAsset asset) async {
   }
 }
 
+/// The card text for a staged update the launcher couldn't install. A
+/// "copy failed" reason means it died part-way: the port is a mix of old and new.
+String installFailedMessage(String reason) {
+  final partial = reason.contains('copy failed')
+      ? ' The app was reinstalled partially: try again, or reinstall from the release zip.'
+      : '';
+  return "The last update couldn't be installed: $reason.$partial";
+}
+
 const cantVerifyMessage = "Can't verify this download: the release lists no checksum.";
 const _unsafePackage = 'The update package is not a valid handheld build.';
 
@@ -242,7 +252,7 @@ class UpdateService {
     Future<Directory> Function()? cacheDir,
     String? portRoot,
     this.isTrusted = isTrustedUpdateUrl,
-    this.freeSpace = DirectoryService.getFreeSpace,
+    this.freeSpace = DirectoryService.getFreeSpaceOrNull,
   })  : _cacheDir = cacheDir ?? getApplicationCacheDirectory,
         portRoot = portRoot ?? p.dirname(Platform.resolvedExecutable);
 
@@ -254,7 +264,9 @@ class UpdateService {
 
   /// Every request and redirect hop must pass; tests swap in loopback.
   final bool Function(Uri url) isTrusted;
-  final Future<int> Function(String path) freeSpace;
+  
+  /// Null when the free space can't be told.
+  final Future<int?> Function(String path) freeSpace;
 
   static const _channel = MethodChannel('retro_toolbox/updater');
 
@@ -307,6 +319,11 @@ class UpdateService {
     final dir = handheld ? portRoot : (await _cacheDir()).path;
     final need = asset.size * (handheld ? 4 : 2);
     final free = await freeSpace(dir);
+    if (free == null) {
+      // Unknown isn't zero: don't block an update on a failed `df`.
+      debugPrint('Update: free space unknown for $dir; continuing without the check');
+      return;
+    }
     if (free < need) {
       throw UpdateException('Not enough free space: the update needs ${formatBytes(need)}, ${formatBytes(free)} free.');
     }
@@ -355,6 +372,27 @@ class UpdateService {
     } finally {
       if (zip.existsSync()) await zip.delete();
     }
+  }
+
+  /// Why the launcher couldn't install the staged update (the first line of
+  /// `.update/FAILED`), or null when there is no such note.
+  String? failedInstallReason() {
+    final file = File(p.join(portRoot, '.update', 'FAILED'));
+    try {
+      if (!file.existsSync()) return null;
+      final line = file.readAsLinesSync().firstWhere((l) => l.trim().isNotEmpty, orElse: () => '');
+      return line.trim().isEmpty ? 'unknown reason' : line.trim();
+    } on FileSystemException {
+      return 'unknown reason';
+    }
+  }
+
+  /// Drops the staged update and the launcher's failure message.
+  Future<void> discardStaged() async {
+    final up = Directory(p.join(portRoot, '.update'));
+    if (up.existsSync()) await up.delete(recursive: true);
+    final note = File(p.join(portRoot, 'UPDATE_FAILED.txt'));
+    if (note.existsSync()) await note.delete();
   }
 
   /// The package that installed this Android app (Play is

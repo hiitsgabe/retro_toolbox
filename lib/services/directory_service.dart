@@ -64,28 +64,33 @@ class DirectoryService {
     return extensions.contains(path.extension(filePath).toLowerCase()) || extensions.contains(path.extension(filePath, 2).toLowerCase());
   }
 
-  static Future<int> getFreeSpace(String dirPath) async {
+  static Future<int> getFreeSpace(String dirPath) async => (await getFreeSpaceOrNull(dirPath)) ?? 0;
+
+  /// Free bytes at [dirPath], or null when it can't be told (`df` failed or
+  /// printed something unreadable) so callers can tell "unknown" from "0".
+  static Future<int?> getFreeSpaceOrNull(String dirPath) async {
     // disk_space_2 is a GTK plugin: flutter-pi (handheld Linux) doesn't load
     // it, so Linux reads `df` too. -P keeps each filesystem on one line.
     if (Platform.isMacOS || Platform.isLinux) {
       try {
         final result = await Process.run('df', ['-Pk', dirPath]);
-        if (result.exitCode != 0) return 0;
-        final output = result.stdout.toString().trim();
-        final lines = output.split('\n');
-        if (lines.length < 2) return 0;
-        final parts = lines[1].split(RegExp(r"\s+"));
-        if (parts.length < 4) return 0;
-        final availKb = int.tryParse(parts[3]) ?? 0;
-        return availKb * 1024;
+        return result.exitCode != 0 ? null : parseDfAvailable(result.stdout.toString());
       } catch (_) {
-        return 0;
+        return null;
       }
     }
 
-    double? freeDiskSpaceForPath = await DiskSpace.getFreeDiskSpaceForPath(dirPath);
-    int freeInMb = freeDiskSpaceForPath?.toInt() ?? 0;
-    int freeInBytes = freeInMb * 1024 * 1024;
-    return freeInBytes;
+    final freeInMb = (await DiskSpace.getFreeDiskSpaceForPath(dirPath))?.toInt();
+    return freeInMb == null ? null : freeInMb * 1024 * 1024;
+  }
+
+  /// Available bytes from `df -Pk` output; null when it can't be read.
+  static int? parseDfAvailable(String output) {
+    final lines = output.trim().split('\n');
+    if (lines.length < 2) return null;
+    final parts = lines[1].split(RegExp(r"\s+"));
+    if (parts.length < 4) return null;
+    final availKb = int.tryParse(parts[3]);
+    return availKb == null ? null : availKb * 1024;
   }
 }

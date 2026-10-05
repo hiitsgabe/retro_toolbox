@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/services/update_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 
-enum UpdatePhase { idle, checking, upToDate, available, downloading, ready, error }
+enum UpdatePhase { idle, checking, upToDate, available, downloading, ready, error, installFailed }
 
 class UpdateState {
   const UpdateState(this.phase, {this.release, this.asset, this.progress = 0, this.message});
@@ -16,6 +16,9 @@ class UpdateState {
   final ReleaseAsset? asset;
   final double progress;
   final String? message;
+
+  /// Handheld: the launcher left a note that the staged update failed.
+  bool get installFailed => phase == UpdatePhase.installFailed;
 
   bool get busy => phase == UpdatePhase.checking || phase == UpdatePhase.downloading;
 }
@@ -35,7 +38,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           os: os ?? Platform.operatingSystem,
           abi: abi ?? Abi.current(),
         ),
-        super(const UpdateState(UpdatePhase.idle));
+        super(_initial(_service, handheld ?? Handheld.current));
+
+  // The note only exists on the handheld, and only the launcher writes it.
+  static UpdateState _initial(UpdateService service, bool handheld) {
+    final reason = handheld ? service.failedInstallReason() : null;
+    return reason == null
+        ? const UpdateState(UpdatePhase.idle)
+        : UpdateState(UpdatePhase.installFailed, message: installFailedMessage(reason));
+  }
 
   final UpdateService _service;
   final bool handheld;
@@ -46,7 +57,29 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   /// About opened: check unless an update is already under way.
   Future<void> checkOnOpen(String currentVersion) async {
     if (state.busy || state.phase == UpdatePhase.available || state.phase == UpdatePhase.ready) return;
+    if (state.installFailed) return; // the notice stays until the user answers it
     await check(currentVersion);
+  }
+
+  /// "Try again on next start": leave the staged update alone and hide the
+  /// notice for this session.
+  Future<void> keepFailedUpdate(String? currentVersion) async {
+    if (!state.installFailed) return;
+    state = const UpdateState(UpdatePhase.idle);
+    if (currentVersion != null) await check(currentVersion);
+  }
+
+  /// "Discard update": delete the staged update, then look for a fresh one.
+  Future<void> discardFailedUpdate(String? currentVersion) async {
+    if (!state.installFailed) return;
+    try {
+      await _service.discardStaged();
+    } catch (e) {
+      state = UpdateState(UpdatePhase.installFailed, message: "Couldn't discard the update: ${_describe(e)}");
+      return;
+    }
+    state = const UpdateState(UpdatePhase.idle);
+    if (currentVersion != null) await check(currentVersion);
   }
 
   Future<void> check(String currentVersion) async {
