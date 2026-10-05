@@ -574,6 +574,36 @@ void main() {
       expect(calls.contains('TextInput.hide'), !touch);
     });
   }
+
+  testWidgets('up/down scroll the page where nothing is focusable that way', (t) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await t.pumpWidget(app(Scaffold(
+      body: SingleChildScrollView(
+        controller: controller,
+        child: Column(children: [
+          const SizedBox(height: 2000, child: Text('long text')),
+          const ElevatedButton(onPressed: null, child: Text('disabled')),
+          ElevatedButton(autofocus: true, onPressed: () {}, child: const Text('last')),
+        ]),
+      ),
+    )));
+    await t.pump();
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await t.pump();
+    final bottom = controller.offset;
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.pump();
+    expect(controller.offset, lessThan(bottom));
+    for (var i = 0; i < 20; i++) {
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await t.pump();
+    }
+    expect(controller.offset, 0);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.pump();
+    expect(controller.offset, greaterThan(0));
+  });
 }
 
 class _PopCounter extends NavigatorObserver {

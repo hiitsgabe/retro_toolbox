@@ -73,8 +73,25 @@ class _VerticalAction extends Action<_VerticalIntent> {
   @override
   void invoke(_VerticalIntent intent) {
     _onMove();
-    FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
+    final node = FocusManager.instance.primaryFocus;
+    if (node == null || node.focusInDirection(intent.direction)) return;
+    // Nothing focusable that way (text, a disabled button, a header above the
+    // first button): scroll the page so it can still be read.
+    _scrollVertically(node.context, intent.direction == TraversalDirection.down);
   }
+}
+
+/// Scrolls the nearest vertical scrollable around [context] by a third of its
+/// viewport.
+void _scrollVertically(BuildContext? context, bool down) {
+  var s = context == null ? null : Scrollable.maybeOf(context);
+  while (s != null && axisDirectionToAxis(s.axisDirection) != Axis.vertical) {
+    s = Scrollable.maybeOf(s.context);
+  }
+  if (s == null) return;
+  final pos = s.position;
+  final target = (pos.pixels + pos.viewportDimension / 3 * (down ? 1 : -1)).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+  if (target != pos.pixels) pos.jumpTo(target);
 }
 
 /// Left/right: leave a text field only when the caret is collapsed at that
