@@ -21,6 +21,7 @@ import 'package:retro_toolbox/screens/add_catalog_source_screen.dart';
 import 'package:retro_toolbox/screens/collection_clean_screen.dart';
 import 'package:retro_toolbox/screens/file_explorer_screen.dart';
 import 'package:retro_toolbox/screens/rar_decompress_screen.dart';
+import 'package:retro_toolbox/services/archive_extract_service.dart';
 import 'package:retro_toolbox/screens/cia_convert_screen.dart';
 import 'package:retro_toolbox/screens/m3u_screen.dart';
 import 'package:retro_toolbox/screens/chd_convert_screen.dart';
@@ -100,7 +101,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           MenuTile(label: 'New Catalog Source', icon: Icons.playlist_add, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const AddCatalogSourceScreen())),
           MenuTile(label: 'Collection Clean', icon: Icons.cleaning_services, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CollectionCleanScreen())),
           MenuTile(label: 'File Explorer', icon: Icons.folder_copy, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const FileExplorerScreen())),
-          if (!Handheld.current) MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
+          if (!Handheld.current || ArchiveExtractService.rarSupported()) MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
           MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
           if (!Handheld.current) MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
           MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
