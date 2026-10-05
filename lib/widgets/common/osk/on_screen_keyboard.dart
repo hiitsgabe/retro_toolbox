@@ -5,7 +5,7 @@ import 'package:retro_toolbox/widgets/common/osk/osk_controller.dart';
 
 /// Docks the on-screen keyboard at the bottom of [overlay], typing into
 /// [field]. While open it owns the d-pad: arrows move between keys, A types,
-/// B hides (Android: gameButtonB), Y = backspace, X = space, L1/R1 = caret. At most one is open;
+/// B or Select hides, Y = backspace, X = space, L1/R1 = caret. At most one is open;
 /// it closes itself when the field leaves the tree or its route stops being
 /// the top one.
 void showOnScreenKeyboard(OverlayState overlay, EditableTextState field) {
@@ -233,6 +233,10 @@ class _OskState extends State<_Osk> {
           const SingleActivator(LogicalKeyboardKey.space): () => _numeric ? null : _type(' '),
           const SingleActivator(LogicalKeyboardKey.pageUp): () => _caret(-1),
           const SingleActivator(LogicalKeyboardKey.pageDown): () => _caret(1),
+          // Linux handheld buttons (gptokeyb: X=F2, Y=F3, Select=F4).
+          const SingleActivator(LogicalKeyboardKey.f2): () => _numeric ? null : _type(' '),
+          const SingleActivator(LogicalKeyboardKey.f3): _backspace,
+          const SingleActivator(LogicalKeyboardKey.f4): _hide,
           // Android gamepad buttons.
           const SingleActivator(LogicalKeyboardKey.gameButtonB): _hide,
           const SingleActivator(LogicalKeyboardKey.gameButtonY): _backspace,
