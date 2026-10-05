@@ -106,8 +106,8 @@ void main() {
       done = true;
     }));
     await listed(t);
-    expect(find.text('Use this folder'), findsOneWidget);
-    await t.tap(find.text('Use this folder'));
+    expect(find.widgetWithText(FilledButton, 'Use this folder'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Use this folder'));
     await t.pumpAndSettle();
     expect(done, isTrue);
     expect(out, p.normalize(tmp.path));
@@ -128,7 +128,7 @@ void main() {
     String? out;
     unawaited(pickSavePath(c, title: 'S', fileName: 'a.json', initialDir: tmp.path, useBrowser: true).then((v) => out = v));
     await listed(t);
-    await t.tap(find.text('Use this folder'));
+    await t.tap(find.widgetWithText(FilledButton, 'Use this folder'));
     await t.pumpAndSettle();
     expect(out, p.join(p.normalize(tmp.path), 'a.json'));
     expect(fake.savedName, isNull);

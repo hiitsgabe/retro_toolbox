@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
@@ -51,7 +52,11 @@ String? focusedLabel() {
 }
 
 void main() {
+  final wasHandheld = Handheld.current;
+  tearDown(() => Handheld.current = wasHandheld);
   setUp(() {
+    // The d-pad tests below are about the handheld layout; touch ones opt out.
+    Handheld.current = true;
     tmp = Directory.systemTemp.createTempSync('pb_test');
     Directory(p.join(tmp.path, 'alpha', 'inner')).createSync(recursive: true);
     Directory(p.join(tmp.path, 'beta')).createSync();
@@ -70,6 +75,50 @@ void main() {
     expect(find.text('beta'), findsOneWidget);
     expect(find.text('file.txt'), findsNothing);
     expect(focusedLabel(), 'alpha');
+  });
+
+  testWidgets('touch: footer "Use this folder" button returns the folder, no top row', (t) async {
+    Handheld.current = false;
+    await open(t);
+    expect(find.byType(ListTile).evaluate().map((e) => ((e.widget as ListTile).title as Text).data), isNot(contains('Use this folder')));
+    expect(find.widgetWithText(FilledButton, 'Use this folder'), findsOneWidget);
+    expect(focusedLabel(), 'alpha');
+    await t.tap(find.widgetWithText(FilledButton, 'Use this folder'));
+    await t.pumpAndSettle();
+    expect(closed, isTrue);
+    expect(result, tmp.path);
+  });
+
+  testWidgets('touch: footer button is disabled while the folder fails to list', (t) async {
+    Handheld.current = false;
+    Directory(p.join(tmp.path, 'locked')).createSync();
+    Process.runSync('chmod', ['000', p.join(tmp.path, 'locked')]);
+    await open(t);
+    await t.tap(find.text('locked'));
+    await settle(t);
+    expect(find.textContaining("Can't open"), findsOneWidget);
+    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Use this folder')).onPressed, isNull);
+  });
+
+  testWidgets('touch: an empty folder focuses ".."', (t) async {
+    Handheld.current = false;
+    await open(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(t);
+    expect(find.text('No subfolders'), findsOneWidget);
+    expect(focusedLabel(), '..');
+  });
+
+  testWidgets('file mode has no "Use this folder" button', (t) async {
+    await open(t, selectDirectory: false);
+    expect(find.text('Use this folder'), findsNothing);
+  });
+
+  testWidgets('handheld: top row and footer button both present', (t) async {
+    await open(t);
+    expect(find.widgetWithText(ListTile, 'Use this folder'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Use this folder'), findsOneWidget);
   });
 
   testWidgets('file mode still lists files', (t) async {
