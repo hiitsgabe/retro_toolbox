@@ -113,40 +113,10 @@ class BoxartService {
 List<Game> _process(List<dynamic> data) {
   final games = data[0] as List<Game>;
   final boxarts = data[1] as Map<String, String>;
-
-  final tokenIndex = buildTokenIndex(boxarts.keys);
-
-  final bracketedId = RegExp(r'[\[(]([A-Za-z0-9-]{4,12})[\])]');
-
-  return games.map((game) {
-    final gameNameWithoutExt = path.basenameWithoutExtension(game.filename);
-
-    // Exact id match first: filenames carrying a serial/title id in brackets
-    // (e.g. "Game Name [ABCD12]") beat any fuzzy name matching.
-    String? boxartUrl;
-    for (final m in bracketedId.allMatches(gameNameWithoutExt)) {
-      boxartUrl = boxarts['id:${m.group(1)!.toLowerCase()}'];
-      if (boxartUrl != null) break;
-    }
-
-    boxartUrl ??= matchTitle(titleToMatch: gameNameWithoutExt, candidates: boxarts, tokenIndex: tokenIndex);
-
-    // ponytail: fallback strips "(...)"/"[...]" groups so decorated names like
-    // "Game (1982) (Mattel)" or "Game [ABCD12]" match plain boxart names.
-    // May pick a wrong region variant; better than no art.
-    if (boxartUrl == null) {
-      final stripped = gameNameWithoutExt.replaceAll(RegExp(r'\s*[\[(][^\])]*[\])]'), '').trim();
-      if (stripped.isNotEmpty && stripped != gameNameWithoutExt) {
-        boxartUrl = matchTitle(titleToMatch: stripped, candidates: boxarts, tokenIndex: tokenIndex);
-      }
-    }
-
-    if (boxartUrl != null) {
-      return game.copyWith(details: GameDetails(boxart: boxartUrl));
-    }
-
-    return game;
-  }).toList();
+  final urls = matchBoxartUrls([for (final g in games) path.basenameWithoutExtension(g.filename)], boxarts);
+  return [
+    for (var i = 0; i < games.length; i++) urls[i] != null ? games[i].copyWith(details: GameDetails(boxart: urls[i])) : games[i],
+  ];
 }
 
 Map<String, String> _parseBoxartHtml(List<String> args) {
