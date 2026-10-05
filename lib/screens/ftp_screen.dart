@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/providers/ftp_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/utils/network.dart';
@@ -324,6 +325,8 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
                       style: theme.textTheme.titleMedium
                           ?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer)),
                 ),
+                // No clipboard on the handheld.
+                if (!Handheld.current)
                 IconButton(
                   icon: const Icon(Icons.copy, size: 20),
                   color: theme.colorScheme.onPrimaryContainer,

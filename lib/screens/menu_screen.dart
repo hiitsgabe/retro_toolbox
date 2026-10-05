@@ -77,17 +77,20 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         accentColor: const Color(0xFF2E6DB4),
         onTap: _openGamesLibrary,
       ),
-      if (!Handheld.current)
       MenuTile(
         label: 'Servers',
         icon: Icons.dns,
         accentColor: const Color(0xFF167C80),
         onTap: () => _push(MenuGridScreen(title: 'Servers', tiles: [
+          // The handheld keeps the pure-Dart servers that make sense there.
+          if (!Handheld.current)
           MenuTile(label: 'Tinfoil Server', icon: Icons.cloud_upload, accentColor: const Color(0xFF167C80), onTap: () => _push(TinfoilServerScreen())),
+          if (!Handheld.current)
           MenuTile(label: 'JDKV Server', icon: Icons.folder_shared, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const JdkvServerScreen())),
           MenuTile(label: 'SMB Share', icon: Icons.folder_open, accentColor: const Color(0xFF7A5CA8), onTap: () => _push(const SmbScreen())),
           MenuTile(label: 'FTP', icon: Icons.cloud_sync, accentColor: const Color(0xFFB4632E), onTap: () => _push(const FtpScreen())),
           MenuTile(label: 'Retro Tools Server', icon: Icons.dns_rounded, accentColor: const Color(0xFF167C80), onTap: () => _push(const RtsServerScreen())),
+          if (!Handheld.current)
           MenuTile(label: 'FBI Server', icon: Icons.install_mobile, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const FbiServerScreen())),
         ])),
       ),
