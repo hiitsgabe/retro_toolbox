@@ -205,6 +205,24 @@ void main() {
     expect(Focus.of(t.element(find.text('Below'))).hasPrimaryFocus, isTrue);
   });
 
+  testWidgets('signed number fields get a minus key; plain ones do not', (t) async {
+    await t.pumpWidget(app(form(keyboardType: TextInputType.number)));
+    await t.pump();
+    await press(t, LogicalKeyboardKey.arrowDown);
+    await press(t, LogicalKeyboardKey.enter);
+    expect(find.byKey(key('-')), findsNothing);
+    await t.pumpWidget(const SizedBox());
+
+    await t.pumpWidget(app(form(keyboardType: const TextInputType.numberWithOptions(signed: true))));
+    await t.pump();
+    await press(t, LogicalKeyboardKey.arrowDown);
+    await press(t, LogicalKeyboardKey.enter);
+    expect(find.byKey(key('-')), findsOneWidget);
+    await t.tap(find.byKey(key('-')));
+    await t.pump();
+    expect(text.text, '-');
+  });
+
   testWidgets('number fields get a digit pad', (t) async {
     await t.pumpWidget(app(form(keyboardType: TextInputType.number)));
     await t.pump();

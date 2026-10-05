@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +31,12 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
   final toggled = <String>[];
 
   @override
-  void toggleGameSelection(String gameId) => toggled.add(gameId);
+  void toggleGameSelection(String gameId) {
+    toggled.add(gameId);
+    final sel = {...state.selectedGames};
+    if (!sel.remove(gameId)) sel.add(gameId);
+    state = CatalogState(selectedGames: sel);
+  }
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -222,5 +228,62 @@ void main() {
     await t.tap(find.text('Ready').first, warnIfMissed: false);
     await t.pumpAndSettle();
     expect(find.byType(BottomSheet), findsOneWidget);
+  });
+
+  testWidgets('holding Enter on a card opens the menu once and runs nothing', (t) async {
+    await pump(t, const GameRow(game: _game));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    for (var i = 0; i < 4; i++) {
+      await t.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+      await t.pump();
+    }
+    await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(ran, isEmpty);
+  });
+
+  testWidgets('focus stays in the sheet when the focused Select tile disappears', (t) async {
+    catalog.state = CatalogState(selectedGames: {_game.gameId});
+    await pump(t, const GameRow(game: _game),
+        state: const GameState(game: _game, status: GameStatus.ready, isInteractable: false, availableActions: {GameAction.download}));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // favourites
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Unselect
+    await t.pump();
+    expect(Focus.of(t.element(inSheet(find.text('Unselect')))).hasFocus, isTrue);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(inSheet(find.text('Unselect')), findsNothing);
+    expect(inSheet(find.text('Select')), findsNothing);
+    final node = FocusManager.instance.primaryFocus;
+    expect(node, isNot(isA<FocusScopeNode>()));
+    expect(node?.context?.findAncestorWidgetOfExactType<BottomSheet>(), isNotNull);
+    expect(Focus.of(t.element(inSheet(find.text('Add to favourites')))).hasFocus, isTrue);
+  });
+
+  testWidgets('escape while an action runs does not drop it', (t) async {
+    final gate = Completer<void>();
+    debugRunGameAction = (ref, context, game, state, action) async {
+      await gate.future;
+      ran.add((game, action));
+    };
+    await pump(t, const GameRow(game: _game));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    await t.tap(inSheet(find.text('Download')));
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+    gate.complete();
+    await t.pumpAndSettle();
+    expect(ran, [(_game, GameAction.download)]);
+    expect(find.byType(BottomSheet), findsNothing);
   });
 }

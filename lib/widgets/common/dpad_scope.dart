@@ -161,10 +161,31 @@ class _DpadScopeState extends State<DpadScope> {
   }
 
   // Built-in keyboard on: keep the system IME down when a field takes focus
-  // (best effort; the IME is asked to show after focus lands).
+  // (best effort; the IME is asked to show after focus lands). Touch users
+  // keep it: the on-screen keyboard only opens from Enter/A.
   void _hideImeOnField() {
-    if (!widget.onScreenKeyboard || _focusedField() == null) return;
+    if (!widget.onScreenKeyboard || FocusManager.instance.highlightMode == FocusHighlightMode.touch) return;
+    if (_focusedField() == null) return;
     SchedulerBinding.instance.addPostFrameCallback((_) => SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+  }
+
+  // A held activate key must act once. The default Enter/A/Select/Space ->
+  // ActivateIntent shortcuts also match key repeats, so swallow the repeats
+  // here (above them). Text fields keep their own repeats unless the built-in
+  // keyboard owns typing.
+  static final _activateKeys = {
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.space,
+    LogicalKeyboardKey.gameButtonA,
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.gameButtonStart,
+  };
+
+  KeyEventResult _swallowRepeat(FocusNode _, KeyEvent e) {
+    if (e is! KeyRepeatEvent || !_activateKeys.contains(e.logicalKey)) return KeyEventResult.ignored;
+    if (!widget.onScreenKeyboard && _focusedField() != null) return KeyEventResult.ignored;
+    return KeyEventResult.handled;
   }
 
   void _onHighlight(FocusHighlightMode _) => _repaint.ping();
@@ -221,34 +242,40 @@ class _DpadScopeState extends State<DpadScope> {
     final color = Theme.of(context).colorScheme.primary;
     return Shortcuts(
       shortcuts: {..._shortcuts, if (widget.onScreenKeyboard) ..._oskShortcuts},
-      child: Actions(
-        actions: {
-          PageFocusIntent: CallbackAction<PageFocusIntent>(
-            onInvoke: (i) => _pageFocus(i.forward),
-          ),
-          _VerticalIntent: _VerticalAction(),
-          _SideIntent: _SideAction(),
-          _BackIntent: CallbackAction<_BackIntent>(
-            onInvoke: (_) => _back(),
-          ),
-          _OskIntent: _OskAction(widget.onScreenKeyboard ? widget.navigatorKey : null),
-        },
-        child: Stack(
-          textDirection: TextDirection.ltr,
-          fit: StackFit.passthrough,
-          children: [
-            widget.child,
-            Positioned.fill(
-              child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    key: const ValueKey('dpad-focus-outline'),
-                    painter: _OutlinePainter(this, color, _repaint),
+      // Below Shortcuts so repeats are dropped before our own Start shortcut.
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: _swallowRepeat,
+        child: Actions(
+          actions: {
+            PageFocusIntent: CallbackAction<PageFocusIntent>(
+              onInvoke: (i) => _pageFocus(i.forward),
+            ),
+            _VerticalIntent: _VerticalAction(),
+            _SideIntent: _SideAction(),
+            _BackIntent: CallbackAction<_BackIntent>(
+              onInvoke: (_) => _back(),
+            ),
+            _OskIntent: _OskAction(widget.onScreenKeyboard ? widget.navigatorKey : null),
+          },
+          child: Stack(
+            textDirection: TextDirection.ltr,
+            fit: StackFit.passthrough,
+            children: [
+              widget.child,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      key: const ValueKey('dpad-focus-outline'),
+                      painter: _OutlinePainter(this, color, _repaint),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
