@@ -29,6 +29,7 @@ final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
 class UpdateNotifier extends StateNotifier<UpdateState> {
   UpdateNotifier(this._service, {bool? handheld, String? os, Abi? abi})
       : handheld = handheld ?? Handheld.current,
+        _os = os ?? Platform.operatingSystem,
         _assetName = updateAssetName(
           handheld: handheld ?? Handheld.current,
           os: os ?? Platform.operatingSystem,
@@ -38,6 +39,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
   final UpdateService _service;
   final bool handheld;
+  final String _os;
   final String? _assetName;
   File? _apk;
 
@@ -52,15 +54,24 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     state = const UpdateState(UpdatePhase.checking);
     try {
       final release = await _service.fetchLatest();
+      if (!isValidVersion(release.version)) {
+        throw UpdateException("Can't read the latest version (\"${release.version}\").");
+      }
       if (!isNewerVersion(release.version, currentVersion)) {
         state = UpdateState(UpdatePhase.upToDate, release: release);
         return;
       }
-      final name = _assetName;
+      // Play installs update through Play (its signing key differs from the
+      // GitHub APK's anyway): link out like desktop.
+      final name = await _fromPlay() ? null : _assetName;
       final asset = name == null ? null : release.asset(name);
       if (name != null && asset == null) {
         state = UpdateState(UpdatePhase.error,
             release: release, message: 'Version ${release.version} has no download for this device yet.');
+        return;
+      }
+      if (asset != null && asset.sha256 == null) {
+        state = UpdateState(UpdatePhase.error, release: release, message: cantVerifyMessage);
         return;
       }
       state = UpdateState(UpdatePhase.available, release: release, asset: asset);
@@ -74,6 +85,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
     if (state.phase != UpdatePhase.available || release == null || asset == null) return;
     state = UpdateState(UpdatePhase.downloading, release: release, asset: asset);
     try {
+      await _service.ensureSpace(asset, handheld: handheld);
       final file = await _service.download(asset, (progress) {
         if (mounted) state = UpdateState(UpdatePhase.downloading, release: release, asset: asset, progress: progress);
       });
@@ -102,6 +114,15 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
           message: launched ? null : 'Allow Retro Toolbox to install apps, then press Install again.');
     } catch (e) {
       state = UpdateState(UpdatePhase.ready, release: release, asset: state.asset, message: _describe(e));
+    }
+  }
+
+  Future<bool> _fromPlay() async {
+    if (handheld || _os != 'android') return false;
+    try {
+      return await _service.installerPackage() == playStoreInstaller;
+    } catch (_) {
+      return false;
     }
   }
 

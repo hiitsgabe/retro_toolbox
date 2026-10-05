@@ -54,7 +54,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
       UpdatePhase.ready => notifier.handheld
           ? ('Update ready', 'Restart Retro Toolbox to finish the update')
           : ('Update downloaded', 'Install version ${release?.version}'),
-      UpdatePhase.error => ('Update check failed', state.message ?? ''),
+      UpdatePhase.error => (release == null ? 'Update check failed' : 'Update failed', state.message ?? ''),
     };
 
     final (String label, VoidCallback? onPressed) = switch (state.phase) {

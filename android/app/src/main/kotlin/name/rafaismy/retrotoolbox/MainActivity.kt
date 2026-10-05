@@ -29,10 +29,25 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "retro_toolbox/updater")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    // Play installs must not self-update; the app links out instead.
+                    "installerPackage" -> result.success(
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                packageManager.getInstallSourceInfo(packageName).installingPackageName
+                            } else {
+                                @Suppress("DEPRECATION")
+                                packageManager.getInstallerPackageName(packageName)
+                            }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    )
                     "installApk" -> {
-                        val path = call.argument<String>("path")
-                        if (path == null) {
-                            result.error("ARGS", "path missing", null)
+                        // Only an APK the updater downloaded: <cache>/updates/*.apk.
+                        val updates = File(cacheDir, "updates").canonicalFile
+                        val apk = call.argument<String>("path")?.let { File(it).canonicalFile }
+                        if (apk == null || apk.parentFile != updates || !apk.name.endsWith(".apk")) {
+                            result.error("ARGS", "not an update APK", null)
                             return@setMethodCallHandler
                         }
                         try {
@@ -48,7 +63,7 @@ class MainActivity : FlutterActivity() {
                                 result.success(false)
                                 return@setMethodCallHandler
                             }
-                            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", File(path))
+                            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", apk)
                             startActivity(
                                 Intent(Intent.ACTION_VIEW)
                                     .setDataAndType(uri, "application/vnd.android.package-archive")
