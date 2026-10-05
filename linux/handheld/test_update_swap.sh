@@ -82,6 +82,7 @@ rt_apply_update "$G" "$P" >/dev/null; rc=$?
 unset -f df
 check "no space returns 2" '[ $rc -eq 2 ]'
 check "no space: old port untouched" '[ -f "$G/bundled_libs/libgone.so" ] && [ "$(cat "$G/flutter-pi")" = old ]'
+check "no space: no UPDATE_FAILED.txt (port untouched)" '[ ! -e "$G/UPDATE_FAILED.txt" ]'
 check "no space: FAILED says why" 'grep -q "not enough space" "$U/FAILED" && [ -f "$U/READY" ]'
 
 # --- copy fails part-way: stop, keep everything for a retry ---
@@ -92,9 +93,13 @@ if [ "$(id -u)" != 0 ]; then
   check "failed copy: .update, READY and FAILED kept" '[ -f "$U/READY" ] && [ -f "$U/FAILED" ] && [ -f "$N/flutter-pi" ]'
   check "failed copy: launcher not replaced" '[ "$(cat "$P/Retro Toolbox.sh")" = "old launcher" ]'
   check "failed copy logged" 'echo "$out" | grep -q "copy failed"'
+  check "failed copy: message in the log" 'echo "$out" | grep -q "only partly updated" && echo "$out" | grep -q "reinstall Retro Toolbox from the release zip"'
+  check "failed copy: UPDATE_FAILED.txt written" '[ "$(wc -l < "$G/UPDATE_FAILED.txt")" -ge 4 ] && grep -q "Reason: copy failed" "$G/UPDATE_FAILED.txt" && grep -q "release zip" "$G/UPDATE_FAILED.txt"'
+  check "failed copy: FAILED holds the bare reason" '[ "$(cat "$U/FAILED")" = "copy failed" ]'
   chmod u+w "$G/bin"
   rt_apply_update "$G" "$P" >/dev/null; rc=$?
   check "retry after a failed copy applies" '[ $rc -eq 0 ] && [ "$(cat "$G/flutter-pi")" = new ] && [ ! -e "$U" ]'
+  check "successful retry removes UPDATE_FAILED.txt" '[ ! -e "$G/UPDATE_FAILED.txt" ]'
 else
   echo "skip failed-copy cases (root ignores permissions)"
 fi

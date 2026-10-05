@@ -10,11 +10,26 @@
 # launcher). Returns 0 when there was nothing to do or it applied; 2 when it
 # failed before touching the port (the old one still runs); 1 when it failed
 # part-way (the port is mixed: don't start it). Failures leave .update/ and
-# READY for a retry next start, plus a FAILED note.
+# READY for a retry next start, plus a FAILED note (the app shows it in About).
+# A part-way failure also leaves UPDATE_FAILED.txt in the port folder.
 RT_UPDATE_WIPE="bundled_libs xkb data/flutter_assets app site-packages"
+# Part-way failure ($1 port folder, $2 reason): note the reason in FAILED, put
+# the same plain message in the log and in UPDATE_FAILED.txt, return 1.
+rt_fail_partial() {
+  local msg
+  msg="Retro Toolbox: the update could not be completed.
+The app was only partly updated, so it was not started.
+Reason: $2
+Fix that (free some space on the card?) and start Retro Toolbox again to retry,
+or reinstall Retro Toolbox from the release zip."
+  echo "$2" > "$1/.update/FAILED"
+  echo "$msg"
+  echo "$msg" > "$1/UPDATE_FAILED.txt"
+  return 1
+}
 rt_apply_update() {
   local game="$1" ports="$2" up="$1/.update" d
-  [ -d "$up" ] || return 0
+  if [ ! -d "$up" ]; then rm -f "$game/UPDATE_FAILED.txt"; return 0; fi
   if [ ! -f "$up/READY" ]; then
     echo "Update: incomplete, removing $up"
     rm -rf "$up"
@@ -42,17 +57,17 @@ rt_apply_update() {
   for d in $RT_UPDATE_WIPE; do
     [ -d "$up/retrotoolbox/$d" ] || continue
     echo "Update: replacing $d"
-    rm -rf "${game:?}/$d" || { echo "copy failed: rm $d" > "$up/FAILED"; return 1; }
+    rm -rf "${game:?}/$d" || { rt_fail_partial "$game" "copy failed: rm $d"; return 1; }
   done
   echo "Update: copying files"
-  cp -rf "$up/retrotoolbox/." "$game/" || { echo "Update: copy failed"; echo "copy failed" > "$up/FAILED"; return 1; }
+  cp -rf "$up/retrotoolbox/." "$game/" || { rt_fail_partial "$game" "copy failed"; return 1; }
   if [ -f "$up/Retro Toolbox.sh" ]; then
     echo "Update: replacing launcher"
     # Copy then rename: this script is the one running, and bash reads it as
     # it goes — overwriting it in place would corrupt the rest of this run.
     { cp -f "$up/Retro Toolbox.sh" "$ports/.Retro Toolbox.sh.new" &&
       mv -f "$ports/.Retro Toolbox.sh.new" "$ports/Retro Toolbox.sh"; } ||
-      { echo "Update: launcher copy failed"; echo "launcher copy failed" > "$up/FAILED"; return 1; }
+      { rt_fail_partial "$game" "launcher copy failed"; return 1; }
     chmod +x "$ports/Retro Toolbox.sh" 2>/dev/null || true
   fi
   chmod +x "$game/flutter-pi" "$game"/bin/* 2>/dev/null || true
@@ -62,6 +77,7 @@ rt_apply_update() {
   rm -f "$up/READY"
   sync
   rm -rf "$up"
+  rm -f "$game/UPDATE_FAILED.txt"
   echo "Update: done"
 }
 # test_update_swap.sh sources this file for the function alone.
@@ -83,6 +99,9 @@ echo "--- Retro Toolbox --- $(date)"
 rt_apply_update "$GAMEDIR" "/$directory/ports"
 if [ $? -eq 1 ]; then
   echo "Update failed part-way; not starting. Free some space and start Retro Toolbox again to retry."
+  # pm_message lives in PortMaster's funcs.txt (sourced by control.txt).
+  type pm_message >/dev/null 2>&1 &&
+    pm_message "Update failed part-way. See UPDATE_FAILED.txt in the retrotoolbox folder, then start again."
   pm_finish
   exit 1
 fi
