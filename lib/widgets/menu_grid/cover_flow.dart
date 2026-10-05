@@ -4,11 +4,15 @@ import 'package:flutter/services.dart';
 /// One card in a [CoverFlow]: a visual [face], a [label] shown under the
 /// centered card, and an optional [onTap] fired when the centered card is
 /// tapped. Leave [onTap] null for faces that handle their own interaction.
+/// [wrapFocus] wraps the flow's one focus stop while this item is centred, so
+/// its gamepad bindings (e.g. X/Y) apply; use the same widget type for every
+/// item or focus is lost while browsing.
 class CoverFlowItem {
   final Widget face;
   final String label;
   final VoidCallback? onTap;
-  const CoverFlowItem({required this.face, required this.label, this.onTap});
+  final Widget Function(Widget focus)? wrapFocus;
+  const CoverFlowItem({required this.face, required this.label, this.onTap, this.wrapFocus});
 }
 
 /// PS Vita / RetroFlow-style cover flow: near-upright cards fanned out from the
@@ -61,17 +65,22 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   }
 
   // One focus stop for the whole flow: faces (and their reflections) are
-  // ExcludeFocus'd, so Left/Right browse, Enter/Space/A/Start opens, Up/Down leave.
+  // ExcludeFocus'd, so Left/Right browse, Enter/Space/A opens, Up/Down leave.
   // Left/Right at the ends are swallowed so a held arrow can't spill over.
+  // Start is left to the screen (DpadScope falls back to ActivateIntent, which
+  // opens the centre card).
   static final _open = {
     LogicalKeyboardKey.enter,
     LogicalKeyboardKey.numpadEnter,
     LogicalKeyboardKey.space,
     LogicalKeyboardKey.gameButtonA,
     LogicalKeyboardKey.select,
-    LogicalKeyboardKey.gameButtonStart,
-    LogicalKeyboardKey.f5, // Start on the Linux handheld
   };
+
+  void _openCentre() {
+    if (widget.items.isEmpty) return;
+    widget.items[_position.round().clamp(0, _last)].onTap?.call();
+  }
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is KeyUpEvent || widget.items.isEmpty) return KeyEventResult.ignored;
@@ -82,7 +91,7 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
     } else if (k == LogicalKeyboardKey.arrowRight) {
       _animateTo(centre + 1);
     } else if (e is KeyDownEvent && _open.contains(k)) {
-      widget.items[centre].onTap?.call();
+      _openCentre();
     } else {
       return KeyEventResult.ignored;
     }
@@ -143,7 +152,12 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
             ],
           ),
         );
-        return Focus(autofocus: true, onKeyEvent: _onKey, child: flow);
+        final focus = Actions(
+          actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => _openCentre())},
+          child: Focus(autofocus: true, onKeyEvent: _onKey, child: flow),
+        );
+        final wrap = widget.items.isEmpty ? null : widget.items[_position.round().clamp(0, _last)].wrapFocus;
+        return wrap?.call(focus) ?? focus;
       },
     );
   }
