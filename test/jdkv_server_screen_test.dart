@@ -1,9 +1,9 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:retro_toolbox/providers/jdkv_server_provider.dart';
@@ -42,11 +42,29 @@ Future<void> saveTo(WidgetTester t, String path) async {
   ));
   await t.pump();
   await t.tap(find.byTooltip('Save webdav.json'));
-  await t.pump();
-  await t.pump();
+  // The write is real file I/O: wait for its snackbar instead of a fixed
+  // number of pumps (flaky under a loaded full-suite run).
+  for (var i = 0; i < 50; i++) {
+    await t.pump();
+    if (find.textContaining('Saved webdav.json').evaluate().isNotEmpty || find.textContaining('Could not save').evaluate().isNotEmpty) break;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
 }
 
 void main() {
+  // The screen loads settings in the background, which asks path_provider for
+  // folders; unanswered, that throws after the test ends (flaky under load).
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (_) async => Directory.systemTemp.path,
+    );
+  });
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
+  });
+
   testWidgets('saving webdav.json writes the file and says Saved', (t) async {
     final dir = Directory.systemTemp.createTempSync('jdkv');
     addTearDown(() => dir.deleteSync(recursive: true));
