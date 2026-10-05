@@ -214,20 +214,54 @@ class ExtractionService {
     try {
       sendPort.send({'type': 'progress', 'value': 0.1});
       var extractedFiles = 0;
-      await virtual_archive.extractFileToDisk(params['filePath'], params['extractionDir'], callback: (archiveFile) {
-        final progress = (0.1 + (++extractedFiles / 4) * 0.85).clamp(0.1, 0.95);
-        sendPort.send({'type': 'progress', 'value': progress});
+      final allowed = (params['allowedExtensions'] as List?)?.cast<String>() ?? const <String>[];
+      await _extractStaged(params['extractionDir'], allowed, (staging) {
+        return virtual_archive.extractFileToDisk(params['filePath'], staging, callback: (archiveFile) {
+          final progress = (0.1 + (++extractedFiles / 4) * 0.85).clamp(0.1, 0.95);
+          sendPort.send({'type': 'progress', 'value': progress});
+        });
       });
-      await _flattenSingleTopLevelDir(params['extractionDir']);
-      await _pruneToAllowed(params['extractionDir'], (params['allowedExtensions'] as List?)?.cast<String>() ?? const []);
-      // Zips can carry mode-000 entries; make extracted files readable.
-      if (!Platform.isWindows) {
-        await Process.run('chmod', ['-R', 'u+rwX,go+rX', params['extractionDir']]);
-      }
       sendPort.send({'type': 'complete'});
     } catch (e) {
       debugPrint('Extraction error: $e');
       sendPort.send({'type': 'error', 'message': 'Failed to extract: $e'});
+    }
+  }
+}
+
+/// Extracts (via [extract]) into a private staging folder inside
+/// [extractionDir], tidies it there, then moves the result in. Flattening and
+/// pruning must never run on [extractionDir] itself: with "extract contents"
+/// that is the whole console folder (other archives, gamelist.xml, media).
+// ponytail: a crash mid-extraction leaves a hidden .rt-extract-* folder behind.
+Future<void> _extractStaged(String extractionDir, List<String> allowed, Future<void> Function(String staging) extract) async {
+  final staging = Directory(path.join(extractionDir, '.rt-extract-${DateTime.now().microsecondsSinceEpoch}'));
+  await staging.create(recursive: true);
+  try {
+    await extract(staging.path);
+    await _flattenSingleTopLevelDir(staging.path);
+    await _pruneToAllowed(staging.path, allowed);
+    // Zips can carry mode-000 entries; make extracted files readable.
+    if (!Platform.isWindows) {
+      await Process.run('chmod', ['-R', 'u+rwX,go+rX', staging.path]);
+    }
+    await _moveInto(staging, extractionDir);
+  } finally {
+    try {
+      await staging.delete(recursive: true);
+    } catch (_) {}
+  }
+}
+
+/// Moves [from]'s contents into [to], merging folders and replacing files.
+Future<void> _moveInto(Directory from, String to) async {
+  await for (final e in from.list(followLinks: false)) {
+    final dest = path.join(to, path.basename(e.path));
+    if (e is Directory && await Directory(dest).exists()) {
+      await _moveInto(e, dest);
+    } else {
+      if (await File(dest).exists()) await File(dest).delete();
+      await e.rename(dest);
     }
   }
 }
@@ -316,27 +350,30 @@ class ExtractionTaskHandler extends TaskHandler {
 
       final fileName = path.basename(filePath);
       int lastPct = -1;
-      ZipFile.extractToDirectory(
-        zipFile: File(filePath),
-        destinationDir: Directory(extractionDir),
-        onExtracting: (zipEntry, progress) {
-          final pct = progress.round();
-          if (pct != lastPct) {
-            lastPct = pct;
-            FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName... $pct%');
-            FlutterForegroundTask.sendDataToMain({
-              'type': ExtractionService.progressDataType,
-              'taskId': taskId,
-              'value': (progress / 100.0).clamp(0.0, 1.0),
-            });
-          }
-          if (allowed.isNotEmpty && !zipEntry.isDirectory) {
-            final ext = path.extension(zipEntry.name).toLowerCase();
-            if (!allowed.contains(ext)) return ZipFileOperation.skipItem;
-          }
-          return ZipFileOperation.includeItem;
-        },
-      ).then((_) => _flattenSingleTopLevelDir(extractionDir)).then((_) => _pruneToAllowed(extractionDir, allowed)).then((_) {
+      _extractStaged(
+          extractionDir,
+          allowed,
+          (staging) => ZipFile.extractToDirectory(
+                zipFile: File(filePath),
+                destinationDir: Directory(staging),
+                onExtracting: (zipEntry, progress) {
+                  final pct = progress.round();
+                  if (pct != lastPct) {
+                    lastPct = pct;
+                    FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName... $pct%');
+                    FlutterForegroundTask.sendDataToMain({
+                      'type': ExtractionService.progressDataType,
+                      'taskId': taskId,
+                      'value': (progress / 100.0).clamp(0.0, 1.0),
+                    });
+                  }
+                  if (allowed.isNotEmpty && !zipEntry.isDirectory) {
+                    final ext = path.extension(zipEntry.name).toLowerCase();
+                    if (!allowed.contains(ext)) return ZipFileOperation.skipItem;
+                  }
+                  return ZipFileOperation.includeItem;
+                },
+              )).then((_) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
           'type': ExtractionService.completionDataType,
