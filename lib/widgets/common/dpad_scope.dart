@@ -2,12 +2,16 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:retro_toolbox/widgets/common/osk/on_screen_keyboard.dart';
 
 /// Moves focus a page at a time (L1/R1 on handhelds map to PageUp/PageDown).
 class PageFocusIntent extends Intent {
   const PageFocusIntent(this.forward);
   final bool forward;
 }
+
+EditableTextState? _focusedField() =>
+    FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
 
 /// Up/down: leave a text field unless it is multi-line (maxLines != 1); then
 /// disabled, so the key falls through to caret movement.
@@ -19,8 +23,7 @@ class _VerticalIntent extends Intent {
 class _VerticalAction extends Action<_VerticalIntent> {
   @override
   bool isEnabled(_VerticalIntent intent) {
-    final ctx = FocusManager.instance.primaryFocus?.context;
-    final t = ctx?.findAncestorStateOfType<EditableTextState>();
+    final t = _focusedField();
     return t == null || t.widget.maxLines == 1;
   }
 
@@ -41,8 +44,7 @@ class _SideIntent extends Intent {
 class _SideAction extends Action<_SideIntent> {
   @override
   bool isEnabled(_SideIntent intent) {
-    final ctx = FocusManager.instance.primaryFocus?.context;
-    final c = ctx?.findAncestorStateOfType<EditableTextState>()?.widget.controller;
+    final c = _focusedField()?.widget.controller;
     if (c == null) return true;
     final sel = c.selection;
     if (!sel.isValid) return true;
@@ -60,14 +62,38 @@ class _BackIntent extends Intent {
   const _BackIntent();
 }
 
+/// Enter on a single-line text field opens the on-screen keyboard (handheld
+/// only; [_navigatorKey] is null when disabled). Otherwise disabled, so Enter
+/// falls through to activate/submit.
+class _OskIntent extends Intent {
+  const _OskIntent();
+}
+
+class _OskAction extends Action<_OskIntent> {
+  _OskAction(this._navigatorKey);
+  final GlobalKey<NavigatorState>? _navigatorKey;
+
+  @override
+  bool isEnabled(_OskIntent intent) {
+    final t = _focusedField();
+    return _navigatorKey?.currentState?.overlay != null && t != null && t.widget.maxLines == 1 && !t.widget.readOnly;
+  }
+
+  @override
+  void invoke(_OskIntent intent) => showOnScreenKeyboard(_navigatorKey!.currentState!.overlay!, _focusedField()!);
+}
+
 /// Global d-pad/gamepad key map plus a visible focus outline.
 /// Handheld gamepads reach the app as keys: D-pad=arrows, A=Enter, B=Escape,
 /// L1/R1=PageUp/PageDown.
 class DpadScope extends StatefulWidget {
-  const DpadScope({super.key, required this.child, required this.navigatorKey});
+  const DpadScope({super.key, required this.child, required this.navigatorKey, this.onScreenKeyboard = false});
 
   final Widget child;
   final GlobalKey<NavigatorState> navigatorKey;
+
+  /// Enter on a text field opens the in-app keyboard (no platform IME).
+  final bool onScreenKeyboard;
 
   @override
   State<DpadScope> createState() => _DpadScopeState();
@@ -84,6 +110,7 @@ class _DpadScopeState extends State<DpadScope> {
     const SingleActivator(LogicalKeyboardKey.pageUp): const PageFocusIntent(false),
     const SingleActivator(LogicalKeyboardKey.pageDown): const PageFocusIntent(true),
     const SingleActivator(LogicalKeyboardKey.escape): const _BackIntent(),
+    const SingleActivator(LogicalKeyboardKey.enter): const _OskIntent(),
   };
 
   final _repaint = _Repaint();
@@ -182,6 +209,7 @@ class _DpadScopeState extends State<DpadScope> {
           _BackIntent: CallbackAction<_BackIntent>(
             onInvoke: (_) => _back(),
           ),
+          _OskIntent: _OskAction(widget.onScreenKeyboard ? widget.navigatorKey : null),
         },
         child: Stack(
           textDirection: TextDirection.ltr,
