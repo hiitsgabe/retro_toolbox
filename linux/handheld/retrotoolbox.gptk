@@ -1,9 +1,9 @@
-back = esc
-start = enter
+back = f4
+start = f5
 a = enter
 b = esc
-x = space
-y = tab
+x = f2
+y = f3
 up = up
 down = down
 left = left

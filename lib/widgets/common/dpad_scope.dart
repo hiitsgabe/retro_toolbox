@@ -10,6 +10,46 @@ class PageFocusIntent extends Intent {
   final bool forward;
 }
 
+/// X: mark / unmark the focused item. Screens bind it with a plain `Actions`
+/// widget around the focused control; DpadScope's own no-op is the fallback.
+class MarkIntent extends Intent {
+  const MarkIntent();
+}
+
+/// Y: actions for the focused item.
+class ItemActionsIntent extends Intent {
+  const ItemActionsIntent();
+}
+
+/// Start: the screen's primary action. Falls back to activating the focused
+/// control.
+class PrimaryActionIntent extends Intent {
+  const PrimaryActionIntent();
+}
+
+/// Select: filters / options.
+class OptionsIntent extends Intent {
+  const OptionsIntent();
+}
+
+/// L2/R2 (Home/End): focus the first ([end] false) or last item of the list.
+class ListEdgeIntent extends Intent {
+  const ListEdgeIntent(this.end);
+  final bool end;
+}
+
+/// Disabled while a text field has focus, so Home/End keep moving the caret.
+class _EdgeAction extends Action<ListEdgeIntent> {
+  _EdgeAction(this._run);
+  final void Function(bool end) _run;
+
+  @override
+  bool isEnabled(ListEdgeIntent intent) => _focusedField() == null;
+
+  @override
+  void invoke(ListEdgeIntent intent) => _run(intent.end);
+}
+
 EditableTextState? _focusedField() =>
     FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
 
@@ -85,7 +125,7 @@ class _OskAction extends Action<_OskIntent> {
 
 /// Global d-pad/gamepad key map plus a visible focus outline.
 /// Handheld gamepads reach the app as keys: D-pad=arrows, A=Enter, B=Escape,
-/// L1/R1=PageUp/PageDown.
+/// L1/R1=PageUp/PageDown, L2/R2=Home/End, X/Y/Select/Start=F2/F3/F4/F5.
 class DpadScope extends StatefulWidget {
   const DpadScope({super.key, required this.child, required this.navigatorKey, this.onScreenKeyboard = false});
 
@@ -119,7 +159,18 @@ class _DpadScopeState extends State<DpadScope> {
     const SingleActivator(LogicalKeyboardKey.gameButtonB): const _BackIntent(),
     const SingleActivator(LogicalKeyboardKey.gameButtonLeft1): const PageFocusIntent(false),
     const SingleActivator(LogicalKeyboardKey.gameButtonRight1): const PageFocusIntent(true),
-    const SingleActivator(LogicalKeyboardKey.gameButtonStart): const ActivateIntent(),
+    const SingleActivator(LogicalKeyboardKey.f2): const MarkIntent(),
+    const SingleActivator(LogicalKeyboardKey.gameButtonX): const MarkIntent(),
+    const SingleActivator(LogicalKeyboardKey.f3): const ItemActionsIntent(),
+    const SingleActivator(LogicalKeyboardKey.gameButtonY): const ItemActionsIntent(),
+    const SingleActivator(LogicalKeyboardKey.f4): const OptionsIntent(),
+    const SingleActivator(LogicalKeyboardKey.gameButtonSelect): const OptionsIntent(),
+    const SingleActivator(LogicalKeyboardKey.f5): const PrimaryActionIntent(),
+    const SingleActivator(LogicalKeyboardKey.gameButtonStart): const PrimaryActionIntent(),
+    const SingleActivator(LogicalKeyboardKey.home): const ListEdgeIntent(false),
+    const SingleActivator(LogicalKeyboardKey.gameButtonLeft2): const ListEdgeIntent(false),
+    const SingleActivator(LogicalKeyboardKey.end): const ListEdgeIntent(true),
+    const SingleActivator(LogicalKeyboardKey.gameButtonRight2): const ListEdgeIntent(true),
     const SingleActivator(LogicalKeyboardKey.enter): const _OskIntent(),
   };
 
@@ -211,8 +262,21 @@ class _DpadScopeState extends State<DpadScope> {
     LogicalKeyboardKey.gameButtonStart,
   };
 
+  // Button intents never repeat, even in a text field.
+  static final _buttonKeys = {
+    LogicalKeyboardKey.f2,
+    LogicalKeyboardKey.f3,
+    LogicalKeyboardKey.f4,
+    LogicalKeyboardKey.f5,
+    LogicalKeyboardKey.gameButtonX,
+    LogicalKeyboardKey.gameButtonY,
+    LogicalKeyboardKey.gameButtonSelect,
+  };
+
   KeyEventResult _swallowRepeat(FocusNode _, KeyEvent e) {
-    if (e is! KeyRepeatEvent || !_activateKeys.contains(e.logicalKey)) return KeyEventResult.ignored;
+    if (e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    if (_buttonKeys.contains(e.logicalKey)) return KeyEventResult.handled;
+    if (!_activateKeys.contains(e.logicalKey)) return KeyEventResult.ignored;
     if (!widget.onScreenKeyboard && _focusedField() != null) return KeyEventResult.ignored;
     return KeyEventResult.handled;
   }
@@ -245,15 +309,28 @@ class _DpadScopeState extends State<DpadScope> {
     }
   }
 
+  /// One focus step; false when focus did not move.
+  bool _step(TraversalDirection dir) {
+    final node = FocusManager.instance.primaryFocus;
+    if (node == null || !node.focusInDirection(dir)) return false;
+    // Focus changes are otherwise applied in a microtask, after the caller's loop.
+    FocusManager.instance.applyFocusChangesIfNeeded();
+    return FocusManager.instance.primaryFocus != node;
+  }
+
+  // Lazy lists only build near the viewport: wait a frame between steps so
+  // ensureVisible's scroll builds the next items.
+  Future<void> _listEdge(bool end) async {
+    final dir = end ? TraversalDirection.down : TraversalDirection.up;
+    while (!_disposed && _step(dir)) {
+      await SchedulerBinding.instance.endOfFrame;
+    }
+  }
+
   void _pageFocus(bool forward) {
     final dir = forward ? TraversalDirection.down : TraversalDirection.up;
     var moved = false;
-    for (var i = 0; i < _pageSteps; i++) {
-      final node = FocusManager.instance.primaryFocus;
-      if (node == null || !node.focusInDirection(dir)) break;
-      // Focus changes are otherwise applied in a microtask, after this loop.
-      FocusManager.instance.applyFocusChangesIfNeeded();
-      if (FocusManager.instance.primaryFocus == node) break;
+    for (var i = 0; i < _pageSteps && _step(dir); i++) {
       moved = true;
     }
     // Nothing to focus (text-only view): keep the stock page scroll.
@@ -286,6 +363,17 @@ class _DpadScopeState extends State<DpadScope> {
             _BackIntent: CallbackAction<_BackIntent>(
               onInvoke: (_) => _back(),
             ),
+            // Fallbacks: a screen's own Actions around the focused widget win.
+            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
+              onInvoke: (_) {
+                final ctx = FocusManager.instance.primaryFocus?.context;
+                return ctx == null ? null : Actions.maybeInvoke(ctx, const ActivateIntent());
+              },
+            ),
+            MarkIntent: DoNothingAction(),
+            ItemActionsIntent: DoNothingAction(),
+            OptionsIntent: DoNothingAction(),
+            ListEdgeIntent: _EdgeAction(_listEdge),
             _OskIntent: _OskAction(widget.onScreenKeyboard ? widget.navigatorKey : null),
           },
           child: Stack(
