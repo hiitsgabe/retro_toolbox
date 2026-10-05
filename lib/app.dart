@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class RetroToolboxApp extends StatelessWidget {
+class RetroToolboxApp extends ConsumerWidget {
   const RetroToolboxApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final builtInKeyboard = ref.watch(settingsProvider.select((s) => s.useOnScreenKeyboard));
     final colorScheme = ColorScheme.fromSeed(
       seedColor: const Color(0xFF7C4DEF),
       brightness: Brightness.dark,
@@ -35,7 +38,7 @@ class RetroToolboxApp extends StatelessWidget {
         ),
       ),
       builder: (context, child) =>
-          DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current, child: child!),
+          DpadScope(navigatorKey: navigatorKey, onScreenKeyboard: Handheld.current || builtInKeyboard, child: child!),
       home: const MenuScreen(),
     );
   }

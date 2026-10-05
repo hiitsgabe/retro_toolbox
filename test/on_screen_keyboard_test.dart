@@ -105,6 +105,40 @@ void main() {
     expect(text.text, 'ab ');
   });
 
+  testWidgets('gamepad buttons in the keyboard: X space, Y backspace, L1/R1 caret, B hides', (t) async {
+    text.text = 'ab';
+    await t.pumpWidget(app(form()));
+    await t.pump();
+    await press(t, LogicalKeyboardKey.arrowDown);
+    await press(t, LogicalKeyboardKey.enter);
+    await press(t, LogicalKeyboardKey.gameButtonLeft1); // a|b
+    await press(t, LogicalKeyboardKey.gameButtonX);
+    expect(text.text, 'a b');
+    await press(t, LogicalKeyboardKey.gameButtonY);
+    expect(text.text, 'ab');
+    await press(t, LogicalKeyboardKey.gameButtonRight1);
+    await press(t, LogicalKeyboardKey.gameButtonX);
+    expect(text.text, 'ab ');
+    await press(t, LogicalKeyboardKey.gameButtonB);
+    expect(find.byKey(osk), findsNothing);
+    expect(field.hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('opening the keyboard hides the system IME', (t) async {
+    final calls = <String>[];
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, (c) async {
+      calls.add(c.method);
+      return null;
+    });
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, null));
+    await t.pumpWidget(app(form()));
+    await t.pump();
+    await press(t, LogicalKeyboardKey.arrowDown);
+    calls.clear();
+    await press(t, LogicalKeyboardKey.enter);
+    expect(calls, contains('TextInput.hide'));
+  });
+
   testWidgets('Escape hides the keyboard and keeps focus on the field', (t) async {
     await t.pumpWidget(app(form()));
     await t.pump();

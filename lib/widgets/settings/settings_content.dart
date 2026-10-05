@@ -13,6 +13,7 @@ import 'package:retro_toolbox/widgets/settings/favorites_settings.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
+import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
 
 class SettingsContent extends StatelessWidget {
@@ -132,6 +133,15 @@ class SettingsContent extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (!Handheld.current) ...[
+              // The Linux handheld always has it on.
+              _section(
+                context,
+                icon: Icons.keyboard_outlined,
+                title: 'Built-in keyboard (for gamepads)',
+                subtitle: 'Use the app\'s own keyboard in text fields instead of the system one.',
+                child: const OnScreenKeyboardSetting(),
+              ),
+              const SizedBox(height: 8),
               _section(
                 context,
                 icon: Icons.lan_outlined,
