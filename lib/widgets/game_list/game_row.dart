@@ -49,11 +49,15 @@ class _GameRowState extends ConsumerState<GameRow> {
     // ExcludeFocus'd so the d-pad skips them but touch still hits them.
     return Material(
       type: MaterialType.transparency,
-      child: InkWell(
-        focusColor: Colors.transparent, // DpadScope draws the one outline
-        autofocus: widget.autofocus,
-        onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),
-        child: _card(context, gameState, isSelected, catalogNotifier, gameId),
+      child: GameCardActions(
+        game: widget.game,
+        selectable: widget.selectable,
+        child: InkWell(
+          focusColor: Colors.transparent, // DpadScope draws the one outline
+          autofocus: widget.autofocus,
+          onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),
+          child: _card(context, gameState, isSelected, catalogNotifier, gameId),
+        ),
       ),
     );
   }

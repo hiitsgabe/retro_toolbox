@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_list.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid.dart';
@@ -27,98 +29,127 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
 
     return Scaffold(
-      body: Column(
-        children: [
-          Header(
-            consoles: appState.consolesList,
-            selectedConsole: appState.selectedConsole,
-            onConsoleSelect: appStateNotifier.selectConsole,
-          ),
-          Expanded(
-            child: appState.consolesList.isEmpty && !appState.loading
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.dataset_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          const SizedBox(height: 16),
-                          const Text('No catalog configured', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Add a console catalog to get started: import a JSON file or load one from a URL.',
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null)),
+      body: GamesButtons(
+        child: Column(
+          children: [
+            Header(
+              consoles: appState.consolesList,
+              selectedConsole: appState.selectedConsole,
+              onConsoleSelect: appStateNotifier.selectConsole,
+            ),
+            Expanded(
+              child: appState.consolesList.isEmpty && !appState.loading
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.dataset_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                            const SizedBox(height: 16),
+                            const Text('No catalog configured', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Add a console catalog to get started: import a JSON file or load one from a URL.',
+                              textAlign: TextAlign.center,
                             ),
-                            icon: const Icon(Icons.settings),
-                            label: const Text('Open Settings'),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            FilledButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null)),
+                              ),
+                              icon: const Icon(Icons.settings),
+                              label: const Text('Open Settings'),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  )
-                : appState.loading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        HammerLoader(),
-                        SizedBox(height: 16),
-                        Text(loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...'),
-                      ],
-                    ),
-                  )
-                : errorMessage.isNotEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
+                    )
+                  : appState.loading
+                      ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
-                              const SizedBox(height: 12),
-                              Text(errorMessage, textAlign: TextAlign.center),
-                              const SizedBox(height: 16),
-                              Wrap(
-                                alignment: WrapAlignment.center,
-                                spacing: 12,
-                                runSpacing: 8,
-                                children: [
-                                  FilledButton.icon(
-                                    onPressed: appState.selectedConsole == null
-                                        ? null
-                                        : () => ref.read(catalogProvider.notifier).loadCatalog(appState.selectedConsole!),
-                                    icon: const Icon(Icons.refresh),
-                                    label: const Text('Retry'),
-                                  ),
-                                  // Never a dead end: a console that fails to load
-                                  // leads back to the console list.
-                                  OutlinedButton.icon(
-                                    autofocus: true,
-                                    onPressed: () => Navigator.maybePop(context),
-                                    icon: const Icon(Icons.arrow_back),
-                                    label: const Text('Choose another console'),
-                                  ),
-                                ],
-                              ),
+                              HammerLoader(),
+                              SizedBox(height: 16),
+                              Text(loadingStatus.isEmpty ? 'Loading (this can take a while)...' : '$loadingStatus...'),
                             ],
                           ),
-                        ),
-                      )
-                    : switch (appState.viewMode) {
-                        ViewMode.grid => GameGrid(),
-                        ViewMode.coverflow => const GameCoverFlow(),
-                        ViewMode.list => GameList(),
-                      },
-          ),
-          Footer(),
-        ],
+                        )
+                      : errorMessage.isNotEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.error_outline, size: 40, color: Theme.of(context).colorScheme.error),
+                                    const SizedBox(height: 12),
+                                    Text(errorMessage, textAlign: TextAlign.center),
+                                    const SizedBox(height: 16),
+                                    Wrap(
+                                      alignment: WrapAlignment.center,
+                                      spacing: 12,
+                                      runSpacing: 8,
+                                      children: [
+                                        FilledButton.icon(
+                                          onPressed: appState.selectedConsole == null
+                                              ? null
+                                              : () => ref.read(catalogProvider.notifier).loadCatalog(appState.selectedConsole!),
+                                          icon: const Icon(Icons.refresh),
+                                          label: const Text('Retry'),
+                                        ),
+                                        // Never a dead end: a console that fails to load
+                                        // leads back to the console list.
+                                        OutlinedButton.icon(
+                                          autofocus: true,
+                                          onPressed: () => Navigator.maybePop(context),
+                                          icon: const Icon(Icons.arrow_back),
+                                          label: const Text('Choose another console'),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : switch (appState.viewMode) {
+                              ViewMode.grid => GameGrid(),
+                              ViewMode.coverflow => const GameCoverFlow(),
+                              ViewMode.list => GameList(),
+                            },
+            ),
+            Footer(),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// Gamepad buttons for the games screen, wherever focus is on it: Start
+/// downloads the selected games (only when the header button would be enabled;
+/// otherwise it defers to the enclosing Start action, DpadScope's press of the
+/// focused control), Select opens the filters.
+class GamesButtons extends ConsumerWidget {
+  const GamesButtons({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Actions(
+      actions: {
+        // Not isEnabled-gated: the nearest Start binding wins even when
+        // disabled (the key would be dropped), so defer explicitly.
+        PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (intent) {
+          if (!canDownloadSelected(ref)) return Actions.maybeInvoke(context, intent);
+          downloadSelected(ref, context, ref.read(appStateProvider).selectedConsole?.id);
+          return null;
+        }),
+        OptionsIntent: CallbackAction<OptionsIntent>(onInvoke: (_) => FilterModal.show(context)),
+      },
+      child: child,
     );
   }
 }

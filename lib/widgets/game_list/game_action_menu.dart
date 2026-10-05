@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
@@ -17,6 +18,34 @@ const _labels = {
   GameAction.retryDownload: 'Retry download',
   GameAction.retryExtraction: 'Retry extraction',
 };
+
+/// Gamepad buttons for a focused game card: X marks it (where the checkbox
+/// would work), Y opens its menu.
+class GameCardActions extends ConsumerWidget {
+  const GameCardActions({super.key, required this.game, required this.selectable, required this.child});
+
+  final Game game;
+  final bool selectable;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Actions(
+      actions: {
+        MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) {
+          if (selectable && (ref.read(gameStateProvider(game)).isInteractable || ref.read(gameSelectionProvider(game.gameId)))) {
+            ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId);
+          }
+          return null;
+        }),
+        ItemActionsIntent: CallbackAction<ItemActionsIntent>(
+          onInvoke: (_) => showGameActionMenu(context, game, selectable: selectable),
+        ),
+      },
+      child: child,
+    );
+  }
+}
 
 /// The per-game menu a card opens: everything the row's small buttons and
 /// checkbox do, as big focusable tiles. Actions run with the sheet's own ref
