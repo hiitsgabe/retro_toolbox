@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:retro_toolbox/providers/update_provider.dart';
 import 'package:retro_toolbox/widgets/about/info_card.dart';
 import 'package:retro_toolbox/widgets/about/expandable_info_card.dart';
+import 'package:retro_toolbox/widgets/about/update_card.dart';
 
-class AboutScreen extends StatefulWidget {
+class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
 
   @override
-  State<AboutScreen> createState() => _AboutScreenState();
+  ConsumerState<AboutScreen> createState() => _AboutScreenState();
 }
 
-class _AboutScreenState extends State<AboutScreen> {
+class _AboutScreenState extends ConsumerState<AboutScreen> {
   PackageInfo? _packageInfo;
 
   @override
@@ -24,6 +27,7 @@ class _AboutScreenState extends State<AboutScreen> {
     final info = await PackageInfo.fromPlatform();
     if (!mounted) return;
     setState(() => _packageInfo = info);
+    ref.read(updateProvider.notifier).checkOnOpen(info.version);
   }
 
   void _copyToClipboard(BuildContext context, String text) {
@@ -83,7 +87,9 @@ class _AboutScreenState extends State<AboutScreen> {
                 fontSize: 11,
               ),
             ),
-            SizedBox(height: 28),
+            SizedBox(height: 20),
+            UpdateCard(currentVersion: _packageInfo?.version),
+            SizedBox(height: 24),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
