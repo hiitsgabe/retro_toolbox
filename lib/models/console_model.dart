@@ -142,5 +142,8 @@ class Console {
   String get defaultRegex =>
       '<tr><td class="link"><a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a></td><td class="size">(?<size>[^<]+)</td><td class="date">[^<]*</td></tr>';
 
-  String get cacheFile => 'catalog_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
+  // v2: games saved with box art from the fixed matcher; older files (no
+  // version) are ignored, so the first load after the update re-fetches.
+  // ponytail: the old files stay behind in the cache dir until it is cleared.
+  String get cacheFile => 'catalog_v2_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
 }

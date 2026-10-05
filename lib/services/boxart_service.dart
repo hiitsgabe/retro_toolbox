@@ -14,7 +14,7 @@ import 'package:retro_toolbox/utils/title_match.dart';
 class BoxartService {
   static final Map<String, Map<String, String>> _boxartCache = {};
   static const _diskCacheTtl = Duration(days: 7);
-  static const _diskCacheFormat = 1; // bump when the parsed map's shape changes
+  static const _diskCacheFormat = 2; // bump when the parsed map's shape (or normalizeTitle) changes
 
   @visibleForTesting
   static void clearMemoryCache() => _boxartCache.clear();

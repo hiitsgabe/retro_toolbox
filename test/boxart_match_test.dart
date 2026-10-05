@@ -1,152 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:rapidfuzz/rapidfuzz.dart';
 import 'package:retro_toolbox/utils/title_match.dart';
-
-// ---------------------------------------------------------------------------
-// Reference implementation: the matcher as it was before the speed-up, copied
-// verbatim. The golden test below asserts the shipped matcher picks exactly
-// the same box art for every game of a large synthetic corpus.
-// ---------------------------------------------------------------------------
-
-String legacyNormalizeTitle(String name) {
-  return RegExp(r'[_\W]+')
-      .allMatches(name.toLowerCase())
-      .fold<StringBuffer>(StringBuffer(), (b, m) {
-        b
-          ..write(name.substring(b.length, m.start).replaceAll('_', ' '))
-          ..write(' ');
-        return b;
-      })
-      .toString()
-      .trim();
-}
-
-Map<String, List<String>> legacyBuildTokenIndex(Iterable<String> names) {
-  final Map<String, List<String>> index = {};
-  for (final name in names) {
-    for (final token in name.split(' ')) {
-      if (token.length > 1) {
-        index.putIfAbsent(token, () => []).add(name);
-      }
-    }
-  }
-  return index;
-}
-
-String? legacyMatch({
-  required String titleToMatch,
-  required Map<String, String> candidates,
-  required Map<String, List<String>> tokenIndex,
-}) {
-  final normalizedTitle = legacyNormalizeTitle(titleToMatch);
-
-  if (candidates.containsKey(normalizedTitle)) {
-    return candidates[normalizedTitle];
-  }
-
-  final numericRegExp = RegExp(r'^\d+$');
-  final mixedTokenRegExp = RegExp(r'^[a-z]+\d+$');
-  final titleTokens = normalizedTitle.split(' ').where((token) {
-    return token.length > 1;
-  }).toList();
-
-  final numericTokens = titleTokens.where((t) => numericRegExp.hasMatch(t)).toList();
-
-  Set<String> candidateNames = {};
-
-  if (numericTokens.isNotEmpty) {
-    Set<String>? intersection;
-    for (final nt in numericTokens) {
-      final names = tokenIndex[nt];
-      if (names == null) {
-        intersection = <String>{};
-        break;
-      }
-      final nameSet = names.toSet();
-      intersection = intersection == null ? nameSet : intersection.intersection(nameSet);
-      if (intersection.isEmpty) break;
-    }
-    candidateNames = intersection ?? <String>{};
-  }
-
-  if (candidateNames.isEmpty && numericTokens.isEmpty) {
-    for (final token in titleTokens.where((t) => !numericRegExp.hasMatch(t))) {
-      final names = tokenIndex[token];
-      if (names != null) candidateNames.addAll(names);
-    }
-  }
-
-  if (candidateNames.isEmpty) {
-    return null;
-  }
-
-  final mixedTokens = titleTokens.where((t) => mixedTokenRegExp.hasMatch(t)).toList();
-
-  final hasMixedTokensInGame = mixedTokens.isNotEmpty;
-  candidateNames = candidateNames.where((name) {
-    if (!hasMixedTokensInGame && RegExp(r'\b[a-z]+\d+\b').hasMatch(name)) {
-      return false;
-    }
-    return true;
-  }).toSet();
-
-  // Generic meaningful-token Jaccard style filter.
-  if (candidateNames.isNotEmpty) {
-    final Set<String> meaningfulGameTokens = {
-      for (final t in titleTokens)
-        if (!numericRegExp.hasMatch(t) && t.length > 1) t
-    };
-
-    if (meaningfulGameTokens.isNotEmpty) {
-      candidateNames = candidateNames.where((name) {
-        final tokens = name.split(' ').where((tok) => tok.length > 1 && !numericRegExp.hasMatch(tok)).toSet();
-        final int common = tokens.intersection(meaningfulGameTokens).length;
-        return common >= meaningfulGameTokens.length * 0.7;
-      }).toSet();
-    }
-  }
-
-  if (candidateNames.isEmpty) return null;
-
-  final Iterable<String> searchSpace = candidateNames;
-
-  String? bestMatchName;
-  int highestScore = 0;
-  for (final candidate in searchSpace) {
-    final score = tokenSetRatio(normalizedTitle, candidate).toInt();
-    if (score > highestScore && score >= 90) {
-      highestScore = score;
-      bestMatchName = candidate;
-    }
-  }
-  if (bestMatchName != null) {
-    return candidates[bestMatchName];
-  }
-  return null;
-}
-
-/// The per-game steps of the old `_process` (id, name, then stripped name).
-List<String?> legacyMatchBoxartUrls(List<String> names, Map<String, String> boxarts) {
-  final tokenIndex = legacyBuildTokenIndex(boxarts.keys);
-  final bracketedId = RegExp(r'[\[(]([A-Za-z0-9-]{4,12})[\])]');
-  return names.map((gameNameWithoutExt) {
-    String? boxartUrl;
-    for (final m in bracketedId.allMatches(gameNameWithoutExt)) {
-      boxartUrl = boxarts['id:${m.group(1)!.toLowerCase()}'];
-      if (boxartUrl != null) break;
-    }
-    boxartUrl ??= legacyMatch(titleToMatch: gameNameWithoutExt, candidates: boxarts, tokenIndex: tokenIndex);
-    if (boxartUrl == null) {
-      final stripped = gameNameWithoutExt.replaceAll(RegExp(r'\s*[\[(][^\])]*[\])]'), '').trim();
-      if (stripped.isNotEmpty && stripped != gameNameWithoutExt) {
-        boxartUrl = legacyMatch(titleToMatch: stripped, candidates: boxarts, tokenIndex: tokenIndex);
-      }
-    }
-    return boxartUrl;
-  }).toList();
-}
 
 // ---------------------------------------------------------------------------
 // Deterministic synthetic corpus: made-up words, sequel numbers, mixed tokens
@@ -318,36 +173,36 @@ Corpus buildCorpus({required int boxartCount, required int gameCount, int seed =
 }
 
 void main() {
-  test('synthetic corpus exercises every matcher path', () {
-    final c = buildCorpus(boxartCount: 3000, gameCount: 2000);
-    final legacy = legacyMatchBoxartUrls(c.games, c.boxarts);
-    final exact = c.games.where((g) => c.boxarts.containsKey(legacyNormalizeTitle(g))).length;
-    final matched = legacy.where((u) => u != null).length;
-    final byId = legacy.where((u) => u != null && u.contains('/id')).length;
-    // Plenty of fuzzy matches, plenty of misses, and the id path is hit.
-    expect(matched - exact - byId, greaterThan(300));
-    expect(legacy.length - matched, greaterThan(200));
-    expect(byId, greaterThan(20));
+  Map<String, String> arts(List<String> names) => {for (final n in names) normalizeTitle(n): 'https://art/${normalizeTitle(n)}'};
+  String? art(Map<String, String> boxarts, String game) => matchBoxartUrls([game], boxarts).single;
+
+  test('normalizeTitle: lowercase words, apostrophes dropped, punctuation a break', () {
+    expect(normalizeTitle("Zorb: Quest-Two's  Run_Off"), 'zorb quest twos run off');
+    expect(normalizeTitle('A: B'), 'a b');
+    expect(normalizeTitle('Game - Sub Title'), 'game sub title');
   });
 
-  test('golden: matcher picks exactly the same box art as the legacy matcher', () {
-    final c = buildCorpus(boxartCount: 3000, gameCount: 2000);
+  test('sequels keep their own art: numbers must agree, arabic or roman', () {
+    final b = arts(['Zorb Quest', 'Zorb Quest II', 'Zorb Quest III', 'Zorb Quest IV']);
+    expect(art(b, 'Zorb Quest (USA)'), 'https://art/zorb quest');
+    expect(art(b, 'Zorb Quest II (Europe) (En,Fr)'), 'https://art/zorb quest ii');
+    expect(art(b, 'Zorb Quest 3 (USA)'), 'https://art/zorb quest iii');
+    expect(art(b, 'Zorb Quest V (USA)'), isNull); // not IV's art
+    // Disc numbers and dates are tags, not sequel numbers.
+    expect(art(b, 'Zorb Quest II (USA) (Disc 2) (2009-11-18)'), 'https://art/zorb quest ii');
+  });
 
-    final sw = Stopwatch()..start();
-    final legacy = legacyMatchBoxartUrls(c.games, c.boxarts);
-    final legacyMs = sw.elapsedMilliseconds;
+  test('a subtitle picks its own art, not the first name it contains', () {
+    final b = arts(['Vexa Saga', 'Vexa Saga: Ironfall', 'Vexa Saga: Dawnreach']);
+    expect(art(b, 'Vexa Saga - Ironfall (USA)'), 'https://art/vexa saga ironfall');
+    expect(art(b, 'Vexa Saga - Dawnreach (Japan)'), 'https://art/vexa saga dawnreach');
+    expect(art(b, 'Vexa Saga (Europe)'), 'https://art/vexa saga');
+  });
 
-    sw.reset();
-    final current = matchBoxartUrls(c.games, c.boxarts);
-    final currentMs = sw.elapsedMilliseconds;
-
-    // ignore: avoid_print
-    print('boxart match ${c.games.length} games x ${c.boxarts.length} names: '
-        'legacy ${legacyMs}ms, current ${currentMs}ms');
-
-    for (var i = 0; i < c.games.length; i++) {
-      expect(current[i], legacy[i], reason: 'game #$i "${c.games[i]}"');
-    }
+  test('edition words still find the base art', () {
+    final b = arts(['Kalo Dorm Run']);
+    expect(art(b, 'Kalo: Dorm Run - Game of the Year Edition (USA)'), 'https://art/kalo dorm run');
+    expect(art(b, 'Kalo - Dorm Run (USA) (Essentials)'), 'https://art/kalo dorm run');
   });
 
   test('parallel matching keeps input order and results', () async {
