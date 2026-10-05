@@ -187,7 +187,15 @@ pm_platform_helper "$GAMEDIR/flutter-pi"
 # Something in the stack writes to a closed pipe at startup; ignore SIGPIPE
 # (the write then fails with EPIPE instead of killing flutter-pi).
 trap '' PIPE
+# Memory every 30 s, so a kill (exit 137) shows what filled it.
+( while sleep 30 && pgrep flutter-pi >/dev/null; do
+    echo "mem: $(awk '/^(MemAvailable|Dirty|SwapFree):/{printf "%s %d MB  ", $1, $2/1024}' /proc/meminfo)flutter-pi $(awk '/^VmRSS:/{printf "%d MB", $2/1024}' /proc/$(pgrep -o flutter-pi)/status 2>/dev/null)"
+  done ) &
+MEMLOG=$!
 ./flutter-pi --release $MODE_ARGS -d "${RT_DISPLAY_MM:-71,53}" ./data/flutter_assets
-echo "flutter-pi exited with $?"
+RC=$?
+kill $MEMLOG 2>/dev/null
+echo "flutter-pi exited with $RC"
+[ $RC -eq 137 ] && { echo "Kernel log:"; dmesg 2>/dev/null | grep -iE "out of memory|oom|killed process" | tail -15; }
 [ -n "$FB_VIRTUAL" ] && echo "$FB_VIRTUAL" > "$FB/virtual_size" 2>/dev/null
 pm_finish
