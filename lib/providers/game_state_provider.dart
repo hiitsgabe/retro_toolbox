@@ -93,7 +93,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     }
   }
 
-  void updateExtractionState(String gameId, ExtractionStatus status, double progress) {
+  void updateExtractionState(String gameId, ExtractionStatus status, double progress, {String? error}) {
     final current = state[gameId];
     if (current == null || current.status == GameStatus.downloading) return;
 
@@ -122,6 +122,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     } else if (status == ExtractionStatus.failed) {
       updated = current.copyWith(
         status: current.isTransfer ? GameStatus.downloadFailed : GameStatus.extractionFailed,
+        errorMessage: error,
         isInteractable: true,
         showProgressBar: false,
         availableActions: {current.isTransfer ? GameAction.retryDownload : GameAction.retryExtraction, GameAction.cancel},
@@ -201,6 +202,27 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
               ));
     } finally {
       _resolving.remove(gameId);
+    }
+  }
+
+  /// After a queued task is cancelled or a failed one dismissed: a transfer's
+  /// transient game goes away; any other game goes back to what's on disk
+  /// (a failed extraction leaves the download as `downloaded`).
+  void resetAfterCancel(String gameId) {
+    final current = state[gameId];
+    if (current == null) return;
+    if (current.isTransfer) {
+      state = {...state}..remove(gameId);
+      return;
+    }
+    // Fresh state also drops the stale error text.
+    state = {...state, gameId: GameState(game: current.game)};
+    final dir = _ref.read(settingsProvider.notifier).getDownloadDir(current.game.consoleId);
+    if (dir.isEmpty) {
+      // resolveState bails without a folder; nothing on disk to find anyway.
+      _updateState(gameId, (s) => s.copyWith(status: GameStatus.ready, isInteractable: true, availableActions: {GameAction.download}));
+    } else {
+      resolveState(gameId);
     }
   }
 
