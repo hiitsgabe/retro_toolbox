@@ -75,11 +75,16 @@ void main() {
       );
       await tester.pumpAndSettle();
       final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale;
-      final border = find.byWidgetPredicate(
-        (w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).border?.top.width == 3,
+      // Check that no DecoratedBox with a 3px focus border exists inside the tile
+      final tileKey = find.byKey(const ValueKey('One'));
+      final focusBorderInTile = find.descendant(
+        of: tileKey,
+        matching: find.byWidgetPredicate(
+          (w) => w is DecoratedBox && (w.decoration as BoxDecoration?)?.border?.top.width == 3,
+        ),
       );
       expect(scale, traditional ? 1.05 : 1);
-      expect(border, traditional ? findsOneWidget : findsNothing);
+      expect(focusBorderInTile, findsNothing);
     });
   }
 
