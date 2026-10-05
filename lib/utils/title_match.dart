@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:rapidfuzz/rapidfuzz.dart';
 
 final _separators = RegExp(r'[_\W]+');
@@ -159,13 +160,26 @@ List<String?> matchBoxartUrls(List<String> names, Map<String, String> boxarts) {
 
 /// [matchBoxartUrls] split across up to 4 isolates, results in input order.
 /// Each isolate builds its own [BoxartIndex] (a few ms for thousands of names).
+/// If a worker fails the whole list is retried once in a single isolate; a
+/// second failure is thrown to the caller.
 Future<List<String?>> matchBoxartUrlsParallel(List<String> names, Map<String, String> boxarts) async {
-  final workers = names.length < 500 ? 1 : Platform.numberOfProcessors.clamp(1, 4);
+  // ~400 names per worker: below that, spawning and copying the listing costs
+  // more than it saves.
+  final workers = names.length < 500 ? 1 : (names.length ~/ 400).clamp(1, min(4, Platform.numberOfProcessors));
   final size = max(1, (names.length / workers).ceil());
   final chunks = [for (var i = 0; i < names.length; i += size) names.sublist(i, min(i + size, names.length))];
-  final results = await Future.wait(chunks.map((c) => _matchInIsolate(c, boxarts)));
-  return [for (final r in results) ...r];
+  try {
+    final results = await Future.wait(chunks.map((c) => matchInIsolate(c, boxarts)));
+    return [for (final r in results) ...r];
+  } catch (e) {
+    debugPrint('Box art matching failed ($e); retrying in one isolate');
+    return matchInIsolate(names, boxarts);
+  }
 }
+
+/// Runs one chunk in a fresh isolate; replaceable so tests can inject failures.
+@visibleForTesting
+Future<List<String?>> Function(List<String> chunk, Map<String, String> boxarts) matchInIsolate = _matchInIsolate;
 
 // Top-level so the isolate closure captures only the chunk and the listing.
 Future<List<String?>> _matchInIsolate(List<String> chunk, Map<String, String> boxarts) => Isolate.run(() => matchBoxartUrls(chunk, boxarts));
