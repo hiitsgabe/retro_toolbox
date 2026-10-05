@@ -310,9 +310,10 @@ class CatalogService {
     }
 
     final body = await response.transform(utf8.decoder).join();
-    // Auto-detect: a JSON listing (e.g. from Retro Tools Server) vs HTML.
+    // Auto-detect a JSON listing (e.g. from Retro Tools Server) vs HTML. A
+    // console's own regex always wins: some sources are JSON read by regex.
     final trimmed = body.trimLeft();
-    final parsed = (trimmed.startsWith('[') || trimmed.startsWith('{'))
+    final parsed = console.regex == null && (trimmed.startsWith('[') || trimmed.startsWith('{'))
         ? _parseJsonListing(body, console, url)
         : await compute(_parseHtmlIsolate, [body, console.toJson(), url]);
     return parsed.map((entry) => Game.fromJson(entry)).toList();
@@ -554,7 +555,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     final size = sizeStr != null ? _parseSizeBytesIsolate(sizeStr) : 0;
 
     final metadata = TitleMetadataParser.parseRomTitle(title).toJson();
-    // Some configs (e.g. ultranx) capture a banner_url group — use it as the
+    // Some configs capture a banner_url group — use it as the
     // boxart, resolving relative paths against the catalog host.
     final banner = _tryNamedGroup(match, 'banner_url');
     out.add({

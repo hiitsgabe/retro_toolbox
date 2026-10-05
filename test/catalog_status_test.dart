@@ -85,6 +85,38 @@ void main() {
     expect(Directory(tmp.path).listSync(recursive: true).whereType<File>().where((f) => f.path.contains('empty_test')), isEmpty);
   });
 
+  test('a JSON source with its own regex is read by the regex', () async {
+    HttpOverrides.global = null;
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    server.listen((req) {
+      req.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          '0100000000001000': {'name': {'en': 'Alpha'}, 'size': 5},
+          '0100000000002000': {'name': {'en': 'Beta'}, 'size': 7},
+        }))
+        ..close();
+    });
+    final base = 'http://127.0.0.1:${server.port}';
+    await CatalogService().resetCatalog(); // drops the console list cached by the test above
+    final configDir = Directory('${tmp.path}/config')..createSync(recursive: true);
+    File('${configDir.path}/consoles.json').writeAsStringSync(jsonEncode([
+      {
+        'name': 'Regex Json Test',
+        'url': ['$base/list'],
+        'regex': r'"(?P<id>[0-9A-F]{16})"\s*:\s*\{.*?"en"\s*:\s*"(?P<text>[^"]+)".*?"size"\s*:\s*(?P<size>\d+)',
+        'download_url': '$base/dl/<id>',
+        'file_format': ['.bin'],
+        'ignore_extension_filtering': true,
+      }
+    ]));
+
+    final games = await CatalogService().loadCatalog(CatalogService.consoleId('Regex Json Test'));
+    expect(games.map((g) => g.title), ['Alpha.bin', 'Beta.bin']);
+    expect(games.first.url, '$base/dl/0100000000001000');
+  });
+
   test('provider shows the service status as loadingStatus', () async {
     SharedPreferences.setMockInitialValues({});
     const a = Console(id: 'a', name: 'A', urls: []);
