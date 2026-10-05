@@ -67,6 +67,14 @@ Future<BuildContext> ctxOf(WidgetTester t) async {
   return c;
 }
 
+// The "Use this folder" row appears once the (real async) directory listing lands.
+Future<void> listed(WidgetTester t) async {
+  for (var i = 0; i < 6; i++) {
+    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await t.pump();
+  }
+}
+
 void main() {
   late _FakePicker fake;
   setUp(() => FilePicker.platform = fake = _FakePicker());
@@ -97,8 +105,7 @@ void main() {
       out = v;
       done = true;
     }));
-    await t.pump();
-    await t.pump();
+    await listed(t);
     expect(find.text('Use this folder'), findsOneWidget);
     await t.tap(find.text('Use this folder'));
     await t.pumpAndSettle();
@@ -120,8 +127,7 @@ void main() {
     final c = await ctxOf(t);
     String? out;
     unawaited(pickSavePath(c, title: 'S', fileName: 'a.json', initialDir: tmp.path, useBrowser: true).then((v) => out = v));
-    await t.pump();
-    await t.pump();
+    await listed(t);
     await t.tap(find.text('Use this folder'));
     await t.pumpAndSettle();
     expect(out, p.join(p.normalize(tmp.path), 'a.json'));
