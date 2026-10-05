@@ -119,6 +119,13 @@ class _DpadScopeState extends State<DpadScope> {
     const SingleActivator(LogicalKeyboardKey.enter): const _OskIntent(),
   };
 
+  // Android gamepad A / DPAD_CENTER also open the keyboard on a text field
+  // (the intent is disabled elsewhere, so they fall through to Activate).
+  static final _oskShortcuts = <ShortcutActivator, Intent>{
+    const SingleActivator(LogicalKeyboardKey.gameButtonA): const _OskIntent(),
+    const SingleActivator(LogicalKeyboardKey.select): const _OskIntent(),
+  };
+
   final _repaint = _Repaint();
   Rect? _painted; // rect last drawn by the painter; the frame callback diffs against it
 
@@ -129,6 +136,7 @@ class _DpadScopeState extends State<DpadScope> {
     super.initState();
     FocusManager.instance.addListener(_repaint.ping);
     FocusManager.instance.addHighlightModeListener(_onHighlight);
+    FocusManager.instance.addListener(_hideImeOnField);
     // Persistent callbacks can't be removed, hence the _disposed guard.
     // ponytail: runs only after frames that render anyway; repaints just when
     // the focused rect moved (scrolling), so an idle app schedules no frames.
@@ -146,9 +154,17 @@ class _DpadScopeState extends State<DpadScope> {
   void dispose() {
     _disposed = true;
     FocusManager.instance.removeListener(_repaint.ping);
+    FocusManager.instance.removeListener(_hideImeOnField);
     FocusManager.instance.removeHighlightModeListener(_onHighlight);
     _repaint.dispose();
     super.dispose();
+  }
+
+  // Built-in keyboard on: keep the system IME down when a field takes focus
+  // (best effort; the IME is asked to show after focus lands).
+  void _hideImeOnField() {
+    if (!widget.onScreenKeyboard || _focusedField() == null) return;
+    SchedulerBinding.instance.addPostFrameCallback((_) => SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
   }
 
   void _onHighlight(FocusHighlightMode _) => _repaint.ping();
@@ -204,7 +220,7 @@ class _DpadScopeState extends State<DpadScope> {
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
     return Shortcuts(
-      shortcuts: _shortcuts,
+      shortcuts: {..._shortcuts, if (widget.onScreenKeyboard) ..._oskShortcuts},
       child: Actions(
         actions: {
           PageFocusIntent: CallbackAction<PageFocusIntent>(
