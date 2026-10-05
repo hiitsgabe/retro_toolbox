@@ -50,7 +50,7 @@ class BoxartService {
   /// { "url": ..., "list": "dot.path" (optional, default root),
   ///   "name": "field with the game name",
   ///   "id": "field with a serial/title id" (optional — matched exactly
-  ///         against bracketed ids in filenames, e.g. "[SJBP52]"),
+  ///         against bracketed ids in filenames, e.g. "[ABCD12]"),
   ///   "image": "template with {field} placeholders" }
   Future<Map<String, String>> _fetchBoxartJsonMap(Map<String, dynamic> config) async {
     final url = config['url'] as String? ?? '';
@@ -122,7 +122,7 @@ List<Game> _process(List<dynamic> data) {
     final gameNameWithoutExt = path.basenameWithoutExtension(game.filename);
 
     // Exact id match first: filenames carrying a serial/title id in brackets
-    // (e.g. "007 - Golden Eye [SJBP52]") beat any fuzzy name matching.
+    // (e.g. "Game Name [ABCD12]") beat any fuzzy name matching.
     String? boxartUrl;
     for (final m in bracketedId.allMatches(gameNameWithoutExt)) {
       boxartUrl = boxarts['id:${m.group(1)!.toLowerCase()}'];
@@ -132,7 +132,7 @@ List<Game> _process(List<dynamic> data) {
     boxartUrl ??= matchTitle(titleToMatch: gameNameWithoutExt, candidates: boxarts, tokenIndex: tokenIndex);
 
     // ponytail: fallback strips "(...)"/"[...]" groups so decorated names like
-    // "Game (1982) (Mattel)" or "Game [SJBP52]" match plain boxart names.
+    // "Game (1982) (Mattel)" or "Game [ABCD12]" match plain boxart names.
     // May pick a wrong region variant; better than no art.
     if (boxartUrl == null) {
       final stripped = gameNameWithoutExt.replaceAll(RegExp(r'\s*[\[(][^\])]*[\])]'), '').trim();
