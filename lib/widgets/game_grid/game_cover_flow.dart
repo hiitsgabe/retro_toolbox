@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 
 /// Cover Flow view of the filtered games, reusing the interactive
@@ -24,6 +25,7 @@ class GameCoverFlow extends ConsumerWidget {
           CoverFlowItem(
             face: GameGridItem(game: game, aspectRatio: _aspectRatio),
             label: game.displayTitle,
+            onTap: () => showGameActionMenu(context, game),
           ),
       ],
     );
