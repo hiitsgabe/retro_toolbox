@@ -14,6 +14,9 @@ class Handheld {
 
   static bool isFramebuffer({Map<String, String>? env}) => (env ?? Platform.environment)['RETRO_TOOLBOX_FBDEV'] == '1';
 
-  static final bool current = isLinuxHandheld();
-  static final bool framebuffer = current && isFramebuffer();
+  /// Tests may override.
+  static bool current = isLinuxHandheld();
+
+  /// Tests may override.
+  static bool framebuffer = current && isFramebuffer();
 }

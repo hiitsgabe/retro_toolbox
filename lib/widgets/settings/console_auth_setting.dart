@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
@@ -153,7 +154,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
           ],
           Row(
             children: [
-              if (widget.console.authSignin!['register_url'] != null)
+              if (!Handheld.current && widget.console.authSignin!['register_url'] != null)
                 TextButton(
                   onPressed: () => launchUrl(Uri.parse(widget.console.authSignin!['register_url'] as String)),
                   child: const Text('Create account'),

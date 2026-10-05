@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
@@ -130,15 +131,17 @@ class SettingsContent extends StatelessWidget {
               child: const CatalogSourceSetting(),
             ),
             const SizedBox(height: 8),
-            _section(
-              context,
-              icon: Icons.lan_outlined,
-              title: 'Network Address',
-              subtitle: 'Which local IP the servers (Tinfoil, FBI, Retro Tools, FTP, JDKV) advertise.',
-              child: const NetworkAddressSetting(),
-            ),
-            const SizedBox(height: 8),
-            const PermissionsSetting(),
+            if (!Handheld.current) ...[
+              _section(
+                context,
+                icon: Icons.lan_outlined,
+                title: 'Network Address',
+                subtitle: 'Which local IP the servers (Tinfoil, FBI, Retro Tools, FTP, JDKV) advertise.',
+                child: const NetworkAddressSetting(),
+              ),
+              const SizedBox(height: 8),
+              const PermissionsSetting(),
+            ],
           ],
           if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
             const SizedBox(height: 8),

@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -25,7 +26,7 @@ class InfoCard extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: onTap,
+        onTap: Handheld.current ? null : onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -62,7 +63,7 @@ class InfoCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (url != null) ...[
+              if (url != null && !Handheld.current) ...[
                 SizedBox(width: 8),
                 IconButton(
                   icon: Icon(Icons.open_in_new_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
@@ -75,7 +76,7 @@ class InfoCard extends StatelessWidget {
                   },
                 ),
               ],
-              if (onTap != null) ...[
+              if (onTap != null && !Handheld.current) ...[
                 SizedBox(width: 8),
                 Icon(Icons.copy_rounded, size: 16, color: theme.colorScheme.onSurfaceVariant),
               ],

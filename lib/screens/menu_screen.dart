@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -75,6 +76,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         accentColor: const Color(0xFF2E6DB4),
         onTap: _openGamesLibrary,
       ),
+      if (!Handheld.current)
       MenuTile(
         label: 'Servers',
         icon: Icons.dns,
@@ -94,13 +96,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
           MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => _push(const NszDecompressScreen())),
-          MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(SteamShortcutScreen())),
+          if (!Handheld.current) MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(SteamShortcutScreen())),
           MenuTile(label: 'New Catalog Source', icon: Icons.playlist_add, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const AddCatalogSourceScreen())),
           MenuTile(label: 'Collection Clean', icon: Icons.cleaning_services, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CollectionCleanScreen())),
           MenuTile(label: 'File Explorer', icon: Icons.folder_copy, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const FileExplorerScreen())),
-          MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
+          if (!Handheld.current) MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
           MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
-          MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
+          if (!Handheld.current) MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
           MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
         ])),
       ),

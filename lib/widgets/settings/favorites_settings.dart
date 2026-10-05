@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 
@@ -286,6 +287,7 @@ class _FavoritesSettingsState extends ConsumerState<FavoritesSettings> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (!Handheld.current)
                           IconButton(
                             onPressed: () => _copyToClipboard(displayableCode),
                             icon: Icon(Icons.copy, size: 18),
