@@ -63,7 +63,6 @@ void main() {
     final popped = <bool>[];
     await pumpWizard(tester, step: 1, popped: popped);
     expect(find.text('2/3 · Downloads'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown); // focus lands in the screen
     await tester.sendKeyEvent(LogicalKeyboardKey.f5);
     await tester.pumpAndSettle();
     expect(find.text('3/3 · Connections'), findsOneWidget);
@@ -86,7 +85,6 @@ void main() {
   testWidgets('Start on the last step finishes (marks seen)', (tester) async {
     final popped = <bool>[];
     await pumpWizard(tester, step: 2, popped: popped);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.runAsync(() async {
       await tester.sendKeyEvent(LogicalKeyboardKey.f5);
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -94,5 +92,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(popped, [true]);
     expect((await SharedPreferences.getInstance()).getBool(SetupWizardScreen.seenKey), isTrue);
+  });
+
+  testWidgets('Start pressed repeatedly walks the wizard from a cold route', (tester) async {
+    final popped = <bool>[];
+    await pumpWizard(tester, step: 0, popped: popped);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    await tester.pumpAndSettle();
+    expect(find.text('2/3 · Downloads'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+    await tester.pumpAndSettle();
+    expect(find.text('3/3 · Connections'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.f5);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+    expect(popped, [true]);
+  });
+
+  testWidgets('two quick backs on step 0 leave once (the page below stays)', (tester) async {
+    final popped = <bool>[];
+    await pumpWizard(tester, step: 0, popped: popped);
+    // Two backs in one turn, both before markSeen returns (on device it is
+    // slow enough for two quick presses).
+    final nav = tester.state<NavigatorState>(find.byType(Navigator));
+    await tester.runAsync(() async {
+      nav.maybePop();
+      nav.maybePop();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+    await tester.pumpAndSettle();
+    expect(popped, [true]);
+    expect(find.text('open'), findsOneWidget);
   });
 }

@@ -50,11 +50,20 @@ void main() {
   testWidgets('Start advances when the step can advance', (t) async {
     await pump(t);
     expect(find.text('Next'), findsOneWidget);
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // focus lands in the screen
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     // Now on the ROM step: Back is still there and the step advanced past Teams.
     expect(find.text('Add team'), findsNothing);
+  });
+
+  testWidgets('Start pressed repeatedly advances step by step from a cold route', (t) async {
+    await pump(t, step: 0);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(find.text('Add team'), findsOneWidget); // Teams
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(find.text('Select ROM'), findsOneWidget);
   });
 
   testWidgets('B goes back a step instead of leaving; on step 0 it leaves', (t) async {

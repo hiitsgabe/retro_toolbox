@@ -281,7 +281,36 @@ class _DpadScopeState extends State<DpadScope> {
     LogicalKeyboardKey.gameButtonStart,
   };
 
-  KeyEventResult _swallowRepeat(FocusNode _, KeyEvent e) {
+  // Button presses that first wake a cold focus (see [_onKey]).
+  static final _wakeKeys = {
+    ..._buttonKeys,
+    LogicalKeyboardKey.home,
+    LogicalKeyboardKey.end,
+    LogicalKeyboardKey.gameButtonLeft2,
+    LogicalKeyboardKey.gameButtonRight2,
+  };
+
+  /// This press only moved focus off a bare scope; the Start fallback must not
+  /// then press whatever got focused (often the AppBar back button).
+  bool _woke = false;
+
+  // Runs before Shortcuts. A pushed route (or one whose focused control was
+  // removed) leaves focus on its scope, above the page's Actions, so button
+  // intents would only reach our fallbacks. Wake focus on the first control
+  // first; Shortcuts then dispatches from there.
+  KeyEventResult _onKey(FocusNode _, KeyEvent e) {
+    if (e is KeyDownEvent && _wakeKeys.contains(e.logicalKey)) {
+      final scope = FocusManager.instance.primaryFocus;
+      final first = scope is FocusScopeNode
+          ? scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull
+          : null;
+      _woke = first != null;
+      if (first != null) {
+        first.requestFocus();
+        FocusManager.instance.applyFocusChangesIfNeeded();
+      }
+      return KeyEventResult.ignored;
+    }
     if (e is! KeyRepeatEvent) return KeyEventResult.ignored;
     if (_buttonKeys.contains(e.logicalKey)) return KeyEventResult.handled;
     if (!_activateKeys.contains(e.logicalKey)) return KeyEventResult.ignored;
@@ -387,11 +416,12 @@ class _DpadScopeState extends State<DpadScope> {
     final color = Theme.of(context).colorScheme.primary;
     return Shortcuts(
       shortcuts: {..._shortcuts, if (widget.onScreenKeyboard) ..._oskShortcuts},
-      // Below Shortcuts so repeats are dropped before our own Start shortcut.
+      // Below Shortcuts so repeats are dropped (and a cold focus woken) before
+      // our own shortcuts dispatch.
       child: Focus(
         canRequestFocus: false,
         skipTraversal: true,
-        onKeyEvent: _swallowRepeat,
+        onKeyEvent: _onKey,
         child: Actions(
           actions: {
             PageFocusIntent: CallbackAction<PageFocusIntent>(
@@ -406,7 +436,8 @@ class _DpadScopeState extends State<DpadScope> {
             PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(
               onInvoke: (_) {
                 final ctx = FocusManager.instance.primaryFocus?.context;
-                return ctx == null ? null : Actions.maybeInvoke(ctx, const ActivateIntent());
+                if (_woke || ctx == null) return null;
+                return Actions.maybeInvoke(ctx, const ActivateIntent());
               },
             ),
             MarkIntent: DoNothingAction(),
