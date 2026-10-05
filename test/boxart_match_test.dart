@@ -213,7 +213,7 @@ Corpus buildCorpus({required int boxartCount, required int gameCount, int seed =
     '(USA) [b]',
   ];
   const mixed = ['abc2', 'mk2', 'x360', 'vol3', 'ep1', 'MK2', 'Zx81'];
-  const numbers = ['2', '3', '4', '64', '2000', '99', 'II', 'III'];
+  const numbers = ['2', '3', '4', '64', '2000', '99', '16', '32', '128', '98', 'II', 'III'];
   const seps = [' ', ' ', ' ', ' - ', ': ', '_', ' & '];
 
   String baseTitle() {
@@ -271,7 +271,7 @@ Corpus buildCorpus({required int boxartCount, required int gameCount, int seed =
         final w = s.split(' ')..removeAt(r.nextInt(s.split(' ').length));
         return w.isEmpty ? s : w.join(' ');
       case 4:
-        final w = s.split(' ')..insert(r.nextInt(s.split(' ').length + 1), pick(pool));
+        final w = s.split(' ')..insert(r.nextInt(s.split(' ').length + 1), r.nextBool() ? pick(pool) : pick(numbers));
         return w.join(' ');
       case 5:
         final w = s.split(' ');
@@ -348,5 +348,12 @@ void main() {
     for (var i = 0; i < c.games.length; i++) {
       expect(current[i], legacy[i], reason: 'game #$i "${c.games[i]}"');
     }
+  });
+
+  test('parallel matching keeps input order and results', () async {
+    final c = buildCorpus(boxartCount: 1500, gameCount: 1200, seed: 3);
+    expect(await matchBoxartUrlsParallel(c.games, c.boxarts), matchBoxartUrls(c.games, c.boxarts));
+    expect(await matchBoxartUrlsParallel(c.games.take(10).toList(), c.boxarts), matchBoxartUrls(c.games.take(10).toList(), c.boxarts));
+    expect(await matchBoxartUrlsParallel([], c.boxarts), isEmpty);
   });
 }
