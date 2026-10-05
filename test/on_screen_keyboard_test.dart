@@ -6,8 +6,8 @@ import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 const osk = ValueKey('osk');
 Key key(String label) => ValueKey('osk-$label');
 
-Widget app(Widget home, {bool onScreenKeyboard = true}) {
-  final nav = GlobalKey<NavigatorState>();
+Widget app(Widget home, {bool onScreenKeyboard = true, GlobalKey<NavigatorState>? navigator}) {
+  final nav = navigator ?? GlobalKey<NavigatorState>();
   return MaterialApp(
     navigatorKey: nav,
     builder: (c, child) => DpadScope(navigatorKey: nav, onScreenKeyboard: onScreenKeyboard, child: child!),
@@ -36,10 +36,26 @@ void main() {
     field.dispose();
   });
 
-  Widget form({ValueChanged<String>? onSubmitted, TextInputType? keyboardType, VoidCallback? onBelow}) => Scaffold(
+  Widget form({
+    ValueChanged<String>? onSubmitted,
+    TextInputType? keyboardType,
+    VoidCallback? onBelow,
+    bool obscureText = false,
+    int? maxLength,
+    bool showField = true,
+  }) =>
+      Scaffold(
         body: Column(children: [
           ElevatedButton(autofocus: true, onPressed: () {}, child: const Text('Above')),
-          TextField(controller: text, focusNode: field, keyboardType: keyboardType, onSubmitted: onSubmitted),
+          if (showField)
+            TextField(
+              controller: text,
+              focusNode: field,
+              keyboardType: keyboardType,
+              onSubmitted: onSubmitted,
+              obscureText: obscureText,
+              maxLength: maxLength,
+            ),
           ElevatedButton(onPressed: onBelow ?? () {}, child: const Text('Below')),
         ]),
       );
@@ -138,6 +154,86 @@ void main() {
     await t.pump();
     expect(find.byKey(key('~')), findsOneWidget);
     expect(t.takeException(), isNull);
+  });
+
+  Future<void> open(WidgetTester t) async {
+    await press(t, LogicalKeyboardKey.arrowDown);
+    expect(field.hasPrimaryFocus, isTrue);
+    await press(t, LogicalKeyboardKey.enter);
+    expect(find.byKey(osk), findsOneWidget);
+  }
+
+  testWidgets('closes when the field\'s route pops', (t) async {
+    final nav = GlobalKey<NavigatorState>();
+    await t.pumpWidget(app(
+      Builder(
+        builder: (c) => TextButton(
+          autofocus: true,
+          onPressed: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => form())),
+          child: const Text('Open'),
+        ),
+      ),
+      navigator: nav,
+    ));
+    await t.pump();
+    await press(t, LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    await open(t);
+    nav.currentState!.pop();
+    await t.pump(); // the pop's first frame: noticed after it
+    await t.pump(); // removed; the exit transition is still running
+    expect(find.byKey(osk), findsNothing);
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(Focus.of(t.element(find.text('Open'))).hasPrimaryFocus, isTrue, reason: 'focus back on the opener');
+  });
+
+  testWidgets('closes when the field leaves the tree', (t) async {
+    final nav = GlobalKey<NavigatorState>(); // same navigator, so only the field goes
+    await t.pumpWidget(app(form(), navigator: nav));
+    await t.pump();
+    await open(t);
+    await t.pumpWidget(app(form(showField: false), navigator: nav));
+    await t.pump();
+    expect(find.byKey(osk), findsNothing);
+    expect(t.takeException(), isNull);
+  });
+
+  testWidgets('Enter on the field again does not stack a second keyboard', (t) async {
+    await t.pumpWidget(app(form()));
+    await t.pump();
+    await open(t);
+    field.requestFocus(); // e.g. a tap back on the field
+    await t.pump();
+    await press(t, LogicalKeyboardKey.enter);
+    expect(find.byKey(osk), findsOneWidget);
+  });
+
+  testWidgets('obscured fields show only dots in the header', (t) async {
+    text.text = 'abc';
+    await t.pumpWidget(app(form(obscureText: true)));
+    await t.pump();
+    await open(t);
+    expect(t.widget<Text>(find.byKey(const ValueKey('osk-header'))).textSpan!.toPlainText(), '•••▏');
+  });
+
+  testWidgets('a field maxLength stops input', (t) async {
+    text.text = 'ab';
+    await t.pumpWidget(app(form(maxLength: 2)));
+    await t.pump();
+    await open(t);
+    await press(t, LogicalKeyboardKey.enter); // q
+    expect(text.text, 'ab');
+    expect(find.byKey(osk), findsOneWidget);
+    expect(field.hasPrimaryFocus, isFalse);
+  });
+
+  testWidgets('X types no space on the digit pad', (t) async {
+    await t.pumpWidget(app(form(keyboardType: TextInputType.number)));
+    await t.pump();
+    await open(t);
+    await press(t, LogicalKeyboardKey.space);
+    expect(text.text, '');
   });
 
   testWidgets('disabled: Enter does not open the keyboard', (t) async {
