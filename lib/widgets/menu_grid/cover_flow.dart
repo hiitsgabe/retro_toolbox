@@ -70,6 +70,7 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
     LogicalKeyboardKey.gameButtonA,
     LogicalKeyboardKey.select,
     LogicalKeyboardKey.gameButtonStart,
+    LogicalKeyboardKey.f5, // Start on the Linux handheld
   };
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {

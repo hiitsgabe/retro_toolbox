@@ -89,7 +89,7 @@ void main() {
     }
   });
 
-  for (final k in [LogicalKeyboardKey.gameButtonA, LogicalKeyboardKey.select, LogicalKeyboardKey.gameButtonStart, LogicalKeyboardKey.space]) {
+  for (final k in [LogicalKeyboardKey.gameButtonA, LogicalKeyboardKey.select, LogicalKeyboardKey.gameButtonStart, LogicalKeyboardKey.f5, LogicalKeyboardKey.space]) {
     testWidgets('${k.debugName} opens the centre card, once per press', (t) async {
       final taps = <int>[];
       await t.pumpWidget(_app(taps, below));
