@@ -26,7 +26,10 @@ class BoxartService {
       }
       if (boxarts.isEmpty) return games;
 
-      return await compute(_process, [games, boxarts]);
+      final urls = await matchBoxartUrlsParallel([for (final g in games) path.basenameWithoutExtension(g.filename)], boxarts);
+      return [
+        for (var i = 0; i < games.length; i++) urls[i] != null ? games[i].copyWith(details: GameDetails(boxart: urls[i])) : games[i],
+      ];
     } catch (e) {
       debugPrint('mutateGamesWithBoxarts error: $e');
       return games;
@@ -108,15 +111,6 @@ class BoxartService {
       client.close();
     }
   }
-}
-
-List<Game> _process(List<dynamic> data) {
-  final games = data[0] as List<Game>;
-  final boxarts = data[1] as Map<String, String>;
-  final urls = matchBoxartUrls([for (final g in games) path.basenameWithoutExtension(g.filename)], boxarts);
-  return [
-    for (var i = 0; i < games.length; i++) urls[i] != null ? games[i].copyWith(details: GameDetails(boxart: urls[i])) : games[i],
-  ];
 }
 
 Map<String, String> _parseBoxartHtml(List<String> args) {
