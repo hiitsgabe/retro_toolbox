@@ -1,17 +1,23 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 
 import 'package:archive/archive_io.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:rar/rar.dart';
+// ignore: implementation_imports
+import 'package:rar/src/rar_ffi.dart'; // the plugin only picks its FFI backend on Android; Linux needs it too
 import 'package:retro_toolbox/services/rar_header.dart';
 
 enum ArchiveKind { zip, rar, unsupported }
 
 /// Extracts a single archive to a folder. ZIP is handled in pure Dart (all
-/// platforms); RAR uses the `rar` plugin, which only ships native code for
-/// Android/iOS/macOS. Ported from the console_utilities extract utilities.
+/// platforms); RAR uses the `rar` plugin, which ships native code for
+/// Android/iOS/macOS. On Linux CI compiles the plugin's libarchive-backed C
+/// source into the bundle's lib/ (see [loadLinuxRar]). Ported from the
+/// console_utilities extract utilities.
 class ArchiveExtractService {
   static ArchiveKind archiveKind(String path) {
     switch (p.extension(path).toLowerCase()) {
@@ -24,10 +30,35 @@ class ArchiveExtractService {
     }
   }
 
-  /// The `rar` plugin bundles native code only for these platforms.
+  /// The `rar` plugin bundles native code for android/ios/macos; Linux works
+  /// when the CI-built library loaded.
   static bool rarSupported({String? overrideOs}) {
     final os = overrideOs ?? Platform.operatingSystem;
+    if (os == 'linux') return linuxRar ??= loadLinuxRar(linuxRarPath);
     return os == 'android' || os == 'ios' || os == 'macos';
+  }
+
+  /// Cached Linux load result; null until first asked.
+  @visibleForTesting
+  static bool? linuxRar;
+
+  /// `<exe dir>/lib/`: the desktop bundle, and the handheld port folder
+  /// (flutter-pi sits beside the bundle's lib/).
+  @visibleForTesting
+  static String linuxRarPath = p.join(p.dirname(Platform.resolvedExecutable), 'lib', 'librar_native.so');
+
+  /// Loads the library by absolute path. Its soname is librar_native.so, so the
+  /// plugin's later by-name open resolves to this already-loaded copy; then
+  /// switch the plugin to its FFI backend (the method channel has no Linux side).
+  @visibleForTesting
+  static bool loadLinuxRar(String path) {
+    try {
+      DynamicLibrary.open(path);
+    } catch (_) {
+      return false;
+    }
+    RarPlatform.instance = RarFfi();
+    return true;
   }
 
   /// Extracts [path] into [outDir]. Throws [UnsupportedError] for RAR on

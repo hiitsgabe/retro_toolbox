@@ -56,7 +56,7 @@ Opened from the home screen's grid menu, grouped into **Servers** and **Tools**.
 - **Steam Shortcut Creator:** Search the Steam store and write `.steam` shortcut files into any folder
 - **NSZ Decompress:** Standalone NSZ to NSP decompression. Pick a file and an output folder (prompts for `prod.keys` if unset)
 - **3DS → CIA:** Convert `.3ds`/`.cci` dumps to installable `.cia` on device (prompts for `boot9.bin` for encrypted dumps)
-- **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android and macOS)
+- **Rar Decompress:** Extract `.rar` and `.zip` archives to a folder (RAR on Android, macOS and Linux, including the handheld)
 - **Collection Clean:** Folder-scoped cleanup — dedupe game files (keep the largest), strip region/version tags from filenames, and remove OS junk files. Every action previews before it applies
 - **M3U Playlists:** Generate `.m3u` playlists for multi-disc games so emulators show one entry and swap discs in-game
 - **CHD Converter:** Compress disc images (`.cue`/`.gdi`/`.iso`) to CHD and extract them back, via `chdman`. Uses a system or user-set `chdman`, or a per-platform binary bundled under `assets/chdman/` (see its README)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/screens/about_screen.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
+import 'package:retro_toolbox/services/archive_extract_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 
 Widget _app(Widget home) => ProviderScope(child: MaterialApp(home: home));
@@ -29,9 +30,11 @@ void main() {
     await t.tap(find.text('Tools'));
     await t.pumpAndSettle();
     expect(find.text('NSZ Decompress'), findsOneWidget);
-    for (final l in ['Steam Shortcuts', 'Rar Decompress', 'CHD Converter']) {
+    for (final l in ['Steam Shortcuts', 'CHD Converter']) {
       expect(find.text(l), findsNothing, reason: l);
     }
+    // Shown only where RAR works (on Linux: when librar_native.so loaded).
+    expect(find.text('Rar Decompress'), ArchiveExtractService.rarSupported() ? findsOneWidget : findsNothing);
   });
 
   testWidgets('non-handheld: Servers tile present', (t) async {
