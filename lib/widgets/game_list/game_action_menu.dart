@@ -24,6 +24,8 @@ const _labels = {
 /// closes once they finish. Back/Escape is ignored while an action runs
 /// (closing would dispose the sheet's ref mid-action and drop it).
 Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectable = true}) {
+  // ponytail: not disposed — a touch drag can close the sheet mid-action and
+  // the finally block still writes to it; it's tiny and goes with the closure.
   final busy = ValueNotifier(false);
   return showModalBottomSheet<void>(
     context: context,
@@ -93,5 +95,5 @@ Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectabl
         },
       ),
     ),
-  ).whenComplete(busy.dispose);
+  );
 }

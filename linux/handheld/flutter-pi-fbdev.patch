@@ -203,7 +203,7 @@ index abc352a..33b6a3b 100644
  
      // create the in fence here
      TRACER_BEGIN(s->surface.tracer, "eglSwapBuffers");
-@@ -638,6 +754,11 @@ static int egl_gbm_render_surface_queue_present(struct render_surface *s, const
+@@ -638,6 +755,11 @@ static int egl_gbm_render_surface_queue_present(struct render_surface *s, const
          return EIO;
      }
  
@@ -215,7 +215,7 @@ index abc352a..33b6a3b 100644
      TRACER_BEGIN(s->surface.tracer, "gbm_surface_lock_front_buffer");
      bo = gbm_surface_lock_front_buffer(egl_surface->gbm_surface);
      TRACER_END(s->surface.tracer, "gbm_surface_lock_front_buffer");
-@@ -783,3 +904,92 @@ ATTR_PURE EGLSurface egl_gbm_render_surface_get_egl_surface(struct egl_gbm_rende
+@@ -783,3 +905,92 @@ ATTR_PURE EGLSurface egl_gbm_render_surface_get_egl_surface(struct egl_gbm_rende
  ATTR_PURE EGLConfig egl_gbm_render_surface_get_egl_config(struct egl_gbm_render_surface *s) {
      return s->egl_config;
  }
