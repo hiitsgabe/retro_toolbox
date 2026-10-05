@@ -205,6 +205,7 @@ assets/
 - **[nicoboss/nsz](https://github.com/nicoboss/nsz):** NSZ/NSP decompression library (embedded in `python_app/nsz/`)
 - **[MAME `chdman`](https://www.mamedev.org)** (BSD-3-Clause): CHD compression/extraction (bundled per-platform under `assets/chdman/`)
 - **[ihaveamac/3dsconv](https://github.com/ihaveamac/3dsconv)** (MIT): 3DS `.3ds`/`.cci` → `.cia` conversion (embedded in `python_app/threedsconv/`), with **[pyaes](https://pypi.org/project/pyaes)** (MIT)
+- **[libarchive](https://www.libarchive.org)** (BSD-2-Clause): RAR extraction on Linux desktop and handheld, through the `rar` plugin's C wrapper. The handheld package also bundles libarchive's own dependencies where the firmware lacks them (among them nettle and acl, LGPL), as unmodified shared libraries.
 
 > Key material is never distributed: NSZ needs your own `prod.keys` and 3DS conversion your own `boot9.bin`, exactly as with the console tools. Convert only backups of games and consoles you own.
 

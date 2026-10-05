@@ -422,8 +422,13 @@ jobs:
           set -euo pipefail
           LIB=build/linux/x64/release/bundle/lib
           RAR=$(python3 -c "import json; print(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='rar').removeprefix('file://'))")
+          # Refuse "../" entries: the plugin's flags allow writing outside the
+          # destination, and handheld firmwares run apps as root.
+          cp "$RAR/src/rar_native.c" "$RUNNER_TEMP/rar_native.c"
+          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
+          grep -q 'ARCHIVE_EXTRACT_SECURE_NODOTDOT' "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags"; exit 1; }
           gcc -O2 -shared -fPIC -Wl,-soname,librar_native.so -Wl,-rpath,'$ORIGIN' \
-            "$RAR/src/rar_native.c" -I"$RAR/src" -larchive -o "$LIB/librar_native.so"
+            "$RUNNER_TEMP/rar_native.c" -I"$RAR/src" -larchive -o "$LIB/librar_native.so"
           cp -L "$(ldd "$LIB/librar_native.so" | awk '/libarchive\.so/{print $3}')" "$LIB/libarchive.so.13"
           ldd "$LIB/librar_native.so"
 

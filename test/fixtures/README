@@ -1,1 +1,2 @@
-sample.rar: test_read_format_rar.rar from the libarchive test suite (libarchive/test/test_read_format_rar.rar.uu, uudecoded), BSD 2-Clause.
+sample.rar: test_read_format_rar.rar from the libarchive test suite (libarchive/test/test_read_format_rar.rar.uu, uudecoded).
+Copyright (c) 2003-2018 Tim Kientzle and the libarchive contributors. BSD 2-Clause licence: https://github.com/libarchive/libarchive/blob/master/COPYING

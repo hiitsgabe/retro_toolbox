@@ -112,8 +112,13 @@ jobs:
         run: |
           set -euo pipefail
           RAR=$(python3 -c "import json; print(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='rar').removeprefix('file://'))")
+          # Refuse "../" entries: the plugin's flags allow writing outside the
+          # destination, and handheld firmwares run apps as root.
+          cp "$RAR/src/rar_native.c" "$RUNNER_TEMP/rar_native.c"
+          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
+          grep -q 'ARCHIVE_EXTRACT_SECURE_NODOTDOT' "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags"; exit 1; }
           gcc -O2 -shared -fPIC -Wl,-soname,librar_native.so -Wl,-rpath,'$ORIGIN' \
-            "$RAR/src/rar_native.c" -I"$RAR/src" -larchive -o build/linux/arm64/release/bundle/lib/librar_native.so
+            "$RUNNER_TEMP/rar_native.c" -I"$RAR/src" -larchive -o build/linux/arm64/release/bundle/lib/librar_native.so
           ldd build/linux/arm64/release/bundle/lib/librar_native.so
 
       - name: Test RAR extraction
