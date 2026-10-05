@@ -414,6 +414,74 @@ void main() {
     }
   }
 
+  Widget longList(int n) => app(Scaffold(
+        body: ListView(children: [
+          for (var i = 0; i < n; i++) ListTile(autofocus: i == n ~/ 2, title: Text('item $i'), onTap: () {}),
+        ]),
+      ));
+
+  testWidgets('End then Home before settling ends at the top and goes idle', (t) async {
+    await t.pumpWidget(longList(100));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.end);
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.home);
+    await t.pumpAndSettle();
+    expect(Focus.of(t.element(find.text('item 0'))).hasFocus, isTrue);
+    expect(t.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('an arrow press mid-run stops the run', (t) async {
+    await t.pumpWidget(longList(200));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.end);
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.pump();
+    final at = FocusManager.instance.primaryFocus;
+    await t.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(at));
+    expect(find.text('item 199'), findsNothing);
+  });
+
+  testWidgets('End stays inside the list: not the footer button', (t) async {
+    final footer = FocusNode();
+    addTearDown(footer.dispose);
+    await t.pumpWidget(app(Scaffold(
+      body: Column(children: [
+        const TextField(),
+        Expanded(
+          child: ListView(children: [
+            for (var i = 0; i < 30; i++) ListTile(autofocus: i == 0, title: Text('item $i'), onTap: () {}),
+          ]),
+        ),
+        ElevatedButton(focusNode: footer, onPressed: () {}, child: const Text('footer')),
+      ]),
+    )));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.end);
+    await t.pumpAndSettle();
+    expect(Focus.of(t.element(find.text('item 29'))).hasFocus, isTrue);
+    expect(footer.hasFocus, isFalse);
+  });
+
+  testWidgets('held Start does not repeat while a text field has focus', (t) async {
+    var n = 0;
+    await t.pumpWidget(app(Scaffold(
+      body: Actions(
+        actions: {PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => n++)},
+        child: const TextField(autofocus: true),
+      ),
+    )));
+    await t.pump();
+    await t.sendKeyDownEvent(LogicalKeyboardKey.gameButtonStart);
+    for (var i = 0; i < 3; i++) {
+      await t.sendKeyRepeatEvent(LogicalKeyboardKey.gameButtonStart);
+    }
+    await t.sendKeyUpEvent(LogicalKeyboardKey.gameButtonStart);
+    expect(n, 1);
+  });
+
   testWidgets('Home/End move the caret in a text field; F2 still dispatches', (t) async {
     final c = TextEditingController(text: 'hello');
     addTearDown(c.dispose);

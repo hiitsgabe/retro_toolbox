@@ -61,6 +61,9 @@ class _VerticalIntent extends Intent {
 }
 
 class _VerticalAction extends Action<_VerticalIntent> {
+  _VerticalAction(this._onMove);
+  final VoidCallback _onMove;
+
   @override
   bool isEnabled(_VerticalIntent intent) {
     final t = _focusedField();
@@ -69,6 +72,7 @@ class _VerticalAction extends Action<_VerticalIntent> {
 
   @override
   void invoke(_VerticalIntent intent) {
+    _onMove();
     FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
   }
 }
@@ -82,6 +86,9 @@ class _SideIntent extends Intent {
 }
 
 class _SideAction extends Action<_SideIntent> {
+  _SideAction(this._onMove);
+  final VoidCallback _onMove;
+
   @override
   bool isEnabled(_SideIntent intent) {
     final c = _focusedField()?.widget.controller;
@@ -94,6 +101,7 @@ class _SideAction extends Action<_SideIntent> {
 
   @override
   void invoke(_SideIntent intent) {
+    _onMove();
     FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
   }
 }
@@ -259,7 +267,6 @@ class _DpadScopeState extends State<DpadScope> {
     LogicalKeyboardKey.space,
     LogicalKeyboardKey.gameButtonA,
     LogicalKeyboardKey.select,
-    LogicalKeyboardKey.gameButtonStart,
   };
 
   // Button intents never repeat, even in a text field.
@@ -271,6 +278,7 @@ class _DpadScopeState extends State<DpadScope> {
     LogicalKeyboardKey.gameButtonX,
     LogicalKeyboardKey.gameButtonY,
     LogicalKeyboardKey.gameButtonSelect,
+    LogicalKeyboardKey.gameButtonStart,
   };
 
   KeyEventResult _swallowRepeat(FocusNode _, KeyEvent e) {
@@ -301,6 +309,7 @@ class _DpadScopeState extends State<DpadScope> {
   // Not DismissIntent: a page route registers a disabled DismissIntent action
   // that would shadow ours. Dialogs/sheets keep handling Escape themselves.
   void _back() {
+    _edgeRun++;
     final ctx = FocusManager.instance.primaryFocus?.context;
     if (ctx != null && ModalRoute.of(ctx) is PopupRoute) {
       Actions.maybeInvoke(ctx, const DismissIntent());
@@ -320,14 +329,44 @@ class _DpadScopeState extends State<DpadScope> {
 
   // Lazy lists only build near the viewport: wait a frame between steps so
   // ensureVisible's scroll builds the next items.
+  // Any newer edge run or focus-moving intent bumps [_edgeRun]; older runs exit.
+  int _edgeRun = 0;
+
+  static ScrollableState? _scrollable(FocusNode? n) {
+    final ctx = n?.context;
+    return ctx == null ? null : Scrollable.maybeOf(ctx);
+  }
+
+  // Stays inside the scrollable that held focus when pressed: a step that lands
+  // outside it (or goes nowhere) is undone. A failed step may only mean the
+  // next item is not built yet, so it is retried once after a frame.
   Future<void> _listEdge(bool end) async {
+    final token = ++_edgeRun;
     final dir = end ? TraversalDirection.down : TraversalDirection.up;
-    while (!_disposed && _step(dir)) {
+    final home = _scrollable(FocusManager.instance.primaryFocus);
+    FocusNode? stuck;
+    while (!_disposed && token == _edgeRun) {
+      for (var i = 0; i < 10; i++) {
+        final prev = FocusManager.instance.primaryFocus;
+        if (prev == null) return;
+        if (_step(dir) && _scrollable(FocusManager.instance.primaryFocus) == home) {
+          stuck = null;
+          continue;
+        }
+        if (FocusManager.instance.primaryFocus != prev) {
+          prev.requestFocus();
+          FocusManager.instance.applyFocusChangesIfNeeded();
+        }
+        if (identical(stuck, prev)) return;
+        stuck = prev;
+        break;
+      }
       await SchedulerBinding.instance.endOfFrame;
     }
   }
 
   void _pageFocus(bool forward) {
+    _edgeRun++;
     final dir = forward ? TraversalDirection.down : TraversalDirection.up;
     var moved = false;
     for (var i = 0; i < _pageSteps && _step(dir); i++) {
@@ -358,8 +397,8 @@ class _DpadScopeState extends State<DpadScope> {
             PageFocusIntent: CallbackAction<PageFocusIntent>(
               onInvoke: (i) => _pageFocus(i.forward),
             ),
-            _VerticalIntent: _VerticalAction(),
-            _SideIntent: _SideAction(),
+            _VerticalIntent: _VerticalAction(() => _edgeRun++),
+            _SideIntent: _SideAction(() => _edgeRun++),
             _BackIntent: CallbackAction<_BackIntent>(
               onInvoke: (_) => _back(),
             ),
