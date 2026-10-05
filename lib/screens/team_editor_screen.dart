@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
@@ -31,6 +32,29 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   /// with it. Null when not swapping.
   int? _swapFrom;
 
+  /// Focus follows the swap: the picked row loses its buttons, so it takes
+  /// focus, and afterwards the row the pick landed on.
+  final _rowFocus = FocusNode();
+  int? _focusRow;
+
+  @override
+  void dispose() {
+    _rowFocus.dispose();
+    super.dispose();
+  }
+
+  void _focusOn(int i) {
+    _focusRow = i;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _rowFocus.requestFocus();
+    });
+  }
+
+  void _startSwap(int i) {
+    setState(() => _swapFrom = i);
+    _focusOn(i);
+  }
+
   void _onRowTap(int i, RosterPlayer p) {
     final from = _swapFrom;
     if (from == null) {
@@ -46,6 +70,23 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
       }
       _swapFrom = null;
     });
+    _focusOn(i);
+  }
+
+  Future<void> _removePlayer(int i) async {
+    final name = team.players[i].name;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove player?'),
+        content: Text('Remove $name from this team?'),
+        actions: [
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) setState(() => team.players.removeAt(i));
   }
 
   Future<void> _editPlayer(RosterPlayer? player) async {
@@ -143,8 +184,10 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
           spacing: 12,
           runSpacing: 12,
           children: [
-            for (final c in _palette)
-              GestureDetector(
+            for (final (n, c) in _palette.indexed)
+              InkWell(
+                customBorder: const CircleBorder(),
+                autofocus: n == 0,
                 onTap: () => Navigator.pop(ctx, c),
                 child: Container(
                   width: 44,
@@ -254,8 +297,17 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     );
   }
 
+  // B while swapping cancels the swap instead of leaving.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+        canPop: _swapFrom == null,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) setState(() => _swapFrom = null);
+        },
+        child: _scaffold(context),
+      );
+
+  Widget _scaffold(BuildContext context) {
     final theme = Theme.of(context);
     final players = team.players;
     final compact = _compact;
@@ -306,7 +358,14 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                     const Icon(Icons.swap_vert, size: 20),
                     const SizedBox(width: 8),
                     Expanded(child: Text('Tap a player to swap with ${players[_swapFrom!].name}', overflow: TextOverflow.ellipsis)),
-                    TextButton(onPressed: () => setState(() => _swapFrom = null), child: const Text('Cancel')),
+                    TextButton(
+                      onPressed: () {
+                        final from = _swapFrom!;
+                        setState(() => _swapFrom = null);
+                        _focusOn(from);
+                      },
+                      child: const Text('Cancel'),
+                    ),
                   ],
                 ),
               ),
@@ -333,7 +392,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                               _sectionLabel(theme, 'Starting lineup', Colors.green),
                             ],
                           ),
-                    buildDefaultDragHandles: !swapping,
+                    buildDefaultDragHandles: !swapping && !Handheld.current,
                     itemBuilder: (context, i) {
                       final p = players[i];
                       final starter = i < _starters;
@@ -364,6 +423,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                   : null,
                               color: starter ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5) : null,
                               child: ListTile(
+                                focusNode: _focusRow == i ? _rowFocus : null,
                                 dense: compact,
                                 visualDensity: compact ? VisualDensity.compact : null,
                                 leading: _avatar(p, starter),
@@ -378,15 +438,16 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                             icon: const Icon(Icons.swap_vert),
                                             tooltip: 'Swap with another player',
                                             visualDensity: VisualDensity.compact,
-                                            onPressed: () => setState(() => _swapFrom = i),
+                                            onPressed: () => _startSwap(i),
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.delete_outline),
                                             tooltip: 'Remove',
                                             visualDensity: VisualDensity.compact,
-                                            onPressed: () => setState(() => players.removeAt(i)),
+                                            onPressed: () => _removePlayer(i),
                                           ),
-                                          ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                                          if (!Handheld.current)
+                                            ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
                                         ],
                                       ),
                                 onTap: () => _onRowTap(i, p),

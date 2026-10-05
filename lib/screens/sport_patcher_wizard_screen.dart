@@ -68,6 +68,46 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   RomCatalogMatch? _catalogMatch;
   String? _catalogDownloadDir;
 
+  /// Team picked to swap on the teams step; the next row chosen trades places
+  /// with it. Null when not swapping.
+  int? _teamSwapFrom;
+  final _teamFocus = FocusNode();
+  int? _teamFocusRow;
+
+  @override
+  void dispose() {
+    _teamFocus.dispose();
+    super.dispose();
+  }
+
+  void _focusTeam(int i) {
+    _teamFocusRow = i;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _teamFocus.requestFocus();
+    });
+  }
+
+  void _startTeamSwap(int i) {
+    setState(() => _teamSwapFrom = i);
+    _focusTeam(i);
+  }
+
+  Future<void> _removeTeam(int i) async {
+    final teams = _doc!.teams;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove team?'),
+        content: Text('Remove ${teams[i].name} from the roster?'),
+        actions: [
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) setState(() => teams.removeAt(i));
+  }
+
   bool _busy = false;
   double _progress = 0;
   String? _status;
@@ -317,9 +357,16 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     // B steps back; on the first step (nothing to lose yet) it leaves. Never
     // while busy.
     return PopScope(
-      canPop: _index == 0 && !_busy,
+      canPop: _index == 0 && !_busy && _teamSwapFrom == null,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && !_busy && _index > 0) setState(() => _index--);
+        if (didPop || _busy) return;
+        if (_teamSwapFrom != null) {
+          final from = _teamSwapFrom!;
+          setState(() => _teamSwapFrom = null);
+          _focusTeam(from);
+        } else if (_index > 0) {
+          setState(() => _index--);
+        }
       },
       child: Actions(
         actions: {
@@ -621,7 +668,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
           children: [
             Expanded(
               child: _sectionTitle(theme, Icons.groups, doc.leagueName,
-                  'Drag to reorder (slot order), tap to edit a squad, swipe options to delete.'),
+                  Handheld.current
+                      ? 'Swap to reorder (slot order), tap to edit a squad.'
+                      : 'Drag or swap to reorder (slot order), tap to edit a squad.'),
             ),
             if (_compact)
               IconButton.filledTonal(onPressed: _addTeam, icon: const Icon(Icons.add), tooltip: 'Add team')
@@ -635,6 +684,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ),
         Expanded(
           child: ReorderableListView.builder(
+            buildDefaultDragHandles: !Handheld.current,
             itemCount: teams.length,
             onReorder: (oldI, newI) => setState(() {
               if (newI > oldI) newI--;
@@ -642,32 +692,72 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             }),
             itemBuilder: (context, i) {
               final t = teams[i];
-              return Card(
+              final swapping = _teamSwapFrom != null;
+              final card = Card(
                 key: ValueKey('team_${t.id}_$i'),
+                shape: _teamSwapFrom == i
+                    ? RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: theme.colorScheme.primary, width: 2),
+                      )
+                    : null,
                 margin: EdgeInsets.symmetric(vertical: _compact ? 2 : 4),
                 child: ListTile(
+                  focusNode: _teamFocusRow == i ? _teamFocus : null,
                   dense: _compact,
                   visualDensity: _compact ? VisualDensity.compact : null,
                   leading: _teamCrest(theme, t),
                   title: Text(t.name),
                   subtitle: Text('${t.players.length} players'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () => setState(() => teams.removeAt(i)),
-                      ),
-                      const Icon(Icons.drag_handle),
-                    ],
-                  ),
+                  trailing: swapping
+                      ? null
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.swap_vert),
+                              tooltip: 'Swap with another team',
+                              onPressed: () => _startTeamSwap(i),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: 'Remove',
+                              onPressed: () => _removeTeam(i),
+                            ),
+                            if (!Handheld.current) const Icon(Icons.drag_handle),
+                          ],
+                        ),
                   onTap: () async {
+                    final from = _teamSwapFrom;
+                    if (from != null) {
+                      setState(() {
+                        if (from != i) {
+                          final a = teams[from];
+                          teams[from] = teams[i];
+                          teams[i] = a;
+                        }
+                        _teamSwapFrom = null;
+                      });
+                      _focusTeam(i);
+                      return;
+                    }
                     await Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => TeamEditorScreen(team: t, gameId: info.gameId, sport: info.sport)),
                     );
                     setState(() {});
                   },
                 ),
+              );
+              // Y swaps this team.
+              return Actions(
+                key: card.key,
+                actions: {
+                  ItemActionsIntent: CallbackAction<ItemActionsIntent>(onInvoke: (_) {
+                    if (!swapping) _startTeamSwap(i);
+                    return null;
+                  }),
+                },
+                child: card,
               );
             },
           ),

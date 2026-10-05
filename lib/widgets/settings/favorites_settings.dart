@@ -84,6 +84,7 @@ class _FavoritesSettingsState extends ConsumerState<FavoritesSettings> {
         content: Text('Are you sure you want to remove all favorites? This action cannot be undone.'),
         actions: [
           TextButton(
+            autofocus: true,
             onPressed: () => Navigator.pop(context, false),
             child: Text('Cancel'),
           ),
@@ -111,6 +112,7 @@ class _FavoritesSettingsState extends ConsumerState<FavoritesSettings> {
         content: Text('Are you sure you want to delete the current export? This will permanently remove the shared code.'),
         actions: [
           TextButton(
+            autofocus: true,
             onPressed: () => Navigator.pop(context, false),
             child: Text('Cancel'),
           ),
