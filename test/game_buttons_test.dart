@@ -16,6 +16,7 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
@@ -36,7 +37,7 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
     toggled.add(gameId);
     final sel = {...state.selectedGames};
     if (!sel.remove(gameId)) sel.add(gameId);
-    state = CatalogState(games: state.games, selectedGames: sel);
+    state = state.copyWith(selectedGames: sel);
   }
 
   @override
@@ -74,7 +75,7 @@ void main() {
   });
   tearDown(() => debugStartDownloads = null);
 
-  Future<void> pump(WidgetTester t, Widget card, {bool interactable = true}) async {
+  Future<void> pump(WidgetTester t, Widget card, {bool interactable = true, bool above = true}) async {
     final nav = GlobalKey<NavigatorState>();
     await t.pumpWidget(ProviderScope(
       overrides: [
@@ -94,10 +95,12 @@ void main() {
         builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
         home: Scaffold(
           body: GamesButtons(
-            child: Column(children: [
-              TextButton(autofocus: true, onPressed: () {}, child: const Text('Above')),
-              SizedBox(width: 800, height: 120, child: card),
-            ]),
+            child: above
+                ? Column(children: [
+                    TextButton(autofocus: true, onPressed: () {}, child: const Text('Above')),
+                    SizedBox(width: 800, height: 120, child: card),
+                  ])
+                : card,
           ),
         ),
       ),
@@ -184,5 +187,30 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.f4);
     await t.pumpAndSettle();
     expect(find.byType(FilterModal), findsOneWidget);
+  });
+
+  testWidgets('cover flow: Start downloads the selection, X marks and Y opens the centre game', (t) async {
+    catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/b.zip'}, cachedFilteredGames: [_a, _b]);
+    await pump(t, const GameCoverFlow(), above: false);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(started.single.$1, [_b]);
+    expect(find.byType(BottomSheet), findsNothing);
+
+    await t.sendKeyEvent(LogicalKeyboardKey.f2);
+    await t.pump();
+    expect(catalog.toggled, [_a.gameId]);
+    await t.sendKeyEvent(LogicalKeyboardKey.f3);
+    await t.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsOneWidget);
+  });
+
+  testWidgets('cover flow: Start with nothing selected opens the centre game', (t) async {
+    catalog.state = const CatalogState(games: [_a, _b], cachedFilteredGames: [_a, _b]);
+    await pump(t, const GameCoverFlow(), above: false);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pumpAndSettle();
+    expect(started, isEmpty);
+    expect(find.byType(BottomSheet), findsOneWidget);
   });
 }
