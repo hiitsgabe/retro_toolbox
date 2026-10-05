@@ -3,6 +3,43 @@
 # Layout: ports/Retro Toolbox.sh + ports/retrotoolbox/ (flutter-pi, engine,
 # data/flutter_assets, lib/, app/, site-packages/, bundled_libs/).
 
+# In-app updater: the app stages a new port in $1/.update/ (retrotoolbox/ +
+# Retro Toolbox.sh) and writes READY last. Swap it in over the port folder $1;
+# user data (config/, cache/, data/home/, Documents/, Downloads/, log.txt)
+# isn't in the update so it stays. $2 is the ports folder (new launcher).
+rt_apply_update() {
+  local game="$1" ports="$2" up="$1/.update"
+  [ -d "$up" ] || return 0
+  if [ ! -f "$up/READY" ]; then
+    echo "Update: incomplete, removing $up"
+    rm -rf "$up"
+    return 0
+  fi
+  echo "Update: applying"
+  local d
+  for d in bundled_libs xkb data/flutter_assets; do
+    [ -d "$up/retrotoolbox/$d" ] || continue
+    echo "Update: replacing $d"
+    rm -rf "${game:?}/$d"
+  done
+  echo "Update: copying files"
+  # READY stays on failure, so the next start retries.
+  cp -rf "$up/retrotoolbox/." "$game/" || { echo "Update: copy failed"; return 1; }
+  if [ -f "$up/Retro Toolbox.sh" ]; then
+    echo "Update: replacing launcher"
+    # Copy then rename: this script is the one running, and bash reads it as
+    # it goes — overwriting it in place would corrupt the rest of this run.
+    cp -f "$up/Retro Toolbox.sh" "$ports/.Retro Toolbox.sh.new" &&
+      mv -f "$ports/.Retro Toolbox.sh.new" "$ports/Retro Toolbox.sh" &&
+      chmod +x "$ports/Retro Toolbox.sh"
+  fi
+  chmod +x "$game/flutter-pi" "$game"/bin/* 2>/dev/null
+  rm -rf "$up"
+  echo "Update: done"
+}
+# test_update_swap.sh sources this file for the function alone.
+[ -n "$RT_UPDATE_FUNCTION_ONLY" ] && return 0
+
 XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
 if [ -d "/opt/system/Tools/PortMaster/" ]; then controlfolder="/opt/system/Tools/PortMaster"
 elif [ -d "/opt/tools/PortMaster/" ]; then controlfolder="/opt/tools/PortMaster"
@@ -16,6 +53,7 @@ GAMEDIR="/$directory/ports/retrotoolbox"
 cd "$GAMEDIR" || exit 1
 exec > >(tee "$GAMEDIR/log.txt") 2>&1
 echo "--- Retro Toolbox --- $(date)"
+rt_apply_update "$GAMEDIR" "/$directory/ports"
 
 # Bundled libraries only where the firmware lacks them.
 mkdir -p "$GAMEDIR/runtime_libs"; rm -f "$GAMEDIR/runtime_libs"/*
