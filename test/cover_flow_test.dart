@@ -88,4 +88,19 @@ void main() {
       expect(faceNodes.every((n) => !n.canRequestFocus), isTrue);
     }
   });
+
+  for (final k in [LogicalKeyboardKey.gameButtonA, LogicalKeyboardKey.select, LogicalKeyboardKey.gameButtonStart, LogicalKeyboardKey.space]) {
+    testWidgets('${k.debugName} opens the centre card, once per press', (t) async {
+      final taps = <int>[];
+      await t.pumpWidget(_app(taps, below));
+      await t.pump();
+      await key(t, LogicalKeyboardKey.arrowRight);
+      await t.sendKeyDownEvent(k);
+      await t.sendKeyRepeatEvent(k);
+      await t.sendKeyRepeatEvent(k);
+      await t.sendKeyUpEvent(k);
+      await t.pumpAndSettle();
+      expect(taps, [1]);
+    });
+  }
 }

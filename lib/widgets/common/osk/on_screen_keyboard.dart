@@ -63,6 +63,7 @@ class _OskState extends State<_Osk> {
 
   EditableTextState get _field => widget.field;
   FocusNode get _fieldNode => _field.widget.focusNode;
+  bool get _signed => _field.widget.keyboardType.signed ?? false;
   bool get _numeric => _field.widget.keyboardType.index == TextInputType.number.index;
 
   /// The field's screen is still up: field mounted, its route on top.
@@ -158,7 +159,12 @@ class _OskState extends State<_Osk> {
         Row(children: _chars('123', first: true)),
         Row(children: _chars('456')),
         Row(children: _chars('789')),
-        Row(children: [_key('.', '.', () => _type('.')), _key('0', '0', () => _type('0')), _key('backspace', '⌫', _backspace, flex: 2)]),
+        Row(children: [
+          if (_signed) _key('-', '-', () => _type('-')),
+          _key('.', '.', () => _type('.')),
+          _key('0', '0', () => _type('0')),
+          _key('backspace', '⌫', _backspace, flex: 2),
+        ]),
         Row(children: [_key('left', '◀', () => _caret(-1)), _key('Done', 'Done', _done), _key('right', '▶', () => _caret(1))]),
       ];
     }

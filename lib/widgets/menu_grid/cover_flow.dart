@@ -61,8 +61,17 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   }
 
   // One focus stop for the whole flow: faces (and their reflections) are
-  // ExcludeFocus'd, so Left/Right browse, Enter/Space opens, Up/Down leave.
+  // ExcludeFocus'd, so Left/Right browse, Enter/Space/A/Start opens, Up/Down leave.
   // Left/Right at the ends are swallowed so a held arrow can't spill over.
+  static final _open = {
+    LogicalKeyboardKey.enter,
+    LogicalKeyboardKey.numpadEnter,
+    LogicalKeyboardKey.space,
+    LogicalKeyboardKey.gameButtonA,
+    LogicalKeyboardKey.select,
+    LogicalKeyboardKey.gameButtonStart,
+  };
+
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is KeyUpEvent || widget.items.isEmpty) return KeyEventResult.ignored;
     final centre = _position.round().clamp(0, _last);
@@ -71,7 +80,7 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
       _animateTo(centre - 1);
     } else if (k == LogicalKeyboardKey.arrowRight) {
       _animateTo(centre + 1);
-    } else if (e is KeyDownEvent && (k == LogicalKeyboardKey.enter || k == LogicalKeyboardKey.space)) {
+    } else if (e is KeyDownEvent && _open.contains(k)) {
       widget.items[centre].onTap?.call();
     } else {
       return KeyEventResult.ignored;

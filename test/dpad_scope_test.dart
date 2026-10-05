@@ -322,6 +322,50 @@ void main() {
     final outline = t.renderObject<RenderBox>(find.byKey(const ValueKey('dpad-focus-outline')));
     expect(outline.parent, isA<RenderRepaintBoundary>());
   });
+
+  for (final k in [LogicalKeyboardKey.enter, LogicalKeyboardKey.gameButtonA, LogicalKeyboardKey.select, LogicalKeyboardKey.gameButtonStart, LogicalKeyboardKey.space]) {
+    testWidgets('holding ${k.debugName} activates a button once', (t) async {
+      var pressed = 0;
+      await t.pumpWidget(app(Scaffold(body: ElevatedButton(autofocus: true, onPressed: () => pressed++, child: const Text('go')))));
+      await t.pump();
+      await t.sendKeyDownEvent(k);
+      for (var i = 0; i < 3; i++) {
+        await t.sendKeyRepeatEvent(k);
+      }
+      await t.sendKeyUpEvent(k);
+      await t.pump();
+      expect(pressed, 1);
+    });
+  }
+
+  for (final touch in [false, true]) {
+    testWidgets('built-in keyboard ${touch ? 'keeps' : 'hides'} the system IME on field focus when highlight is ${touch ? 'touch' : 'traditional'}',
+        (t) async {
+      final calls = <String>[];
+      t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, (c) async {
+        calls.add(c.method);
+        return null;
+      });
+      addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.textInput, null));
+      FocusManager.instance.highlightStrategy =
+          touch ? FocusHighlightStrategy.alwaysTouch : FocusHighlightStrategy.alwaysTraditional;
+      addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+      final nav = GlobalKey<NavigatorState>();
+      final fieldNode = FocusNode();
+      addTearDown(fieldNode.dispose);
+      await t.pumpWidget(MaterialApp(
+        navigatorKey: nav,
+        builder: (c, child) => DpadScope(navigatorKey: nav, onScreenKeyboard: true, child: child!),
+        home: Scaffold(body: TextField(focusNode: fieldNode)),
+      ));
+      await t.pump();
+      calls.clear();
+      fieldNode.requestFocus();
+      await t.pump();
+      await t.pump();
+      expect(calls.contains('TextInput.hide'), !touch);
+    });
+  }
 }
 
 class _PopCounter extends NavigatorObserver {
