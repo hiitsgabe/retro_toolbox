@@ -142,6 +142,47 @@ void main() {
     expect(onCard(t, GameRow), isTrue);
   });
 
+  testWidgets('an action still runs, with a live ref, after the card unmounts', (t) async {
+    final show = ValueNotifier(true);
+    final read = <Object?>[];
+    debugRunGameAction = (ref, context, game, state, action) async {
+      read.add(ref.read(favoritesProvider)); // throws if ref is disposed
+      ran.add((game, action));
+    };
+    await pump(
+        t,
+        ValueListenableBuilder<bool>(
+          valueListenable: show,
+          builder: (_, on, __) => on ? const GameRow(game: _game) : const SizedBox(),
+        ));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    show.value = false;
+    await t.pump();
+    expect(find.byType(GameRow), findsNothing);
+
+    await t.tap(inSheet(find.text('Download')));
+    await t.pumpAndSettle();
+    expect(t.takeException(), isNull);
+    expect(ran, [(_game, GameAction.download)]);
+    expect(read, hasLength(1));
+    expect(find.byType(BottomSheet), findsNothing);
+  });
+
+  testWidgets('actions are listed in availableActions order', (t) async {
+    await pump(t, const GameRow(game: _game),
+        state: const GameState(
+          game: _game,
+          status: GameStatus.downloading,
+          availableActions: {GameAction.cancel, GameAction.pause},
+        ));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(t.getTopLeft(inSheet(find.text('Cancel'))).dy, lessThan(t.getTopLeft(inSheet(find.text('Pause'))).dy));
+  });
+
   testWidgets('favourite and select tiles use the providers', (t) async {
     await pump(t, const GameRow(game: _game));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
