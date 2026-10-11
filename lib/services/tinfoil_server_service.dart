@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
-import 'package:retro_toolbox/utils/network.dart';
 
 /// Serves a Tinfoil "shop": an index of the catalog's Switch games plus a
 /// streaming proxy that injects source auth (IA S3 / bearer / cookie).
@@ -147,13 +146,23 @@ class TinfoilServerService {
     client.autoUncompress = false;
     activeTransfers.value++;
     try {
-      final upstreamUrl = await resolveRedirects(entry.game.url, headers);
-      final upstreamReq = await client.getUrl(Uri.parse(upstreamUrl));
-      headers.forEach(upstreamReq.headers.set);
+      // Follow redirects with the data request itself (auth on every hop),
+      // never a separate probe: some storage hosts hand out links that break
+      // after one use, or close a probe's connection before its body.
       final range = req.headers.value(HttpHeaders.rangeHeader);
-      if (range != null) upstreamReq.headers.set(HttpHeaders.rangeHeader, range);
-
-      final upstreamRes = await upstreamReq.close();
+      var url = Uri.parse(entry.game.url);
+      HttpClientResponse upstreamRes;
+      for (var hop = 0;; hop++) {
+        final upstreamReq = await client.getUrl(url);
+        upstreamReq.followRedirects = false;
+        headers.forEach(upstreamReq.headers.set);
+        if (range != null) upstreamReq.headers.set(HttpHeaders.rangeHeader, range);
+        upstreamRes = await upstreamReq.close();
+        final location = upstreamRes.headers.value(HttpHeaders.locationHeader);
+        if (!upstreamRes.isRedirect || location == null || hop >= 5) break;
+        await upstreamRes.drain<void>().catchError((_) {});
+        url = url.resolve(location);
+      }
       // Never hand Tinfoil an auth/error page as if it were the game file.
       if (upstreamRes.statusCode >= 400) {
         await upstreamRes.drain<void>();

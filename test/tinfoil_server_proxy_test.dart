@@ -76,6 +76,45 @@ void main() {
     client.close();
   });
 
+  test('follows redirects with the data request: a one-use storage link is hit once', () async {
+    // The game URL redirects to a storage link that only works once (a probe
+    // before the real request would burn it).
+    final storage = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => storage.close(force: true));
+    var storageHits = 0;
+    storage.listen((req) async {
+      storageHits++;
+      if (storageHits > 1) {
+        req.response.statusCode = 403;
+      } else {
+        req.response.statusCode = 206;
+        req.response.headers.set(HttpHeaders.contentRangeHeader, 'bytes 0-3/100');
+        req.response.add([1, 2, 3, 4]);
+      }
+      await req.response.close();
+    });
+    final api = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => api.close(force: true));
+    api.listen((req) async {
+      req.response.statusCode = HttpStatus.found;
+      req.response.headers.set(HttpHeaders.locationHeader, 'http://127.0.0.1:${storage.port}/once');
+      await req.response.close();
+    });
+
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${api.port}/dl', size: 100, consoleId: 'switch');
+    await service.start(port: 0, loadGames: () async => {console: [game]}, authHeaders: (c) => {'Authorization': 'Bearer tok123'});
+    final client = HttpClient();
+    addTearDown(client.close);
+    await (await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}/'))).close().then((r) => r.drain<void>());
+    final req = await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}/dl/switch/0/Game.nsz'));
+    req.headers.set(HttpHeaders.rangeHeader, 'bytes=0-3');
+    final res = await req.close();
+    expect(res.statusCode, 206);
+    expect(await res.fold<List<int>>([], (a, b) => a..addAll(b)), [1, 2, 3, 4]);
+    expect(storageHits, 1);
+  });
+
   test('unknown route 404s', () async {
     await startService();
     final client = HttpClient();
