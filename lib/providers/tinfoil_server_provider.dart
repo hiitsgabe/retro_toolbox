@@ -27,8 +27,7 @@ class TinfoilServerState {
     this.error,
   });
 
-  TinfoilServerState copyWith({bool? running, int? port, List<String>? addresses, int? activeTransfers, String? error, bool clearError = false}) =>
-      TinfoilServerState(
+  TinfoilServerState copyWith({bool? running, int? port, List<String>? addresses, int? activeTransfers, String? error, bool clearError = false}) => TinfoilServerState(
         running: running ?? this.running,
         port: port ?? this.port,
         addresses: addresses ?? this.addresses,
@@ -89,7 +88,13 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
 
   Future<void> enable() async {
     try {
-      await _service.start(port: state.port, loadGames: _loadGames, authHeaders: _authHeaders);
+      await _service.start(
+        port: state.port,
+        loadGames: _loadGames,
+        authHeaders: _authHeaders,
+        // Games already downloaded here go out from disk, not the internet.
+        downloadDir: (c) => _ref.read(settingsProvider.notifier).getDownloadDir(c.id),
+      );
       final addresses = await TinfoilServerService.localAddresses();
       state = state.copyWith(running: true, addresses: addresses, port: _service.port, clearError: true);
       if (Platform.isAndroid) {
