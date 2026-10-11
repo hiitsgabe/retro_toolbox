@@ -115,6 +115,39 @@ void main() {
     expect(storageHits, 1);
   });
 
+  test('a game already in the download folder is listed and served from disk', () async {
+    final dir = Directory.systemTemp.createTempSync('tinfoil_local');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    // The catalog's .nsz was downloaded and decompressed to .nsp here.
+    File('${dir.path}/Game.nsp').writeAsBytesSync(List.generate(50, (i) => 200 - i));
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    // API-style URL with no file name: the file is named after the title.
+    final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'switch');
+    await service.start(
+      port: 0,
+      loadGames: () async => {console: [game]},
+      authHeaders: (c) => {'Authorization': 'Bearer tok123'},
+      downloadDir: (c) => dir.path,
+    );
+    final client = HttpClient();
+    addTearDown(client.close);
+    final index = await (await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}/'))).close();
+    final file = (jsonDecode(await index.transform(utf8.decoder).join())['files'] as List).single;
+    expect(file['size'], 50);
+    expect(file['url'], endsWith('/dl/switch/0/Game%20%5B0100000000001000%5D.nsp')); // local extension, title ID kept
+
+    final req = await client.getUrl(Uri.parse(file['url'] as String));
+    req.headers.set(HttpHeaders.rangeHeader, 'bytes=10-14');
+    final res = await req.close();
+    expect(res.statusCode, 206);
+    expect(res.headers.value(HttpHeaders.contentRangeHeader), 'bytes 10-14/50');
+    expect(await res.fold<List<int>>([], (a, b) => a..addAll(b)), [190, 189, 188, 187, 186]);
+
+    final whole = await (await client.getUrl(Uri.parse(file['url'] as String))).close();
+    expect(whole.statusCode, 200);
+    expect((await whole.fold<List<int>>([], (a, b) => a..addAll(b))).length, 50);
+  });
+
   test('unknown route 404s', () async {
     await startService();
     final client = HttpClient();
