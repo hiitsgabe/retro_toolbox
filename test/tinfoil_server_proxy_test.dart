@@ -148,6 +148,31 @@ void main() {
     expect((await whole.fold<List<int>>([], (a, b) => a..addAll(b))).length, 50);
   });
 
+  test('File Browser folders: Fast install lists only games on the device', () async {
+    final dir = Directory.systemTemp.createTempSync('tinfoil_folders');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/Here.nsp').writeAsBytesSync([1, 2, 3]);
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final here = Game(title: 'Here.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'switch');
+    final away = Game(title: 'Away.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000002000/base', size: 100, consoleId: 'switch');
+    await service.start(port: 0, loadGames: () async => {console: [here, away]}, authHeaders: (c) => {}, downloadDir: (c) => dir.path);
+    final client = HttpClient();
+    addTearDown(client.close);
+    Future<Map<String, dynamic>> index(String path) async =>
+        jsonDecode(await (await (await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}$path'))).close()).transform(utf8.decoder).join());
+
+    final root = await index('/');
+    expect((root['files'] as List).length, 2); // New Games still sees everything
+    expect(root['directories'], ['http://127.0.0.1:${service.port}/Fast%20install/', 'http://127.0.0.1:${service.port}/All%20games/']);
+
+    final fast = await index('/Fast%20install/');
+    expect((fast['files'] as List).map((f) => f['url']), [endsWith('Here%20%5B0100000000001000%5D.nsp')]);
+    expect(fast.containsKey('directories'), isFalse);
+
+    final all = await index('/All%20games/');
+    expect((all['files'] as List).length, 2);
+  });
+
   test('unknown route 404s', () async {
     await startService();
     final client = HttpClient();

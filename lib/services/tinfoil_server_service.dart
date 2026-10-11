@@ -61,12 +61,19 @@ class TinfoilServerService {
     }
   }
 
+  /// File Browser folders: games already on the device, and every game.
+  static const fastInstallFolder = 'Fast install';
+  static const allGamesFolder = 'All games';
+
   /// Builds the Tinfoil index JSON and the route map keyed `<consoleId>/<idx>`.
   /// [hostPort] is the address the Switch reached us on (its Host header).
   /// [localFiles] gives a console's [localSwitchFiles]: those games are listed
-  /// with the local file's extension and size.
-  static (Map<String, dynamic>, Map<String, TinfoilEntry>) buildIndex(Map<Console, List<Game>> gamesByConsole, String hostPort, {Map<String, String> Function(Console)? localFiles}) {
+  /// with the local file's extension and size. The root index ([folder] null)
+  /// lists every game plus the two [fastInstallFolder]/[allGamesFolder]
+  /// directories; a folder's index lists just its games.
+  static (Map<String, dynamic>, Map<String, TinfoilEntry>) buildIndex(Map<Console, List<Game>> gamesByConsole, String hostPort, {Map<String, String> Function(Console)? localFiles, String? folder}) {
     final files = <Map<String, dynamic>>[];
+    final localOnly = <Map<String, dynamic>>[];
     final routes = <String, TinfoilEntry>{};
     gamesByConsole.forEach((console, games) {
       final local = localFiles?.call(console) ?? const {};
@@ -82,14 +89,25 @@ class TinfoilServerService {
         final entry = TinfoilEntry(game: game, console: console, fileName: fileName, localPath: localPath);
         final key = '${console.id}/$i';
         routes[key] = entry;
-        files.add({
+        final file = {
           'url': 'http://$hostPort/dl/$key/${Uri.encodeComponent(entry.fileName)}',
           'size': size,
-        });
+        };
+        files.add(file);
+        if (localPath != null) localOnly.add(file);
       }
     });
+    String dir(String name) => 'http://$hostPort/${Uri.encodeComponent(name)}/';
     return (
-      {'files': files, 'success': 'Retro Toolbox — ${files.length} games'},
+      switch (folder) {
+        fastInstallFolder => {'files': localOnly, 'success': 'Retro Toolbox — ${localOnly.length} games ready for fast install'},
+        allGamesFolder => {'files': files, 'success': 'Retro Toolbox — ${files.length} games'},
+        _ => {
+            'files': files,
+            'directories': [dir(fastInstallFolder), dir(allGamesFolder)],
+            'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install',
+          },
+      },
       routes,
     );
   }
@@ -126,9 +144,12 @@ class TinfoilServerService {
 
   Future<void> _handle(HttpRequest req) async {
     try {
-      final segments = req.uri.pathSegments;
+      // Folder URLs end in '/': drop the empty last segment.
+      final segments = req.uri.pathSegments.where((s) => s.isNotEmpty).toList();
       if (segments.isEmpty) {
         await _serveIndex(req);
+      } else if (segments.length == 1 && (segments.first == fastInstallFolder || segments.first == allGamesFolder)) {
+        await _serveIndex(req, folder: segments.first);
       } else if (segments.first == 'dl' && segments.length >= 3) {
         await _serveProxy(req, '${segments[1]}/${segments[2]}');
       } else {
@@ -189,9 +210,9 @@ class TinfoilServerService {
   /// The address the Switch reached us on — index URLs must use it back.
   String _hostPort(HttpRequest req) => req.headers.value(HttpHeaders.hostHeader) ?? 'localhost:$port';
 
-  Future<void> _serveIndex(HttpRequest req) async {
+  Future<void> _serveIndex(HttpRequest req, {String? folder}) async {
     final games = await _loadGames!();
-    final (index, routes) = buildIndex(games, _hostPort(req), localFiles: _localFiles);
+    final (index, routes) = buildIndex(games, _hostPort(req), localFiles: _localFiles, folder: folder);
     _routes = routes;
     req.response.headers.contentType = ContentType.json;
     req.response.write(jsonEncode(index));
