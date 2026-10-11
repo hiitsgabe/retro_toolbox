@@ -47,7 +47,8 @@ class LibrarySnapshot {
 
     // 2) Or if there is a root-level sibling with same base but different extension
     final hasSiblingDifferentExtAtRoot = rel.any((abs) {
-      if (p.dirname(abs) != libraryDir) return false; // only root-level
+      // only root-level; as paths, so a saved folder ending in '/' still matches
+      if (!p.equals(p.dirname(abs), libraryDir)) return false;
       final b = p.basename(abs);
       return p.basenameWithoutExtension(b) == baseNoExt && p.extension(b).toLowerCase() != ext;
     });
