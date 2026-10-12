@@ -67,8 +67,7 @@ class TinfoilServerScreen extends ConsumerWidget {
             ],
             const SizedBox(height: 16),
             Center(
-              child: Text('Active transfers: ${state.activeTransfers}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              child: Text('Active transfers: ${state.activeTransfers}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ),
           ],
         ],
@@ -87,8 +86,7 @@ class TinfoilServerScreen extends ConsumerWidget {
         );
     if (consoles.isEmpty) return const [];
 
-    bool authed(Console c) =>
-        (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
+    bool authed(Console c) => (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
 
     return [
       for (final c in consoles) ...[
@@ -163,6 +161,7 @@ class TinfoilServerScreen extends ConsumerWidget {
       'Open Tinfoil → File Browser → New',
       'Set Protocol to http, then enter the host and port above',
       'Save — your games show up under New Games',
+      'Optional: add a second location with Path /Fast install/ and Title "Fast install" — it lists only the games already on this device, installed straight from its storage',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

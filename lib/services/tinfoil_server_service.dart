@@ -61,16 +61,17 @@ class TinfoilServerService {
     }
   }
 
-  /// File Browser folders: games already on the device, and every game.
+  /// Extra shop paths: games already on the device, and every game. Tinfoil
+  /// merges an index's `directories` into one shop instead of showing them as
+  /// folders, so each is meant to be added as its own File Browser location.
   static const fastInstallFolder = 'Fast install';
   static const allGamesFolder = 'All games';
 
   /// Builds the Tinfoil index JSON and the route map keyed `<consoleId>/<idx>`.
   /// [hostPort] is the address the Switch reached us on (its Host header).
   /// [localFiles] gives a console's [localSwitchFiles]: those games are listed
-  /// with the local file's extension and size. The root index ([folder] null)
-  /// lists every game plus the two [fastInstallFolder]/[allGamesFolder]
-  /// directories; a folder's index lists just its games.
+  /// with the local file's extension and size. [folder] picks a sub-shop
+  /// ([fastInstallFolder] lists just the local games); null is the full shop.
   static (Map<String, dynamic>, Map<String, TinfoilEntry>) buildIndex(Map<Console, List<Game>> gamesByConsole, String hostPort, {Map<String, String> Function(Console)? localFiles, String? folder}) {
     final files = <Map<String, dynamic>>[];
     final localOnly = <Map<String, dynamic>>[];
@@ -97,16 +98,11 @@ class TinfoilServerService {
         if (localPath != null) localOnly.add(file);
       }
     });
-    String dir(String name) => 'http://$hostPort/${Uri.encodeComponent(name)}/';
     return (
       switch (folder) {
         fastInstallFolder => {'files': localOnly, 'success': 'Retro Toolbox — ${localOnly.length} games ready for fast install'},
         allGamesFolder => {'files': files, 'success': 'Retro Toolbox — ${files.length} games'},
-        _ => {
-            'files': files,
-            'directories': [dir(fastInstallFolder), dir(allGamesFolder)],
-            'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install',
-          },
+        _ => {'files': files, 'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install'},
       },
       routes,
     );

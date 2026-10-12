@@ -148,7 +148,7 @@ void main() {
     expect((await whole.fold<List<int>>([], (a, b) => a..addAll(b))).length, 50);
   });
 
-  test('File Browser folders: Fast install lists only games on the device', () async {
+  test('the Fast install shop lists only games on the device', () async {
     final dir = Directory.systemTemp.createTempSync('tinfoil_folders');
     addTearDown(() => dir.deleteSync(recursive: true));
     File('${dir.path}/Here.nsp').writeAsBytesSync([1, 2, 3]);
@@ -163,7 +163,7 @@ void main() {
 
     final root = await index('/');
     expect((root['files'] as List).length, 2); // New Games still sees everything
-    expect(root['directories'], ['http://127.0.0.1:${service.port}/Fast%20install/', 'http://127.0.0.1:${service.port}/All%20games/']);
+    expect(root.containsKey('directories'), isFalse); // Tinfoil would merge them, not show folders
 
     final fast = await index('/Fast%20install/');
     expect((fast['files'] as List).map((f) => f['url']), [endsWith('Here%20%5B0100000000001000%5D.nsp')]);
