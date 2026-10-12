@@ -63,7 +63,8 @@ class TinfoilServerService {
 
   /// Extra shop paths: games already on the device, and every game. Tinfoil
   /// merges an index's `directories` into one shop instead of showing them as
-  /// folders, so each is meant to be added as its own File Browser location.
+  /// folders; the root index's `locations` adds Fast install to the console's
+  /// File Browser as its own entry instead.
   static const fastInstallFolder = 'Fast install';
   static const allGamesFolder = 'All games';
 
@@ -102,7 +103,13 @@ class TinfoilServerService {
       switch (folder) {
         fastInstallFolder => {'files': localOnly, 'success': 'Retro Toolbox — ${localOnly.length} games ready for fast install'},
         allGamesFolder => {'files': files, 'success': 'Retro Toolbox — ${files.length} games'},
-        _ => {'files': files, 'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install'},
+        _ => {
+            'files': files,
+            'locations': [
+              {'url': 'http://$hostPort/${Uri.encodeComponent(fastInstallFolder)}/', 'title': fastInstallFolder, 'action': 'add'},
+            ],
+            'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install',
+          },
       },
       routes,
     );

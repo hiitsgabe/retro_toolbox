@@ -161,7 +161,7 @@ class TinfoilServerScreen extends ConsumerWidget {
       'Open Tinfoil → File Browser → New',
       'Set Protocol to http, then enter the host and port above',
       'Save — your games show up under New Games',
-      'Optional: add a second location with Path /Fast install/ and Title "Fast install" — it lists only the games already on this device, installed straight from its storage',
+      'A "Fast install" location then appears in the File Browser with only the games already on this device, installed straight from its storage (if it doesn\'t, add one with Path /Fast install/)',
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

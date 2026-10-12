@@ -164,6 +164,9 @@ void main() {
     final root = await index('/');
     expect((root['files'] as List).length, 2); // New Games still sees everything
     expect(root.containsKey('directories'), isFalse); // Tinfoil would merge them, not show folders
+    expect(root['locations'], [
+      {'url': 'http://127.0.0.1:${service.port}/Fast%20install/', 'title': 'Fast install', 'action': 'add'},
+    ]);
 
     final fast = await index('/Fast%20install/');
     expect((fast['files'] as List).map((f) => f['url']), [endsWith('Here%20%5B0100000000001000%5D.nsp')]);
