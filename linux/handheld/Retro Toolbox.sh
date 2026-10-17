@@ -94,6 +94,7 @@ else controlfolder="/roms/ports/PortMaster"; fi
 source "$controlfolder/control.txt"
 [ -f "${controlfolder}/mod_${CFW_NAME}.txt" ] && source "${controlfolder}/mod_${CFW_NAME}.txt"
 get_controls
+export RT_DEVICE_NAME="${DEVICE_NAME:-}" RT_CFW_NAME="${CFW_NAME:-}"
 
 GAMEDIR="/$directory/ports/retrotoolbox"
 cd "$GAMEDIR" || exit 1
