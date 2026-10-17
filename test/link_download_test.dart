@@ -24,6 +24,11 @@ void main() {
     expect(safeFileName('a:b\u0001.zip'), 'a_b.zip');
     expect(fileNameFromUrl('https://h/dir/game%20pack.zip?x=1'), 'game pack.zip');
     expect(fileNameFromUrl('https://h/'), 'download');
+    expect(fileNameFromUrl('https://h/%FF'), '%FF');
+    expect(fileNameFromUrl('https://h/a%C3'), 'a%C3');
+    // not UTF-8: no throw, falls back to the plain name (or null)
+    expect(fileNameFromContentDisposition("attachment; filename*=ISO-8859-1''caf%E9.zip; filename=\"cafe.zip\""), 'cafe.zip');
+    expect(fileNameFromContentDisposition("attachment; filename*=ISO-8859-1''caf%E9.zip"), isNull);
   });
 
   group('network', () {
@@ -33,12 +38,14 @@ void main() {
     var honourRange = true;
     var status = 200;
     String? lastRange;
+    String? lastEncoding;
     String url() => 'http://127.0.0.1:${server.port}/f.bin';
 
     setUp(() async {
       honourRange = true;
       status = 200;
       lastRange = null;
+      lastEncoding = null;
       source = Uint8List.fromList(List.generate(1000, (i) => i % 251));
       tmp = await Directory.systemTemp.createTemp('link_dl');
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -51,6 +58,7 @@ void main() {
         }
         res.headers.set('content-disposition', 'attachment; filename="served.bin"');
         lastRange = req.headers.value('range');
+        lastEncoding = req.headers.value('accept-encoding');
         final m = lastRange == null ? null : RegExp(r'bytes=(\d+)-').firstMatch(lastRange!);
         if (m != null && honourRange) {
           final from = int.parse(m.group(1)!);
@@ -77,6 +85,11 @@ void main() {
       expect(File(dest).readAsBytesSync(), source);
       expect(File('$dest.part').existsSync(), isFalse);
       expect(seen.last, [1000, 1000]);
+    });
+
+    test('asks for an uncompressed body so resume offsets match the file', () async {
+      await downloadToFile(url: url(), destPath: '${tmp.path}/out.bin', onProgress: (_, __) {});
+      expect(lastEncoding, 'identity');
     });
 
     test('resumes a .part when the server honours Range', () async {

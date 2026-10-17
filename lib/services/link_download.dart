@@ -23,8 +23,15 @@ String safeFileName(String raw) {
 
 /// The decoded last path segment of [url], through [safeFileName].
 String fileNameFromUrl(String url) {
-  final segs = Uri.tryParse(url)?.pathSegments ?? const <String>[];
-  return safeFileName(segs.isEmpty ? '' : segs.last);
+  final uri = Uri.tryParse(url);
+  if (uri == null) return 'download';
+  try {
+    final segs = uri.pathSegments;
+    return safeFileName(segs.isEmpty ? '' : segs.last);
+  } on FormatException {
+    // invalid UTF-8 escape (e.g. %FF): use the undecoded segment
+    return safeFileName(uri.path.split('/').last);
+  }
 }
 
 /// The file name in a Content-Disposition header; `filename*` wins over `filename`.
@@ -34,6 +41,8 @@ String? fileNameFromContentDisposition(String? header) {
   if (star != null) {
     try {
       return safeFileName(Uri.decodeComponent(star.group(1)!.trim()));
+    } on FormatException {
+      // not UTF-8: fall back to plain filename
     } on ArgumentError {
       // malformed escape: fall back to plain filename
     }
@@ -77,11 +86,14 @@ Future<String?> probeFileName(String url) async {
 Future<void> downloadToFile({required String url, required String destPath, required FileOpsProgress onProgress, HttpClient? client}) async {
   final http = client ?? HttpClient();
   http.connectionTimeout = const Duration(seconds: 30);
+  // Resume offsets are raw bytes on disk, so never let the transfer be compressed.
+  http.autoUncompress = false;
   final part = File('$destPath.part');
   try {
     var have = part.existsSync() ? part.lengthSync() : 0;
     final req = await http.getUrl(Uri.parse(url));
     req.followRedirects = true;
+    req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
     if (have > 0) req.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
     final res = await req.close();
     if (res.statusCode < 200 || res.statusCode > 299) {
@@ -99,11 +111,12 @@ Future<void> downloadToFile({required String url, required String destPath, requ
     await part.parent.create(recursive: true);
     final sink = part.openWrite(mode: resumed ? FileMode.append : FileMode.write);
     try {
-      await for (final chunk in res) {
-        sink.add(chunk);
+      // addStream applies backpressure, so a slow disk can't buffer the file in RAM.
+      await sink.addStream(res.map((chunk) {
         done += chunk.length;
         onProgress(done, total);
-      }
+        return chunk;
+      }));
     } finally {
       await sink.close();
     }
