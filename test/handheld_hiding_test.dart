@@ -44,8 +44,8 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.text('Tools'));
     await t.pumpAndSettle();
-    expect(find.text('NSZ Decompress'), findsOneWidget);
-    for (final l in ['Steam Shortcuts', 'CHD Converter']) {
+    expect(find.text('M3U Playlists'), findsOneWidget);
+    for (final l in ['Steam Shortcuts', 'CHD Converter', 'NSZ Decompress', '3DS → CIA']) {
       expect(find.text(l), findsNothing, reason: l);
     }
     // Shown only where RAR works (on Linux: when librar_native.so loaded).
