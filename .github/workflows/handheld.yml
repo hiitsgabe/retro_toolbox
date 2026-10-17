@@ -219,9 +219,29 @@ jobs:
       - name: Create zip
         run: cd dist && zip -qr ../retro_toolbox_handheld_arm64.zip ports
 
+      # PortMaster's own layout (Retro Toolbox.sh + retrotoolbox/ at the root,
+      # with port.json, gameinfo.xml, screenshot and licenses), never with a
+      # catalog. The zip above keeps ports/ for the in-app updater.
+      - name: Create PortMaster zip
+        run: |
+          linux/handheld/package_portmaster.sh dist/ports retrotoolbox.zip "$RUNNER_TEMP/flutter-pi"
+          for f in "Retro Toolbox.sh" retrotoolbox/port.json retrotoolbox/gameinfo.xml retrotoolbox/screenshot.png retrotoolbox/flutter-pi retrotoolbox/licenses/flutter-pi.LICENSE; do
+            unzip -l retrotoolbox.zip | grep -qF " $f" || { echo "::error::$f missing from the PortMaster zip"; exit 1; }
+          done
+          if unzip -p retrotoolbox.zip retrotoolbox/data/flutter_assets/assets/catalog/consoles.json 2>/dev/null | grep -q '[^][[:space:]]'; then
+            echo "::error::the PortMaster zip carries a catalog"; exit 1
+          fi
+
       - name: Upload handheld zip
         uses: actions/upload-artifact@v4
         with:
           name: handheld-zip
           path: retro_toolbox_handheld_arm64.zip
+          retention-days: 30
+
+      - name: Upload PortMaster zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: portmaster-zip
+          path: retrotoolbox.zip
           retention-days: 30

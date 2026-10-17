@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<gameList>
+  <game>
+    <path>./Retro Toolbox.sh</path>
+    <name>Retro Toolbox</name>
+    <desc>A toolbox for your game collection: SMB and FTP file transfer, a LAN file server, archive extraction, M3U playlists, collection cleanup and sports roster updates for classic games.</desc>
+    <releasedate>20250101T000000</releasedate>
+    <developer>hiitsgabe</developer>
+    <publisher>hiitsgabe</publisher>
+    <genre>Other</genre>
+    <image>./retrotoolbox/screenshot.png</image>
+  </game>
+</gameList>

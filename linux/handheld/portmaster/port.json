@@ -1,0 +1,33 @@
+{
+    "version": 4,
+    "name": "retrotoolbox.zip",
+    "items": [
+        "Retro Toolbox.sh",
+        "retrotoolbox"
+    ],
+    "items_opt": [],
+    "attr": {
+        "title": "Retro Toolbox",
+        "porter": [
+            "hiitsgabe"
+        ],
+        "desc": "A toolbox for your game collection: SMB and FTP file transfer, a LAN file server, archive extraction, M3U playlists, collection cleanup and sports roster updates for classic games. Built with Flutter and running on flutter-pi.",
+        "desc_md": null,
+        "inst": "Ready to run. The optional Games Library is off by default; turn it on in Settings.",
+        "inst_md": null,
+        "genres": [
+            "other"
+        ],
+        "image": null,
+        "rtr": true,
+        "exp": false,
+        "runtime": [],
+        "store": [],
+        "availability": "full",
+        "reqs": [],
+        "arch": [
+            "aarch64"
+        ],
+        "min_glibc": "2.34"
+    }
+}

@@ -9,6 +9,12 @@ Flutter-based app for Linux ARM64 handheld devices via PortMaster + flutter-pi.
 3. Copy the `retrotoolbox/` folder (containing flutter-pi binary, engine, data/flutter_assets, bundled_libs, etc.) into `ports/`.
 4. Run `Retro Toolbox.sh` from your device's port launcher.
 
+## PortMaster package
+
+The handheld workflow also builds `retrotoolbox.zip` (artifact `portmaster-zip`) in PortMaster's layout: `Retro Toolbox.sh` and `retrotoolbox/` at the root, with `port.json`, `gameinfo.xml`, `README.md`, `screenshot.png` (from `portmaster/`) and `licenses/`. It never carries a catalog. Built by `package_portmaster.sh` (needs dpkg). Unzip it into `ports/`, drop it in PortMaster's `autoinstall/`, or use its contents for a PortMaster-New submission.
+
+The Games Library and downloads are off by default on every platform (Settings > Games Library); installs that already had a catalog keep them on.
+
 ## Layout
 
 ```
