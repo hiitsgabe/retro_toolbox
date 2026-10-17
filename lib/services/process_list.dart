@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 /// Processes the device needs to keep running; they never get an end action.
@@ -30,6 +31,9 @@ class ProcessList {
   final String procRoot;
   final int selfPid;
 
+  // Never throws on odd bytes: a pid that failed to decode would break the ancestor walk and unprotect its parents.
+  static Future<String> _read(String path) async => utf8.decode(await File(path).readAsBytes(), allowMalformed: true);
+
   /// Every readable process, protected flags set. Pids that vanish mid-read are skipped.
   Future<List<ProcessEntry>> _scan() async {
     final raw = <int, ({int ppid, String name, String cmd, int rss})>{};
@@ -43,12 +47,12 @@ class ProcessList {
       final p = int.tryParse(d.uri.pathSegments.where((s) => s.isNotEmpty).last);
       if (p == null) continue;
       try {
-        final stat = await File('${d.path}/stat').readAsString();
+        final stat = await _read('${d.path}/stat');
         final open = stat.indexOf('('), close = stat.lastIndexOf(')');
         final ppid = int.parse(stat.substring(close + 1).trim().split(' ')[1]);
-        final status = await File('${d.path}/status').readAsString();
+        final status = await _read('${d.path}/status');
         final kb = RegExp(r'^VmRSS:\s*(\d+)', multiLine: true).firstMatch(status)?.group(1);
-        final cmd = (await File('${d.path}/cmdline').readAsString()).replaceAll('\x00', ' ').trim();
+        final cmd = (await _read('${d.path}/cmdline')).replaceAll('\x00', ' ').trim();
         raw[p] = (ppid: ppid, name: stat.substring(open + 1, close), cmd: cmd, rss: (int.tryParse(kb ?? '') ?? 0) * 1024);
       } on FileSystemException {
         continue;

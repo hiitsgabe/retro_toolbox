@@ -60,4 +60,18 @@ void main() {
     final root = fakeProc(procs);
     expect(await ProcessList(procRoot: root.path, selfPid: 50).end(999), EndResult.alreadyGone);
   });
+
+  test('ancestors with invalid UTF-8 are still parsed and keep their parents protected', () async {
+    final root = fakeProc({
+      1: (ppid: 0, name: 'init', cmd: '/sbin/init', rssKb: 2000),
+      30: (ppid: 1, name: 'launcher', cmd: 'launcher.sh', rssKb: 1000),
+      40: (ppid: 30, name: 'sh', cmd: 'sh', rssKb: 1000),
+      50: (ppid: 40, name: 'app', cmd: 'app', rssKb: 5000),
+    });
+    File('${root.path}/40/cmdline').writeAsBytesSync([0x73, 0x68, 0x20, 0xff, 0xfe, 0x00]);
+    File('${root.path}/40/stat').writeAsBytesSync([...'40 (s'.codeUnits, 0xff, ...') S 30 0 0'.codeUnits]);
+    final list = await ProcessList(procRoot: root.path, selfPid: 50).list();
+    expect(list.firstWhere((e) => e.pid == 40).protected, isTrue);
+    expect(list.firstWhere((e) => e.pid == 30).protected, isTrue);
+  });
 }
