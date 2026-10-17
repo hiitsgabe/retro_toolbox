@@ -87,7 +87,7 @@ void main() {
 
     await t.tap(find.text('Games Library & downloads'));
     await t.pumpAndSettle();
-    expect(find.text('Only download games you legally own, from your own sources.'), findsOneWidget);
+    expect(find.text('Play fair'), findsOneWidget);
     await t.tap(find.text('Cancel'));
     await t.pumpAndSettle();
     expect(c.read(settingsProvider).isLibraryEnabled, isFalse);

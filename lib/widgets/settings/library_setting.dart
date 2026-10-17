@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/widgets/about/play_fair_card.dart';
 
-/// Opt-in switch for the Games Library and downloads. Turning it on asks the
-/// user to confirm they only download games they own; turning it off doesn't.
+/// Opt-in switch for the Games Library and downloads. Turning it on shows the
+/// Play fair note for the user to accept; turning it off doesn't.
 class LibrarySetting extends ConsumerWidget {
   const LibrarySetting({super.key});
 
@@ -24,8 +25,7 @@ class LibrarySetting extends ConsumerWidget {
   Future<bool?> _confirm(BuildContext context) => showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Enable Games Library'),
-          content: const Text('Only download games you legally own, from your own sources.'),
+          content: const PlayFairCard(),
           actions: [
             TextButton(
               autofocus: true,

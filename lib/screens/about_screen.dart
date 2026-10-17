@@ -6,6 +6,7 @@ import 'package:retro_toolbox/providers/update_provider.dart';
 import 'package:retro_toolbox/widgets/about/info_card.dart';
 import 'package:retro_toolbox/widgets/about/expandable_info_card.dart';
 import 'package:retro_toolbox/widgets/about/update_card.dart';
+import 'package:retro_toolbox/widgets/about/play_fair_card.dart';
 
 class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
@@ -90,31 +91,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             SizedBox(height: 20),
             UpdateCard(currentVersion: _packageInfo?.version),
             SizedBox(height: 24),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.35)),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.verified_user_rounded, color: theme.colorScheme.primary, size: 28),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Play fair',
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Retro Toolbox is a utility, not a source of games. Neither the app nor its developers endorse piracy. It stands for easy access to a library you already own. Stick to trusted sources and download only titles you own.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
+            const PlayFairCard(),
             SizedBox(height: 24),
             InfoCard(
               icon: Icons.code_rounded,
