@@ -52,6 +52,19 @@ void main() {
     expect(find.text('Rar Decompress'), ArchiveExtractService.rarSupported() ? findsOneWidget : findsNothing);
   });
 
+  testWidgets('Console Info only on the handheld', (t) async {
+    for (final h in [true, false]) {
+      Handheld.current = h;
+      await pumpMenu(t);
+      await t.tap(find.text('Tools'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Tools'));
+      await t.pumpAndSettle();
+      expect(find.text('Console Info'), h ? findsOneWidget : findsNothing, reason: 'handheld: $h');
+      await t.pumpWidget(const SizedBox());
+    }
+  });
+
   testWidgets('non-handheld: Servers tile present', (t) async {
     Handheld.current = false;
     await pumpMenu(t);

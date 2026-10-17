@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:retro_toolbox/screens/console_grid_screen.dart';
+import 'package:retro_toolbox/screens/console_info_screen.dart';
 import 'package:retro_toolbox/screens/sports_grid_screen.dart';
 import 'package:retro_toolbox/screens/menu_grid_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
@@ -103,6 +104,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
+          if (Handheld.current)
+            MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
           if (!Handheld.current)
             MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => _push(const NszDecompressScreen())),
           if (!Handheld.current)
