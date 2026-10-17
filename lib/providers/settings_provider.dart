@@ -41,8 +41,21 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await _settingsService.loadSettings();
-    state = settings;
+    var settings = await _settingsService.loadSettings();
+    if (settings.libraryEnabled == null) {
+      // First run of a version with the opt-in: keep the library for anyone
+      // who already set up a catalog. A catalog bundled in the build doesn't count.
+      final hasCatalog = await CatalogService().hasUserCatalog().catchError((_) => false);
+      settings = settings.copyWith(libraryEnabled: hasCatalog);
+      await _settingsService.saveSettings(settings);
+    }
+    if (mounted) state = settings;
+  }
+
+  Future<void> setLibraryEnabled(bool enabled) async {
+    final newState = state.copyWith(libraryEnabled: enabled);
+    state = newState;
+    await _settingsService.saveSettings(newState);
   }
 
   Future<void> setGeneralSetting<T>(String key, T value) async {

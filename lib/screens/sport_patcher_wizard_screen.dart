@@ -152,6 +152,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   /// Search the console catalog for this game so the ROM step can offer a
   /// download. Best-effort — any failure just leaves the manual file picker.
   Future<void> _lookupRom() async {
+    if (!ref.read(settingsProvider).isLibraryEnabled) return;
     final consoles = ref.read(appStateProvider).consolesList;
     if (consoles.isEmpty) return;
     try {

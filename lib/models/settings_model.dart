@@ -25,6 +25,9 @@ class AppSettings {
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
   final String? preferredLocalIp; // LAN IP all servers advertise/use, if chosen
   final String? boot9Path; // user-set boot9.bin for 3DS->CIA conversion
+  // Games Library and downloads, opt-in. Null until the first load decides it
+  // (on when a user catalog already exists, see SettingsNotifier).
+  final bool? libraryEnabled;
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -39,7 +42,10 @@ class AppSettings {
     this.catalogSourceUrl,
     this.preferredLocalIp,
     this.boot9Path,
+    this.libraryEnabled,
   });
+
+  bool get isLibraryEnabled => libraryEnabled ?? false;
 
   bool get hasIaCredentials =>
       iaAccessKey != null && iaAccessKey!.isNotEmpty &&
@@ -66,6 +72,7 @@ class AppSettings {
     bool clearPreferredLocalIp = false,
     String? boot9Path,
     bool clearBoot9Path = false,
+    bool? libraryEnabled,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -80,6 +87,7 @@ class AppSettings {
       catalogSourceUrl: clearCatalogSourceUrl ? null : (catalogSourceUrl ?? this.catalogSourceUrl),
       preferredLocalIp: clearPreferredLocalIp ? null : (preferredLocalIp ?? this.preferredLocalIp),
       boot9Path: clearBoot9Path ? null : (boot9Path ?? this.boot9Path),
+      libraryEnabled: libraryEnabled ?? this.libraryEnabled,
     );
   }
 
@@ -97,6 +105,7 @@ class AppSettings {
       if (catalogSourceUrl != null) 'catalogSourceUrl': catalogSourceUrl,
       if (preferredLocalIp != null) 'preferredLocalIp': preferredLocalIp,
       if (boot9Path != null) 'boot9Path': boot9Path,
+      if (libraryEnabled != null) 'libraryEnabled': libraryEnabled,
     };
   }
 
@@ -114,6 +123,7 @@ class AppSettings {
       catalogSourceUrl: json['catalogSourceUrl'] as String?,
       preferredLocalIp: json['preferredLocalIp'] as String?,
       boot9Path: json['boot9Path'] as String?,
+      libraryEnabled: json['libraryEnabled'] as bool?,
     );
   }
 }

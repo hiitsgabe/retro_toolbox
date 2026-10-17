@@ -1,5 +1,6 @@
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -15,8 +16,9 @@ import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/widgets/settings/library_setting.dart';
 
-class SettingsContent extends StatelessWidget {
+class SettingsContent extends ConsumerWidget {
   final Console? selectedConsole;
   final SettingsNotifier settingsNotifier;
 
@@ -55,17 +57,29 @@ class SettingsContent extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Off: only settings that don't touch the library or downloads.
+    final library = ref.watch(settingsProvider.select((s) => s.isLibraryEnabled));
     return SingleChildScrollView(
       child: Column(
         children: [
-          _section(
-            context,
-            icon: selectedConsole == null ? Icons.settings : Icons.videogame_asset,
-            title: selectedConsole == null ? 'General Settings' : '${selectedConsole!.name} Settings',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          if (selectedConsole == null) ...[
+            _section(
+              context,
+              icon: Icons.download,
+              title: 'Games Library',
+              child: const LibrarySetting(),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (library)
+            _section(
+              context,
+              icon: selectedConsole == null ? Icons.settings : Icons.videogame_asset,
+              title: selectedConsole == null ? 'General Settings' : '${selectedConsole!.name} Settings',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   DirectorySetting(
                     settingKey: AppSettings.downloadDir,
                     title: 'Download Directory',
@@ -123,15 +137,17 @@ class SettingsContent extends StatelessWidget {
               ),
             ),
           if (selectedConsole == null) ...[
-            const SizedBox(height: 8),
-            _section(
-              context,
-              icon: Icons.dataset_outlined,
-              title: 'Catalog Source',
-              subtitle: 'Import a console catalog JSON file or load one from a URL.',
-              child: const CatalogSourceSetting(),
-            ),
-            const SizedBox(height: 8),
+            if (library) ...[
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.dataset_outlined,
+                title: 'Catalog Source',
+                subtitle: 'Import a console catalog JSON file or load one from a URL.',
+                child: const CatalogSourceSetting(),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (!Handheld.current) ...[
               // The Linux handheld always has it on.
               _section(
@@ -153,47 +169,49 @@ class SettingsContent extends StatelessWidget {
               const PermissionsSetting(),
             ],
           ],
-          if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
-            const SizedBox(height: 8),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: NszSetting(),
+          if (library) ...[
+            if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
+              const SizedBox(height: 8),
+              const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: NszSetting(),
+                ),
               ),
-            ),
-          ],
-          if (selectedConsole != null && selectedConsole!.hasTokenAuth) ...[
+            ],
+            if (selectedConsole != null && selectedConsole!.hasTokenAuth) ...[
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.lock_outline,
+                title: 'Authentication',
+                child: ConsoleAuthSetting(console: selectedConsole!),
+              ),
+            ],
             const SizedBox(height: 8),
             _section(
               context,
-              icon: Icons.lock_outline,
-              title: 'Authentication',
-              child: ConsoleAuthSetting(console: selectedConsole!),
+              icon: Icons.build,
+              title: 'Tools',
+              child: ToolsSetting(console: selectedConsole),
             ),
-          ],
-          const SizedBox(height: 8),
-          _section(
-            context,
-            icon: Icons.build,
-            title: 'Tools',
-            child: ToolsSetting(console: selectedConsole),
-          ),
-          if (selectedConsole == null) ...[
-            const SizedBox(height: 8),
-            _section(
-              context,
-              icon: Icons.manage_accounts_outlined,
-              title: 'Accounts',
-              subtitle: 'Connect accounts for restricted or private collections.',
-              child: const AccountsSetting(),
-            ),
-            const SizedBox(height: 8),
-            _section(
-              context,
-              icon: Icons.favorite,
-              title: 'Favorites',
-              child: const FavoritesSettings(),
-            ),
+            if (selectedConsole == null) ...[
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.manage_accounts_outlined,
+                title: 'Accounts',
+                subtitle: 'Connect accounts for restricted or private collections.',
+                child: const AccountsSetting(),
+              ),
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.favorite,
+                title: 'Favorites',
+                child: const FavoritesSettings(),
+              ),
+            ],
           ],
         ],
       ),

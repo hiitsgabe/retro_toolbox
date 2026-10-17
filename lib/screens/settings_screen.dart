@@ -28,7 +28,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    ref.watch(settingsProvider);
+    // Per-console settings are all library settings.
+    final library = ref.watch(settingsProvider).isLibraryEnabled;
+    final general = showGeneral || !library;
     final settingsNotifier = ref.read(settingsProvider.notifier);
 
     if (widget.consoleId != null && selectedConsole == null && appState.consoles.isNotEmpty) {
@@ -51,28 +53,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SettingsTabSelector(
-              showGeneral: showGeneral,
-              selectedConsole: selectedConsole,
-              consoles: appState.consolesList,
-              onTabChanged: (isGeneral) {
-                setState(() {
-                  showGeneral = isGeneral;
-                  if (!showGeneral && selectedConsole == null) {
-                    selectedConsole = appState.consoles.isNotEmpty ? appState.consolesList.first : null;
-                  }
-                });
-              },
-              onConsoleSelected: (console) {
-                setState(() {
-                  selectedConsole = console;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
+            if (library)
+              SettingsTabSelector(
+                showGeneral: showGeneral,
+                selectedConsole: selectedConsole,
+                consoles: appState.consolesList,
+                onTabChanged: (isGeneral) {
+                  setState(() {
+                    showGeneral = isGeneral;
+                    if (!showGeneral && selectedConsole == null) {
+                      selectedConsole = appState.consoles.isNotEmpty ? appState.consolesList.first : null;
+                    }
+                  });
+                },
+                onConsoleSelected: (console) {
+                  setState(() {
+                    selectedConsole = console;
+                  });
+                },
+              ),
+            if (library) const SizedBox(height: 8),
             Expanded(
               child: SettingsContent(
-                selectedConsole: showGeneral ? null : selectedConsole,
+                selectedConsole: general ? null : selectedConsole,
                 settingsNotifier: settingsNotifier,
               ),
             ),
