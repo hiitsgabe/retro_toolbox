@@ -19,6 +19,13 @@ Screenshots of the handheld UI (640x480); `portmaster/screenshot.png` is the one
 
 The Games Library and downloads are off by default on every platform (Settings > Games Library); installs that already had a catalog keep them on.
 
+## Handheld-only tools
+
+Two extra tiles appear in Tools on handhelds only:
+
+- **Console Info**: device and firmware, storage, memory, battery and temperature, the network address for FTP, SMB and the Retro Tools Server, and system details. An Advanced section lists running processes with an end action; critical ones are locked.
+- **Download from link**: type or paste an http/https link, or scan the on-screen QR code with a phone and send the link from the page at `http://<ip>:9094/` (port 9094). The link only fills the field; press Download on the device. Downloads run in the task manager (retries resume), and .zip/.rar files get "Extract here". The phone page runs only while this screen is open.
+
 ## Layout
 
 ```

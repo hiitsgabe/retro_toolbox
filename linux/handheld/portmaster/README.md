@@ -8,6 +8,8 @@ The app runs on flutter-pi straight on DRM/KMS, or on the framebuffer where DRM 
 
 The Games Library and downloads are off by default. Turn them on in Settings. Only download games you legally own, from your own sources.
 
+The Tools tab also has Console Info (device info) and Download from link (type, paste or send a link from your phone; you confirm on the device before anything downloads).
+
 ## Controls
 
 | Button | Action |

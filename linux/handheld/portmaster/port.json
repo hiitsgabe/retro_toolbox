@@ -11,7 +11,7 @@
         "porter": [
             "hiitsgabe"
         ],
-        "desc": "A toolbox for your game collection: SMB and FTP file transfer, a LAN file server, archive extraction, M3U playlists, collection cleanup and sports roster updates for classic games. Built with Flutter and running on flutter-pi.",
+        "desc": "A toolbox for your game collection: SMB and FTP file transfer, a LAN file server, archive extraction, M3U playlists, collection cleanup, device info, download from a link and sports roster updates for classic games. Built with Flutter and running on flutter-pi.",
         "desc_md": null,
         "inst": "Ready to run. The optional Games Library is off by default; turn it on in Settings.",
         "inst_md": null,
