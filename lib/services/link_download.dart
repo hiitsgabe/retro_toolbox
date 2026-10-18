@@ -5,10 +5,11 @@ import 'package:path/path.dart' as p;
 
 import 'file_ops.dart';
 
-/// True for a trimmed `http`/`https` link with a host and no whitespace.
+/// True for a trimmed `http`/`https` link with a host and no whitespace, control or bidi characters.
 bool isValidDownloadUrl(String input) {
   final s = input.trim();
-  if (s.isEmpty || s.contains(RegExp(r'\s'))) return false;
+  // Whitespace, control and bidi-override characters could hide or alter what the user confirms.
+  if (s.isEmpty || s.contains(RegExp(r'[\s\x00-\x1f\x7f\u200e\u200f\u202a-\u202e\u2066-\u2069]'))) return false;
   final uri = Uri.tryParse(s);
   return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
 }

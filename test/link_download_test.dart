@@ -8,7 +8,7 @@ void main() {
   test('isValidDownloadUrl accepts http(s) with a host only', () {
     expect(isValidDownloadUrl('https://h.example/a.zip'), isTrue);
     expect(isValidDownloadUrl('  http://h/a  '), isTrue);
-    for (final bad in ['', 'ftp://h/a', 'https:///a', 'https://h/a b.zip']) {
+    for (final bad in ['', 'ftp://h/a', 'https:///a', 'https://h/a b.zip', 'https://h/a\x00b', 'https://h/a\x07b', 'https://h/a\u202eb']) {
       expect(isValidDownloadUrl(bad), isFalse, reason: bad);
     }
   });

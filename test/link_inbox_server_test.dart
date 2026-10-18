@@ -59,6 +59,8 @@ void main() {
     expect((await post('url=ftp%3A%2F%2Fh')).statusCode, 400);
     expect((await post('url=https%3A%2F%2Fh%2Fa%20b')).statusCode, 400);
     expect((await post('url=%ZZ')).statusCode, 400);
+    expect((await post('url=https%3A%2F%2Fh%2Fa%00b')).statusCode, 400);
+    expect((await post('url=https%3A%2F%2Fh%2Fa%E2%80%AEb')).statusCode, 400);
     expect((await post('url=${'a' * 9000}')).statusCode, 413);
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(seen, isEmpty);
