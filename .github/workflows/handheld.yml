@@ -1,19 +1,8 @@
 name: Build Linux Handheld (PortMaster)
 
 on:
-  # Build the package on PRs so it can be tried on a device before release.
-  pull_request:
+  # Only run by Build and Release (release.yml); no standalone builds.
   workflow_call:
-    inputs:
-      ref:
-        description: Git ref to build (default branch when empty)
-        type: string
-        default: ''
-      with_catalog:
-        description: Download the catalog artifact and bundle it
-        type: boolean
-        default: false
-  workflow_dispatch:
     inputs:
       ref:
         description: Git ref to build (default branch when empty)
