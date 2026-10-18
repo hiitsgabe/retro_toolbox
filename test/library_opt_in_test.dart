@@ -9,6 +9,7 @@ import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -71,6 +72,20 @@ void main() {
     saved(true);
     await pump(t, const MenuScreen());
     expect(find.text('Games Library'), findsOneWidget);
+  });
+
+  testWidgets('handheld: Download from link does not need the library', (t) async {
+    final was = Handheld.current;
+    Handheld.current = true;
+    addTearDown(() => Handheld.current = was);
+    saved(false);
+    await pump(t, const MenuScreen());
+    // Cover flow: first tap centres the card, second opens it.
+    await t.tap(find.text('Tools'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Tools'));
+    await t.pumpAndSettle();
+    expect(find.text('Download from link'), findsOneWidget);
   });
 
   testWidgets('settings: off hides library settings; enabling asks first', (t) async {

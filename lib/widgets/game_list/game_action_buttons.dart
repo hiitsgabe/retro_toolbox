@@ -26,6 +26,8 @@ Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameS
       TaskQueueService.resumeDownloadTask(ref, game.gameId);
     case GameAction.cancel:
       TaskQueueService.cancelTask(ref, game, gameState);
+    case GameAction.extract when gameState.isTransfer && gameState.outputPath != null:
+      TaskQueueService.enqueueArchiveExtraction(ref, context, gameState.outputPath!);
     case GameAction.extract:
     case GameAction.retryExtraction:
       TaskQueueService.startExtraction(ref, game.gameId);

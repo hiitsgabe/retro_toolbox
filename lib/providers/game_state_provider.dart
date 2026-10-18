@@ -9,6 +9,7 @@ import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/archive_extract_service.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
 
 final gameStateProvider = Provider.family<GameState, Game>((ref, game) {
@@ -115,7 +116,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
         isInteractable: true,
         showProgressBar: false,
         currentProgress: 1.0,
-        availableActions: const {},
+        availableActions: _isArchive(current.outputPath) ? const {GameAction.extract} : const {},
       );
     } else if (status == ExtractionStatus.completed) {
       resolveState(gameId, true);
@@ -230,10 +231,12 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
 
   /// Register a state for a one-off task (e.g. a manual NSZ decompression) that
   /// isn't part of the loaded catalog, so it shows up in the task manager.
-  void registerTransientGame(Game game, {bool isTransfer = false}) {
+  void registerTransientGame(Game game, {bool isTransfer = false, String? outputPath}) {
     if (state.containsKey(game.gameId)) return;
-    state = {...state, game.gameId: GameState(game: game, isTransfer: isTransfer)};
+    state = {...state, game.gameId: GameState(game: game, isTransfer: isTransfer, outputPath: outputPath)};
   }
+
+  static bool _isArchive(String? path) => path != null && ArchiveExtractService.archiveKind(path) != ArchiveKind.unsupported;
 
   void _initGames(List<Game> games) {
     final updates = <String, GameState>{};
@@ -258,7 +261,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     final updated = <String, GameState>{};
     for (final entry in state.entries) {
       final game = entry.value.game;
-      updated[entry.key] = GameState(game: game, isTransfer: entry.value.isTransfer);
+      updated[entry.key] = GameState(game: game, isTransfer: entry.value.isTransfer, outputPath: entry.value.outputPath);
     }
     state = updated;
   }

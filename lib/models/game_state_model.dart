@@ -47,6 +47,9 @@ class GameState {
   /// reports through the extraction states but reads and files as a download.
   final bool isTransfer;
 
+  /// Where a transfer writes its file, when known (lets a finished archive offer Extract).
+  final String? outputPath;
+
   const GameState({
     required this.game,
     this.status = GameStatus.init,
@@ -61,6 +64,7 @@ class GameState {
     this.errorMessage,
     this.hasJustCompleted = false,
     this.isTransfer = false,
+    this.outputPath,
   });
 
   GameState copyWith({
@@ -92,6 +96,7 @@ class GameState {
       errorMessage: errorMessage ?? (status == null || status == GameStatus.downloadFailed || status == GameStatus.extractionFailed ? this.errorMessage : null),
       hasJustCompleted: hasJustCompleted ?? this.hasJustCompleted,
       isTransfer: isTransfer,
+      outputPath: outputPath,
     );
   }
 

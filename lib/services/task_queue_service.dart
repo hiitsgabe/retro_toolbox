@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
@@ -63,8 +64,9 @@ class TaskQueueService {
   /// Queues a network transfer (SMB/FTP download or zip) as a background
   /// task with a task-manager row titled [title]. [source] ('smb' / 'ftp')
   /// lets that screen show the task's progress. [run] is held in memory
-  /// with the task; it isn't persisted.
-  static void enqueueTransfer(
+  /// with the task; it isn't persisted. [outputPath]: the file it writes, when
+  /// known, so a finished archive offers Extract. Returns the task id.
+  static String enqueueTransfer(
     WidgetRef ref,
     BuildContext context, {
     required String title,
@@ -72,10 +74,11 @@ class TaskQueueService {
     required String verb,
     required String label,
     required TransferJob run,
+    String? outputPath,
   }) {
     // Unique per job: the task key comes from the URL's file name.
     final game = Game(title: title, url: 'https://manual/net-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
-    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game, isTransfer: true);
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game, isTransfer: true, outputPath: outputPath);
     ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.remoteTransfer, {
       'taskId': game.gameId,
       'source': source,
@@ -84,6 +87,18 @@ class TaskQueueService {
       'run': run,
     });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
+    return game.gameId;
+  }
+
+  /// Extracts [archivePath] into a new folder named after it, beside it (the
+  /// file explorer's convention), as a task-manager row.
+  static void enqueueArchiveExtraction(WidgetRef ref, BuildContext context, String archivePath) {
+    final dir = p.dirname(archivePath), name = p.basename(archivePath);
+    final out = p.join(dir, FileOps.uniqueName(dir, p.basenameWithoutExtension(archivePath)));
+    final game = Game(title: 'Extract $name', url: 'https://manual/op-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
+    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
+    ref.read(taskQueueProvider.notifier).enqueue(game.gameId, TaskType.archiveExtraction, {'taskId': game.gameId, 'archivePath': archivePath, 'outputDir': out});
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Extract $name added to the task list')));
   }
 
   /// Runs a failed transfer again from its original task (same job, same
