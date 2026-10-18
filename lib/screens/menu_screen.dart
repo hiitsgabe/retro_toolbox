@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
@@ -47,6 +48,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     // Start listening to the downloader at boot: downloads the OS resumed after
     // a crash must reach the task manager before any games screen opens.
     ref.read(downloadProvider);
+    // Downloads that were still waiting in the queue come back the same way.
+    ref.read(taskQueueProvider);
   }
 
   void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));

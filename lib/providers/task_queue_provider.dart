@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -15,7 +18,48 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
   Timer? _processingTimer;
 
   TaskQueueNotifier(this._ref) : super(const TaskQueueState()) {
-    _startProcessing();
+    // No timer until there's work: enqueue starts it.
+    restored = _restoreQueuedDownloads();
+    addListener(_saveQueuedDownloads, fireImmediately: false);
+  }
+
+  /// Completes once downloads queued before the last exit are back in the queue.
+  late final Future<void> restored;
+
+  // Running downloads survive a crash in the downloader's own database; the
+  // ones still waiting for a slot only live here, so keep them in prefs too.
+  static const _queuedDownloadsKey = 'queued_downloads';
+  bool _restoreDone = false;
+  String? _savedQueue;
+
+  void _saveQueuedDownloads(TaskQueueState s) {
+    if (!_restoreDone) return; // don't overwrite the saved queue before reading it
+    final json = jsonEncode([
+      for (final t in s.tasks)
+        if (t.type == TaskType.download && t.status == TaskQueueStatus.waiting) {'id': t.id, 'params': t.params},
+    ]);
+    if (json == _savedQueue) return;
+    _savedQueue = json;
+    SharedPreferences.getInstance().then((p) => p.setString(_queuedDownloadsKey, json));
+  }
+
+  Future<void> _restoreQueuedDownloads() async {
+    try {
+      await _ref.read(settingsProvider.notifier).loaded; // respect the parallel-download limit
+      final raw = (await SharedPreferences.getInstance()).getString(_queuedDownloadsKey);
+      _savedQueue = raw;
+      for (final e in raw == null ? const [] : jsonDecode(raw) as List) {
+        final id = e['id'] as String;
+        if (!mounted || state.tasks.any((t) => t.id == id)) continue;
+        final params = Map<String, dynamic>.from(e['params'] as Map);
+        _ref.read(gameStateManagerProvider.notifier).registerTransientGame(Game.fromJson(Map<String, dynamic>.from(params['game'] as Map)));
+        enqueue(id, TaskType.download, params);
+      }
+    } catch (e) {
+      debugPrint('Could not restore queued downloads: $e');
+    }
+    _restoreDone = true;
+    if (mounted) _saveQueuedDownloads(state);
   }
 
   void enqueue(String taskId, TaskType type, Map<String, dynamic> params) {

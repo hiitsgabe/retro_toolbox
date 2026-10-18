@@ -87,6 +87,7 @@ void main() {
     expect(task.params['destDir'], p.join(root.path, 'Saves'));
     expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
     expect(find.text('Paste here'), findsNothing);
+    container.dispose(); // stops the queue's timer, started in fake time by the queued copy
   });
 
   testWidgets('the grid/list choice switches the view and is remembered', (tester) async {
@@ -170,6 +171,7 @@ void main() {
     expect(task.params['destDir'], root.path);
     expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
     expect(find.textContaining('open the destination and paste'), findsNothing);
+    container.dispose(); // stops the queue's timer, started in fake time by the queued copy
   });
 
   testWidgets('Start without a clipboard activates the focused row as before', (tester) async {
@@ -197,6 +199,7 @@ void main() {
     expect(find.text('Empty'), findsOneWidget);
     await press(tester, LogicalKeyboardKey.f5);
     expect(container.read(taskQueueProvider).tasks.single.params['destDir'], p.join(root.path, 'Saves'));
+    container.dispose(); // stops the queue's timer, started in fake time by the queued copy
   });
 
   testWidgets('at the storage list Y offers no New folder or Paste here', (tester) async {

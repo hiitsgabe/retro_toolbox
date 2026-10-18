@@ -10,7 +10,8 @@ class FavoritesNotifier extends StateNotifier<Favorites> {
   }
 
   Future<void> _loadFavorites() async {
-    state = await _service.loadFavorites();
+    final favorites = await _service.loadFavorites();
+    if (mounted) state = favorites;
   }
 
   Future<void> toggleFavorite(String gameId) async {
