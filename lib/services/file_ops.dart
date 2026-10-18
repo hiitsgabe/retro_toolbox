@@ -12,8 +12,9 @@ typedef FileOpsProgress = void Function(int done, int total);
 class FileOps {
   /// [name] when free in [dir], else `name (1)`, `name (2)`… with the number
   /// before the extension, so a copy never overwrites an existing entry.
-  static String uniqueName(String dir, String name) {
-    bool taken(String n) => FileSystemEntity.typeSync(p.join(dir, n)) != FileSystemEntityType.notFound;
+  /// [reserved] marks more full paths as taken.
+  static String uniqueName(String dir, String name, {bool Function(String path)? reserved}) {
+    bool taken(String n) => FileSystemEntity.typeSync(p.join(dir, n)) != FileSystemEntityType.notFound || (reserved?.call(p.join(dir, n)) ?? false);
     if (!taken(name)) return name;
     final isDir = FileSystemEntity.isDirectorySync(p.join(dir, name));
     final ext = isDir ? '' : p.extension(name);

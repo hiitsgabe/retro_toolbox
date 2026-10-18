@@ -45,4 +45,13 @@ void main() {
   test('a finished transfer of anything else offers nothing', () {
     expect(completedActions('/x/a.bin'), isEmpty);
   });
+
+  test('a finished .rar offers Extract only when this build can extract rar', () {
+    final saved = GameStateManager.rarSupported;
+    addTearDown(() => GameStateManager.rarSupported = saved);
+    GameStateManager.rarSupported = () => false;
+    expect(completedActions('/x/a.rar'), isEmpty);
+    GameStateManager.rarSupported = () => true;
+    expect(completedActions('/x/a.rar'), {GameAction.extract});
+  });
 }

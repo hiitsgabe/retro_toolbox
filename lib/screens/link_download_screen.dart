@@ -9,7 +9,6 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
-import 'package:retro_toolbox/services/file_ops.dart';
 import 'package:retro_toolbox/services/link_download.dart';
 import 'package:retro_toolbox/services/link_inbox_server.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
@@ -159,9 +158,9 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
   void _download() {
     final url = _url.text.trim(), dir = _dir;
     if (dir == null || !isValidDownloadUrl(url)) return;
-    // A free name now, so the task's path (for Extract) is where the file lands.
-    final name = FileOps.uniqueName(dir, safeFileName(_name.text));
-    final dest = p.join(dir, name);
+    // Reserved now, so the task's path (for Extract) is where the file lands.
+    final dest = reserveDownloadPath(dir, safeFileName(_name.text));
+    final name = p.basename(dest);
     final id = TaskQueueService.enqueueTransfer(
       ref,
       context,
@@ -170,7 +169,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
       verb: 'Downloading',
       label: name,
       outputPath: dest,
-      run: (onProgress) => downloadToFile(url: url, destPath: dest, onProgress: onProgress),
+      run: downloadJob(url, dest),
     );
     _started.add(id);
   }

@@ -112,11 +112,14 @@ jobs:
         run: |
           set -euo pipefail
           RAR=$(python3 -c "import json; print(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='rar').removeprefix('file://'))")
-          # Refuse "../" entries: the plugin's flags allow writing outside the
-          # destination, and handheld firmwares run apps as root.
+          # Refuse "../" entries, absolute paths and writes through symlinks: the
+          # plugin's flags allow writing outside the destination, and handheld
+          # firmwares run apps as root.
           cp "$RAR/src/rar_native.c" "$RUNNER_TEMP/rar_native.c"
-          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
-          grep -q 'ARCHIVE_EXTRACT_SECURE_NODOTDOT' "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags"; exit 1; }
+          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
+          for f in NODOTDOT SYMLINKS NOABSOLUTEPATHS; do
+            grep -q "ARCHIVE_EXTRACT_SECURE_$f" "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags ($f)"; exit 1; }
+          done
           gcc -O2 -shared -fPIC -Wl,-soname,librar_native.so -Wl,-rpath,'$ORIGIN' \
             "$RUNNER_TEMP/rar_native.c" -I"$RAR/src" -larchive -o build/linux/arm64/release/bundle/lib/librar_native.so
           ldd build/linux/arm64/release/bundle/lib/librar_native.so

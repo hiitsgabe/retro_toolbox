@@ -89,9 +89,11 @@ class ProcessList {
     return all.where((e) => !(e.rssBytes == 0 && _isKernel(e.pid, e.ppid, e.cmdline))).toList()..sort((a, b) => b.rssBytes.compareTo(a.rssBytes));
   }
 
-  Future<EndResult> end(int pid, {bool force = false}) async {
+  /// Signals [pid] unless it is protected. With [name], a pid now held by a
+  /// different process (reused since the list was read) counts as gone.
+  Future<EndResult> end(int pid, {bool force = false, String? name}) async {
     final entry = (await _scan()).where((e) => e.pid == pid).firstOrNull;
-    if (entry == null) return EndResult.alreadyGone;
+    if (entry == null || (name != null && entry.name != name)) return EndResult.alreadyGone;
     if (entry.protected) return EndResult.refused;
     if (!Process.killPid(pid, force ? ProcessSignal.sigkill : ProcessSignal.sigterm)) return EndResult.alreadyGone;
     for (var i = 0; i < 30; i++) {

@@ -18,8 +18,9 @@ bool isValidDownloadUrl(String input) {
 /// are illegal on common filesystems replaced, control characters dropped.
 String safeFileName(String raw) {
   final base = raw.split(RegExp(r'[/\\]')).last;
-  final name = base.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim();
-  return name.replaceAll(RegExp(r'[_ ]'), '').isEmpty || name == '.' || name == '..' ? 'download' : name;
+  // Leading dots dropped too: a hidden file would be easy to lose (and as root, dotfiles matter).
+  final name = base.replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '').replaceAll(RegExp(r'[<>:"/\\|?*]'), '_').trim().replaceFirst(RegExp(r'^[.\s]+'), '');
+  return name.replaceAll(RegExp(r'[_ ]'), '').isEmpty ? 'download' : name;
 }
 
 /// The decoded last path segment of [url], through [safeFileName].
@@ -82,9 +83,18 @@ Future<String?> probeFileName(String url) async {
 }
 
 /// Downloads [url] to `<destPath>.part`, resuming it with a Range request when
-/// it already exists, then renames it to [destPath] (a free name if taken).
-/// Throws [HttpException] on a non-2xx response; the `.part` is kept for a retry.
-Future<void> downloadToFile({required String url, required String destPath, required FileOpsProgress onProgress, HttpClient? client}) async {
+/// it already exists, then renames it to exactly [destPath] (a [StateError] if
+/// something is there now). Throws [HttpException] on a non-2xx response and
+/// [TimeoutException] when the server goes quiet for [idleTimeout] (a dropped
+/// Wi-Fi with no reset would otherwise hold the transfer slot forever); the
+/// `.part` is kept for a retry.
+Future<void> downloadToFile({
+  required String url,
+  required String destPath,
+  required FileOpsProgress onProgress,
+  HttpClient? client,
+  Duration idleTimeout = const Duration(seconds: 60),
+}) async {
   final http = client ?? HttpClient();
   http.connectionTimeout = const Duration(seconds: 30);
   // Resume offsets are raw bytes on disk, so never let the transfer be compressed.
@@ -96,7 +106,7 @@ Future<void> downloadToFile({required String url, required String destPath, requ
     req.followRedirects = true;
     req.headers.set(HttpHeaders.acceptEncodingHeader, 'identity');
     if (have > 0) req.headers.set(HttpHeaders.rangeHeader, 'bytes=$have-');
-    final res = await req.close();
+    final res = await req.close().timeout(idleTimeout);
     if (res.statusCode < 200 || res.statusCode > 299) {
       await res.drain<void>();
       // A stale .part the server can no longer range over would fail every retry.
@@ -111,9 +121,14 @@ Future<void> downloadToFile({required String url, required String destPath, requ
     onProgress(done, total);
     await part.parent.create(recursive: true);
     final sink = part.openWrite(mode: resumed ? FileMode.append : FileMode.write);
+    var stalled = false;
     try {
       // addStream applies backpressure, so a slow disk can't buffer the file in RAM.
-      await sink.addStream(res.map((chunk) {
+      // A stall ends the stream cleanly, so the .part keeps everything received; it fails below.
+      await sink.addStream(res.timeout(idleTimeout, onTimeout: (s) {
+        stalled = true;
+        s.close();
+      }).map((chunk) {
         done += chunk.length;
         onProgress(done, total);
         return chunk;
@@ -121,10 +136,37 @@ Future<void> downloadToFile({required String url, required String destPath, requ
     } finally {
       await sink.close();
     }
-    final dir = p.dirname(destPath);
-    await part.rename(p.join(dir, FileOps.uniqueName(dir, p.basename(destPath))));
+    if (stalled) throw TimeoutException('No data for ${idleTimeout.inSeconds}s', idleTimeout);
+    // The task's path (for Extract) is destPath, so land there or fail.
+    if (FileSystemEntity.typeSync(destPath) != FileSystemEntityType.notFound) throw StateError('${p.basename(destPath)} already exists');
+    await part.rename(destPath);
     onProgress(done, done);
   } finally {
     if (client == null) http.close(force: true);
   }
+}
+
+/// Paths handed out by [reserveDownloadPath] whose download hasn't finished this session.
+final _reserved = <String>{};
+
+/// A free path for [name] in [dir]: no file, no leftover `.part` and no
+/// unfinished download this session uses it. Held until its [downloadJob] succeeds.
+String reserveDownloadPath(String dir, String name) {
+  final path = p.join(dir, FileOps.uniqueName(dir, name, reserved: (path) => _reserved.contains(path) || File('$path.part').existsSync()));
+  _reserved.add(path);
+  return path;
+}
+
+/// The task-queue job for [url] to [destPath] (from [reserveDownloadPath]).
+/// Its first run drops any `.part` there (some other file's); a retry runs the
+/// same job and resumes what the failed run left.
+Future<void> Function(FileOpsProgress) downloadJob(String url, String destPath) {
+  var first = true;
+  return (onProgress) async {
+    final part = File('$destPath.part');
+    if (first && part.existsSync()) await part.delete();
+    first = false;
+    await downloadToFile(url: url, destPath: destPath, onProgress: onProgress);
+    _reserved.remove(destPath);
+  };
 }

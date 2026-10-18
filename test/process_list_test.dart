@@ -61,6 +61,17 @@ void main() {
     expect(await ProcessList(procRoot: root.path, selfPid: 50).end(999), EndResult.alreadyGone);
   });
 
+  test('end with a name leaves a pid now held by another process alone', () async {
+    final child = await Process.start('sleep', ['30']);
+    addTearDown(() => child.kill(ProcessSignal.sigkill));
+    final root = fakeProc({
+      1: (ppid: 0, name: 'init', cmd: '/sbin/init', rssKb: 2000),
+      child.pid: (ppid: 1, name: 'other', cmd: 'other', rssKb: 100),
+    });
+    expect(await ProcessList(procRoot: root.path, selfPid: 50).end(child.pid, name: 'retroarch'), EndResult.alreadyGone);
+    expect(await child.exitCode.timeout(const Duration(milliseconds: 200), onTimeout: () => -1), -1, reason: 'was signalled');
+  });
+
   test('ancestors with invalid UTF-8 are still parsed and keep their parents protected', () async {
     final root = fakeProc({
       1: (ppid: 0, name: 'init', cmd: '/sbin/init', rssKb: 2000),

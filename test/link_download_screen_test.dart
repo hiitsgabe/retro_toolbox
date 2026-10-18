@@ -134,4 +134,20 @@ void main() {
     expect(extractType, TaskType.archiveExtraction);
     expect(extractParams['archivePath'], state.outputPath);
   });
+
+  testWidgets('two downloads of the same name get their own files', (t) async {
+    final dir = Directory.systemTemp.createTempSync('link_dl_screen');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    SharedPreferences.setMockInitialValues({'link_download_dir': dir.path});
+    final queue = _FakeQueue();
+    final (c, server) = await pump(t, overrides: [taskQueueProvider.overrideWith((ref) => queue)]);
+    server.ctrl.add('https://h/a.zip');
+    await t.pump();
+    for (var i = 0; i < 2; i++) {
+      await t.tap(downloadButton());
+      await t.pump();
+    }
+    final paths = [for (final (id, _, _) in queue.enqueued) c.read(gameStateManagerProvider)[id]!.outputPath];
+    expect(paths, ['${dir.path}${Platform.pathSeparator}a.zip', '${dir.path}${Platform.pathSeparator}a (1).zip']);
+  });
 }

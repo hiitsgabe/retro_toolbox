@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:path/path.dart' as path;
@@ -236,7 +237,17 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     state = {...state, game.gameId: GameState(game: game, isTransfer: isTransfer, outputPath: outputPath)};
   }
 
-  static bool _isArchive(String? path) => path != null && ArchiveExtractService.archiveKind(path) != ArchiveKind.unsupported;
+  /// Whether this build can extract `.rar`; a test seam.
+  @visibleForTesting
+  static bool Function() rarSupported = ArchiveExtractService.rarSupported;
+
+  static bool _isArchive(String? path) =>
+      path != null &&
+      switch (ArchiveExtractService.archiveKind(path)) {
+        ArchiveKind.zip => true,
+        ArchiveKind.rar => rarSupported(),
+        ArchiveKind.unsupported => false,
+      };
 
   void _initGames(List<Game> games) {
     final updates = <String, GameState>{};

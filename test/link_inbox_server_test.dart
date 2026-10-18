@@ -52,6 +52,28 @@ void main() {
     expect(await first.timeout(const Duration(seconds: 2)), 'https://h/b.zip');
   });
 
+  test('only the page itself, reached by IP, may post', () async {
+    Future<int> postWith(Map<String, String> headers) async {
+      final req = await client.post('127.0.0.1', server.port!, '/link');
+      headers.forEach(req.headers.set);
+      req.add(utf8.encode('url=https%3A%2F%2Fh%2Fa.zip'));
+      final res = await req.close();
+      await res.drain<void>();
+      return res.statusCode;
+    }
+
+    final seen = <String>[];
+    final sub = server.links.listen(seen.add);
+    final port = server.port!;
+    expect(await postWith({'origin': 'http://evil.example'}), 403);
+    expect(await postWith({'host': 'evil.example:$port'}), 403);
+    expect(await postWith({'host': 'evil.example:$port', 'origin': 'http://evil.example:$port'}), 403);
+    expect(await postWith({'origin': 'http://127.0.0.1:$port'}), 200);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(seen, ['https://h/a.zip']);
+    await sub.cancel();
+  });
+
   test('invalid or oversized posts are rejected and emit nothing', () async {
     final seen = <String>[];
     final sub = server.links.listen(seen.add);

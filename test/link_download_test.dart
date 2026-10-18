@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/link_download.dart';
 
 void main() {
@@ -30,6 +32,38 @@ void main() {
     expect(fileNameFromContentDisposition("attachment; filename*=ISO-8859-1''caf%E9.zip; filename=\"cafe.zip\""), 'cafe.zip');
     expect(fileNameFromContentDisposition("attachment; filename*=ISO-8859-1''caf%E9.zip"), isNull);
   });
+
+  test('leading dots are dropped so a saved file is never hidden', () {
+    expect(safeFileName('.profile'), 'profile');
+    expect(safeFileName(' . x.zip'), 'x.zip');
+    expect(safeFileName('...'), 'download');
+  });
+
+  test('reserveDownloadPath skips names with a leftover .part or held by another download', () {
+    final dir = Directory.systemTemp.createTempSync('reserve');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/a.zip.part').writeAsStringSync('some other file');
+    expect(p.basename(reserveDownloadPath(dir.path, 'a.zip')), 'a (1).zip');
+    expect(p.basename(reserveDownloadPath(dir.path, 'a.zip')), 'a (2).zip');
+  });
+
+  test('a stalled response times out and keeps the .part for a retry', () async {
+    final stall = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => stall.close(force: true));
+    stall.listen((req) async {
+      if (req.uri.path == '/headers') return; // never answers
+      req.response.contentLength = 100000;
+      req.response.add(List.filled(20000, 1)); // big enough that the server really flushes it
+      await req.response.flush(); // then stalls
+    });
+    final dir = Directory.systemTemp.createTempSync('link_stall');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    Future<void> get(String path, String dest) =>
+        downloadToFile(url: 'http://127.0.0.1:${stall.port}$path', destPath: dest, onProgress: (_, __) {}, idleTimeout: const Duration(milliseconds: 300));
+    await expectLater(get('/headers', '${dir.path}/h.bin'), throwsA(isA<TimeoutException>()));
+    await expectLater(get('/body', '${dir.path}/b.bin'), throwsA(isA<TimeoutException>()));
+    expect(File('${dir.path}/b.bin.part').lengthSync(), 20000);
+  }, timeout: const Timeout(Duration(seconds: 10)));
 
   group('network', () {
     late HttpServer server;
@@ -110,12 +144,26 @@ void main() {
       expect(File(dest).readAsBytesSync(), source);
     });
 
-    test('an existing destination is not overwritten', () async {
+    test('finishes at exactly destPath and never overwrites a file there', () async {
       final dest = '${tmp.path}/out.bin';
       File(dest).writeAsStringSync('old');
-      await downloadToFile(url: url(), destPath: dest, onProgress: (_, __) {});
+      await expectLater(downloadToFile(url: url(), destPath: dest, onProgress: (_, __) {}), throwsA(isA<StateError>()));
       expect(File(dest).readAsStringSync(), 'old');
-      expect(File('${tmp.path}/out (1).bin').readAsBytesSync(), source);
+      expect(File('${tmp.path}/out (1).bin').existsSync(), isFalse);
+    });
+
+    test('a job drops a leftover .part on its first run and resumes on a retry', () async {
+      final dest = '${tmp.path}/out.bin';
+      final job = downloadJob(url(), dest);
+      File('$dest.part').writeAsBytesSync(List.filled(400, 7)); // some other file's
+      status = 500;
+      await expectLater(job((_, __) {}), throwsA(isA<HttpException>()));
+      expect(File('$dest.part').existsSync(), isFalse);
+      File('$dest.part').writeAsBytesSync(source.sublist(0, 400)); // what a failed run left
+      status = 200;
+      await job((_, __) {});
+      expect(lastRange, 'bytes=400-');
+      expect(File(dest).readAsBytesSync(), source);
     });
 
     test('a 404 throws and leaves the destination missing', () async {

@@ -66,7 +66,7 @@ class LinkInboxServer {
           ..write(_page);
         await req.response.close();
       } else if (req.method == 'POST' && path == '/link') {
-        await _receive(req);
+        await (_fromOwnPage(req) ? _receive(req) : _reply(req, HttpStatus.forbidden));
       } else {
         await _reply(req, HttpStatus.notFound);
       }
@@ -76,6 +76,14 @@ class LinkInboxServer {
         await _reply(req, HttpStatus.internalServerError);
       } catch (_) {}
     }
+  }
+
+  /// Browsers send Origin on every POST, so another site's page can't push a
+  /// link; an IP-only Host shuts out DNS rebinding (a name pointing here).
+  static bool _fromOwnPage(HttpRequest req) {
+    final host = req.headers.value(HttpHeaders.hostHeader), origin = req.headers.value('origin');
+    if (host == null || InternetAddress.tryParse(Uri.tryParse('http://$host')?.host ?? '') == null) return false;
+    return origin == null || origin == 'http://$host';
   }
 
   Future<void> _receive(HttpRequest req) async {

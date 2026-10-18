@@ -21,11 +21,13 @@ class _Procs extends ProcessList {
   _Procs(this.entries);
   final List<ProcessEntry> entries;
   final ended = <int>[];
+  final names = <String?>[];
   @override
   Future<List<ProcessEntry>> list() async => entries;
   @override
-  Future<EndResult> end(int pid, {bool force = false}) async {
+  Future<EndResult> end(int pid, {bool force = false, String? name}) async {
     ended.add(pid);
+    names.add(name);
     return EndResult.ended;
   }
 }
@@ -94,6 +96,13 @@ void main() {
     await t.tap(find.text('Cancel'));
     await t.pumpAndSettle();
     expect(procs.ended, isEmpty);
+
+    // The row's name goes along, so a pid reused since the list was read is left alone.
+    await t.tap(find.descendant(of: tailRow, matching: find.byIcon(Icons.close)));
+    await t.pumpAndSettle();
+    await t.tap(find.text('End'));
+    await t.pumpAndSettle();
+    expect(procs.names, ['tailscaled']);
   });
 
   testWidgets('d-pad steps through the cards to Advanced and opens it', (t) async {

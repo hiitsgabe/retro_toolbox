@@ -21,7 +21,8 @@ Future<List<Mount>> readMounts(List<({String label, String path})> paths) async 
   final out = <Mount>[];
   for (final p in paths) {
     try {
-      final r = await Process.run('df', ['-Pk', p.path]);
+      // A dead network mount can hang df; skip it rather than freeze the refresh.
+      final r = await Process.run('df', ['-Pk', p.path]).timeout(const Duration(seconds: 5));
       if (r.exitCode != 0) continue;
       final lines = r.stdout.toString().trim().split('\n');
       if (lines.length < 2) continue;
@@ -49,7 +50,7 @@ Future<List<Mount>> _defaultMounts() async {
 }
 
 Future<String?> _defaultSsid() async {
-  final r = await Process.run('iwgetid', ['-r']);
+  final r = await Process.run('iwgetid', ['-r']).timeout(const Duration(seconds: 5));
   final s = r.stdout.toString().trim();
   return r.exitCode == 0 && s.isNotEmpty ? s : null;
 }
@@ -157,9 +158,9 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
 
   Future<void> _end(ProcessEntry e) async {
     if (!await _confirm('End ${e.name}?', 'Anything unsaved in it is lost.', 'End') || !mounted) return;
-    var r = await _processes.end(e.pid);
+    var r = await _processes.end(e.pid, name: e.name);
     if (r == EndResult.stillRunning && mounted && await _confirm('${e.name} is still running', 'Force end stops it at once.', 'Force end')) {
-      r = await _processes.end(e.pid, force: true);
+      r = await _processes.end(e.pid, force: true, name: e.name);
     }
     if (!mounted) return;
     final msg = switch (r) {
