@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/services/update_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 
-enum UpdatePhase { idle, checking, upToDate, available, downloading, ready, error, installFailed }
+enum UpdatePhase { idle, checking, upToDate, available, downloading, ready, error, installFailed, portMaster }
 
 class UpdateState {
   const UpdateState(this.phase, {this.release, this.asset, this.progress = 0, this.message});
@@ -42,6 +42,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
   // The note only exists on the handheld, and only the launcher writes it.
   static UpdateState _initial(UpdateService service, bool handheld) {
+    if (handheld && service.installedByPortMaster()) return const UpdateState(UpdatePhase.portMaster);
     final reason = handheld ? service.failedInstallReason() : null;
     return reason == null
         ? const UpdateState(UpdatePhase.idle)
@@ -83,7 +84,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   }
 
   Future<void> check(String currentVersion) async {
-    if (state.busy) return;
+    if (state.busy || state.phase == UpdatePhase.portMaster) return;
     state = const UpdateState(UpdatePhase.checking);
     try {
       final release = await _service.fetchLatest();

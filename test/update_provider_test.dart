@@ -1,4 +1,5 @@
 import 'dart:ffi' show Abi;
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -64,12 +65,43 @@ void main() {
       expect(s.message, contains("Can't read"));
     });
   });
+
+  group('PortMaster install', () {
+    final release = ReleaseInfo.fromJson(releaseJson(tag: 'v9.9.9'));
+
+    test('a port.json in the port folder hands updates to PortMaster', () async {
+      final root = Directory.systemTemp.createTempSync('pm_port');
+      addTearDown(() => root.deleteSync(recursive: true));
+      File('${root.path}/port.json').writeAsStringSync('{}');
+      final service = _Fetching(release, portRoot: root.path);
+      final n = UpdateNotifier(service, handheld: true, os: 'linux', abi: Abi.linuxArm64);
+      expect(n.state.phase, UpdatePhase.portMaster);
+      await n.checkOnOpen('0.1.0');
+      await n.check('0.1.0');
+      expect(n.state.phase, UpdatePhase.portMaster);
+      expect(service.fetches, 0);
+    });
+
+    test('without port.json the handheld updater still checks', () async {
+      final root = Directory.systemTemp.createTempSync('gh_port');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final service = _Fetching(release, portRoot: root.path);
+      final n = UpdateNotifier(service, handheld: true, os: 'linux', abi: Abi.linuxArm64);
+      expect(n.state.phase, UpdatePhase.idle);
+      await n.check('0.1.0');
+      expect(service.fetches, 1);
+    });
+  });
 }
 
 /// Talks to the (mocked) platform channel; only the release fetch is faked.
 class _Fetching extends UpdateService {
-  _Fetching(this.release) : super(portRoot: '/nowhere');
+  _Fetching(this.release, {super.portRoot = '/nowhere'});
   final ReleaseInfo release;
+  int fetches = 0;
   @override
-  Future<ReleaseInfo> fetchLatest() async => release;
+  Future<ReleaseInfo> fetchLatest() async {
+    fetches++;
+    return release;
+  }
 }

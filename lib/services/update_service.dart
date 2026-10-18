@@ -374,6 +374,16 @@ class UpdateService {
     }
   }
 
+  /// Installed from PortMaster's catalog: only its zip puts port.json in the
+  /// port folder. PortMaster updates those installs, not the app.
+  bool installedByPortMaster() {
+    try {
+      return File(p.join(portRoot, 'port.json')).existsSync();
+    } on FileSystemException {
+      return false;
+    }
+  }
+
   /// Why the launcher couldn't install the staged update (the first line of
   /// `.update/FAILED`), or null when there is no such note.
   String? failedInstallReason() {

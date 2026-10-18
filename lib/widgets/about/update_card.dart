@@ -56,6 +56,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
           : ('Update downloaded', 'Install version ${release?.version}'),
       UpdatePhase.installFailed => ('Update not installed', state.message ?? ''),
       UpdatePhase.error => (release == null ? 'Update check failed' : 'Update failed', state.message ?? ''),
+      UpdatePhase.portMaster => ('Updates through PortMaster', 'Installed from PortMaster: update Retro Toolbox there'),
     };
 
     final (String label, VoidCallback? onPressed) = switch (state.phase) {
@@ -130,6 +131,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
               const SizedBox(height: 12),
               LinearProgressIndicator(value: state.progress > 0 ? state.progress : null),
             ],
+            if (state.phase != UpdatePhase.portMaster) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
@@ -153,6 +155,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
                     )
                   : FilledButton.tonal(focusNode: _action, onPressed: onPressed, child: Text(label)),
             ),
+            ],
           ],
         ),
       ),

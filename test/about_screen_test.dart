@@ -167,6 +167,17 @@ void main() {
     expect(_button('Close app'), findsOneWidget);
   });
 
+  testWidgets('handheld from PortMaster: no update button, updates come from PortMaster', (t) async {
+    _mockVersion(t, '0.2.8');
+    final port = Directory.systemTemp.createTempSync('pm_about');
+    addTearDown(() => port.deleteSync(recursive: true));
+    File('${port.path}/port.json').writeAsStringSync('{}');
+    await _pumpAbout(t, _FakeService(portRoot: port.path), handheld: true, os: 'linux');
+
+    expect(find.text('Updates through PortMaster'), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+  });
+
   group('handheld: the launcher could not install a staged update', () {
     late Directory port;
     setUp(() {
