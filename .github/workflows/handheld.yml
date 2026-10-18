@@ -112,14 +112,16 @@ jobs:
         run: |
           set -euo pipefail
           RAR=$(python3 -c "import json; print(next(p['rootUri'] for p in json.load(open('.dart_tool/package_config.json'))['packages'] if p['name']=='rar').removeprefix('file://'))")
-          # Refuse "../" entries, absolute paths and writes through symlinks: the
-          # plugin's flags allow writing outside the destination, and handheld
-          # firmwares run apps as root.
+          # Refuse "../" entries and skip symlink/hardlink entries: the plugin's
+          # flags allow writing outside the destination (through a link it just
+          # made, or an absolute hardlink target), and handheld firmwares run
+          # apps as root. SECURE_SYMLINKS / NOABSOLUTEPATHS don't fit: the plugin
+          # extracts to absolute dest/entry paths, and /roms may be a symlink.
           cp "$RAR/src/rar_native.c" "$RUNNER_TEMP/rar_native.c"
-          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_SECURE_SYMLINKS | ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
-          for f in NODOTDOT SYMLINKS NOABSOLUTEPATHS; do
-            grep -q "ARCHIVE_EXTRACT_SECURE_$f" "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags ($f)"; exit 1; }
-          done
+          sed -i 's/ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/ARCHIVE_EXTRACT_SECURE_NODOTDOT | ARCHIVE_EXTRACT_TIME | ARCHIVE_EXTRACT_PERM/' "$RUNNER_TEMP/rar_native.c"
+          sed -i '/const char\* entry_path = archive_entry_pathname(entry);/a\        if (archive_entry_filetype(entry) == AE_IFLNK || archive_entry_hardlink(entry)) { archive_read_data_skip(a); continue; }' "$RUNNER_TEMP/rar_native.c"
+          grep -q 'ARCHIVE_EXTRACT_SECURE_NODOTDOT' "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not harden rar_native.c extract flags"; exit 1; }
+          grep -q 'AE_IFLNK || archive_entry_hardlink' "$RUNNER_TEMP/rar_native.c" || { echo "::error::could not make rar_native.c skip link entries"; exit 1; }
           gcc -O2 -shared -fPIC -Wl,-soname,librar_native.so -Wl,-rpath,'$ORIGIN' \
             "$RUNNER_TEMP/rar_native.c" -I"$RAR/src" -larchive -o build/linux/arm64/release/bundle/lib/librar_native.so
           ldd build/linux/arm64/release/bundle/lib/librar_native.so
