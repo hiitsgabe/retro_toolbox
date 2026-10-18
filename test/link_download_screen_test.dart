@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -78,6 +79,18 @@ void main() {
     // The queue polls on a periodic timer; stop it before the test ends.
     await t.pumpWidget(const SizedBox());
     c.dispose();
+  });
+
+  testWidgets('a long link from the phone is shown in full', (t) async {
+    final (_, server) = await pump(t);
+    final link = 'https://h/a.zip?sig=${'x' * 600}';
+    server.ctrl.add(link);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 500));
+    final helper = find.descendant(of: find.byType(InputDecorator).first, matching: find.byWidgetPredicate((w) => w is Text && w.data == link));
+    final paragraph = t.renderObject<RenderParagraph>(helper);
+    expect(paragraph.didExceedMaxLines, isFalse, reason: 'helper text was cut off');
+    expect(t.takeException(), isNull);
   });
 
   testWidgets('a non-http link is refused', (t) async {

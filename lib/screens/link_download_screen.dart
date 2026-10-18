@@ -229,6 +229,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
   Widget _form(BuildContext context) {
     final url = _url.text;
     final invalid = url.trim().isNotEmpty && !isValidDownloadUrl(url);
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -249,8 +250,8 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
             prefixIcon: const Icon(Icons.link),
             suffixIcon: IconButton(icon: const Icon(Icons.content_paste), tooltip: 'Paste', onPressed: _paste),
             errorText: invalid ? 'Enter an http or https link' : null,
-            helperText: _showFull && !invalid ? url.trim() : null,
-            helperMaxLines: 4,
+            // A plain Text, not helperText: the decorator ellipsizes that, and the user must see exactly the link they confirm.
+            helper: _showFull && !invalid ? Text(url.trim(), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)) : null,
             border: const OutlineInputBorder(),
             isDense: true,
           ),
