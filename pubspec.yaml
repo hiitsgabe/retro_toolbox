@@ -1,7 +1,7 @@
 name: retro_toolbox
 description: Retro Toolbox
 publish_to: none
-version: 0.3.2+32
+version: 0.3.3+33
 
 environment:
   flutter: ">=3.35.7"
