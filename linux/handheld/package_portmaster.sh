@@ -5,7 +5,8 @@
 #   Retro Toolbox.sh
 #   retrotoolbox/  (the app + port.json, README.md, gameinfo.xml,
 #                   screenshot.png, licenses/)
-# Never ships a catalog. Needs dpkg (Debian/Ubuntu): the bundled libraries'
+# A bundled catalog stays (hidden until the user enables the Games Library).
+# Needs dpkg (Debian/Ubuntu): the bundled libraries'
 # licenses come from the packages they were copied from.
 # Usage: package_portmaster.sh <ports dir> <out.zip> <flutter-pi source dir>
 set -euo pipefail
@@ -21,8 +22,6 @@ cp -R "$SRC/." "$STAGE/"
 P="$STAGE/retrotoolbox"
 [ -f "$STAGE/Retro Toolbox.sh" ] && [ -f "$P/flutter-pi" ] || { echo "not a built port: $SRC" >&2; exit 1; }
 cp "$META/port.json" "$META/README.md" "$META/gameinfo.xml" "$META/screenshot.png" "$P/"
-C="$P/data/flutter_assets/assets/catalog/consoles.json"
-[ -f "$C" ] && echo '[]' > "$C"
 
 L="$P/licenses"
 mkdir -p "$L"
