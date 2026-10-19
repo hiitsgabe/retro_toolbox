@@ -15,6 +15,7 @@ class GameGrid extends ConsumerStatefulWidget {
 class _GameGridState extends ConsumerState<GameGrid> {
   double _aspectRatio = 0.75;
   String? _lastConsoleId;
+  String? _aspectUrl; // first boxart the ratio was measured from
 
   int _calculateCrossAxisCount(double screenWidth, double screenHeight, double aspectRatio) {
     try {
@@ -40,30 +41,36 @@ class _GameGridState extends ConsumerState<GameGrid> {
     }
   }
 
+  // Once per first-boxart URL (build runs on every selection change), on a
+  // small decode, and the listener removes itself so it holds nothing.
   void _updateAspectRatio(String? firstBoxartUrl) {
-    if (firstBoxartUrl != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        try {
-          CachedNetworkImageProvider(firstBoxartUrl).resolve(const ImageConfiguration()).addListener(
-                ImageStreamListener(
-                  (ImageInfo info, bool _) {
-                    final aspectRatio = info.image.width / info.image.height;
-                    if (mounted && aspectRatio != _aspectRatio) {
-                      setState(() {
-                        _aspectRatio = aspectRatio.clamp(0.5, 1.5);
-                      });
-                    }
-                  },
-                  onError: (exception, stackTrace) {
-                    debugPrint('Error loading boxart for aspect ratio calculation: $exception');
-                  },
-                ),
-              );
-        } catch (e) {
-          debugPrint('Error fetching image to calculate ratio: $e');
-        }
-      });
-    }
+    if (firstBoxartUrl == null || firstBoxartUrl == _aspectUrl) return;
+    _aspectUrl = firstBoxartUrl;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        final stream = ResizeImage(CachedNetworkImageProvider(firstBoxartUrl), width: 64).resolve(const ImageConfiguration());
+        late final ImageStreamListener listener;
+        listener = ImageStreamListener(
+          (ImageInfo info, bool _) {
+            stream.removeListener(listener);
+            final aspectRatio = info.image.width / info.image.height;
+            info.dispose();
+            if (mounted && aspectRatio != _aspectRatio) {
+              setState(() {
+                _aspectRatio = aspectRatio.clamp(0.5, 1.5);
+              });
+            }
+          },
+          onError: (exception, stackTrace) {
+            stream.removeListener(listener);
+            debugPrint('Error loading boxart for aspect ratio calculation: $exception');
+          },
+        );
+        stream.addListener(listener);
+      } catch (e) {
+        debugPrint('Error fetching image to calculate ratio: $e');
+      }
+    });
   }
 
   @override
@@ -78,6 +85,7 @@ class _GameGridState extends ConsumerState<GameGrid> {
       final currentConsoleId = games.first.consoleId;
       if (_lastConsoleId != currentConsoleId) {
         _aspectRatio = 0.75;
+        _aspectUrl = null;
         _lastConsoleId = currentConsoleId;
       }
       _updateAspectRatio(games.first.boxart);

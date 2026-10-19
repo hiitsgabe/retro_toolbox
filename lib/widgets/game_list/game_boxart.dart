@@ -3,6 +3,7 @@ import 'package:photo_view/photo_view.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
+import 'package:retro_toolbox/utils/image_memory.dart';
 
 /// Full-screen box art viewer; closes on tap, and on B (it is a popup route).
 Future<void> showBoxartViewer(BuildContext context, Game game) {
@@ -106,10 +107,17 @@ class GameBoxart extends StatelessWidget {
         onTap: () => showBoxartViewer(context, game),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(1),
-          child: CachedNetworkImage(
+          // Decode at the on-screen size: full-size covers made the grid hold
+          // GBs of image memory. The viewer above loads the full image.
+          child: LayoutBuilder(builder: (context, box) => CachedNetworkImage(
             imageUrl: boxart,
             width: size,
             height: size,
+            memCacheWidth: thumbnailDecodeWidth(
+              box.hasBoundedWidth ? box.maxWidth : size,
+              box.hasBoundedHeight ? box.maxHeight : size,
+              MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
+            ),
             fit: BoxFit.cover,
             errorWidget: (context, url, error) => _DefaultPlaceholder(size: size),
             errorListener: (value) => debugPrint('Error loading boxart: $value'),
@@ -128,7 +136,7 @@ class GameBoxart extends StatelessWidget {
                 ),
               ),
             ),
-          ),
+          )),
         ),
       ),
     );
