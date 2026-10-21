@@ -76,6 +76,23 @@ void main() {
     expect(defaultSeason('espn', DateTime(2026, 3, 1)), 2026);
   });
 
+  test('PatcherInfo reads the visual capabilities, off when absent', () {
+    final visual = PatcherInfo.fromJson({
+      'game_id': 'g',
+      'supports_logos': true,
+      'supports_blank_unused': true,
+      'image_slots': ['title', 'menu'],
+    });
+    expect(visual.supportsLogos, isTrue);
+    expect(visual.supportsBlankUnused, isTrue);
+    expect(visual.imageSlots, ['title', 'menu']);
+    expect(visual.hasVisuals, isTrue);
+    final plain = PatcherInfo.fromJson({'game_id': 'g'});
+    expect(plain.hasVisuals, isFalse);
+    expect(imageSlotLabel('title').$1, 'Title screen');
+    expect(imageSlotLabel('other').$1, 'Other');
+  });
+
   test('PatcherInfo carries the game languages, empty when it has none', () {
     final withLangs = PatcherInfo.fromJson({'game_id': 'g', 'languages': ['en', 'pt']});
     expect(withLangs.languages, ['en', 'pt']);

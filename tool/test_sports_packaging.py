@@ -140,6 +140,53 @@ def test_options_reach_patch():
     assert seen == {'language': 'pt'}
 
 
+def test_patch_options_follow_the_patcher_capabilities():
+    class Visual:
+        languages = ('en', 'pt')
+        supports_logos = True
+        supports_blank_unused = True
+        image_slots = ('title', 'menu')
+
+    class Plain:
+        pass
+
+    job = {'language': 'pt', 'logos': False, 'blank_unused': True,
+           'images': {'title': '/a.png', 'menu': ''}}
+    assert main._patch_options(job, Visual()) == {
+        'language': 'pt', 'logos': False, 'blank_unused': True, 'images': {'title': '/a.png'}}
+    # A patcher without the capabilities never sees the keywords.
+    assert main._patch_options(job, Plain()) == {}
+    # Absent flags are left to the library's defaults.
+    assert main._patch_options({}, Visual()) == {}
+
+
+def test_assets_with_logos_copies_the_bundle_and_adds_the_overrides():
+    base, logos = tempfile.mkdtemp(), tempfile.mkdtemp()
+    open(os.path.join(base, 'w202-english.ppf'), 'wb').write(b'ppf')
+    open(os.path.join(logos, 'x.png'), 'wb').write(b'png')
+    assert main._assets_with_logos(base, {}) == base
+    d = main._assets_with_logos(base, {'359': os.path.join(logos, 'x.png')})
+    assert d != base
+    assert open(os.path.join(d, 'w202-english.ppf'), 'rb').read() == b'ppf'
+    assert open(os.path.join(d, 'logos', '359.png'), 'rb').read() == b'png'
+
+
+def test_with_data_file_extracts_a_zip_and_cleans_up():
+    src = tempfile.mkdtemp()
+    _disc(src)
+    z = os.path.join(src, 'Game.zip')
+    with zipfile.ZipFile(z, 'w') as zf:
+        for n in ('Game (Track 1).bin', 'Game (Track 2).bin', 'Game.cue'):
+            zf.write(os.path.join(src, n), n)
+    path, cleanup = main._with_data_file(z)
+    assert path.endswith('Game (Track 1).bin') and os.path.isfile(path)
+    cleanup()
+    assert not os.path.exists(path)
+    plain, cleanup = main._with_data_file(os.path.join(src, 'Game.cue'))
+    assert plain == os.path.join(src, 'Game.cue')
+    cleanup()
+
+
 if __name__ == '__main__':
     for name, fn in list(globals().items()):
         if name.startswith('test_'):

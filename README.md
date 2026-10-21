@@ -115,6 +115,23 @@ Latest builds are on the [Actions page](../../actions) (GitHub login required).
 
 ## Project Structure
 
+### Sports — look of the patched game
+
+Games whose art the library can change (Winning Eleven 2002 today) get a
+**Look** step before the patch runs:
+
+- **Team logos** draws each team's logo as its in-game flag; tap a crest on the
+  Teams step to use your own PNG for that team instead.
+- **Blank unused slots** empties the name and flag of every team slot the
+  league leaves unfilled.
+- **Screen art** shows the ROM's own title, main-menu and boot images, each
+  laid out the way the game keeps it. *Replace* takes a PNG of the same layout,
+  *Branded* draws Retro Toolbox art with the league name and season into that
+  screen, and the reset arrow goes back to the original.
+
+The branded images are painted by `python_app/default_art.py` from the logo and
+font in `python_app/rrp_assets/`.
+
 ### Sports — custom leagues
 
 The **Sports** menu patches game rosters with real teams via the

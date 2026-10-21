@@ -105,7 +105,8 @@ def run_3dsconv(job):
         _report(progress_file, 'ERROR:Conversion produced no CIA — check that boot9.bin is correct for this ROM')
 
 
-SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_analyze', 'sports_patch'}
+SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_analyze', 'sports_patch',
+                'sports_images', 'sports_default_images'}
 
 
 def _configure_ssl():
@@ -262,15 +263,75 @@ def _patch_with_packaging(patcher, rom_path, output_dir, label, rosters_for, on_
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _build_patcher(cls, cache_dir, provider):
+def _build_patcher(cls, cache_dir, provider, assets_dir=None):
     """Instantiate a patcher, handing it the app's bundled data files when it
-    takes an `assets_dir` (the PSX soccer patcher's full menu translation)."""
+    takes an `assets_dir` (the PSX soccer patcher's full menu translation), or
+    the per-job assets_dir given."""
     import inspect
     kwargs = {}
     if 'assets_dir' in inspect.signature(cls.__init__).parameters:
-        import rrp_assets
-        kwargs['assets_dir'] = os.path.dirname(rrp_assets.__file__)
+        if assets_dir is None:
+            import rrp_assets
+            assets_dir = os.path.dirname(rrp_assets.__file__)
+        kwargs['assets_dir'] = assets_dir
     return cls(cache_dir=cache_dir, provider=provider, **kwargs)
+
+
+def _assets_with_logos(base_dir, team_logos):
+    """A copy of the bundled assets dir plus `logos/<team_id>.png` for each
+    entry of team_logos ({team_id: png path}): the library reads a team's logo
+    override from there. Returns base_dir itself when there is nothing to add."""
+    import shutil
+    import tempfile
+    if not team_logos:
+        return base_dir
+    d = tempfile.mkdtemp(prefix='rrp_assets_')
+    for name in os.listdir(base_dir):
+        src = os.path.join(base_dir, name)
+        if os.path.isfile(src):
+            shutil.copy2(src, d)
+    os.makedirs(os.path.join(d, 'logos'))
+    for team_id, path in team_logos.items():
+        shutil.copy2(path, os.path.join(d, 'logos', f'{int(team_id)}.png'))
+    return d
+
+
+def _patch_options(job, patcher):
+    """The keyword options for patcher.patch from a sports_patch job: only the
+    ones this patcher declares, so an older library or another game never sees
+    a keyword it does not take."""
+    options = {}
+    language = job.get('language')
+    if language and getattr(patcher, 'languages', ()):
+        options['language'] = language
+    if getattr(patcher, 'supports_logos', False) and 'logos' in job:
+        options['logos'] = bool(job['logos'])
+    if getattr(patcher, 'supports_blank_unused', False) and job.get('blank_unused'):
+        options['blank_unused'] = True
+    images = job.get('images') or {}
+    if getattr(patcher, 'image_slots', ()) and images:
+        options['images'] = {slot: path for slot, path in images.items() if path}
+    return options
+
+
+def _with_data_file(rom_path):
+    """(data file path, cleanup) for a ROM that may be a zip: the zip's data
+    track is extracted to a temp dir that cleanup removes."""
+    import shutil
+    import tempfile
+    import zipfile
+    rom_path = str(rom_path)
+    if not rom_path.lower().endswith('.zip'):
+        return rom_path, lambda: None
+    work = tempfile.mkdtemp(prefix='rrp_zip_')
+    with zipfile.ZipFile(rom_path) as zf:
+        zf.extractall(work)
+    inner = [os.path.join(dp, f) for dp, _, fs in os.walk(work) for f in fs]
+    data_file = _find_data_file(inner)
+    if not data_file:
+        shutil.rmtree(work, ignore_errors=True)
+        raise ValueError('No patchable image inside the zip')
+    return data_file, lambda: shutil.rmtree(work, ignore_errors=True)
 
 
 def _map_rosters(patcher, data, slot_mapping, rom):
@@ -349,9 +410,19 @@ def run_sports(job):
 
     try:
         if jtype == 'list_patchers':
-            # `languages` lives on the patcher class, not in PatcherInfo.
-            emit([{**p.to_dict(), 'languages': list(getattr(rrp.get_patcher(p.game_id), 'languages', ()))}
-                  for p in rrp.list_patchers()])
+            # `languages` and the visual capabilities live on the patcher
+            # class, not in PatcherInfo.
+            out = []
+            for p in rrp.list_patchers():
+                cls = rrp.get_patcher(p.game_id)
+                out.append({
+                    **p.to_dict(),
+                    'languages': list(getattr(cls, 'languages', ())),
+                    'supports_logos': bool(getattr(cls, 'supports_logos', False)),
+                    'supports_blank_unused': bool(getattr(cls, 'supports_blank_unused', False)),
+                    'image_slots': list(getattr(cls, 'image_slots', ())),
+                })
+            emit(out)
             _report(progress_file, 'DONE')
             return
 
@@ -400,10 +471,34 @@ def run_sports(job):
             _report(progress_file, 'DONE')
             return
 
+        if jtype == 'sports_images':
+            # The current screen art of each slot, as PNGs laid out the way the
+            # game keeps them, for the app to preview and let the user edit.
+            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            data_file, cleanup = _with_data_file(job['rom_path'])
+            try:
+                written = patcher.export_images(Path(data_file), Path(job['out_dir']))
+            finally:
+                cleanup()
+            emit({p.stem: str(p) for p in written})
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_default_images':
+            import default_art
+            emit(default_art.render_default_images(
+                game_id, job.get('league') or '', job.get('season') or '', job['out_dir']))
+            _report(progress_file, 'DONE')
+            return
+
         if jtype == 'sports_patch':
             patcher = _build_patcher(rrp.get_patcher(game_id), cache_dir, provider)
-            language = job.get('language')
-            options = {'language': language} if language and getattr(patcher, 'languages', ()) else {}
+            team_logos = job.get('team_logos') or {}
+            if team_logos and getattr(patcher, 'assets_dir', None) is not None:
+                patcher = _build_patcher(
+                    rrp.get_patcher(game_id), cache_dir, provider,
+                    assets_dir=_assets_with_logos(str(patcher.assets_dir), team_logos))
+            options = _patch_options(job, patcher)
             with open(job['rosters_file']) as f:
                 data = rrp.league_data_from_dict(json.load(f))
             raw_map = job.get('slot_mapping')

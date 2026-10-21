@@ -13,6 +13,15 @@ class PatcherInfo {
   /// the game has no translation choice.
   final List<String> languages;
 
+  /// The patch can draw each team's logo into the game's flag slots.
+  final bool supportsLogos;
+
+  /// The patch can empty the team slots the league leaves unused.
+  final bool supportsBlankUnused;
+
+  /// Screen art slots (`title`, `menu`, ...) whose image the patch can replace.
+  final List<String> imageSlots;
+
   const PatcherInfo({
     required this.gameId,
     required this.platform,
@@ -20,7 +29,13 @@ class PatcherInfo {
     required this.requiresSlotMapping,
     required this.providers,
     this.languages = const [],
+    this.supportsLogos = false,
+    this.supportsBlankUnused = false,
+    this.imageSlots = const [],
   });
+
+  /// Whether the wizard has a visuals step to show for this game.
+  bool get hasVisuals => supportsLogos || supportsBlankUnused || imageSlots.isNotEmpty;
 
   factory PatcherInfo.fromJson(Map<String, dynamic> j) => PatcherInfo(
         gameId: (j['game_id'] ?? '') as String,
@@ -29,6 +44,9 @@ class PatcherInfo {
         requiresSlotMapping: (j['requires_slot_mapping'] ?? false) as bool,
         providers: ((j['providers'] as List?) ?? const []).map((e) => '$e').toList(),
         languages: ((j['languages'] as List?) ?? const []).map((e) => '$e').toList(),
+        supportsLogos: (j['supports_logos'] ?? false) as bool,
+        supportsBlankUnused: (j['supports_blank_unused'] ?? false) as bool,
+        imageSlots: ((j['image_slots'] as List?) ?? const []).map((e) => '$e').toList(),
       );
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';
@@ -38,6 +56,16 @@ const _languageNames = {'en': 'English', 'es': 'Español', 'fr': 'Français', 'p
 
 /// Display name for a patch language code; the upper-cased code when unknown.
 String languageName(String code) => _languageNames[code] ?? code.toUpperCase();
+
+const _slotNames = {
+  'title': ('Title screen', 'The logo and ball on the title screen.'),
+  'menu': ('Main menu', 'The ball, banner and year beside the main menu.'),
+  'boot': ('Boot screens', 'The publisher and licence screens shown at start-up.'),
+};
+
+/// Display name and one-line description of a screen art slot.
+(String, String) imageSlotLabel(String slot) =>
+    _slotNames[slot] ?? ('${slot[0].toUpperCase()}${slot.substring(1)}', 'Screen art the patch can replace.');
 
 /// A selectable soccer league. Built-in leagues come from the library; custom
 /// ones come from the user's JSON file and carry an ESPN [code] so the worker

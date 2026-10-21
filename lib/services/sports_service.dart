@@ -150,6 +150,52 @@ class SportsService {
     return f.path;
   }
 
+  /// A fresh folder under the system temp dir for one batch of images.
+  static Future<String> _imageDir(String kind) async {
+    final dir = p.join(Directory.systemTemp.path, 'rrp_images', '${kind}_${DateTime.now().microsecondsSinceEpoch}');
+    await Directory(dir).create(recursive: true);
+    return dir;
+  }
+
+  /// The ROM's current screen art, one PNG per slot: {slot: path}.
+  static Future<Map<String, String>> exportImages({required String gameId, required String romPath}) async {
+    final out = _tmp('images');
+    final data = await _runData(
+      tag: 'images_${gameId.hashCode.abs()}',
+      job: {
+        'type': 'sports_images',
+        'game_id': gameId,
+        'rom_path': romPath,
+        'out_dir': await _imageDir('rom'),
+        'cache_dir': await _cacheDir(),
+      },
+      outputFile: out,
+    );
+    return Map<String, String>.from(data as Map);
+  }
+
+  /// Retro Toolbox-branded art for every slot, with the league and season
+  /// drawn in: {slot: path}.
+  static Future<Map<String, String>> defaultImages({
+    required String gameId,
+    required String league,
+    required int season,
+  }) async {
+    final out = _tmp('default_images');
+    final data = await _runData(
+      tag: 'default_images_${gameId.hashCode.abs()}',
+      job: {
+        'type': 'sports_default_images',
+        'game_id': gameId,
+        'league': league,
+        'season': season,
+        'out_dir': await _imageDir('branded'),
+      },
+      outputFile: out,
+    );
+    return Map<String, String>.from(data as Map);
+  }
+
   static Future<PatchResult> patchRom({
     required String gameId,
     required String provider,
@@ -159,6 +205,10 @@ class SportsService {
     required String rostersFile,
     List<SlotMapping>? slotMapping,
     String? language,
+    bool? logos,
+    bool blankUnused = false,
+    Map<String, String> images = const {},
+    Map<int, String> teamLogos = const {},
     void Function(double)? onProgress,
     void Function(String)? onStatus,
   }) async {
@@ -173,6 +223,10 @@ class SportsService {
         'output_dir': outputDir,
         'label': label,
         if (language != null) 'language': language,
+        if (logos != null) 'logos': logos,
+        if (blankUnused) 'blank_unused': true,
+        if (images.isNotEmpty) 'images': images,
+        if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},
         'rosters_file': rostersFile,
         'slot_mapping': slotMapping?.map((m) => m.toJson()).toList(),
         'cache_dir': await _cacheDir(),

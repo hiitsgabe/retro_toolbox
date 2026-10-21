@@ -37,16 +37,39 @@ class SportPatcherWizardScreen extends ConsumerStatefulWidget {
   @visibleForTesting
   final int initialStep;
 
-  const SportPatcherWizardScreen({super.key, required this.info, this.initialDoc, this.initialStep = 0});
+  /// Screen art previews ({slot: png path}) to show on the Look step without
+  /// exporting them from a ROM. Tests and screenshots only.
+  @visibleForTesting
+  final Map<String, String>? initialImages;
+
+  const SportPatcherWizardScreen({
+    super.key,
+    required this.info,
+    this.initialDoc,
+    this.initialStep = 0,
+    this.initialImages,
+  });
 
   @override
   ConsumerState<SportPatcherWizardScreen> createState() => _WizardState();
 }
 
-enum _Step { rosters, teams, rom, patch }
+enum _Step { rosters, teams, rom, look, patch }
+
+/// A screen art slot's replacement: a PNG the user picked, or the branded
+/// art the app generated.
+typedef _ImagePick = ({String path, bool branded});
 
 class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
-  final List<_Step> _steps = const [_Step.rosters, _Step.teams, _Step.rom, _Step.patch];
+  // The look step exists only for games whose logos or screen art the patch
+  // can change.
+  late final List<_Step> _steps = [
+    _Step.rosters,
+    _Step.teams,
+    _Step.rom,
+    if (widget.info.hasVisuals) _Step.look,
+    _Step.patch,
+  ];
   late int _stepIndex = widget.initialStep;
   int get _index => _stepIndex;
   // A swap armed on the teams step must not outlive the step.
@@ -68,6 +91,25 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   late RosterDoc? _doc = widget.initialDoc;
   String? _romPath;
   String? _outputDir;
+
+  // -- Look step state ----------------------------------------------------
+  bool _useLogos = true;
+  bool _blankUnused = false;
+
+  /// The ROM's current art per slot, exported for [_romImagesFor].
+  late Map<String, String> _romImages = widget.initialImages ?? const {};
+  String? _romImagesFor;
+  bool _loadingImages = false;
+
+  /// Per slot, the image replacing the ROM's; absent = keep the original.
+  final Map<String, _ImagePick> _imagePicks = {};
+
+  /// Branded art generated for the current league and season, by slot.
+  Map<String, String>? _brandedImages;
+  String? _brandedFor;
+
+  /// Team id → PNG path replacing that team's downloaded logo.
+  final Map<int, String> _teamLogos = {};
 
   // Catalog lookup: if the user's console catalog has this game, offer a
   // download instead of a manual file pick.
@@ -276,6 +318,105 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     setState(() => _romPath = path);
   }
 
+  /// Export the chosen ROM's screen art for the look step's previews, once
+  /// per ROM. Failure leaves the cards without a preview and shows the error.
+  Future<void> _loadRomImages() async {
+    final rom = _romPath;
+    if (rom == null || info.imageSlots.isEmpty || _romImagesFor == rom || _loadingImages) return;
+    setState(() {
+      _loadingImages = true;
+      _error = null;
+    });
+    try {
+      final images = await SportsService.exportImages(gameId: info.gameId, romPath: rom);
+      if (!mounted) return;
+      setState(() {
+        _romImages = images;
+        _romImagesFor = rom;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Screen art preview: $e');
+    } finally {
+      if (mounted) setState(() => _loadingImages = false);
+    }
+  }
+
+  /// The branded art for the current league and season, generated once.
+  Future<Map<String, String>> _brandedArt() async {
+    final key = '${_doc?.leagueName}|$_season';
+    if (_brandedImages != null && _brandedFor == key) return _brandedImages!;
+    final images = await SportsService.defaultImages(
+      gameId: info.gameId,
+      league: _doc?.leagueName ?? '',
+      season: _season,
+    );
+    _brandedImages = images;
+    _brandedFor = key;
+    return images;
+  }
+
+  Future<void> _useBranded(Iterable<String> slots) async {
+    setState(() {
+      _loadingImages = true;
+      _error = null;
+    });
+    try {
+      final art = await _brandedArt();
+      if (!mounted) return;
+      setState(() {
+        for (final slot in slots) {
+          final path = art[slot];
+          if (path != null) _imagePicks[slot] = (path: path, branded: true);
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Retro Toolbox art: $e');
+    } finally {
+      if (mounted) setState(() => _loadingImages = false);
+    }
+  }
+
+  Future<void> _replaceImage(String slot) async {
+    final path = await pickFile(context, title: 'Select a PNG for the ${imageSlotLabel(slot).$1.toLowerCase()}', extensions: ['png']);
+    if (path == null || !mounted) return;
+    setState(() => _imagePicks[slot] = (path: path, branded: false));
+  }
+
+  /// Pick a PNG for a team's logo, or go back to the downloaded one.
+  Future<void> _changeTeamLogo(RosterTeam t) async {
+    final current = _teamLogos[t.id];
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Choose a PNG…'),
+              subtitle: Text('Replaces the logo drawn for ${t.name}.'),
+              onTap: () => Navigator.pop(ctx, 'pick'),
+            ),
+            if (current != null)
+              ListTile(
+                leading: const Icon(Icons.restart_alt),
+                title: const Text('Use the downloaded logo'),
+                onTap: () => Navigator.pop(ctx, 'reset'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'reset') {
+      setState(() => _teamLogos.remove(t.id));
+      return;
+    }
+    final path = await pickFile(context, title: 'Select a logo PNG for ${t.name}', extensions: ['png']);
+    if (path == null || !mounted) return;
+    setState(() => _teamLogos[t.id] = path);
+  }
+
   /// Default output folder: the console's download dir when the ROM came from
   /// the library, otherwise next to the picked ROM.
   String _defaultOutputDir() {
@@ -315,6 +456,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         rostersFile: rostersFile,
         slotMapping: slotMapping,
         language: _language,
+        logos: info.supportsLogos ? _useLogos : null,
+        blankUnused: info.supportsBlankUnused && _blankUnused,
+        images: {for (final e in _imagePicks.entries) e.key: e.value.path},
+        teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
         onProgress: (v) => setState(() => _progress = v),
         onStatus: (s) => setState(() => _status = s),
       );
@@ -336,6 +481,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         return _doc != null && _doc!.teams.isNotEmpty;
       case _Step.rom:
         return _romPath != null;
+      case _Step.look:
+        return true;
       case _Step.patch:
         return false;
     }
@@ -357,6 +504,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _fetch();
     } else {
       setState(() => _index++);
+      if (_step == _Step.look) _loadRomImages();
     }
   }
 
@@ -483,6 +631,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         _Step.rosters => 'Rosters',
         _Step.teams => 'Teams',
         _Step.rom => 'ROM',
+        _Step.look => 'Look',
         _Step.patch => 'Patch',
       };
 
@@ -508,6 +657,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _Step.rosters => _rostersStep(theme),
       _Step.teams => _teamsStep(theme),
       _Step.rom => _romStep(theme),
+      _Step.look => _lookStep(theme),
       _Step.patch => _patchStep(theme),
     };
     return Padding(
@@ -779,17 +929,50 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   Widget _teamCrest(ThemeData theme, RosterTeam t) {
     final url = t.logoUrl;
-    if (url.isEmpty) {
-      return CircleAvatar(child: Text(t.name.isEmpty ? '?' : t.name[0]));
-    }
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: CachedNetworkImage(
+    final override = _teamLogos[t.id];
+    final fallback = CircleAvatar(child: Text(t.name.isEmpty ? '?' : t.name[0]));
+    final Widget crest;
+    if (override != null) {
+      crest = Image.file(File(override), fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
+    } else if (url.isEmpty) {
+      crest = fallback;
+    } else {
+      crest = CachedNetworkImage(
         imageUrl: url,
         fit: BoxFit.contain,
         placeholder: (_, __) => const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
-        errorWidget: (_, __, ___) => CircleAvatar(child: Text(t.name.isEmpty ? '?' : t.name[0])),
+        errorWidget: (_, __, ___) => fallback,
+      );
+    }
+    if (!info.supportsLogos) return SizedBox(width: 40, height: 40, child: crest);
+    // The crest is a button: the patch draws it into the game, so it can be
+    // swapped for the user's own PNG here.
+    return Tooltip(
+      message: override == null ? 'Replace logo' : 'Custom logo · tap to change',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _changeTeamLogo(t),
+        child: SizedBox(
+          width: 44,
+          height: 44,
+          child: Stack(
+            children: [
+              Positioned.fill(child: Padding(padding: const EdgeInsets.all(2), child: crest)),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: override == null ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.edit, size: 10, color: override == null ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1012,6 +1195,155 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // -- Look: logos, unused slots, screen art -----------------------------
+
+  Widget _lookStep(ThemeData theme) {
+    final slots = info.imageSlots;
+    return ListView(
+      children: [
+        _sectionTitle(theme, Icons.palette_outlined, 'Look',
+            'Choose the team logos and screen art the patch draws into the game.'),
+        if (info.supportsLogos || info.supportsBlankUnused)
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              children: [
+                if (info.supportsLogos)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.shield_outlined),
+                    title: const Text('Team logos'),
+                    subtitle: const Text('Draw each team\'s logo as its in-game flag. Tap a crest on the Teams step to use your own PNG.'),
+                    value: _useLogos,
+                    onChanged: (v) => setState(() => _useLogos = v),
+                  ),
+                if (info.supportsBlankUnused)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.layers_clear_outlined),
+                    title: const Text('Blank unused slots'),
+                    subtitle: const Text('Teams the league does not fill get an empty name and flag instead of the game\'s originals.'),
+                    value: _blankUnused,
+                    onChanged: (v) => setState(() => _blankUnused = v),
+                  ),
+              ],
+            ),
+          ),
+        if (slots.isNotEmpty) ...[
+          Row(
+            children: [
+              Expanded(child: Text('Screen art', style: theme.textTheme.titleSmall)),
+              if (_loadingImages)
+                const Padding(
+                  padding: EdgeInsets.only(right: 12),
+                  child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+              FilledButton.tonalIcon(
+                onPressed: _loadingImages ? null : () => _useBranded(slots),
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Retro Toolbox art everywhere'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Each screen keeps its layout: edit the exported PNG in place, or let the app draw Retro Toolbox art with the league and season.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, c) {
+              final columns = c.maxWidth >= 520 ? 2 : 1;
+              final width = (c.maxWidth - 12 * (columns - 1)) / columns;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [for (final slot in slots) SizedBox(width: width, child: _slotCard(theme, slot))],
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _slotCard(ThemeData theme, String slot) {
+    final (name, description) = imageSlotLabel(slot);
+    final pick = _imagePicks[slot];
+    final shown = pick?.path ?? _romImages[slot];
+    final status = pick == null ? 'Original' : (pick.branded ? 'Retro Toolbox' : 'Custom PNG');
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 4 / 3,
+            child: Container(
+              color: const Color(0xFF0E0A1C),
+              padding: const EdgeInsets.all(8),
+              child: shown == null
+                  ? Center(
+                      child: _loadingImages
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(Icons.image_outlined, color: theme.colorScheme.onSurfaceVariant),
+                    )
+                  : Image.file(
+                      File(shown),
+                      key: ValueKey(shown),
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.none,
+                      errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: theme.colorScheme.onSurfaceVariant),
+                    ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+            child: Row(
+              children: [
+                Expanded(child: Text(name, style: theme.textTheme.titleSmall)),
+                Chip(
+                  label: Text(status),
+                  visualDensity: VisualDensity.compact,
+                  labelStyle: theme.textTheme.labelSmall,
+                  backgroundColor: pick == null ? null : theme.colorScheme.primaryContainer,
+                  side: BorderSide.none,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(description, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            // Wraps on narrow cards instead of overflowing.
+            child: OverflowBar(
+              spacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _replaceImage(slot),
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Replace'),
+                ),
+                TextButton.icon(
+                  onPressed: _loadingImages ? null : () => _useBranded([slot]),
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Branded'),
+                ),
+                if (pick != null)
+                  IconButton(
+                    tooltip: 'Back to the original',
+                    onPressed: () => setState(() => _imagePicks.remove(slot)),
+                    icon: const Icon(Icons.restart_alt),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
