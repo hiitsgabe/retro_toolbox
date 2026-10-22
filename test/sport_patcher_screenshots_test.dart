@@ -13,6 +13,7 @@ import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Renders the wizard's Teams and Look steps and the team editor with its
@@ -77,7 +78,8 @@ void main() {
     return (kits: {if (f.existsSync()) for (final k in kits.keys) k: f.path}, templates: <KitTemplate>[]);
   }
 
-  Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page) async {
+  Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page,
+      {Future<void> Function(WidgetTester t)? act}) async {
     SharedPreferences.setMockInitialValues({});
     final tmp = Directory.systemTemp.createTempSync('shots');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -109,6 +111,11 @@ void main() {
       ));
       await Future<void>.delayed(const Duration(milliseconds: 800));
       await t.pump();
+      if (act != null) {
+        await act(t);
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        await t.pump();
+      }
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await t.pump();
     });
@@ -127,6 +134,49 @@ void main() {
         initialImages: images.isEmpty ? null : images,
       );
 
+  /// The game's designs for the picker shot: `template_<n>.png` files from
+  /// the previews folder, named after the WE2002 jersey templates.
+  List<KitTemplate> designs() {
+    const names = {3: 'England', 22: 'Croatia', 41: 'Brazil', 42: 'Peru', 44: 'Paraguay', 46: 'Argentina', 62: 'Clas. Argentina', 82: 'Piemonte'};
+    return [
+      for (final e in names.entries)
+        if (File('$previews/template_${e.key}.png').existsSync())
+          KitTemplate(index: e.key, name: e.value, path: '$previews/template_${e.key}.png'),
+    ];
+  }
+
+  const pesInfo = PatcherInfo(
+    gameId: 'pes2013-ps2',
+    platform: 'ps2',
+    sport: 'soccer',
+    requiresSlotMapping: true,
+    providers: ['espn'],
+    supportsLogos: true,
+    supportsBlankUnused: true,
+    imageSlots: ['title', 'menu', 'loading', 'match'],
+    supportsKits: true,
+    supportsNationals: true,
+    nationalSlotBase: 1000,
+    slotGroups: [
+      SlotGroup('England', 0, 20),
+      SlotGroup('France', 20, 20),
+      SlotGroup('Italy', 40, 20),
+      SlotGroup('Netherlands', 60, 18),
+      SlotGroup('Spain', 78, 20),
+      SlotGroup('Other', 98, 41),
+    ],
+  );
+
+  const leagues = [
+    League(id: 2006, name: 'Brasileirão Série A', country: 'Brazil'),
+    League(id: 2001, name: 'Premier League', country: 'England'),
+    League(id: 2002, name: 'La Liga', country: 'Spain'),
+    League(id: 2004, name: 'Serie A', country: 'Italy'),
+    League(id: 2013, name: 'Eredivisie', country: 'Netherlands'),
+    League(id: 2005, name: 'Ligue 1', country: 'France'),
+    League(id: 2003, name: 'Bundesliga', country: 'Germany'),
+  ];
+
   // Steps: 0 ROM, 1 Rosters, 2 Teams, 3 Look, 4 Patch.
   testWidgets('teams step', (t) => shoot(t, 'wizard_teams', (i) => wizard(2, i)), skip: !enabled);
   testWidgets('look step', (t) => shoot(t, 'wizard_look', (i) => wizard(3, i)), skip: !enabled);
@@ -144,6 +194,45 @@ void main() {
         slot: 0,
         kitLoader: kitPreviews,
       ),
+    ),
+    skip: !enabled,
+  );
+  testWidgets(
+    'kit picker',
+    (t) => shoot(
+      t,
+      'kit_picker',
+      (_) => KitPickerSheet(
+        team: doc().teams.first,
+        info: info,
+        templates: designs(),
+        loader: kitPreviews,
+        romPath: '/roms/we2002.bin',
+        slot: 0,
+        initialHome: true,
+      ),
+    ),
+    skip: !enabled,
+  );
+  testWidgets(
+    'pes rosters step with several leagues',
+    (t) => shoot(
+      t,
+      'wizard_pes_leagues',
+      (_) => SportPatcherWizardScreen(
+        info: pesInfo,
+        initialStep: 1,
+        initialRomPath: '/roms/pes2013.iso',
+        initialLeagues: leagues,
+      ),
+      act: (t) async {
+        for (final name in ['Brasileirão Série A', 'Premier League', 'La Liga']) {
+          await t.tap(find.textContaining(name).first);
+          await t.pump();
+        }
+        await t.tap(find.textContaining('National teams').first);
+        await t.pump();
+      },
     ),
     skip: !enabled,
   );
