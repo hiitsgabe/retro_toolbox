@@ -25,7 +25,10 @@ class CoverFlow extends StatefulWidget {
   /// Card width / height. 1.0 = square (consoles); < 1 = portrait (game boxart).
   final double aspectRatio;
 
-  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0});
+  /// When this changes to an index, the flow animates there (an L1/R1 jump).
+  final int? jumpTo;
+
+  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0, this.jumpTo});
 
   @override
   State<CoverFlow> createState() => _CoverFlowState();
@@ -55,6 +58,13 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   }
 
   int get _last => widget.items.length - 1;
+
+  @override
+  void didUpdateWidget(CoverFlow old) {
+    super.didUpdateWidget(old);
+    final target = widget.jumpTo;
+    if (target != null && target != old.jumpTo) _animateTo(target);
+  }
 
   void _animateTo(int target) {
     _snapAnim = Tween<double>(begin: _position, end: target.clamp(0, _last).toDouble())

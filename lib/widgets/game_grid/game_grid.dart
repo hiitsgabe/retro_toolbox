@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
+import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 
 class GameGrid extends ConsumerStatefulWidget {
   const GameGrid({super.key});
@@ -12,7 +13,7 @@ class GameGrid extends ConsumerStatefulWidget {
   ConsumerState<GameGrid> createState() => _GameGridState();
 }
 
-class _GameGridState extends ConsumerState<GameGrid> {
+class _GameGridState extends ConsumerState<GameGrid> with JumpScroll<GameGrid> {
   double _aspectRatio = 0.75;
   String? _lastConsoleId;
   String? _aspectUrl; // first boxart the ratio was measured from
@@ -77,6 +78,7 @@ class _GameGridState extends ConsumerState<GameGrid> {
   Widget build(BuildContext context) {
     final catalogState = ref.watch(catalogProvider);
     final selectedConsoleId = ref.watch(appStateProvider).selectedConsole?.id ?? 'all';
+    listenJump();
 
     final games = catalogState.paginatedFilteredGames;
     final loadingMore = catalogState.loadingMore;
@@ -110,6 +112,7 @@ class _GameGridState extends ConsumerState<GameGrid> {
         },
         child: GridView.builder(
           key: PageStorageKey('game-grid-$selectedConsoleId'),
+          controller: jumpScroll,
           padding: EdgeInsets.zero,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,

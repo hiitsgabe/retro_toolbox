@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
+import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 
 class GameGridItem extends ConsumerStatefulWidget {
   final Game game;
@@ -14,22 +15,28 @@ class GameGridItem extends ConsumerStatefulWidget {
   final bool selectable;
   final bool autofocus;
 
+  /// Takes an L1/R1 jump to its game; off where the card cannot hold focus
+  /// (a cover flow face).
+  final bool jumpTarget;
+
   const GameGridItem({
     super.key,
     required this.game,
     this.aspectRatio = 0.75,
     this.selectable = true,
     this.autofocus = false,
+    this.jumpTarget = true,
   });
 
   @override
   ConsumerState<GameGridItem> createState() => _GameGridItemState();
 }
 
-class _GameGridItemState extends ConsumerState<GameGridItem> {
+class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<GameGridItem> {
   @override
   Widget build(BuildContext context) {
     final game = widget.game;
+    if (widget.jumpTarget) watchJump(game.gameId);
     final aspectRatio = widget.aspectRatio;
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final gameState = ref.watch(gameStateProvider(game));
@@ -58,6 +65,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> {
         game: game,
         selectable: widget.selectable,
         child: InkWell(
+          focusNode: jumpFocus,
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
           borderRadius: BorderRadius.circular(4),

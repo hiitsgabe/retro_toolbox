@@ -352,7 +352,12 @@ class _DpadScopeState extends State<DpadScope> {
     if (kDebugMode && !ctx.debugIsActive) return null;
     final box = ctx.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-    return node.rect;
+    // A focused InkWell keeps itself alive when its list scrolls it away, and
+    // the sliver gives kept-alive children a zero paint transform, so its rect
+    // is NaN until focus moves (an L1/R1 jump scrolls a frame before the
+    // target card takes focus).
+    final rect = node.rect;
+    return rect.isFinite ? rect : null;
   }
 
   // Not DismissIntent: a page route registers a disabled DismissIntent action

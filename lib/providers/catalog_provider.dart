@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,8 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/letter_jump.dart';
 
 final gameSelectionProvider = Provider.family<bool, String>((ref, gameId) {
   final catalogState = ref.watch(catalogProvider);
@@ -203,7 +206,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     state = state.copyWith(loadingMore: true);
 
     try {
-      final filteredAndPaginated = await _runFilterAndPaginate(skip: state.paginatedFilteredGames.length, limit: kDefaultCatalogDisplaySize);
+      final before = state.paginatedFilteredGames;
+      final filteredAndPaginated = await _runFilterAndPaginate(skip: before.length, limit: kDefaultCatalogDisplaySize);
+      // A letter jump or a new filter replaced the list meanwhile: this page
+      // no longer follows it.
+      if (!identical(state.paginatedFilteredGames, before)) return;
       state = state.copyWith(
         cachedFilteredGames: [...state.paginatedFilteredGames, ...filteredAndPaginated.games],
         cachedTotalCount: filteredAndPaginated.totalCount,
@@ -411,6 +418,33 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       availableCategories: {},
     );
     await loadCatalog(console);
+  }
+
+  /// L1/R1: the game to focus for a jump from [fromGame]'s first letter to the
+  /// next ([forward]) or previous letter among the filtered games, in the order
+  /// shown, with that letter. The shown list grows to a page past it so the
+  /// views can scroll to it. Null at the ends, with no games, or when the
+  /// catalog, filter or search changed while the list was being sorted.
+  Future<({String gameId, String letter})?> letterJump(Game? fromGame, {required bool forward}) async {
+    if (state.games.isEmpty) return null;
+    final games = state.games, filter = state.filter, text = state.filterText;
+    final all = await _runFilterAndPaginate(skip: 0, limit: 1 << 30);
+    if (!identical(state.games, games) || !identical(state.filter, filter) || state.filterText != text) return null;
+    final target = letterJumpTarget([for (final g in all.games) g.displayTitle], fromGame?.displayTitle, forward: forward);
+    if (target == null) return null;
+    // Straight from this sort, in this same synchronous step: a second fetch
+    // would race loadMoreItems. The shown rows stay the same objects (their
+    // per-game state is keyed by identity); only the missing tail is added.
+    final have = state.paginatedFilteredGames;
+    if (target.index >= have.length) {
+      final end = min(all.games.length, target.index + kDefaultCatalogDisplaySize);
+      state = state.copyWith(
+        cachedFilteredGames: [...have, ...all.games.sublist(have.length, end)],
+        cachedTotalCount: all.totalCount,
+        cachedHasMore: end < all.games.length,
+      );
+    }
+    return (gameId: all.games[target.index].gameId, letter: target.letter);
   }
 
   @override

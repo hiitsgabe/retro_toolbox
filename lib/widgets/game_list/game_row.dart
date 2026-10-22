@@ -11,6 +11,7 @@ import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_progress_bar.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
+import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 
 class GameRow extends ConsumerStatefulWidget {
   final Game game;
@@ -36,12 +37,13 @@ class GameRow extends ConsumerStatefulWidget {
   ConsumerState<GameRow> createState() => _GameRowState();
 }
 
-class _GameRowState extends ConsumerState<GameRow> {
+class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
   @override
   Widget build(BuildContext context) {
     final catalogNotifier = ref.read(catalogProvider.notifier);
 
     final gameId = widget.game.gameId;
+    watchJump(gameId);
     final gameState = ref.watch(gameStateProvider(widget.game));
     final isSelected = ref.watch(gameSelectionProvider(gameId));
 
@@ -53,6 +55,7 @@ class _GameRowState extends ConsumerState<GameRow> {
         game: widget.game,
         selectable: widget.selectable,
         child: InkWell(
+          focusNode: jumpFocus,
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
           onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),

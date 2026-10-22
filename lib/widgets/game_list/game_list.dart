@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
+import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 
 class GameList extends ConsumerStatefulWidget {
   const GameList({super.key});
@@ -11,11 +12,12 @@ class GameList extends ConsumerStatefulWidget {
   ConsumerState<GameList> createState() => _GameListState();
 }
 
-class _GameListState extends ConsumerState<GameList> {
+class _GameListState extends ConsumerState<GameList> with JumpScroll<GameList> {
   @override
   Widget build(BuildContext context) {
     final catalogState = ref.watch(catalogProvider);
     final selectedConsoleId = ref.watch(appStateProvider).selectedConsole?.id ?? 'all';
+    listenJump();
 
     final games = catalogState.paginatedFilteredGames;
     final loadingMore = catalogState.loadingMore;
@@ -112,6 +114,7 @@ class _GameListState extends ConsumerState<GameList> {
             },
             child: ListView.builder(
               key: PageStorageKey('game-list-$selectedConsoleId'),
+              controller: jumpScroll,
               padding: EdgeInsets.zero,
               itemCount: games.length + (loadingMore ? 1 : 0),
               cacheExtent: screenHeight * 1.5,

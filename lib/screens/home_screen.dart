@@ -6,6 +6,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_list.dart';
+import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
 import 'package:retro_toolbox/widgets/footer/footer.dart';
@@ -110,11 +111,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ),
                             )
-                          : switch (appState.viewMode) {
-                              ViewMode.grid => GameGrid(),
-                              ViewMode.coverflow => const GameCoverFlow(),
-                              ViewMode.list => GameList(),
-                            },
+                          : LetterJump(
+                              child: switch (appState.viewMode) {
+                                ViewMode.grid => GameGrid(),
+                                ViewMode.coverflow => const GameCoverFlow(),
+                                ViewMode.list => GameList(),
+                              },
+                            ),
             ),
             Footer(),
           ],
