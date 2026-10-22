@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -48,7 +49,9 @@ void main() {
             RosterTeam(
               teamRaw: {'id': i + 1, 'name': n, 'color': 'C3161C', 'alternate_color': '000000'},
               // Negative ids: no ESPN headshot lookups (network, sqflite) in the editor shot.
-              players: [for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': -(k + 1), 'name': 'Player $k'})],
+              players: [
+                for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': -(k + 1), 'name': 'Player $k'})
+              ],
               statsRaw: {},
               extraRaw: {},
             ),
@@ -89,7 +92,7 @@ void main() {
   }
 
   Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page,
-      {Future<void> Function(WidgetTester t)? act}) async {
+      {Future<void> Function(WidgetTester t)? act, Size size = const Size(1000, 1180)}) async {
     SharedPreferences.setMockInitialValues({});
     final tmp = Directory.systemTemp.createTempSync('shots');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -97,7 +100,7 @@ void main() {
     await t.runAsync(loadFonts);
     t.view.devicePixelRatio = 1;
     // Tall enough for the whole Look step without scrolling.
-    t.view.physicalSize = const Size(1000, 1180);
+    t.view.physicalSize = size;
     addTearDown(t.view.reset);
     final key = GlobalKey<NavigatorState>();
     final images = <String, String>{};
@@ -147,11 +150,19 @@ void main() {
   /// The game's designs for the picker shot: `template_<n>.png` files from
   /// the previews folder, named after the WE2002 jersey templates.
   List<KitTemplate> designs() {
+    // All of them when the folder lists them (`templates.json`, [{index, name}]).
+    final listed = File('$previews/templates.json');
+    if (listed.existsSync()) {
+      return [
+        for (final t in (jsonDecode(listed.readAsStringSync()) as List).cast<Map<String, dynamic>>())
+          if (File('$previews/template_${t['index']}.png').existsSync())
+            KitTemplate(index: t['index'] as int, name: '${t['name']}', path: '$previews/template_${t['index']}.png'),
+      ];
+    }
     const names = {3: 'England', 22: 'Croatia', 41: 'Brazil', 42: 'Peru', 44: 'Paraguay', 46: 'Argentina', 62: 'Clas. Argentina', 82: 'Piemonte'};
     return [
       for (final e in names.entries)
-        if (File('$previews/template_${e.key}.png').existsSync())
-          KitTemplate(index: e.key, name: e.value, path: '$previews/template_${e.key}.png'),
+        if (File('$previews/template_${e.key}.png').existsSync()) KitTemplate(index: e.key, name: e.value, path: '$previews/template_${e.key}.png'),
     ];
   }
 
@@ -221,6 +232,24 @@ void main() {
         slot: 0,
         initialHome: true,
       ),
+    ),
+    skip: !enabled,
+  );
+  testWidgets(
+    'kit picker, every design',
+    (t) => shoot(
+      t,
+      'kit_picker_all',
+      (_) => KitPickerSheet(
+        team: doc().teams.first,
+        info: info,
+        templates: designs(),
+        loader: kitPreviews,
+        romPath: '/roms/we2002.bin',
+        slot: 0,
+        initialHome: true,
+      ),
+      size: const Size(1000, 3000),
     ),
     skip: !enabled,
   );

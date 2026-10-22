@@ -324,6 +324,59 @@ void main() {
     expect(link().onPressed, isNull); // no ROM
   });
 
+  testWidgets('the game designs come one group and one page at a time', (t) async {
+    const we = PatcherInfo(
+      gameId: 'we2002',
+      platform: 'psx',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsKits: true,
+      kitTemplates: true,
+    );
+    final designs = [for (var i = 0; i < 95; i++) KitTemplate(index: i, name: 'Team $i (red)', path: '/t/$i.png')];
+    final tm = team();
+    tm.extraRaw['kits'] = {
+      'home': {'template': 70},
+      'away': null
+    };
+    await pump(t, KitPickerSheet(team: tm, info: we, templates: designs, loader: fakeLoader, romPath: '/roms/we.bin', slot: 0));
+
+    // Three groups; the sheet opens on the chosen design's group and page.
+    expect(find.text('Nations (54)'), findsOneWidget);
+    expect(find.text('Classics (9)'), findsOneWidget);
+    expect(find.text('Master League (32)'), findsOneWidget);
+    expect(find.text('1 / 4'), findsOneWidget); // Master League: 63..70 on page 1
+    expect(find.text('Team 70'), findsOneWidget); // the bracketed note is dropped
+    expect(find.text('Team 71'), findsNothing);
+
+    await t.tap(find.byTooltip('More designs'));
+    await t.pumpAndSettle();
+    expect(find.text('2 / 4'), findsOneWidget);
+    expect(find.text('Team 71'), findsOneWidget);
+    expect(find.text('Team 70'), findsNothing);
+
+    await t.tap(find.text('Nations (54)'));
+    await t.pumpAndSettle();
+    expect(find.text('1 / 7'), findsOneWidget);
+    expect(find.text('Team 0'), findsOneWidget);
+    expect(find.text('Team 8'), findsNothing);
+    expect(t.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.chevron_left)).onPressed, isNull);
+
+    await t.tap(find.text('Team 3'));
+    await t.pumpAndSettle();
+    expect(tm.extraRaw['kits']['home'], {'template': 3});
+  });
+
+  test('designGroups and designLabel', () {
+    final two = [const KitTemplate(index: 1, name: 'A', path: ''), const KitTemplate(index: 9, name: 'B', path: '')];
+    expect(designGroups('pes2013-ps2', two).map((g) => g.name), ['All']);
+    expect(designGroups('we2002', two).map((g) => g.name), ['Nations']);
+    expect(designGroups('we2002', const []), isEmpty);
+    expect(designLabel(const KitTemplate(index: 4, name: 'Peru (white, red sash)', path: '')), 'Peru');
+    expect(designLabel(const KitTemplate(index: 4, name: '', path: '')), 'Design 4');
+  });
+
   test('kitLabel and the default spec', () {
     expect(kitLabel(null), 'Default');
     expect(kitLabel({'pattern': 'sash', 'shirt': '#fff'}), 'Sash');

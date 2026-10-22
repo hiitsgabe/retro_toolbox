@@ -135,6 +135,43 @@ Future<void> saveTemplateZip(BuildContext context, String zip, {String? defaultD
 /// Chooses one team's home and away kit: a pattern in its colours, one of the
 /// game's designs, the user's PNG, or the default. Writes the choice into the
 /// team as it is made.
+/// A named run of a game's designs, by index: the picker shows one group at
+/// a time so a disc's whole catalogue never floods the sheet.
+typedef DesignGroup = ({String name, int first, int last});
+
+/// WE2002's 95 jersey files: the national sides, then the classic and
+/// all-star teams, then the Master League clubs.
+const we2002DesignGroups = <DesignGroup>[
+  (name: 'Nations', first: 0, last: 53),
+  (name: 'Classics', first: 54, last: 62),
+  (name: 'Master League', first: 63, last: 94),
+];
+
+/// Designs shown per page of a group: one row on a desktop-wide sheet.
+const designsPerPage = 8;
+
+/// The groups [templates] fall into for [gameId]; one unnamed group for a
+/// game without a known catalogue, and only groups that hold a design.
+List<DesignGroup> designGroups(String gameId, List<KitTemplate> templates) {
+  final known = gameId == 'we2002' ? we2002DesignGroups : const <DesignGroup>[];
+  final groups = [
+    for (final g in known)
+      if (templates.any((t) => t.index >= g.first && t.index <= g.last)) g,
+  ];
+  if (groups.isEmpty && templates.isNotEmpty) {
+    groups.add((name: 'All', first: templates.first.index, last: templates.last.index));
+  }
+  return groups;
+}
+
+/// A design's label without the colour note in brackets ("Ireland (green)"
+/// -> "Ireland").
+String designLabel(KitTemplate t) {
+  if (t.name.isEmpty) return 'Design ${t.index}';
+  final cut = t.name.indexOf(' (');
+  return cut > 0 ? t.name.substring(0, cut) : t.name;
+}
+
 class KitPickerSheet extends StatefulWidget {
   final RosterTeam team;
   final PatcherInfo info;
@@ -190,6 +227,31 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   bool _loadingCurrent = false;
   bool _downloading = false;
 
+  /// The game designs shown: one group, one page of it.
+  late List<DesignGroup> _groups = designGroups(widget.info.gameId, widget.templates);
+  int _group = 0, _page = 0;
+
+  List<KitTemplate> get _inGroup {
+    if (_groups.isEmpty) return const [];
+    final g = _groups[_group];
+    return [
+      for (final t in widget.templates)
+        if (t.index >= g.first && t.index <= g.last) t
+    ];
+  }
+
+  int get _pages => (_inGroup.length + designsPerPage - 1) ~/ designsPerPage;
+
+  /// Opens the designs on the page holding [index], if it is one of them.
+  void _showDesign(int? index) {
+    if (index == null) return;
+    final g = _groups.indexWhere((g) => index >= g.first && index <= g.last);
+    if (g < 0) return;
+    _group = g;
+    final at = _inGroup.indexWhere((t) => t.index == index);
+    _page = at < 0 ? 0 : at ~/ designsPerPage;
+  }
+
   Map<String, dynamic> _specOf(bool home) {
     final k = kitChoice(team, home: home);
     return _isSpec(k) ? Map<String, dynamic>.from(k as Map) : defaultKitSpec(team, home: home);
@@ -200,8 +262,19 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   Map<String, dynamic> get _cur => _spec[_home]!;
 
   @override
+  void didUpdateWidget(KitPickerSheet old) {
+    super.didUpdateWidget(old);
+    if (!identical(old.templates, widget.templates)) {
+      _groups = designGroups(widget.info.gameId, widget.templates);
+      _group = _page = 0;
+      _showDesign(kitTemplateIndex(_current));
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
+    _showDesign(kitTemplateIndex(_current));
     _loadPatterns();
     _refreshCurrent();
   }
@@ -442,20 +515,57 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
           ],
           if (widget.templates.isNotEmpty) ...[
             _heading(theme, 'Game designs'),
+            if (_groups.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final (n, g) in _groups.indexed)
+                      ChoiceChip(
+                        label: Text('${g.name} (${widget.templates.where((t) => t.index >= g.first && t.index <= g.last).length})'),
+                        selected: n == _group,
+                        onSelected: (_) => setState(() {
+                          _group = n;
+                          _page = 0;
+                        }),
+                      ),
+                  ],
+                ),
+              ),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final t in widget.templates)
-                  _tile(
-                    theme,
-                    label: t.name.isEmpty ? 'Design ${t.index}' : t.name,
-                    selected: template == t.index,
-                    image: t.path,
-                    onTap: () => _choose({'template': t.index}),
+                for (final t in _inGroup.skip(_page * designsPerPage).take(designsPerPage))
+                  Tooltip(
+                    message: t.name,
+                    child: _tile(
+                      theme,
+                      label: designLabel(t),
+                      selected: template == t.index,
+                      image: t.path,
+                      onTap: () => _choose({'template': t.index}),
+                    ),
                   ),
               ],
             ),
+            if (_pages > 1)
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Previous designs',
+                    onPressed: _page > 0 ? () => setState(() => _page--) : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Text('${_page + 1} / $_pages', style: theme.textTheme.labelMedium),
+                  IconButton(
+                    tooltip: 'More designs',
+                    onPressed: _page < _pages - 1 ? () => setState(() => _page++) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
           ],
           _heading(theme, 'Your PNG'),
           Align(
