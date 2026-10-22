@@ -58,8 +58,14 @@ void main() {
       final data = LeagueData.fromJson(const {
         'league': {'name': 'Test League', 'season': 2025},
         'teams': [
-          {'team': {'id': 1, 'name': 'Alpha'}, 'players': [1, 2, 3]},
-          {'team': {'id': 2, 'name': 'Beta'}, 'players': []},
+          {
+            'team': {'id': 1, 'name': 'Alpha'},
+            'players': [1, 2, 3]
+          },
+          {
+            'team': {'id': 2, 'name': 'Beta'},
+            'players': []
+          },
         ],
       });
       expect(data.leagueName, 'Test League');
@@ -93,6 +99,10 @@ void main() {
     expect(imageSlotLabel('loading').$1, 'Loading screen');
     expect(imageSlotLabel('match').$1, 'Match screen');
     expect(imageSlotLabel('other').$1, 'Other');
+    expect(imageSlotLabel('some_slot').$1, 'Some slot');
+    expect(imageSlotLabel('logo', 'nhl07-psp').$1, 'Game logo');
+    expect(imageSlotLabel('title', 'nhl07-psp').$2, contains('PRESS START'));
+    expect(imageSlotLabel('title', 'we2002').$1, 'Title screen');
   });
 
   test('PatcherInfo reads kits, nationals and slot groups; a kit-only game has visuals', () {
@@ -123,7 +133,10 @@ void main() {
   });
 
   test('PatcherInfo carries the game languages, empty when it has none', () {
-    final withLangs = PatcherInfo.fromJson({'game_id': 'g', 'languages': ['en', 'pt']});
+    final withLangs = PatcherInfo.fromJson({
+      'game_id': 'g',
+      'languages': ['en', 'pt']
+    });
     expect(withLangs.languages, ['en', 'pt']);
     expect(PatcherInfo.fromJson({'game_id': 'g'}).languages, isEmpty);
     expect(languageName('pt'), 'Português');

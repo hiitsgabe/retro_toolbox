@@ -445,6 +445,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'pes2013-ps2':
         import pes_art
         return pes_art.render_default_images(league, season, out_dir)
+    if game_id == 'nhl07-psp':
+        import nhl07_art
+        return nhl07_art.render_default_images(league, season, out_dir)
     import default_art
     return default_art.render_default_images(game_id, league, season, out_dir)
 

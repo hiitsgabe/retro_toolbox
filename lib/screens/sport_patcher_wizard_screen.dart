@@ -452,7 +452,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _replaceImage(String slot) async {
-    final path = await pickFile(context, title: 'Select a PNG for the ${imageSlotLabel(slot).$1.toLowerCase()}', extensions: ['png']);
+    final path = await pickFile(context, title: 'Select a PNG for the ${imageSlotLabel(slot, info.gameId).$1.toLowerCase()}', extensions: ['png']);
     if (path == null || !mounted) return;
     setState(() => _imagePicks[slot] = (path: path, branded: false));
   }
@@ -1491,7 +1491,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Widget _slotCard(ThemeData theme, String slot) {
-    final (name, description) = imageSlotLabel(slot);
+    final (name, description) = imageSlotLabel(slot, info.gameId);
     final pick = _imagePicks[slot];
     final shown = pick?.path ?? _romImages[slot];
     final status = pick == null ? 'Original' : (pick.branded ? 'Retro Toolbox' : 'Custom PNG');

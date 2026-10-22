@@ -75,8 +75,7 @@ class PatcherInfo {
         supportsNationals: (j['supports_nationals'] ?? false) as bool,
         nationalSlotBase: (j['national_slot_base'] as num?)?.toInt(),
         slotGroups: [
-          for (final g in ((j['slot_groups'] as List?) ?? const []))
-            SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
+          for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
       );
 
@@ -90,8 +89,7 @@ class SlotGroup {
   final int count;
   const SlotGroup(this.name, this.first, this.count);
 
-  factory SlotGroup.fromJson(Map<String, dynamic> j) =>
-      SlotGroup('${j['name'] ?? ''}', ((j['first'] ?? 0) as num).toInt(), ((j['count'] ?? 0) as num).toInt());
+  factory SlotGroup.fromJson(Map<String, dynamic> j) => SlotGroup('${j['name'] ?? ''}', ((j['first'] ?? 0) as num).toInt(), ((j['count'] ?? 0) as num).toInt());
 }
 
 /// One of the game's own jersey designs, previewed from the ROM.
@@ -121,9 +119,26 @@ const _slotNames = {
   'match': ('Match screen', 'Behind the match menus.'),
 };
 
-/// Display name and one-line description of a screen art slot.
-(String, String) imageSlotLabel(String slot) =>
-    _slotNames[slot] ?? ('${slot[0].toUpperCase()}${slot.substring(1)}', 'Screen art the patch can replace.');
+/// Per-game wording where a slot shows something else than in WE2002/PES.
+const _gameSlotNames = {
+  'nhl07-psp': {
+    'boot': ('Boot screen', 'The splash before the autosave prompt; the game draws its loading bar over it.'),
+    'title': ('Title screen', 'Behind PRESS START; the game writes its own lines in the bottom quarter.'),
+    'menu': ('Menu backdrop', 'Under every menu and the legal screen; keep the middle light, the game writes navy text there.'),
+    'logo': ('Game logo', 'The logo above the main menu, on transparency.'),
+    'player': ('Menu player', 'Beside the main menu, on transparency; the top 272 rows show.'),
+    'loading': ('Loading screens', 'All eight screens shown while a game loads.'),
+    'league_badge': ('League badge', 'Where the NHL shield shows on the legal and title screens.'),
+    'players_badge': ('Players badge', 'Where the NHLPA logo shows on the legal and title screens.'),
+  },
+};
+
+/// Display name and one-line description of a screen art slot, worded for
+/// [gameId] when that game has its own.
+(String, String) imageSlotLabel(String slot, [String? gameId]) =>
+    _gameSlotNames[gameId]?[slot] ??
+    _slotNames[slot] ??
+    ('${slot[0].toUpperCase()}${slot.substring(1).replaceAll('_', ' ')}', 'Screen art the patch can replace.');
 
 /// A selectable soccer league. Built-in leagues come from the library; custom
 /// ones come from the user's JSON file and carry an ESPN [code] so the worker
@@ -171,9 +186,7 @@ class RomInfo {
 
   factory RomInfo.fromJson(Map<String, dynamic> j) => RomInfo(
         isValid: (j['is_valid'] ?? false) as bool,
-        slots: ((j['slots'] as List?) ?? const [])
-            .map((e) => RomSlot.fromJson(Map<String, dynamic>.from(e as Map)))
-            .toList(),
+        slots: ((j['slots'] as List?) ?? const []).map((e) => RomSlot.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
       );
 }
 
@@ -235,6 +248,5 @@ class SlotMapping {
   final String teamName;
   const SlotMapping({required this.slotIndex, required this.teamId, this.teamName = ''});
 
-  Map<String, dynamic> toJson() =>
-      {'slot_index': slotIndex, 'team_id': teamId, 'team_name': teamName};
+  Map<String, dynamic> toJson() => {'slot_index': slotIndex, 'team_id': teamId, 'team_name': teamName};
 }

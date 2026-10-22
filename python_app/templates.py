@@ -99,6 +99,17 @@ def pes_screens():
     return out
 
 
+def nhl07_screens():
+    """[(file name, png, description)] for NHL 07's screen slots, from the
+    library's `screens.SLOTS` and their guides."""
+    from retro_roster_patcher.games.nhl07_psp.screens import SLOTS
+    return [(f'{s.name}.png', render(s.size[0], s.size[1], [(g.x, g.y, g.w, g.h, g.label) for g in s.guides]),
+             f'The {s.name} picture, {s.size[0]}x{s.size[1]} pixels: {s.description}. A box marked '
+             '"game" is where the game draws over your picture, so keep it plain there. A PNG of '
+             'another size is stretched to this size.')
+            for s in SLOTS]
+
+
 def kit_photo_guide():
     """(file name, png, description) of the layout a picked kit picture should have."""
     w, h = 96, 128
@@ -119,6 +130,8 @@ def files_for(game_id, supports_kits):
         files = we2002_screens(SLOTS)
     elif game_id == 'pes2013-ps2':
         files = pes_screens()
+    elif game_id == 'nhl07-psp':
+        files = nhl07_screens()
     else:
         raise ValueError(f'No templates for {game_id}')
     if supports_kits:
@@ -275,5 +288,5 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
 
 if __name__ == '__main__':
     import sys
-    for game in ('we2002', 'pes2013-ps2'):
+    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp'):
         print(*build(game, sys.argv[1], supports_kits=True))
