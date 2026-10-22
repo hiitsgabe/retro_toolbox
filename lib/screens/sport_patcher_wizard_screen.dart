@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +20,11 @@ import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_trivia.dart';
 import 'package:retro_toolbox/widgets/kit_picker.dart' show saveTemplateZip;
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/boxart_service.dart';
+import 'package:retro_toolbox/utils/rom_search.dart';
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
@@ -148,6 +154,11 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   RomCatalogMatch? _catalogMatch;
   String? _catalogDownloadDir;
 
+  /// A file of this game already on the device (see [_findLocalRom]), and its
+  /// cover art when the console has a box-art source.
+  String? _localRomPath;
+  String? _localRomBoxart;
+
   /// Team picked to swap on the teams step (its league in [_teamSwapDoc]);
   /// the next row chosen trades places with it. Null when not swapping.
   int? _teamSwapFrom;
@@ -216,14 +227,14 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   /// The rosters step has something to choose only for soccer (league), a
   /// multi-source game, or a source that exposes a season. Otherwise there's
   /// nothing to pick, so we fetch immediately and skip to the editor.
-  bool get _rostersHasOptions =>
-      _isSoccer || info.providers.length > 1 || providerHasSeason(_provider);
+  bool get _rostersHasOptions => _isSoccer || info.providers.length > 1 || providerHasSeason(_provider);
 
   @override
   void initState() {
     super.initState();
     if (_isSoccer && widget.initialLeagues == null) _loadLeagues();
     _lookupRom();
+    _findLocalRom();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _enterStep();
     });
@@ -259,9 +270,65 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     }
   }
 
+  /// Look for the game among the files already on this device: every download
+  /// folder of the consoles that run it, then the general download folder
+  /// (loose files, and folders named after the game), by fuzzy name, as a
+  /// .bin/.cue/.iso/... or an archive. Runs off the UI isolate, whether or
+  /// not the online library is on.
+  Future<void> _findLocalRom() async {
+    final settings = ref.read(settingsProvider.notifier);
+    final wantSlug = consoleArtSlugForText(info.platform);
+    final consoles = [
+      for (final console in ref.read(appStateProvider).consolesList)
+        if (wantSlug != null && consoleArtSlug(console) == wantSlug) console,
+    ];
+    final dirs = [for (final console in consoles) settings.getDownloadDir(console.id)];
+    final general = [settings.getDownloadDir(null)];
+    // Console folders usually sit inside the general one; the other consoles'
+    // copies of the same title (a PS2 disc for the PSP game) are not this ROM.
+    final skip = [for (final console in ref.read(appStateProvider).consolesList) settings.getDownloadDir(console.id)];
+    final gameId = info.gameId;
+    try {
+      // A full-set folder takes a moment to score; the ROM step is the first
+      // screen, so keep its frames and d-pad free.
+      final found = await Isolate.run(() => SportsRomLookup.findLocal(dirs: dirs, gameId: gameId, looseDirs: general, skip: skip));
+      if (found == null || !mounted) return;
+      setState(() => _localRomPath = found);
+      await _loadLocalBoxart(found, consoles);
+    } catch (_) {
+      // ignore — manual pick remains
+    }
+  }
+
+  /// The game's name as the found file, or the folder it was extracted to,
+  /// spells it: the closer of the two to the game's search terms.
+  String _localRomTitle(String path) {
+    final terms = gameSearchTerms(info.gameId);
+    final own = p.basenameWithoutExtension(path);
+    final folder = p.basename(p.dirname(path));
+    return romBestScore(own, terms) >= romBestScore(folder, terms) ? own : folder;
+  }
+
+  /// Cover art for the file found on the device, from the first console of
+  /// this platform that has a box-art source, matched by name as the catalog
+  /// matches its games.
+  Future<void> _loadLocalBoxart(String path, List<Console> consoles) async {
+    final console = consoles.where((c) => c.boxarts != null).firstOrNull;
+    if (console == null) return;
+    final title = _localRomTitle(path);
+    final game = Game(title: title, url: Uri.file('$title.bin').toString(), size: 0, consoleId: console.id);
+    final art = (await BoxartService().mutateGamesWithBoxarts([game], console)).first.boxart;
+    if (art != null && mounted) setState(() => _localRomBoxart = art);
+  }
+
+  /// The catalog game once downloaded: what its archive was extracted to, or
+  /// the archive itself. A file found by name elsewhere is offered on its own
+  /// card, under its own name, never as this game.
   String? get _downloadedPath {
     final m = _catalogMatch, dir = _catalogDownloadDir;
     if (m == null || dir == null) return null;
+    final extracted = SportsRomLookup.extractedFor(dir: dir, archiveName: m.game.filename, gameId: info.gameId);
+    if (extracted != null) return extracted;
     final path = p.join(dir, m.game.filename);
     return File(path).existsSync() ? path : null;
   }
@@ -533,8 +600,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         // Team order is the slot order for games that need an explicit mapping.
         if (info.requiresSlotMapping) {
           slotMapping = [
-            for (var i = 0; i < doc.teams.length; i++)
-              SlotMapping(slotIndex: i, teamId: doc.teams[i].id, teamName: doc.teams[i].name),
+            for (var i = 0; i < doc.teams.length; i++) SlotMapping(slotIndex: i, teamId: doc.teams[i].id, teamName: doc.teams[i].name),
           ];
         }
       }
@@ -623,8 +689,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       },
       child: Actions(
         actions: {
-          if (primary != null)
-            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
+          if (primary != null) PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
         },
         child: _scaffold(),
       ),
@@ -665,8 +730,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             Icon(sportIcon(info.sport), color: accent, size: 20),
             const SizedBox(width: 8),
             Expanded(child: Text(gameName(info), style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
-            Text('${_index + 1}/${_steps.length} · ${_label(_step)}',
-                style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
+            Text('${_index + 1}/${_steps.length} · ${_label(_step)}', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
             if (_short) ...[const SizedBox(width: 12), ..._navButtons()],
           ],
         ),
@@ -734,7 +798,11 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   Widget _sectionTitle(ThemeData theme, IconData icon, String title, String subtitle) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [Icon(icon, color: theme.colorScheme.primary), const SizedBox(width: 10), Expanded(child: Text(title, style: theme.textTheme.titleMedium))]),
+          Row(children: [
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: theme.textTheme.titleMedium))
+          ]),
           if (!_short) ...[
             SizedBox(height: _compact ? 2 : 6),
             Text(
@@ -778,8 +846,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     if (_busy) return GameTriviaLoader(status: _status, seed: info.gameId.hashCode.abs());
     return ListView(
       children: [
-        _sectionTitle(theme, Icons.tune, 'Rosters',
-            'Pick your options, then Next downloads the league data.'),
+        _sectionTitle(theme, Icons.tune, 'Rosters', 'Pick your options, then Next downloads the league data.'),
         _sourceAndSeason(theme),
         if (_isSoccer) info.multiLeague ? _leagueChecklist(theme) : _leaguePicker(theme),
       ],
@@ -817,12 +884,22 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             const SizedBox(height: 4),
             Row(
               children: [
-                IconButton.filledTonal(onPressed: () => setState(() { _season--; _docs = []; }), icon: const Icon(Icons.remove)),
+                IconButton.filledTonal(
+                    onPressed: () => setState(() {
+                          _season--;
+                          _docs = [];
+                        }),
+                    icon: const Icon(Icons.remove)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text('$_season', style: theme.textTheme.headlineSmall),
                 ),
-                IconButton.filledTonal(onPressed: () => setState(() { _season++; _docs = []; }), icon: const Icon(Icons.add)),
+                IconButton.filledTonal(
+                    onPressed: () => setState(() {
+                          _season++;
+                          _docs = [];
+                        }),
+                    icon: const Icon(Icons.add)),
               ],
             ),
           ],
@@ -846,8 +923,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 isExpanded: true,
                 hint: const Text('Select a league'),
                 items: [
-                  for (final l in _leagues)
-                    DropdownMenuItem(value: l, child: Text(l.label, overflow: TextOverflow.ellipsis)),
+                  for (final l in _leagues) DropdownMenuItem(value: l, child: Text(l.label, overflow: TextOverflow.ellipsis)),
                 ],
                 onChanged: (v) => setState(() {
                   _selectedLeague = v;
@@ -986,9 +1062,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
   }
 
-  String get _reorderHint => Handheld.current
-      ? 'Swap to reorder (slot order), tap to edit a squad.'
-      : 'Drag or swap to reorder (slot order), tap to edit a squad.';
+  String get _reorderHint =>
+      Handheld.current ? 'Swap to reorder (slot order), tap to edit a squad.' : 'Drag or swap to reorder (slot order), tap to edit a squad.';
 
   Widget _addButton(RosterDoc doc, {required bool iconOnly}) => iconOnly
       ? IconButton.filledTonal(onPressed: () => _addTeam(doc), icon: const Icon(Icons.add), tooltip: 'Add team')
@@ -1246,10 +1321,11 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                         ),
                     ],
                   ),
-                  if (err != null) Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(err!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
-                  ),
+                  if (err != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(err!, style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
+                    ),
                 ],
               ),
             ),
@@ -1330,12 +1406,67 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ),
           ),
           // A ROM is already chosen: offering to download the game is noise.
+          // Keyed: the catalog card can arrive after the local one, and their
+          // buttons must not trade focus (A on "Use this file" turning into
+          // a download).
           if (_catalogMatch != null && _romPath == null) ...[
             const SizedBox(height: 16),
-            _catalogCard(theme),
+            KeyedSubtree(key: const ValueKey('rom-catalog-card'), child: _catalogCard(theme)),
+          ],
+          if (_localRomPath != null && _romPath == null && _downloadedPath == null) ...[
+            const SizedBox(height: 16),
+            KeyedSubtree(key: const ValueKey('rom-local-card'), child: _localRomCard(theme)),
           ],
         ],
       );
+
+  /// The game found among the device's files, when the catalog has no entry
+  /// or its download is not on the device.
+  Widget _localRomCard(ThemeData theme) {
+    final path = _localRomPath!;
+    final boxart = _localRomBoxart;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 56,
+              height: 78,
+              child: boxart != null
+                  ? CachedNetworkImage(
+                      imageUrl: boxart,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const Icon(Icons.sd_storage_outlined),
+                    )
+                  : const Icon(Icons.sd_storage_outlined, size: 40),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Found on this device', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                  const SizedBox(height: 2),
+                  Text(_localRomTitle(path), style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(p.basename(path),
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () => setState(() => _romPath = path),
+                    icon: const Icon(Icons.check, size: 18),
+                    label: const Text('Use this file'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _catalogCard(ThemeData theme) {
     final m = _catalogMatch!;
@@ -1345,8 +1476,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final prog = dl.taskProgress[m.game.gameId]?.progress;
     // Status wins over a file-exists check: the download writes into the target
     // path, so the file can be present-but-partial mid-download.
-    final downloading = status == TaskStatus.running || status == TaskStatus.enqueued ||
-        (prog != null && prog > 0 && prog < 1);
+    final downloading = status == TaskStatus.running || status == TaskStatus.enqueued || (prog != null && prog > 0 && prog < 1);
     final downloaded = downloading ? null : _downloadedPath;
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -1416,8 +1546,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final slots = info.imageSlots;
     return ListView(
       children: [
-        _sectionTitle(theme, Icons.palette_outlined, 'Look',
-            'Choose the team logos and screen art the patch draws into the game.'),
+        _sectionTitle(theme, Icons.palette_outlined, 'Look', 'Choose the team logos and screen art the patch draws into the game.'),
         if (info.supportsLogos || info.supportsBlankUnused)
           Card(
             margin: const EdgeInsets.only(bottom: 16),

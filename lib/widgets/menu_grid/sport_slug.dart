@@ -113,6 +113,25 @@ const Map<String, List<String>> _searchTerms = {
   'pes2013-ps2': ['pro evolution soccer 2013', 'pes 2013', 'world soccer winning eleven 2013'],
 };
 
+/// File extensions the patcher takes for a game, best first: the order ranks
+/// several local files of the same game (a .cue over its .bin, an extracted
+/// image over the archive it came from). A .zip is unpacked by the worker.
+List<String> gameRomExtensions(String gameId) => _romExtensions[gameId] ?? const ['.iso', '.bin', '.zip'];
+
+const Map<String, List<String>> _romExtensions = {
+  'iss-snes': ['.sfc', '.smc', '.zip'],
+  'nhl94-snes': ['.sfc', '.smc', '.zip'],
+  'kgj-mlb-snes': ['.sfc', '.smc', '.zip'],
+  'we2002': ['.cue', '.iso', '.bin', '.zip'],
+  'nbalive95-genesis': ['.md', '.gen', '.bin', '.zip'],
+  'nhl94-genesis': ['.md', '.gen', '.bin', '.zip'],
+  'nhl05-ps2': ['.iso', '.zip'],
+  'pes2013-ps2': ['.iso', '.zip'],
+  // Not .cso: both PSP patchers refuse a compressed image by name.
+  'nhl07-psp': ['.iso', '.zip'],
+  'mvp-psp': ['.iso', '.zip'],
+};
+
 /// Preferred ROM region per game, used to break ties between matches (e.g.
 /// prefer "(USA)" over "(Korea)"). Winning Eleven only works with the Japanese
 /// release; everything else defaults to USA.

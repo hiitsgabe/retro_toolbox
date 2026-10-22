@@ -26,6 +26,8 @@ int romFuzzyScore(String searchTerm, String filename) {
   if (ns.isEmpty || nf.isEmpty) return 0;
   if (ns == nf) return 100;
   if (nf.contains(ns)) return 80;
+  // "PES2013.iso" or "WinningEleven2002.bin": the same title without spaces.
+  if (nf.replaceAll(' ', '').contains(ns.replaceAll(' ', ''))) return 75;
   final searchTokens = ns.split(' ').toSet();
   final fileTokens = nf.split(' ').toSet();
   if (searchTokens.isEmpty) return 0;
