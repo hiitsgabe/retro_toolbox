@@ -487,12 +487,12 @@ def _default_kit_specs(colours, whiches, kits_mod, team_cls):
 def _kit_previews(kits, out_dir, kits_mod, mounted=None, default=None):
     """Write `<out_dir>/<key>.png` for each KIT of kits ({key: KIT}); returns
     {key: path}. With `mounted` (see `_mounted_previews`) a key it can draw
-    shows the kit on the player, any KIT kind included (None is the slot's
-    current kit). Otherwise a spec is drawn flat as is, a {"image": path}
-    pick as the spec the game will get from it (`kit_from_image`), and None
-    as the team's default when `default` (see `_default_kit_specs`) knows it,
-    while {"template": n} picks are skipped (the templates are written
-    separately). A picked file is always copied next to its preview as
+    shows the kit on the player, any KIT kind included. None is the team's
+    default when `default` (see `_default_kit_specs`) knows it, the way the
+    patch draws it, else the slot's current kit. Without `mounted` a spec is
+    drawn flat as is, a {"image": path} pick as the spec the game will get
+    from it (`kit_from_image`), and {"template": n} picks are skipped (the
+    templates are written separately). A picked file is always copied next to its preview as
     `<key>_source.png`."""
     import shutil
     os.makedirs(out_dir, exist_ok=True)
@@ -500,20 +500,25 @@ def _kit_previews(kits, out_dir, kits_mod, mounted=None, default=None):
     for key, kit in (kits or {}).items():
         if kit and 'image' in kit:
             shutil.copy2(kit['image'], os.path.join(out_dir, f'{key}_source.png'))
-        png = mounted(key, kit) if mounted else None
-        if png is None:
-            if kit is None and default:
-                spec = default(key)
-                if spec is None:
-                    continue
-            elif not kit or 'template' in kit:
+        if kit is None and default:
+            # The team's default is what the patch draws, not the disc's kit.
+            spec = default(key)
+            if spec is None:
                 continue
-            elif 'image' in kit:
-                with open(kit['image'], 'rb') as f:
-                    spec = kits_mod.kit_from_image(f.read())
-            else:
-                spec = kits_mod.KitSpec.from_dict(kit)
-            png = kits_mod.render_kit(spec)
+            png = mounted(key, spec.to_dict()) if mounted and hasattr(spec, 'to_dict') else None
+            if png is None:
+                png = kits_mod.render_kit(spec)
+        else:
+            png = mounted(key, kit) if mounted else None
+            if png is None:
+                if not kit or 'template' in kit:
+                    continue
+                if 'image' in kit:
+                    with open(kit['image'], 'rb') as f:
+                        spec = kits_mod.kit_from_image(f.read())
+                else:
+                    spec = kits_mod.KitSpec.from_dict(kit)
+                png = kits_mod.render_kit(spec)
         path = os.path.join(out_dir, f'{key}.png')
         with open(path, 'wb') as f:
             f.write(png)

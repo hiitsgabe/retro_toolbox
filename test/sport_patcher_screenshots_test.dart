@@ -46,7 +46,7 @@ void main() {
         teams: [
           for (final (i, n) in ['Flamengo', 'Palmeiras', 'Grêmio', 'Corinthians'].indexed)
             RosterTeam(
-              teamRaw: {'id': i + 1, 'name': n},
+              teamRaw: {'id': i + 1, 'name': n, 'color': 'C3161C', 'alternate_color': '000000'},
               // Negative ids: no ESPN headshot lookups (network, sqflite) in the editor shot.
               players: [for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': -(k + 1), 'name': 'Player $k'})],
               statsRaw: {},
@@ -71,11 +71,21 @@ void main() {
     }
   }
 
-  /// Every kit thumbnail shows `kit.png` from the previews folder, if any.
+  /// Every kit thumbnail shows `<key>.png` from the previews folder when it
+  /// is there (real renders from the worker), else `kit.png`, if any.
   Future<KitPreviews> kitPreviews(Map<String, dynamic> kits,
       {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
-    final f = File('$previews/kit.png');
-    return (kits: {if (f.existsSync()) for (final k in kits.keys) k: f.path}, templates: <KitTemplate>[]);
+    final generic = File('$previews/kit.png');
+    final out = <String, String>{};
+    for (final k in kits.keys) {
+      final own = File('$previews/$k.png');
+      if (own.existsSync()) {
+        out[k] = own.path;
+      } else if (generic.existsSync()) {
+        out[k] = generic.path;
+      }
+    }
+    return (kits: out, templates: <KitTemplate>[]);
   }
 
   Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page,
