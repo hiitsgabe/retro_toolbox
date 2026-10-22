@@ -40,7 +40,11 @@ void main() {
   final requested = <({Map<String, dynamic> kits, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours})>[];
   // Header previews get a path naming the choice, so a refresh is visible by key.
   Future<KitPreviews> fakeLoader(Map<String, dynamic> kits,
-      {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
+      {bool templates = false,
+      Map<String, int>? slots,
+      Map<String, String>? which,
+      Map<String, List<String>>? colours,
+      Map<String, Map<String, Object?>>? teams}) async {
     requested.add((kits: kits, slots: slots, which: which, colours: colours));
     return (
       kits: {
@@ -161,7 +165,11 @@ void main() {
         PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
     var calls = 0;
     Future<KitPreviews> loader(Map<String, dynamic> kits,
-        {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
+        {bool templates = false,
+        Map<String, int>? slots,
+        Map<String, String>? which,
+        Map<String, List<String>>? colours,
+        Map<String, Map<String, Object?>>? teams}) async {
       calls++;
       return (
         // No preview for a design; after the first call none for the away kit either.

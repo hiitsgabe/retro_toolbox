@@ -77,7 +77,11 @@ void main() {
   /// Every kit thumbnail shows `<key>.png` from the previews folder when it
   /// is there (real renders from the worker), else `kit.png`, if any.
   Future<KitPreviews> kitPreviews(Map<String, dynamic> kits,
-      {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
+      {bool templates = false,
+      Map<String, int>? slots,
+      Map<String, String>? which,
+      Map<String, List<String>>? colours,
+      Map<String, Map<String, Object?>>? teams}) async {
     final generic = File('$previews/kit.png');
     final out = <String, String>{};
     for (final k in kits.keys) {
@@ -200,6 +204,93 @@ void main() {
 
   // Steps: 0 ROM, 1 Rosters, 2 Teams, 3 Look, 4 Patch.
   testWidgets('teams step', (t) => shoot(t, 'wizard_teams', (i) => wizard(2, i)), skip: !enabled);
+
+  // Every step of both soccer games, for a tour of the wizard.
+  RosterDoc league(String name, List<String> clubs, int firstId) => RosterDoc(
+        leagueRaw: {'name': name, 'season': 2026},
+        teams: [
+          for (final (i, n) in clubs.indexed)
+            RosterTeam(
+              teamRaw: {'id': firstId + i, 'name': n, 'color': 'C3161C', 'alternate_color': '000000'},
+              players: [
+                for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': -(k + 1), 'name': 'Player $k'})
+              ],
+              statsRaw: {},
+              extraRaw: {},
+            ),
+        ],
+      );
+  Map<String, String> pesImages() => {
+        for (final slot in pesInfo.imageSlots)
+          if (File('$previews/pes/$slot.png').existsSync()) slot: '$previews/pes/$slot.png',
+      };
+  const stepNames = ['rom', 'rosters', 'teams', 'look', 'patch'];
+  for (final (n, name) in stepNames.indexed) {
+    testWidgets(
+      'tour: WE2002 $name',
+      (t) => shoot(
+        t,
+        'tour_we2002_${n}_$name',
+        (i) => SportPatcherWizardScreen(
+          info: info,
+          initialDoc: n >= 2 ? doc() : null,
+          initialStep: n,
+          initialRomPath: '/roms/World Soccer Winning Eleven 2002 (Japan).cue',
+          initialLeagues: leagues,
+          initialImages: i.isEmpty ? null : i,
+        ),
+      ),
+      skip: !enabled,
+    );
+    testWidgets(
+      'tour: PES 2013 $name',
+      (t) => shoot(
+        t,
+        'tour_pes2013_${n}_$name',
+        (_) => SportPatcherWizardScreen(
+          info: pesInfo,
+          initialDocs: n >= 2
+              ? [
+                  league('Brasileirão Série A', ['Flamengo', 'Palmeiras', 'Grêmio', 'Corinthians'], 1),
+                  league('Premier League', ['Arsenal', 'Liverpool', 'Chelsea'], 101),
+                ]
+              : null,
+          initialStep: n,
+          initialRomPath: '/roms/PES 2013 (USA).iso',
+          initialLeagues: leagues,
+          initialImages: pesImages().isEmpty ? null : pesImages(),
+        ),
+        act: n == 1
+            ? (t) async {
+                for (final l in ['Brasileirão Série A', 'Premier League']) {
+                  await t.tap(find.textContaining(l).first);
+                  await t.pump();
+                }
+                await t.tap(find.textContaining('National teams').first);
+                await t.pump();
+              }
+            : null,
+      ),
+      skip: !enabled,
+    );
+  }
+  testWidgets(
+    'tour: PES 2013 team editor',
+    (t) => shoot(
+      t,
+      'tour_pes2013_5_team',
+      (_) => TeamEditorScreen(
+        team: league('Brasileirão Série A', ['Flamengo'], 1).teams.first,
+        gameId: pesInfo.gameId,
+        sport: pesInfo.sport,
+        info: pesInfo,
+        romPath: '/roms/PES 2013 (USA).iso',
+        slot: 0,
+        kitLoader: kitPreviews,
+      ),
+    ),
+    skip: !enabled,
+  );
   testWidgets('look step', (t) => shoot(t, 'wizard_look', (i) => wizard(3, i)), skip: !enabled);
   testWidgets(
     'team editor with kits',

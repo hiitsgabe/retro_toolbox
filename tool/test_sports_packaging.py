@@ -341,6 +341,12 @@ def test_kit_previews_default_from_the_team_colours():
     class Kits:
         @staticmethod
         def default_kits(team):
+            # Like the library: the catalogue's kits for a club it knows (by
+            # id), else the colours, else nothing.
+            if team.id == 819:
+                return ('home', 'catalogue', team.name), ('away', 'catalogue')
+            if not team.color:
+                return None, None
             return ('home', team.color, team.alternate_color), ('away', team.alternate_color)
 
         @staticmethod
@@ -351,15 +357,20 @@ def test_kit_previews_default_from_the_team_colours():
         def __init__(self, **kw):
             self.__dict__.update(kw)
 
-    colours = {'1_home': ['#ff0000', '#ffffff'], '1_away': ['#ff0000', '#ffffff'], '2_home': ['', '#000000'], '3_home': ['#00ff00']}
-    default = main._default_kit_specs(colours, {'1_away': 'away'}, Kits, Team)
+    colours = {'1_home': ['#ff0000', '#ffffff'], '1_away': ['#ff0000', '#ffffff'], '2_home': ['', '#000000'], '3_home': ['#00ff00'],
+               '5_home': ['#000000', '#ffffff']}
+    teams = {'5_home': {'id': 819, 'name': 'Flamengo'}, '6_home': {'id': 819, 'name': 'Flamengo'}}
+    default = main._default_kit_specs(colours, {'1_away': 'away'}, Kits, Team, teams)
     out = tempfile.mkdtemp()
-    written = main._kit_previews({'1_home': None, '1_away': None, '2_home': None, '3_home': None, '4_home': None}, out, Kits, None, default)
-    # The default follows the colours and the side; no first colour or no colours, no preview.
-    assert sorted(written) == ['1_away', '1_home', '3_home']
+    written = main._kit_previews({k: None for k in ('1_home', '1_away', '2_home', '3_home', '4_home', '5_home', '6_home')}, out, Kits, None, default)
+    # The default follows the colours and the side; a club the catalogue knows
+    # takes its kits whatever the colours, even with none sent.
+    assert sorted(written) == ['1_away', '1_home', '3_home', '5_home', '6_home']
     assert open(written['1_home'], 'rb').read() == b"FLAT:('home', '#ff0000', '#ffffff')"
     assert open(written['1_away'], 'rb').read() == b"FLAT:('away', '#ffffff')"
     assert open(written['3_home'], 'rb').read() == b"FLAT:('home', '#00ff00', '')"
+    assert open(written['5_home'], 'rb').read() == b"FLAT:('home', 'catalogue', 'Flamengo')"
+    assert open(written['6_home'], 'rb').read() == b"FLAT:('home', 'catalogue', 'Flamengo')"
     assert main._default_kit_specs({}, {}, Kits, Team) is None
     assert main._default_kit_specs(colours, {}, object(), Team) is None  # an older library
 

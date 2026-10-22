@@ -12,16 +12,22 @@ import 'package:retro_toolbox/utils/handheld.dart';
 /// The shirt patterns the patch can draw, in the order the picker shows them.
 const kitPatterns = ['plain', 'stripes', 'hoops', 'halves', 'sash', 'pinstripes', 'chevron', 'sleeves'];
 
-/// Renders kit previews: {key: KIT} -> {key: png path}. [colours] (per key)
-/// is what a null KIT is drawn from; [slots] and [which] let the worker
-/// mount the kit on the player. Injected so tests run without the worker.
+/// Renders kit previews: {key: KIT} -> {key: png path}. A null KIT is the
+/// team's default: its real kit when the library's catalogue knows the team
+/// ([teams], per key: {id, name}), else drawn from [colours] (per key).
+/// [slots] and [which] let the worker mount the kit on the player. Injected
+/// so tests run without the worker.
 typedef KitPreviewLoader = Future<KitPreviews> Function(
   Map<String, dynamic> kits, {
   bool templates,
   Map<String, int>? slots,
   Map<String, String>? which,
   Map<String, List<String>>? colours,
+  Map<String, Map<String, Object?>>? teams,
 });
+
+/// Who the team is, for the worker's kit catalogue lookup.
+Map<String, Object?> teamIdentity(RosterTeam t) => {'id': t.id, 'name': t.name};
 
 String _hex(String teamHex, String fallback) {
   final h = teamHex.replaceAll('#', '').toLowerCase();
@@ -290,6 +296,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         slots: slot == null ? null : {key: slot},
         which: {key: side},
         colours: {key: teamColours(team)},
+        teams: {key: teamIdentity(team)},
       );
       if (!mounted) return;
       setState(() {
@@ -318,7 +325,8 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
       _error = null;
     });
     try {
-      final r = await widget.loader(kits, templates: false, colours: {for (final k in kits.keys) k: teamColours(team)});
+      final r = await widget.loader(kits,
+          templates: false, colours: {for (final k in kits.keys) k: teamColours(team)}, teams: {for (final k in kits.keys) k: teamIdentity(team)});
       if (mounted) setState(() => _previews.addAll(r.kits));
     } catch (e) {
       if (mounted) setState(() => _error = 'Kit previews: $e');

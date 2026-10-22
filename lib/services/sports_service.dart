@@ -233,7 +233,8 @@ class SportsService {
 
   /// 96x128 PNG previews of [kits] ({key: KIT}, where KIT is a kit spec, an
   /// `image` or `template` choice, or null for the default): {key: path}.
-  /// [colours] ({key: [shirt, alternate]}) is what a null KIT is drawn from.
+  /// [colours] ({key: [shirt, alternate]}) is what a null KIT is drawn from,
+  /// unless the library's kit catalogue knows the team ([teams], {key: {id, name}}).
   /// With a ROM, [slots] ({key: team slot}) and [which] ({key: home|away})
   /// let the worker draw the kit as the game mounts it. With [templates] and
   /// a ROM, also the game's own jersey designs.
@@ -245,6 +246,7 @@ class SportsService {
     Map<String, int>? slots,
     Map<String, String>? which,
     Map<String, List<String>>? colours,
+    Map<String, Map<String, Object?>>? teams,
   }) async {
     final out = _tmp('kit_previews');
     final data = await _runData(
@@ -261,6 +263,7 @@ class SportsService {
         if (slots != null && slots.isNotEmpty) 'slots': slots,
         if (which != null && which.isNotEmpty) 'which': which,
         if (colours != null && colours.isNotEmpty) 'colours': colours,
+        if (teams != null && teams.isNotEmpty) 'teams': teams,
         'cache_dir': await _cacheDir(),
       },
       outputFile: out,

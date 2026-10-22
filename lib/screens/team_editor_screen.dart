@@ -64,7 +64,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   static final _templatesFor = <String, List<KitTemplate>>{};
 
   late final KitPreviewLoader _loadKits = widget.kitLoader ??
-      (kits, {templates = false, slots, which, colours}) => SportsService.kitPreviews(
+      (kits, {templates = false, slots, which, colours, teams}) => SportsService.kitPreviews(
             gameId: widget.gameId,
             kits: kits,
             templates: templates,
@@ -72,6 +72,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
             slots: slots,
             which: which,
             colours: colours,
+            teams: teams,
           );
 
   /// 'home' / 'away' -> png.
@@ -108,6 +109,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         slots: slot == null ? null : {for (final s in sides) s: slot},
         which: {for (final s in sides) s: s},
         colours: {for (final s in sides) s: teamColours(team)},
+        teams: {for (final s in sides) s: teamIdentity(team)},
       );
       if (!mounted) return;
       setState(() {

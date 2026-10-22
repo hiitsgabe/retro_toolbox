@@ -466,20 +466,22 @@ def _mounted_previews(patcher, rom, slots, whiches):
     return mounted
 
 
-def _default_kit_specs(colours, whiches, kits_mod, team_cls):
+def _default_kit_specs(colours, whiches, kits_mod, team_cls, teams=None):
     """key -> KitSpec of a team's default kit, as the library draws it
-    (`default_kits` on a Team with the two colours the app sends, {key: [c1,
-    c2]}), the side from whiches; None for a key without a first colour.
-    None altogether without colours or on a library without default_kits."""
+    (`default_kits`: the club's real kits when the library's kit catalogue
+    knows it, by the ESPN id in teams ({key: {"id", "name"}}), else plain kits
+    in the two colours the app sends, {key: [c1, c2]}), the side from whiches;
+    None for a key with neither. None altogether without colours or teams, or
+    on a library without default_kits."""
     fn = getattr(kits_mod, 'default_kits', None)
-    if not (fn and colours):
+    if not (fn and (colours or teams)):
         return None
 
     def default(key):
-        c = list(colours.get(key) or []) + ['', '']
-        if not c[0]:
-            return None
-        home, away = fn(team_cls(id=0, name='', color=c[0], alternate_color=c[1]))
+        c = list((colours or {}).get(key) or []) + ['', '']
+        t = (teams or {}).get(key) or {}
+        team = team_cls(id=int(t.get('id') or 0), name=str(t.get('name') or ''), color=c[0], alternate_color=c[1])
+        home, away = fn(team)
         return away if (whiches or {}).get(key) == 'away' else home
     return default
 
@@ -730,7 +732,7 @@ def run_sports(job):
             data_file, cleanup = _with_data_file(job['rom_path']) if job.get('rom_path') else (None, lambda: None)
             try:
                 mounted = _mounted_previews(patcher, data_file, job.get('slots') or {}, job.get('which') or {})
-                default = _default_kit_specs(job.get('colours') or {}, job.get('which') or {}, _kits, rrp.Team)
+                default = _default_kit_specs(job.get('colours') or {}, job.get('which') or {}, _kits, rrp.Team, job.get('teams') or {})
                 written = _kit_previews(job.get('kits'), out_dir, _kits, mounted, default)
                 templates = []
                 if job.get('templates') and data_file and _overrides(cls, 'kit_templates', rrp.Patcher):
