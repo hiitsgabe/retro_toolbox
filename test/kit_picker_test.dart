@@ -27,7 +27,9 @@ void main() {
   // A player, because the editor's header (colours, kits) only shows above a squad.
   RosterTeam team() => RosterTeam(
         teamRaw: {'id': 7, 'name': 'Flamengo', 'color': 'C60000', 'alternate_color': '000000'},
-        players: [RosterPlayer(raw: {'id': 1, 'name': 'Ann', 'position': 'GK'})],
+        players: [
+          RosterPlayer(raw: {'id': 1, 'name': 'Ann', 'position': 'GK'})
+        ],
         statsRaw: {},
         extraRaw: {},
       );
@@ -41,7 +43,10 @@ void main() {
       {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
     requested.add((kits: kits, slots: slots, which: which, colours: colours));
     return (
-      kits: {for (final k in kits.keys) if (k.startsWith('current_')) k: '/p/$k=${kitLabel(kits[k])}.png'},
+      kits: {
+        for (final k in kits.keys)
+          if (k.startsWith('current_')) k: '/p/$k=${kitLabel(kits[k])}.png'
+      },
       templates: <KitTemplate>[],
     );
   }
@@ -99,7 +104,10 @@ void main() {
     expect(first.kits, {'home': null, 'away': null});
     expect(first.slots, {'home': 3, 'away': 3});
     expect(first.which, {'home': 'home', 'away': 'away'});
-    expect(first.colours, {'home': ['#c60000', '#000000'], 'away': ['#c60000', '#000000']});
+    expect(first.colours, {
+      'home': ['#c60000', '#000000'],
+      'away': ['#c60000', '#000000']
+    });
 
     await t.tap(find.text('Home kit'));
     await t.pumpAndSettle();
@@ -112,7 +120,9 @@ void main() {
     expect(header.kits, {'current_home': null});
     expect(header.slots, {'current_home': 3});
     expect(header.which, {'current_home': 'home'});
-    expect(header.colours, {'current_home': ['#c60000', '#000000']});
+    expect(header.colours, {
+      'current_home': ['#c60000', '#000000']
+    });
     // The grid's specs come with the colours too.
     expect(patternJobs().length, 1);
     expect(requested.firstWhere((r) => r.kits.length == 16).colours?['home_stripes'], ['#c60000', '#000000']);
@@ -147,7 +157,8 @@ void main() {
   });
 
   testWidgets('a game design the worker did not render shows its own thumbnail; a missing preview is dropped', (t) async {
-    const we = PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
+    const we =
+        PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
     var calls = 0;
     Future<KitPreviews> loader(Map<String, dynamic> kits,
         {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
@@ -198,7 +209,10 @@ void main() {
     }
 
     final tm = team();
-    tm.extraRaw['kits'] = {'home': {'template': 7}, 'away': null};
+    tm.extraRaw['kits'] = {
+      'home': {'template': 7},
+      'away': null
+    };
     await pump(t, editor(tm, romPath: '${dir.path}/we2002.bin', zip: fakeZip));
     final button = find.widgetWithText(TextButton, 'Download kit template');
     await t.tap(button);
@@ -264,11 +278,49 @@ void main() {
   });
 
   testWidgets('without a ROM the picker says where the game designs come from', (t) async {
-    const we = PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
+    const we =
+        PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
     await pump(t, KitPickerSheet(team: team(), info: we, loader: fakeLoader));
     expect(find.text('Pick the ROM first to see the game\'s own designs.'), findsOneWidget);
     await pump(t, KitPickerSheet(team: team(), info: we, loader: fakeLoader, romPath: '/roms/we.bin'));
     expect(find.textContaining('Pick the ROM first'), findsNothing);
+  });
+
+  testWidgets('the picker\'s Template tile downloads this slot\'s kit template', (t) async {
+    const we =
+        PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
+    final args = <(String, String, int, int?)>[];
+    Future<String> fakeZip(String gameId, {required String romPath, required int slot, int? template}) async {
+      args.add((gameId, romPath, slot, template));
+      throw StateError('no worker');
+    }
+
+    final tm = team();
+    tm.extraRaw['kits'] = {
+      'home': {'template': 7},
+      'away': null
+    };
+    InkWell tile() => t.widget<InkWell>(find.ancestor(of: find.text('Template'), matching: find.byType(InkWell)).first);
+
+    await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, romPath: '/roms/we.bin', slot: 5, kitTemplateZip: fakeZip));
+    expect(find.text('Template'), findsOneWidget);
+    expect(find.text('Choose…'), findsOneWidget);
+    expect(tile().onTap, isNotNull);
+    await t.tap(find.text('Template'));
+    await t.pumpAndSettle();
+    expect(args, [('we2002', '/roms/we.bin', 5, 7)]); // the home kit's design
+    expect(find.text('Kit template: Bad state: no worker'), findsOneWidget);
+    expect(tile().onTap, isNotNull); // re-enabled after the job
+
+    // The away kit is a plain default: no design goes with it.
+    await t.tap(find.text('Away'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Template'));
+    await t.pumpAndSettle();
+    expect(args.last, ('we2002', '/roms/we.bin', 5, null));
+
+    await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, slot: 5, kitTemplateZip: fakeZip));
+    expect(tile().onTap, isNull); // no ROM
   });
 
   test('kitLabel and the default spec', () {

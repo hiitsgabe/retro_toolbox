@@ -87,9 +87,7 @@ bool _isSpec(dynamic kit) => kit is Map && kit['shirt'] != null;
 /// A kit preview PNG, or a placeholder (a spinner while [loading]).
 Widget kitPreview(String? path, {bool loading = false, Widget? empty}) => path == null
     ? Center(
-        child: loading
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : empty ?? const Icon(Icons.checkroom),
+        child: loading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : empty ?? const Icon(Icons.checkroom),
       )
     : Image.file(
         File(path),
@@ -99,20 +97,40 @@ Widget kitPreview(String? path, {bool loading = false, Widget? empty}) => path =
         errorBuilder: (_, __, ___) => const Center(child: Icon(Icons.broken_image_outlined)),
       );
 
+/// Builds a kit template ZIP; [SportsService.kitTemplateZip]'s shape, so
+/// tests can stand in for the worker.
+typedef KitTemplateZip = Future<String> Function(String gameId, {required String romPath, required int slot, int? template});
+
+/// The game design [kit] uses, if it is one.
+int? kitTemplateIndex(dynamic kit) => kit is Map && kit['template'] != null ? (kit['template'] as num).toInt() : null;
+
+/// Builds the kit template pack for [slot] (drawn around [template] when the
+/// kit uses a game design) and saves it next to the ROM on handhelds, else
+/// where the user says. Throws when the worker fails.
+Future<void> downloadKitTemplate(
+  BuildContext context, {
+  required String gameId,
+  required String romPath,
+  required int slot,
+  int? template,
+  KitTemplateZip? job,
+}) async {
+  final zip = await (job ?? SportsService.kitTemplateZip)(gameId, romPath: romPath, slot: slot, template: template);
+  if (!context.mounted) return;
+  await saveTemplateZip(context, zip, defaultDir: p.dirname(romPath), what: 'Kit template');
+}
+
 /// Copies a template [zip] where the user says and confirms in a SnackBar.
 /// Handhelds have no native dialog: with a [defaultDir] the file lands there.
 Future<void> saveTemplateZip(BuildContext context, String zip, {String? defaultDir, String what = 'Templates'}) async {
   final known = defaultDir != null && defaultDir.isNotEmpty;
-  final dir = Handheld.current && known
-      ? defaultDir
-      : await pickDirectory(context, title: 'Save the templates to', initialDir: known ? defaultDir : null);
+  final dir = Handheld.current && known ? defaultDir : await pickDirectory(context, title: 'Save the templates to', initialDir: known ? defaultDir : null);
   if (dir == null || !context.mounted) return;
   final dest = p.join(dir, p.basename(zip));
   await File(zip).copy(dest);
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$what saved to $dest')));
 }
-
 
 /// Chooses one team's home and away kit: a pattern in its colours, one of the
 /// game's designs, the user's PNG, or the default. Writes the choice into the
@@ -132,6 +150,10 @@ class KitPickerSheet extends StatefulWidget {
   /// Which side to open on.
   final bool initialHome;
 
+  /// Replaces the worker's kit template job. Tests only.
+  @visibleForTesting
+  final KitTemplateZip? kitTemplateZip;
+
   const KitPickerSheet({
     super.key,
     required this.team,
@@ -141,6 +163,7 @@ class KitPickerSheet extends StatefulWidget {
     this.romPath,
     this.slot,
     this.initialHome = true,
+    this.kitTemplateZip,
   });
 
   @override
@@ -153,7 +176,9 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
 
   /// The editable spec per side: the stored one when it is a spec, else the
   /// default. Colour rows and pattern tiles edit it.
-  late final Map<bool, Map<String, dynamic>> _spec = {for (final h in [true, false]) h: _specOf(h)};
+  late final Map<bool, Map<String, dynamic>> _spec = {
+    for (final h in [true, false]) h: _specOf(h)
+  };
 
   /// `<side>_<pattern>` -> png.
   final _previews = <String, String>{};
@@ -163,6 +188,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   /// side -> png of the current choice, drawn as the game shows it.
   final _currentPng = <String, String>{};
   bool _loadingCurrent = false;
+  bool _downloading = false;
 
   Map<String, dynamic> _specOf(bool home) {
     final k = kitChoice(team, home: home);
@@ -239,6 +265,31 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     _choose({'image': path});
   }
 
+  /// This slot's kit template pack, around the current design if it is one.
+  Future<void> _downloadTemplate() async {
+    final rom = widget.romPath, slot = widget.slot;
+    if (rom == null || slot == null) return;
+    // One job at a time: a second press would reuse the worker tag.
+    setState(() {
+      _downloading = true;
+      _error = null;
+    });
+    try {
+      await downloadKitTemplate(
+        context,
+        gameId: widget.info.gameId,
+        romPath: rom,
+        slot: slot,
+        template: kitTemplateIndex(_current),
+        job: widget.kitTemplateZip,
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Kit template: $e');
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
   Future<void> _pickColour(String key, String label) async {
     final c = await showPaletteDialog(context, current: hexToColor('${_cur[key] ?? ''}'), title: label);
     if (c == null || !mounted) return;
@@ -252,12 +303,14 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         child: Text(text, style: theme.textTheme.titleSmall),
       );
 
+  /// A choice tile; null [onTap] greys it out.
   Widget _tile(
     ThemeData theme, {
     required String label,
     required bool selected,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     bool autofocus = false,
+    bool busy = false,
     String? image,
     IconData icon = Icons.checkroom,
   }) =>
@@ -276,17 +329,20 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               width: selected ? 3 : 1,
             ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 72,
-                height: 96,
-                child: kitPreview(image, loading: _loading && icon == Icons.checkroom, empty: Icon(icon)),
-              ),
-              const SizedBox(height: 4),
-              Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-            ],
+          child: Opacity(
+            opacity: onTap == null ? 0.5 : 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 72,
+                  height: 96,
+                  child: kitPreview(image, loading: busy || (_loading && icon == Icons.checkroom), empty: Icon(icon)),
+                ),
+                const SizedBox(height: 4),
+                Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
           ),
         ),
       );
@@ -407,16 +463,28 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
             ),
           ],
           _heading(theme, 'Your PNG'),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _tile(
-              theme,
-              label: image == null ? 'Choose…' : 'Custom PNG',
-              selected: image != null,
-              image: image,
-              icon: Icons.upload_file,
-              onTap: _pickPng,
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _tile(
+                theme,
+                label: image == null ? 'Choose…' : 'Custom PNG',
+                selected: image != null,
+                image: image,
+                icon: Icons.upload_file,
+                onTap: _pickPng,
+              ),
+              // The slot's kit template pack, to draw the PNG on.
+              _tile(
+                theme,
+                label: 'Template',
+                selected: false,
+                icon: Icons.download_outlined,
+                busy: _downloading,
+                onTap: widget.romPath == null || widget.slot == null || _downloading ? null : _downloadTemplate,
+              ),
+            ],
           ),
           if (widget.info.gameId == 'pes2013-ps2')
             Padding(

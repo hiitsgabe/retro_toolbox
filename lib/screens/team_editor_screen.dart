@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
@@ -33,7 +32,7 @@ class TeamEditorScreen extends StatefulWidget {
 
   /// Replaces the worker's kit template job. Tests only.
   @visibleForTesting
-  final Future<String> Function(String gameId, {required String romPath, required int slot, int? template})? kitTemplateZip;
+  final KitTemplateZip? kitTemplateZip;
 
   const TeamEditorScreen({
     super.key,
@@ -142,33 +141,31 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         romPath: widget.romPath,
         slot: widget.slot,
         initialHome: home,
+        kitTemplateZip: widget.kitTemplateZip,
       ),
     ));
     if (mounted) _refreshKits();
   }
 
   /// The kit template pack for this slot, drawn around the game design the
-  /// team uses when it uses one.
+  /// team uses when it uses one (home first).
   Future<void> _downloadKitTemplate() async {
     final rom = widget.romPath, slot = widget.slot;
     if (rom == null || slot == null) return;
-    int? template;
-    for (final home in [true, false]) {
-      final k = kitChoice(team, home: home);
-      if (k is Map && k['template'] != null) {
-        template = (k['template'] as num).toInt();
-        break;
-      }
-    }
     // One job at a time: a second press would reuse the worker tag.
     setState(() {
       _downloadingKit = true;
       _kitError = null;
     });
     try {
-      final zip = await (widget.kitTemplateZip ?? SportsService.kitTemplateZip)(widget.gameId, romPath: rom, slot: slot, template: template);
-      if (!mounted) return;
-      await saveTemplateZip(context, zip, defaultDir: p.dirname(rom), what: 'Kit template');
+      await downloadKitTemplate(
+        context,
+        gameId: widget.gameId,
+        romPath: rom,
+        slot: slot,
+        template: kitTemplateIndex(kitChoice(team, home: true)) ?? kitTemplateIndex(kitChoice(team, home: false)),
+        job: widget.kitTemplateZip,
+      );
     } catch (e) {
       if (mounted) setState(() => _kitError = 'Kit template: $e');
     } finally {
@@ -199,8 +196,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(home ? 'Home kit' : 'Away kit', style: theme.textTheme.bodyLarge),
-                    Text(kitLabel(kitChoice(team, home: home)),
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    Text(kitLabel(kitChoice(team, home: home)), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -393,18 +389,20 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
 
   Color? _hexToColor(String hex) => hexToColor(hex);
 
-  Widget _colorRow(ThemeData theme) => _compact ? _compactColorRow(theme) : Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Card(
-          child: Column(
-            children: [
-              _colorTile(theme, 'Primary color', team.color, (v) => team.color = v),
-              const Divider(height: 1),
-              _colorTile(theme, 'Alternate color', team.alternateColor, (v) => team.alternateColor = v),
-            ],
+  Widget _colorRow(ThemeData theme) => _compact
+      ? _compactColorRow(theme)
+      : Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Card(
+            child: Column(
+              children: [
+                _colorTile(theme, 'Primary color', team.color, (v) => team.color = v),
+                const Divider(height: 1),
+                _colorTile(theme, 'Alternate color', team.alternateColor, (v) => team.alternateColor = v),
+              ],
+            ),
           ),
-        ),
-      );
+        );
 
   /// Both colors on one line: a swatch per color, tap to change.
   Widget _compactColorRow(ThemeData theme) => Padding(
@@ -457,15 +455,18 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     final fallback = CircleAvatar(radius: 20, child: Text(p.number?.toString() ?? p.name.characters.firstOrNull ?? '?'));
     Widget inner = url == null
         ? fallback
-        : CircleAvatar(radius: 20, backgroundColor: Colors.transparent, child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: url,
-              width: 40,
-              height: 40,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => fallback,
-            ),
-          ));
+        : CircleAvatar(
+            radius: 20,
+            backgroundColor: Colors.transparent,
+            child: ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: url,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => fallback,
+              ),
+            ));
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: ring, width: 2)),
@@ -511,8 +512,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                 ),
               ),
         actions: [
-          if (compact && !swapping)
-            IconButton(icon: const Icon(Icons.person_add), tooltip: 'Add player', onPressed: () => _editPlayer(null)),
+          if (compact && !swapping) IconButton(icon: const Icon(Icons.person_add), tooltip: 'Add player', onPressed: () => _editPlayer(null)),
         ],
       ),
       floatingActionButton: compact || swapping
@@ -586,8 +586,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (showBenchLabel && !swapping) _sectionLabel(theme, 'Bench', Colors.grey),
-                          if (showExtraLabel && !swapping)
-                            _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
+                          if (showExtraLabel && !swapping) _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
                           Opacity(
                             opacity: extra ? 0.5 : 1,
                             child: Card(
@@ -623,8 +622,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                             visualDensity: VisualDensity.compact,
                                             onPressed: () => _removePlayer(i),
                                           ),
-                                          if (!Handheld.current)
-                                            ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
+                                          if (!Handheld.current) ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_handle)),
                                         ],
                                       ),
                                 onTap: () => _onRowTap(i, p),
@@ -654,11 +652,26 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
 }
 
 const List<Color> _palette = [
-  Color(0xFFD32F2F), Color(0xFFC2185B), Color(0xFF7B1FA2), Color(0xFF512DA8),
-  Color(0xFF303F9F), Color(0xFF1976D2), Color(0xFF0288D1), Color(0xFF0097A7),
-  Color(0xFF00796B), Color(0xFF388E3C), Color(0xFF689F38), Color(0xFFAFB42B),
-  Color(0xFFFBC02D), Color(0xFFFFA000), Color(0xFFF57C00), Color(0xFFE64A19),
-  Color(0xFF5D4037), Color(0xFF616161), Color(0xFF000000), Color(0xFFFFFFFF),
+  Color(0xFFD32F2F),
+  Color(0xFFC2185B),
+  Color(0xFF7B1FA2),
+  Color(0xFF512DA8),
+  Color(0xFF303F9F),
+  Color(0xFF1976D2),
+  Color(0xFF0288D1),
+  Color(0xFF0097A7),
+  Color(0xFF00796B),
+  Color(0xFF388E3C),
+  Color(0xFF689F38),
+  Color(0xFFAFB42B),
+  Color(0xFFFBC02D),
+  Color(0xFFFFA000),
+  Color(0xFFF57C00),
+  Color(0xFFE64A19),
+  Color(0xFF5D4037),
+  Color(0xFF616161),
+  Color(0xFF000000),
+  Color(0xFFFFFFFF),
 ];
 
 /// "RRGGBB" (upper case, no hash): the roster JSON's colour form.
@@ -674,8 +687,7 @@ Color? hexToColor(String hex) {
 
 /// A d-pad friendly swatch grid; resolves to the picked colour, null when
 /// dismissed. [current] is outlined.
-Future<Color?> showPaletteDialog(BuildContext context, {Color? current, String title = 'Team color'}) =>
-    showDialog<Color>(
+Future<Color?> showPaletteDialog(BuildContext context, {Color? current, String title = 'Team color'}) => showDialog<Color>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
