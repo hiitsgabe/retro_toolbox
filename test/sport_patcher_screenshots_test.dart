@@ -10,14 +10,18 @@ import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
+import 'package:retro_toolbox/screens/team_editor_screen.dart';
+import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Renders the wizard's Teams and Look steps to PNGs under `build/screenshots`
-/// with the app's theme and fonts. Skipped unless `SCREENSHOTS=1`, so the
-/// normal run does not write files; the images are for eyeballing the UI
-/// without the Python worker, not golden comparisons. `SCREENSHOT_IMAGES`
-/// names a folder of `<slot>.png` previews for the Look step's cards.
+/// Renders the wizard's Teams and Look steps and the team editor with its
+/// Kits section to PNGs under `build/screenshots` with the app's theme and
+/// fonts. Skipped unless
+/// `SCREENSHOTS=1`, so the normal run does not write files; the images are for
+/// eyeballing the UI without the Python worker, not golden comparisons.
+/// `SCREENSHOT_IMAGES` names a folder of `<slot>.png` previews for the Look
+/// step's cards and a `kit.png` for every kit thumbnail.
 void main() {
   final enabled = Platform.environment['SCREENSHOTS'] == '1';
   final previews = Platform.environment['SCREENSHOT_IMAGES'] ?? '';
@@ -32,6 +36,8 @@ void main() {
     supportsLogos: true,
     supportsBlankUnused: true,
     imageSlots: ['title', 'menu', 'boot'],
+    supportsKits: true,
+    kitTemplates: true,
   );
 
   RosterDoc doc() => RosterDoc(
@@ -40,7 +46,8 @@ void main() {
           for (final (i, n) in ['Flamengo', 'Palmeiras', 'Grêmio', 'Corinthians'].indexed)
             RosterTeam(
               teamRaw: {'id': i + 1, 'name': n},
-              players: [for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': k + 1, 'name': 'Player $k'})],
+              // Negative ids: no ESPN headshot lookups (network, sqflite) in the editor shot.
+              players: [for (var k = 0; k < 23; k++) RosterPlayer(raw: {'id': -(k + 1), 'name': 'Player $k'})],
               statsRaw: {},
               extraRaw: {},
             ),
@@ -63,7 +70,14 @@ void main() {
     }
   }
 
-  Future<void> shoot(WidgetTester t, String name, int step) async {
+  /// Every kit thumbnail shows `kit.png` from the previews folder, if any.
+  Future<KitPreviews> kitPreviews(Map<String, dynamic> kits,
+      {bool templates = false, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours}) async {
+    final f = File('$previews/kit.png');
+    return (kits: {if (f.existsSync()) for (final k in kits.keys) k: f.path}, templates: <KitTemplate>[]);
+  }
+
+  Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page) async {
     SharedPreferences.setMockInitialValues({});
     final tmp = Directory.systemTemp.createTempSync('shots');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -90,15 +104,7 @@ void main() {
           navigatorKey: key,
           theme: appTheme(),
           builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
-          home: RepaintBoundary(
-            key: boundaryKey,
-            child: SportPatcherWizardScreen(
-              info: info,
-              initialDoc: doc(),
-              initialStep: step,
-              initialImages: images.isEmpty ? null : images,
-            ),
-          ),
+          home: RepaintBoundary(key: boundaryKey, child: page(images)),
         ),
       ));
       await Future<void>.delayed(const Duration(milliseconds: 800));
@@ -114,6 +120,31 @@ void main() {
     out.writeAsBytesSync(bytes!.buffer.asUint8List());
   }
 
-  testWidgets('teams step', (t) => shoot(t, 'wizard_teams', 1), skip: !enabled);
-  testWidgets('look step', (t) => shoot(t, 'wizard_look', 3), skip: !enabled);
+  Widget wizard(int step, Map<String, String> images) => SportPatcherWizardScreen(
+        info: info,
+        initialDoc: doc(),
+        initialStep: step,
+        initialImages: images.isEmpty ? null : images,
+      );
+
+  // Steps: 0 ROM, 1 Rosters, 2 Teams, 3 Look, 4 Patch.
+  testWidgets('teams step', (t) => shoot(t, 'wizard_teams', (i) => wizard(2, i)), skip: !enabled);
+  testWidgets('look step', (t) => shoot(t, 'wizard_look', (i) => wizard(3, i)), skip: !enabled);
+  testWidgets(
+    'team editor with kits',
+    (t) => shoot(
+      t,
+      'wizard_kits',
+      (_) => TeamEditorScreen(
+        team: doc().teams.first,
+        gameId: info.gameId,
+        sport: info.sport,
+        info: info,
+        romPath: '/roms/we2002.bin',
+        slot: 0,
+        kitLoader: kitPreviews,
+      ),
+    ),
+    skip: !enabled,
+  );
 }

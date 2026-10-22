@@ -18,11 +18,13 @@ import 'package:retro_toolbox/services/sports_rom_lookup.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_trivia.dart';
+import 'package:retro_toolbox/widgets/kit_picker.dart' show saveTemplateZip;
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
 /// One patch flow per game, in the app's own wizard idiom: step dots up top,
-/// one focused step at a time, Back/Next footer.
+/// one focused step at a time, Back/Next footer. The ROM comes first so the
+/// team editor can show the game's own kit designs.
 ///
 /// After fetch the rosters become a full editor (reorder teams, add/delete
 /// teams, edit each squad). Team order is the ROM slot order, so it replaces a
@@ -34,11 +36,28 @@ class SportPatcherWizardScreen extends ConsumerStatefulWidget {
   /// screenshots render later steps without the Python worker.
   @visibleForTesting
   final RosterDoc? initialDoc;
+
+  /// Several leagues already fetched (multi-league games); wins over
+  /// [initialDoc].
+  @visibleForTesting
+  final List<RosterDoc>? initialDocs;
   @visibleForTesting
   final int initialStep;
 
-  /// Screen art previews ({slot: png path}) to show on the Look step without
-  /// exporting them from a ROM. Tests and screenshots only.
+  /// Leagues to offer instead of asking the worker. Tests only.
+  @visibleForTesting
+  final List<League>? initialLeagues;
+
+  /// Replaces the worker's template-pack job. Tests only.
+  @visibleForTesting
+  final Future<String> Function(String gameId, {String? romPath})? templatesZip;
+
+  /// A ROM already chosen. Tests only.
+  @visibleForTesting
+  final String? initialRomPath;
+
+  /// Screen art previews ({slot: png path}) to show on the Look step instead
+  /// of exporting them from [initialRomPath]. Tests and screenshots only.
   @visibleForTesting
   final Map<String, String>? initialImages;
 
@@ -46,15 +65,19 @@ class SportPatcherWizardScreen extends ConsumerStatefulWidget {
     super.key,
     required this.info,
     this.initialDoc,
+    this.initialDocs,
     this.initialStep = 0,
     this.initialImages,
+    this.initialLeagues,
+    this.templatesZip,
+    this.initialRomPath,
   });
 
   @override
   ConsumerState<SportPatcherWizardScreen> createState() => _WizardState();
 }
 
-enum _Step { rosters, teams, rom, look, patch }
+enum _Step { rom, rosters, teams, look, patch }
 
 /// A screen art slot's replacement: a PNG the user picked, or the branded
 /// art the app generated.
@@ -64,9 +87,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   // The look step exists only for games whose logos or screen art the patch
   // can change.
   late final List<_Step> _steps = [
+    _Step.rom,
     _Step.rosters,
     _Step.teams,
-    _Step.rom,
     if (widget.info.hasVisuals) _Step.look,
     _Step.patch,
   ];
@@ -84,12 +107,20 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   late String? _language = info.languages.isEmpty ? null : info.languages.first;
 
   bool get _isSoccer => widget.info.sport == 'soccer';
-  List<League> _leagues = [];
+  late List<League> _leagues = widget.initialLeagues ?? [];
   League? _selectedLeague;
+
+  /// Multi-league games: the leagues ticked, in tick order (league k fills
+  /// slot group k).
+  final List<League> _selectedLeagues = [];
+  bool _nationals = false;
   bool _loadingLeagues = false;
 
-  late RosterDoc? _doc = widget.initialDoc;
-  String? _romPath;
+  /// One fetched league per selected league; a single one for most games.
+  late List<RosterDoc> _docs = widget.initialDocs ?? [if (widget.initialDoc != null) widget.initialDoc!];
+  RosterDoc? get _doc => _docs.firstOrNull;
+  String get _leagueLabel => _docs.map((d) => d.leagueName).join(' + ');
+  late String? _romPath = widget.initialRomPath;
   String? _outputDir;
 
   // -- Look step state ----------------------------------------------------
@@ -98,8 +129,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   /// The ROM's current art per slot, exported for [_romImagesFor].
   late Map<String, String> _romImages = widget.initialImages ?? const {};
-  String? _romImagesFor;
+  late String? _romImagesFor = widget.initialImages == null ? null : widget.initialRomPath;
   bool _loadingImages = false;
+  bool _downloadingTemplates = false;
 
   /// Per slot, the image replacing the ROM's; absent = keep the original.
   final Map<String, _ImagePick> _imagePicks = {};
@@ -116,11 +148,13 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   RomCatalogMatch? _catalogMatch;
   String? _catalogDownloadDir;
 
-  /// Team picked to swap on the teams step; the next row chosen trades places
-  /// with it. Null when not swapping.
+  /// Team picked to swap on the teams step (its league in [_teamSwapDoc]);
+  /// the next row chosen trades places with it. Null when not swapping.
   int? _teamSwapFrom;
+  int _teamSwapDoc = 0;
   final _teamFocus = FocusNode();
   int? _teamFocusRow;
+  int _teamFocusDoc = 0;
 
   @override
   void dispose() {
@@ -128,20 +162,24 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     super.dispose();
   }
 
-  void _focusTeam(int i) {
+  void _focusTeam(int d, int i) {
+    _teamFocusDoc = d;
     _teamFocusRow = i;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _teamFocus.requestFocus();
     });
   }
 
-  void _startTeamSwap(int i) {
-    setState(() => _teamSwapFrom = i);
-    _focusTeam(i);
+  void _startTeamSwap(int d, int i) {
+    setState(() {
+      _teamSwapDoc = d;
+      _teamSwapFrom = i;
+    });
+    _focusTeam(d, i);
   }
 
-  Future<void> _removeTeam(int i) async {
-    final teams = _doc!.teams;
+  Future<void> _removeTeam(int d, int i) async {
+    final teams = _docs[d].teams;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -155,7 +193,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
     if (ok != true || !mounted) return;
     setState(() => teams.removeAt(i));
-    if (teams.isNotEmpty) _focusTeam(i < teams.length ? i : teams.length - 1);
+    if (teams.isNotEmpty) _focusTeam(d, i < teams.length ? i : teams.length - 1);
   }
 
   bool _busy = false;
@@ -184,11 +222,18 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   @override
   void initState() {
     super.initState();
-    if (_isSoccer) _loadLeagues();
+    if (_isSoccer && widget.initialLeagues == null) _loadLeagues();
     _lookupRom();
-    if (!_rostersHasOptions && _doc == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _enterStep();
+    });
+  }
+
+  /// Work a step starts on arrival: Look exports the ROM's art; Rosters with
+  /// nothing to choose fetches at once.
+  void _enterStep() {
+    if (_step == _Step.look) _loadRomImages();
+    if (_step == _Step.rosters && !_rostersHasOptions && _docs.isEmpty) _fetch();
   }
 
   /// Search the console catalog for this game so the ROM step can offer a
@@ -277,6 +322,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _fetch() async {
+    // One worker job per league; multi-league games fetch each ticked league
+    // in turn and the loader names the one in flight.
+    final leagues = info.multiLeague ? List<League?>.of(_selectedLeagues) : <League?>[_selectedLeague];
     setState(() {
       _busy = true;
       _progress = 0;
@@ -284,19 +332,27 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _error = null;
     });
     try {
-      final (_, file) = await SportsService.fetchRosters(
-        gameId: info.gameId,
-        provider: _provider,
-        season: _season,
-        league: _selectedLeague,
-        onProgress: (v) => setState(() => _progress = v),
-        onStatus: (s) => setState(() => _status = s),
-      );
-      final doc = await SportsService.loadRoster(file);
+      final docs = <RosterDoc>[];
+      for (final (n, league) in leagues.indexed) {
+        final prefix = leagues.length > 1 ? '${league?.name} (${n + 1}/${leagues.length}) · ' : '';
+        setState(() {
+          _progress = 0;
+          _status = '${prefix}Contacting the provider…';
+        });
+        final (_, file) = await SportsService.fetchRosters(
+          gameId: info.gameId,
+          provider: _provider,
+          season: _season,
+          league: league,
+          onProgress: (v) => setState(() => _progress = v),
+          onStatus: (s) => setState(() => _status = '$prefix$s'),
+        );
+        docs.add(await SportsService.loadRoster(file));
+      }
       // Fetch is the step's forward action — on success go straight to the
       // editor instead of making the user press a separate Next.
       setState(() {
-        _doc = doc;
+        _docs = docs;
         if (_step == _Step.rosters) _index++;
       });
     } catch (e) {
@@ -341,13 +397,13 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     }
   }
 
-  /// The branded art for the current league and season, generated once.
+  /// The branded art for the current league(s) and season, generated once.
   Future<Map<String, String>> _brandedArt() async {
-    final key = '${_doc?.leagueName}|$_season';
+    final key = '$_leagueLabel|$_season';
     if (_brandedImages != null && _brandedFor == key) return _brandedImages!;
     final images = await SportsService.defaultImages(
       gameId: info.gameId,
-      league: _doc?.leagueName ?? '',
+      league: _leagueLabel,
       season: _season,
     );
     _brandedImages = images;
@@ -373,6 +429,25 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       if (mounted) setState(() => _error = 'Retro Toolbox art: $e');
     } finally {
       if (mounted) setState(() => _loadingImages = false);
+    }
+  }
+
+  /// Builds the screen-art template pack and copies it where the user says
+  /// (handhelds: the output folder).
+  Future<void> _downloadTemplates() async {
+    // One job at a time: a second press would reuse the worker tag.
+    setState(() {
+      _downloadingTemplates = true;
+      _error = null;
+    });
+    try {
+      final zip = await (widget.templatesZip ?? SportsService.templatesZip)(info.gameId, romPath: _romPath);
+      if (!mounted) return;
+      await saveTemplateZip(context, zip, defaultDir: _outputDir ?? _defaultOutputDir());
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Templates: $e');
+    } finally {
+      if (mounted) setState(() => _downloadingTemplates = false);
     }
   }
 
@@ -437,14 +512,32 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _error = null;
     });
     try {
-      final rostersFile = await SportsService.saveRoster(doc);
-      // Team order is the slot order for games that need an explicit mapping.
-      final slotMapping = info.requiresSlotMapping
-          ? [
-              for (var i = 0; i < doc.teams.length; i++)
-                SlotMapping(slotIndex: i, teamId: doc.teams[i].id, teamName: doc.teams[i].name),
-            ]
-          : null;
+      String? rostersFile;
+      List<RostersFile>? rostersFiles;
+      List<SlotMapping>? slotMapping;
+      if (info.multiLeague) {
+        // One file per league, each filling its slot group in team order;
+        // the mapping is absolute and drops teams past the group's size.
+        rostersFiles = [];
+        slotMapping = [];
+        for (final (k, d) in _docs.indexed) {
+          if (k >= info.slotGroups.length) break;
+          final g = info.slotGroups[k];
+          rostersFiles.add((file: await SportsService.saveRoster(d), firstSlot: g.first, count: g.count));
+          for (var i = 0; i < d.teams.length && i < g.count; i++) {
+            slotMapping.add(SlotMapping(slotIndex: g.first + i, teamId: d.teams[i].id, teamName: d.teams[i].name));
+          }
+        }
+      } else {
+        rostersFile = await SportsService.saveRoster(doc);
+        // Team order is the slot order for games that need an explicit mapping.
+        if (info.requiresSlotMapping) {
+          slotMapping = [
+            for (var i = 0; i < doc.teams.length; i++)
+              SlotMapping(slotIndex: i, teamId: doc.teams[i].id, teamName: doc.teams[i].name),
+          ];
+        }
+      }
       final result = await SportsService.patchRom(
         gameId: info.gameId,
         provider: _provider,
@@ -452,12 +545,14 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         // Output mirrors the input's packaging and is named
         // "<league> <season> - <game>..." by the Python side.
         outputDir: dir,
-        label: '${doc.leagueName} $_season',
+        label: '$_leagueLabel $_season',
         rostersFile: rostersFile,
+        rostersFiles: rostersFiles,
         slotMapping: slotMapping,
         language: _language,
         logos: info.supportsLogos ? _useLogos : null,
         blankUnused: info.supportsBlankUnused && _blankUnused,
+        nationals: info.supportsNationals && _nationals,
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
         onProgress: (v) => setState(() => _progress = v),
@@ -476,9 +571,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       // Next on the rosters step triggers the fetch; enabled once a league is
       // chosen (soccer) or immediately (other sports use a fixed league).
       case _Step.rosters:
-        return !_isSoccer || _selectedLeague != null;
+        if (!_isSoccer) return true;
+        return info.multiLeague ? _selectedLeagues.isNotEmpty : _selectedLeague != null;
       case _Step.teams:
-        return _doc != null && _doc!.teams.isNotEmpty;
+        return _docs.isNotEmpty && _docs.every((d) => d.teams.isNotEmpty);
       case _Step.rom:
         return _romPath != null;
       case _Step.look:
@@ -500,12 +596,12 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   // On the rosters step Next runs the fetch (which advances on success);
   // elsewhere it just moves forward.
   void _next() {
-    if (_step == _Step.rosters && _doc == null) {
+    if (_step == _Step.rosters && _docs.isEmpty) {
       _fetch();
-    } else {
-      setState(() => _index++);
-      if (_step == _Step.look) _loadRomImages();
+      return;
     }
+    setState(() => _index++);
+    _enterStep();
   }
 
   @override
@@ -520,7 +616,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         if (_teamSwapFrom != null) {
           final from = _teamSwapFrom!;
           setState(() => _teamSwapFrom = null);
-          _focusTeam(from);
+          _focusTeam(_teamSwapDoc, from);
         } else if (_index > 0) {
           setState(() => _index--);
         }
@@ -628,9 +724,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   static String _label(_Step s) => switch (s) {
+        _Step.rom => 'ROM',
         _Step.rosters => 'Rosters',
         _Step.teams => 'Teams',
-        _Step.rom => 'ROM',
         _Step.look => 'Look',
         _Step.patch => 'Patch',
       };
@@ -654,9 +750,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   Widget _body(ThemeData theme) {
     final content = switch (_step) {
+      _Step.rom => _romStep(theme),
       _Step.rosters => _rostersStep(theme),
       _Step.teams => _teamsStep(theme),
-      _Step.rom => _romStep(theme),
       _Step.look => _lookStep(theme),
       _Step.patch => _patchStep(theme),
     };
@@ -675,7 +771,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
   }
 
-  // -- Step 1: source / season / league / fetch ---------------------------
+  // -- Step 2: source / season / league / fetch ---------------------------
 
   Widget _rostersStep(ThemeData theme) {
     // While fetching (auto or manual), fill the step with the trivia loader.
@@ -685,7 +781,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         _sectionTitle(theme, Icons.tune, 'Rosters',
             'Pick your options, then Next downloads the league data.'),
         _sourceAndSeason(theme),
-        if (_isSoccer) _leaguePicker(theme),
+        if (_isSoccer) info.multiLeague ? _leagueChecklist(theme) : _leaguePicker(theme),
       ],
     );
   }
@@ -710,7 +806,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   onChanged: (v) => setState(() {
                     _provider = v ?? _provider;
                     _season = defaultSeason(_provider);
-                    _doc = null;
+                    _docs = [];
                   }),
                 ),
               ],
@@ -721,12 +817,12 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             const SizedBox(height: 4),
             Row(
               children: [
-                IconButton.filledTonal(onPressed: () => setState(() { _season--; _doc = null; }), icon: const Icon(Icons.remove)),
+                IconButton.filledTonal(onPressed: () => setState(() { _season--; _docs = []; }), icon: const Icon(Icons.remove)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text('$_season', style: theme.textTheme.headlineSmall),
                 ),
-                IconButton.filledTonal(onPressed: () => setState(() { _season++; _doc = null; }), icon: const Icon(Icons.add)),
+                IconButton.filledTonal(onPressed: () => setState(() { _season++; _docs = []; }), icon: const Icon(Icons.add)),
               ],
             ),
           ],
@@ -755,13 +851,69 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 ],
                 onChanged: (v) => setState(() {
                   _selectedLeague = v;
-                  _doc = null;
+                  _docs = [];
                 }),
               ),
             _customLeaguesHelp(theme),
           ],
         ),
       );
+
+  /// Multi-league games: tick one league per slot group, in the order they
+  /// fill the groups; plus the national sides when the patch can do them.
+  Widget _leagueChecklist(ThemeData theme) {
+    final groups = info.slotGroups;
+    final full = _selectedLeagues.length >= groups.length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Leagues', style: theme.textTheme.labelLarge),
+          Text(
+            'Each league you tick fills one group of team slots, in that order (up to ${groups.length}).',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 4),
+          if (_loadingLeagues)
+            const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator())
+          else
+            for (final l in _leagues)
+              Builder(builder: (_) {
+                // Compared by id: a re-import rebuilds the league objects.
+                final k = _selectedLeagues.indexWhere((s) => s.id == l.id);
+                final g = k < 0 ? null : groups[k];
+                return CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: k >= 0,
+                  enabled: k >= 0 || !full,
+                  title: Text(l.label, overflow: TextOverflow.ellipsis),
+                  subtitle: g == null ? null : Text('${l.name} → Group ${k + 1} (${g.name}, ${g.count} teams)'),
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selectedLeagues.add(l);
+                    } else {
+                      _selectedLeagues.removeWhere((s) => s.id == l.id);
+                    }
+                    _docs = [];
+                  }),
+                );
+              }),
+          if (info.supportsNationals)
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.flag_outlined),
+              title: const Text('National teams'),
+              subtitle: const Text('Update the national sides too (international friendlies)'),
+              value: _nationals,
+              onChanged: (v) => setState(() => _nationals = v),
+            ),
+          _customLeaguesHelp(theme),
+        ],
+      ),
+    );
+  }
 
   Widget _customLeaguesHelp(ThemeData theme) => ExpansionTile(
         tilePadding: EdgeInsets.zero,
@@ -814,116 +966,175 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ],
       );
 
-  // -- Step 2: the team editor -------------------------------------------
+  // -- Step 3: the team editor -------------------------------------------
 
   Widget _teamsStep(ThemeData theme) {
-    final doc = _doc;
-    if (doc == null) return const Center(child: Text('Fetch rosters first.'));
-    final teams = doc.teams;
+    if (_docs.isEmpty) return const Center(child: Text('Fetch rosters first.'));
+    if (info.multiLeague) return _leagueSections(theme);
+    final doc = _doc!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Expanded(
-              child: _sectionTitle(theme, Icons.groups, doc.leagueName,
-                  Handheld.current
-                      ? 'Swap to reorder (slot order), tap to edit a squad.'
-                      : 'Drag or swap to reorder (slot order), tap to edit a squad.'),
-            ),
-            if (_compact)
-              IconButton.filledTonal(onPressed: _addTeam, icon: const Icon(Icons.add), tooltip: 'Add team')
-            else
-              FilledButton.tonalIcon(
-                onPressed: _addTeam,
-                icon: const Icon(Icons.add),
-                label: const Text('Add team'),
-              ),
+            Expanded(child: _sectionTitle(theme, Icons.groups, doc.leagueName, _reorderHint)),
+            _addButton(doc, iconOnly: _compact),
           ],
         ),
+        Expanded(child: _teamList(theme, 0)),
+      ],
+    );
+  }
+
+  String get _reorderHint => Handheld.current
+      ? 'Swap to reorder (slot order), tap to edit a squad.'
+      : 'Drag or swap to reorder (slot order), tap to edit a squad.';
+
+  Widget _addButton(RosterDoc doc, {required bool iconOnly}) => iconOnly
+      ? IconButton.filledTonal(onPressed: () => _addTeam(doc), icon: const Icon(Icons.add), tooltip: 'Add team')
+      : FilledButton.tonalIcon(
+          onPressed: () => _addTeam(doc),
+          icon: const Icon(Icons.add),
+          label: const Text('Add team'),
+        );
+
+  /// One section per league: its slot range, its own reorderable list, and
+  /// teams past the group's size greyed out with no slot.
+  Widget _leagueSections(ThemeData theme) {
+    final groups = info.slotGroups;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(theme, Icons.groups, 'Teams', _reorderHint),
         Expanded(
-          child: ReorderableListView.builder(
-            // Off while a swap is armed: a drag would shift the armed index.
-            buildDefaultDragHandles: !Handheld.current && _teamSwapFrom == null,
-            itemCount: teams.length,
-            onReorder: (oldI, newI) => setState(() {
-              _teamSwapFrom = null;
-              if (newI > oldI) newI--;
-              teams.insert(newI, teams.removeAt(oldI));
-            }),
-            itemBuilder: (context, i) {
-              final t = teams[i];
-              final swapping = _teamSwapFrom != null;
-              final card = Card(
-                key: ValueKey('team_${t.id}_$i'),
-                shape: _teamSwapFrom == i
-                    ? RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: theme.colorScheme.primary, width: 2),
-                      )
-                    : null,
-                margin: EdgeInsets.symmetric(vertical: _compact ? 2 : 4),
-                child: ListTile(
-                  focusNode: _teamFocusRow == i ? _teamFocus : null,
-                  dense: _compact,
-                  visualDensity: _compact ? VisualDensity.compact : null,
-                  leading: _teamCrest(theme, t),
-                  title: Text(t.name),
-                  subtitle: Text('${t.players.length} players'),
-                  trailing: swapping
-                      ? null
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.swap_vert),
-                              tooltip: 'Swap with another team',
-                              onPressed: () => _startTeamSwap(i),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: 'Remove',
-                              onPressed: () => _removeTeam(i),
-                            ),
-                            if (!Handheld.current) const Icon(Icons.drag_handle),
-                          ],
-                        ),
-                  onTap: () async {
-                    final from = _teamSwapFrom;
-                    if (from != null) {
-                      setState(() {
-                        if (from != i) {
-                          final a = teams[from];
-                          teams[from] = teams[i];
-                          teams[i] = a;
-                        }
-                        _teamSwapFrom = null;
-                      });
-                      _focusTeam(i);
-                      return;
-                    }
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => TeamEditorScreen(team: t, gameId: info.gameId, sport: info.sport)),
-                    );
-                    setState(() {});
-                  },
+          child: ListView(
+            children: [
+              for (final (d, doc) in _docs.indexed) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(doc.leagueName, style: theme.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
+                      Text(
+                        d < groups.length ? 'slots ${groups[d].first + 1}–${groups[d].first + groups[d].count}' : 'no slots',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(width: 8),
+                      _addButton(doc, iconOnly: true),
+                    ],
+                  ),
                 ),
-              );
-              // Y swaps this team.
-              return Actions(
-                key: card.key,
-                actions: {
-                  ItemActionsIntent: CallbackAction<ItemActionsIntent>(onInvoke: (_) {
-                    if (!swapping) _startTeamSwap(i);
-                    return null;
-                  }),
-                },
-                child: card,
-              );
-            },
+                _teamList(theme, d, shrink: true, slots: d < groups.length ? groups[d].count : 0),
+              ],
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  /// League [d]'s teams; [slots] caps how many get a slot (null: all).
+  Widget _teamList(ThemeData theme, int d, {bool shrink = false, int? slots}) {
+    final teams = _docs[d].teams;
+    return ReorderableListView.builder(
+      shrinkWrap: shrink,
+      physics: shrink ? const NeverScrollableScrollPhysics() : null,
+      // Off while a swap is armed: a drag would shift the armed index.
+      buildDefaultDragHandles: !Handheld.current && _teamSwapFrom == null,
+      itemCount: teams.length,
+      onReorder: (oldI, newI) => setState(() {
+        _teamSwapFrom = null;
+        if (newI > oldI) newI--;
+        teams.insert(newI, teams.removeAt(oldI));
+      }),
+      itemBuilder: (context, i) => _teamRow(theme, d, i, noSlot: slots != null && i >= slots),
+    );
+  }
+
+  Widget _teamRow(ThemeData theme, int d, int i, {bool noSlot = false}) {
+    final teams = _docs[d].teams;
+    final t = teams[i];
+    final swapping = _teamSwapFrom != null;
+    final armed = swapping && _teamSwapDoc == d && _teamSwapFrom == i;
+    final card = Card(
+      key: ValueKey('team_${d}_${t.id}_$i'),
+      shape: armed
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: theme.colorScheme.primary, width: 2),
+            )
+          : null,
+      margin: EdgeInsets.symmetric(vertical: _compact ? 2 : 4),
+      child: Opacity(
+        opacity: noSlot ? 0.5 : 1,
+        child: ListTile(
+          focusNode: _teamFocusDoc == d && _teamFocusRow == i ? _teamFocus : null,
+          dense: _compact,
+          visualDensity: _compact ? VisualDensity.compact : null,
+          leading: _teamCrest(theme, t),
+          title: Text(t.name),
+          subtitle: Text(noSlot ? 'no slot' : '${t.players.length} players'),
+          trailing: swapping
+              ? null
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.swap_vert),
+                      tooltip: 'Swap with another team',
+                      onPressed: () => _startTeamSwap(d, i),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Remove',
+                      onPressed: () => _removeTeam(d, i),
+                    ),
+                    if (!Handheld.current) const Icon(Icons.drag_handle),
+                  ],
+                ),
+          onTap: () async {
+            final from = _teamSwapFrom;
+            if (from != null) {
+              // Swaps work across leagues too: it is just two list slots.
+              setState(() {
+                final fromTeams = _docs[_teamSwapDoc].teams;
+                if (_teamSwapDoc != d || from != i) {
+                  final a = fromTeams[from];
+                  fromTeams[from] = teams[i];
+                  teams[i] = a;
+                }
+                _teamSwapFrom = null;
+              });
+              _focusTeam(d, i);
+              return;
+            }
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => TeamEditorScreen(
+                  team: t,
+                  gameId: info.gameId,
+                  sport: info.sport,
+                  info: info,
+                  romPath: _romPath,
+                  slot: noSlot ? null : (info.multiLeague ? info.slotGroups[d].first + i : i),
+                ),
+              ),
+            );
+            setState(() {});
+          },
+        ),
+      ),
+    );
+    // Y swaps this team.
+    return Actions(
+      key: card.key,
+      actions: {
+        ItemActionsIntent: CallbackAction<ItemActionsIntent>(onInvoke: (_) {
+          if (!swapping) _startTeamSwap(d, i);
+          return null;
+        }),
+      },
+      child: card,
     );
   }
 
@@ -977,7 +1188,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
   }
 
-  Future<void> _addTeam() async {
+  Future<void> _addTeam(RosterDoc doc) async {
     final nameCtrl = TextEditingController();
     final jsonCtrl = TextEditingController();
     String? err;
@@ -1051,13 +1262,13 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 if (js.isNotEmpty) {
                   try {
                     final map = Map<String, dynamic>.from(jsonDecode(js) as Map);
-                    _doc!.addTeamFromJson(map);
+                    doc.addTeamFromJson(map);
                   } catch (e) {
                     setLocal(() => err = 'Invalid team JSON: $e');
                     return;
                   }
                 } else if (nameCtrl.text.trim().isNotEmpty) {
-                  _doc!.addTeam(nameCtrl.text.trim());
+                  doc.addTeam(nameCtrl.text.trim());
                 } else {
                   setLocal(() => err = Handheld.current ? 'Enter a name or import a file' : 'Enter a name or paste JSON');
                   return;
@@ -1073,7 +1284,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     if (result == true) setState(() {});
   }
 
-  // -- Step 3 / 4 --------------------------------------------------------
+  // -- Step 1: the ROM ---------------------------------------------------
 
   Widget _romStep(ThemeData theme) => ListView(
         children: [
@@ -1252,7 +1463,17 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             'Each screen keeps its layout: edit the exported PNG in place, or let the app draw Retro Toolbox art with the league and season.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 12),
+          // Discreet: a ZIP of template PNGs with the content area outlined.
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, textStyle: theme.textTheme.labelSmall),
+              onPressed: _downloadingTemplates ? null : _downloadTemplates,
+              icon: const Icon(Icons.download_outlined, size: 16),
+              label: const Text('Download templates'),
+            ),
+          ),
+          const SizedBox(height: 4),
           LayoutBuilder(
             builder: (context, c) {
               final columns = c.maxWidth >= 520 ? 2 : 1;

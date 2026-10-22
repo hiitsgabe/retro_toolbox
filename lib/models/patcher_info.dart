@@ -22,6 +22,21 @@ class PatcherInfo {
   /// Screen art slots (`title`, `menu`, ...) whose image the patch can replace.
   final List<String> imageSlots;
 
+  /// The patch draws each team's home and away kit (from its colours, a
+  /// pattern, one of the game's designs or a PNG).
+  final bool supportsKits;
+
+  /// The game ships jersey designs a kit can reuse (previewed from the ROM).
+  final bool kitTemplates;
+
+  /// The patch can update the national sides too.
+  final bool supportsNationals;
+  final int? nationalSlotBase;
+
+  /// Team-slot groups the game splits its clubs into (one league each);
+  /// empty for single-league games.
+  final List<SlotGroup> slotGroups;
+
   const PatcherInfo({
     required this.gameId,
     required this.platform,
@@ -32,10 +47,18 @@ class PatcherInfo {
     this.supportsLogos = false,
     this.supportsBlankUnused = false,
     this.imageSlots = const [],
+    this.supportsKits = false,
+    this.kitTemplates = false,
+    this.supportsNationals = false,
+    this.nationalSlotBase,
+    this.slotGroups = const [],
   });
 
   /// Whether the wizard has a visuals step to show for this game.
   bool get hasVisuals => supportsLogos || supportsBlankUnused || imageSlots.isNotEmpty;
+
+  /// One league per slot group: the wizard fetches several leagues.
+  bool get multiLeague => slotGroups.isNotEmpty;
 
   factory PatcherInfo.fromJson(Map<String, dynamic> j) => PatcherInfo(
         gameId: (j['game_id'] ?? '') as String,
@@ -47,9 +70,42 @@ class PatcherInfo {
         supportsLogos: (j['supports_logos'] ?? false) as bool,
         supportsBlankUnused: (j['supports_blank_unused'] ?? false) as bool,
         imageSlots: ((j['image_slots'] as List?) ?? const []).map((e) => '$e').toList(),
+        supportsKits: (j['supports_kits'] ?? false) as bool,
+        kitTemplates: (j['kit_templates'] ?? false) as bool,
+        supportsNationals: (j['supports_nationals'] ?? false) as bool,
+        nationalSlotBase: (j['national_slot_base'] as num?)?.toInt(),
+        slotGroups: [
+          for (final g in ((j['slot_groups'] as List?) ?? const []))
+            SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
+        ],
       );
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';
+}
+
+/// A run of team slots one league fills: [count] slots from [first].
+class SlotGroup {
+  final String name;
+  final int first;
+  final int count;
+  const SlotGroup(this.name, this.first, this.count);
+
+  factory SlotGroup.fromJson(Map<String, dynamic> j) =>
+      SlotGroup('${j['name'] ?? ''}', ((j['first'] ?? 0) as num).toInt(), ((j['count'] ?? 0) as num).toInt());
+}
+
+/// One of the game's own jersey designs, previewed from the ROM.
+class KitTemplate {
+  final int index;
+  final String name;
+  final String path;
+  const KitTemplate({required this.index, required this.name, required this.path});
+
+  factory KitTemplate.fromJson(Map<String, dynamic> j) => KitTemplate(
+        index: ((j['index'] ?? 0) as num).toInt(),
+        name: '${j['name'] ?? ''}',
+        path: '${j['path'] ?? ''}',
+      );
 }
 
 const _languageNames = {'en': 'English', 'es': 'Español', 'fr': 'Français', 'pt': 'Português'};
@@ -61,6 +117,8 @@ const _slotNames = {
   'title': ('Title screen', 'The logo and ball on the title screen.'),
   'menu': ('Main menu', 'The ball, banner and year beside the main menu.'),
   'boot': ('Boot screens', 'The publisher and licence screens shown at start-up.'),
+  'loading': ('Loading screen', 'Shown while a match loads.'),
+  'match': ('Match screen', 'Behind the match menus.'),
 };
 
 /// Display name and one-line description of a screen art slot.

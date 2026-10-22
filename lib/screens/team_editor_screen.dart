@@ -1,18 +1,51 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/services/sports_service.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/kit_picker.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
-/// Edits one team's squad: reorder, add, remove, edit players (incl. stats), and
-/// set the team color for games that use it. Player order is the ROM order, so
-/// the list is split into starting lineup, bench, and extras the ROM won't
-/// store. Mutates the [RosterTeam] in place.
+/// Edits one team's squad: reorder, add, remove, edit players (incl. stats),
+/// set the team color for games that use it, and its kits for games whose
+/// patch draws them. Player order is the ROM order, so the list is split into
+/// starting lineup, bench, and extras the ROM won't store. Mutates the
+/// [RosterTeam] in place.
 class TeamEditorScreen extends StatefulWidget {
   final RosterTeam team;
   final String gameId;
   final String sport;
-  const TeamEditorScreen({super.key, required this.team, required this.gameId, required this.sport});
+
+  /// The game; its `supportsKits` adds the Kits section. Null: no kits.
+  final PatcherInfo? info;
+
+  /// The ROM being patched: the game's own kit designs come from it.
+  final String? romPath;
+
+  /// The team's ROM slot (absolute); null when it has none.
+  final int? slot;
+
+  /// Replaces the worker's kit preview job. Tests and screenshots only.
+  @visibleForTesting
+  final KitPreviewLoader? kitLoader;
+
+  /// Replaces the worker's kit template job. Tests only.
+  @visibleForTesting
+  final Future<String> Function(String gameId, {required String romPath, required int slot, int? template})? kitTemplateZip;
+
+  const TeamEditorScreen({
+    super.key,
+    required this.team,
+    required this.gameId,
+    required this.sport,
+    this.info,
+    this.romPath,
+    this.slot,
+    this.kitLoader,
+    this.kitTemplateZip,
+  });
 
   @override
   State<TeamEditorScreen> createState() => _TeamEditorScreenState();
@@ -24,6 +57,190 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   int get _starters => _roster.starters;
   int get _rosterSize => _roster.rosterSize;
   bool get _usesColor => gameUsesTeamColor(widget.gameId);
+  bool get _hasKits => widget.info?.supportsKits == true;
+
+  // -- Kits ---------------------------------------------------------------
+
+  /// The game's jersey designs, exported once per ROM.
+  static final _templatesFor = <String, List<KitTemplate>>{};
+
+  late final KitPreviewLoader _loadKits = widget.kitLoader ??
+      (kits, {templates = false, slots, which, colours}) => SportsService.kitPreviews(
+            gameId: widget.gameId,
+            kits: kits,
+            templates: templates,
+            romPath: widget.romPath,
+            slots: slots,
+            which: which,
+            colours: colours,
+          );
+
+  /// 'home' / 'away' -> png.
+  final _kitPreviews = <String, String>{};
+  List<KitTemplate> _templates = const [];
+  bool _loadingKits = false;
+  bool _downloadingKit = false;
+  String? _kitError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasKits) _refreshKits();
+  }
+
+  /// Re-renders both kits in one job, mounted on the player when the ROM and
+  /// slot are known; the first job for a ROM also exports the game's designs.
+  Future<void> _refreshKits() async {
+    final info = widget.info!, rom = widget.romPath, slot = widget.slot;
+    final cached = rom == null ? null : _templatesFor[rom];
+    if (cached != null) _templates = cached;
+    final needTemplates = info.kitTemplates && rom != null && cached == null;
+    const sides = ['home', 'away'];
+    // The raw choice (null = default): the worker draws it from the colours.
+    final kits = {for (final s in sides) s: kitChoice(team, home: s == 'home')};
+    setState(() {
+      _loadingKits = true;
+      _kitError = null;
+    });
+    try {
+      final r = await _loadKits(
+        kits,
+        templates: needTemplates,
+        slots: slot == null ? null : {for (final s in sides) s: slot},
+        which: {for (final s in sides) s: s},
+        colours: {for (final s in sides) s: teamColours(team)},
+      );
+      if (!mounted) return;
+      setState(() {
+        if (needTemplates) _templates = _templatesFor[rom] = r.templates;
+        // Replace, never merge: a choice the worker did not render (a game
+        // design, say) must not keep the old thumbnail; it gets the design's own.
+        for (final s in sides) {
+          final path = r.kits[s] ?? kitTemplatePath(kits[s], _templates);
+          if (path == null) {
+            _kitPreviews.remove(s);
+          } else {
+            _kitPreviews[s] = path;
+          }
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _kitError = 'Kit previews: $e');
+    } finally {
+      if (mounted) setState(() => _loadingKits = false);
+    }
+  }
+
+  Future<void> _editKit(bool home) async {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (_) => KitPickerSheet(
+        team: team,
+        info: widget.info!,
+        templates: _templates,
+        loader: _loadKits,
+        romPath: widget.romPath,
+        slot: widget.slot,
+        initialHome: home,
+      ),
+    ));
+    if (mounted) _refreshKits();
+  }
+
+  /// The kit template pack for this slot, drawn around the game design the
+  /// team uses when it uses one.
+  Future<void> _downloadKitTemplate() async {
+    final rom = widget.romPath, slot = widget.slot;
+    if (rom == null || slot == null) return;
+    int? template;
+    for (final home in [true, false]) {
+      final k = kitChoice(team, home: home);
+      if (k is Map && k['template'] != null) {
+        template = (k['template'] as num).toInt();
+        break;
+      }
+    }
+    // One job at a time: a second press would reuse the worker tag.
+    setState(() {
+      _downloadingKit = true;
+      _kitError = null;
+    });
+    try {
+      final zip = await (widget.kitTemplateZip ?? SportsService.kitTemplateZip)(widget.gameId, romPath: rom, slot: slot, template: template);
+      if (!mounted) return;
+      await saveTemplateZip(context, zip, defaultDir: p.dirname(rom), what: 'Kit template');
+    } catch (e) {
+      if (mounted) setState(() => _kitError = 'Kit template: $e');
+    } finally {
+      if (mounted) setState(() => _downloadingKit = false);
+    }
+  }
+
+  Widget _kitRow(ThemeData theme, bool home) => InkWell(
+        focusColor: Colors.transparent, // DpadScope draws the one outline
+        onTap: () => _editKit(home),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              Container(
+                width: 64,
+                height: 85,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: kitPreview(_kitPreviews[home ? 'home' : 'away'], loading: _loadingKits),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(home ? 'Home kit' : 'Away kit', style: theme.textTheme.bodyLarge),
+                    Text(kitLabel(kitChoice(team, home: home)),
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      );
+
+  Widget _kitsSection(ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _kitRow(theme, true),
+              const Divider(height: 1),
+              _kitRow(theme, false),
+              if (_kitError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: Text(_kitError!, style: TextStyle(color: theme.colorScheme.error)),
+                ),
+              // Discreet: a ZIP of this slot's kit templates with the areas outlined.
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact, textStyle: theme.textTheme.labelSmall),
+                    onPressed: widget.romPath == null || widget.slot == null || _downloadingKit ? null : _downloadKitTemplate,
+                    icon: const Icon(Icons.download_outlined, size: 16),
+                    label: const Text('Download kit template'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
 
   /// Short screens: no FAB over the list, colors scroll with it, dense rows.
   bool get _compact => MediaQuery.sizeOf(context).height < 640;
@@ -166,60 +383,15 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
 
   static String _prettyStat(String key) => key.replaceAll('_', ' ');
 
-  static const List<Color> _palette = [
-    Color(0xFFD32F2F), Color(0xFFC2185B), Color(0xFF7B1FA2), Color(0xFF512DA8),
-    Color(0xFF303F9F), Color(0xFF1976D2), Color(0xFF0288D1), Color(0xFF0097A7),
-    Color(0xFF00796B), Color(0xFF388E3C), Color(0xFF689F38), Color(0xFFAFB42B),
-    Color(0xFFFBC02D), Color(0xFFFFA000), Color(0xFFF57C00), Color(0xFFE64A19),
-    Color(0xFF5D4037), Color(0xFF616161), Color(0xFF000000), Color(0xFFFFFFFF),
-  ];
-
-  static String _toHex(Color c) =>
-      c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
-
   Future<void> _pickColorFor(String hex, void Function(String) onPicked) async {
-    final current = _hexToColor(hex);
-    final picked = await showDialog<Color>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Team color'),
-        content: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            for (final (n, c) in _palette.indexed)
-              InkWell(
-                customBorder: const CircleBorder(),
-                focusColor: Colors.transparent, // DpadScope draws the one outline
-                autofocus: n == 0,
-                onTap: () => Navigator.pop(ctx, c),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: c,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: current?.toARGB32() == c.toARGB32() ? Theme.of(ctx).colorScheme.primary : Colors.black26,
-                      width: current?.toARGB32() == c.toARGB32() ? 3 : 1,
-                    ),
-                  ),
-                  child: current?.toARGB32() == c.toARGB32() ? const Icon(Icons.check, color: Colors.white) : null,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked != null) setState(() => onPicked(_toHex(picked)));
+    final picked = await showPaletteDialog(context, current: hexToColor(hex));
+    if (picked == null) return;
+    setState(() => onPicked(colorToHex(picked)));
+    // The default kits are drawn from the colours.
+    if (_hasKits) _refreshKits();
   }
 
-  Color? _hexToColor(String hex) {
-    final h = hex.replaceAll('#', '');
-    if (h.length != 6) return null;
-    final v = int.tryParse(h, radix: 16);
-    return v == null ? null : Color(0xFF000000 | v);
-  }
+  Color? _hexToColor(String hex) => hexToColor(hex);
 
   Widget _colorRow(ThemeData theme) => _compact ? _compactColorRow(theme) : Padding(
         padding: const EdgeInsets.only(top: 4),
@@ -393,6 +565,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (_usesColor) _colorRow(theme),
+                              if (_hasKits) _kitsSection(theme),
                               _sectionLabel(theme, 'Starting lineup', Colors.green),
                             ],
                           ),
@@ -479,3 +652,58 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         ),
       );
 }
+
+const List<Color> _palette = [
+  Color(0xFFD32F2F), Color(0xFFC2185B), Color(0xFF7B1FA2), Color(0xFF512DA8),
+  Color(0xFF303F9F), Color(0xFF1976D2), Color(0xFF0288D1), Color(0xFF0097A7),
+  Color(0xFF00796B), Color(0xFF388E3C), Color(0xFF689F38), Color(0xFFAFB42B),
+  Color(0xFFFBC02D), Color(0xFFFFA000), Color(0xFFF57C00), Color(0xFFE64A19),
+  Color(0xFF5D4037), Color(0xFF616161), Color(0xFF000000), Color(0xFFFFFFFF),
+];
+
+/// "RRGGBB" (upper case, no hash): the roster JSON's colour form.
+String colorToHex(Color c) => c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase();
+
+/// Parses "RRGGBB" or "#rrggbb"; null when it is not a 6-digit colour.
+Color? hexToColor(String hex) {
+  final h = hex.replaceAll('#', '');
+  if (h.length != 6) return null;
+  final v = int.tryParse(h, radix: 16);
+  return v == null ? null : Color(0xFF000000 | v);
+}
+
+/// A d-pad friendly swatch grid; resolves to the picked colour, null when
+/// dismissed. [current] is outlined.
+Future<Color?> showPaletteDialog(BuildContext context, {Color? current, String title = 'Team color'}) =>
+    showDialog<Color>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final (n, c) in _palette.indexed)
+              InkWell(
+                customBorder: const CircleBorder(),
+                focusColor: Colors.transparent, // DpadScope draws the one outline
+                autofocus: n == 0,
+                onTap: () => Navigator.pop(ctx, c),
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: current?.toARGB32() == c.toARGB32() ? Theme.of(ctx).colorScheme.primary : Colors.black26,
+                      width: current?.toARGB32() == c.toARGB32() ? 3 : 1,
+                    ),
+                  ),
+                  child: current?.toARGB32() == c.toARGB32() ? const Icon(Icons.check, color: Colors.white) : null,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );

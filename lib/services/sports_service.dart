@@ -6,6 +6,13 @@ import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/services/python_worker.dart';
 
+/// One league's edited rosters and the run of team slots it fills.
+typedef RostersFile = ({String file, int firstSlot, int count});
+
+/// Kit preview PNGs by request key, plus the game's own jersey designs when
+/// they were asked for.
+typedef KitPreviews = ({Map<String, String> kits, List<KitTemplate> templates});
+
 /// Drives the retro_roster_patcher library over the shared [PythonWorker].
 ///
 /// Data-returning jobs hand the worker an `output_file`; we read and parse it
@@ -196,22 +203,101 @@ class SportsService {
     return Map<String, String>.from(data as Map);
   }
 
+  /// A ZIP of template PNGs for the game's screen art (red borders mark
+  /// where the content shows): its path, named `<game_id>-templates.zip`.
+  static Future<String> templatesZip(String gameId, {String? romPath}) =>
+      _templatesJob(gameId, {if (romPath != null) 'rom_path': romPath});
+
+  /// A ZIP of kit template PNGs for one team [slot]; [template] is the game
+  /// design the kit uses, when it uses one.
+  static Future<String> kitTemplateZip(String gameId, {required String romPath, required int slot, int? template}) =>
+      _templatesJob(gameId, {'kind': 'kits', 'slot': slot, 'which': null, 'template': template, 'rom_path': romPath});
+
+  static Future<String> _templatesJob(String gameId, Map<String, dynamic> extra) async {
+    final out = _tmp('templates');
+    final data = await _runData(
+      tag: 'templates_${gameId.hashCode.abs()}',
+      job: {
+        'type': 'sports_templates',
+        'game_id': gameId,
+        'out_dir': await _imageDir('templates'),
+        'cache_dir': await _cacheDir(),
+        ...extra,
+      },
+      outputFile: out,
+    );
+    return '${(data as Map)['zip']}';
+  }
+
+  static var _kitJob = 0;
+
+  /// 96x128 PNG previews of [kits] ({key: KIT}, where KIT is a kit spec, an
+  /// `image` or `template` choice, or null for the default): {key: path}.
+  /// [colours] ({key: [shirt, alternate]}) is what a null KIT is drawn from.
+  /// With a ROM, [slots] ({key: team slot}) and [which] ({key: home|away})
+  /// let the worker draw the kit as the game mounts it. With [templates] and
+  /// a ROM, also the game's own jersey designs.
+  static Future<KitPreviews> kitPreviews({
+    required String gameId,
+    required Map<String, dynamic> kits,
+    bool templates = false,
+    String? romPath,
+    Map<String, int>? slots,
+    Map<String, String>? which,
+    Map<String, List<String>>? colours,
+  }) async {
+    final out = _tmp('kit_previews');
+    final data = await _runData(
+      // Previews are requested while another batch may still be rendering;
+      // each needs its own progress file.
+      tag: 'kits_${gameId.hashCode.abs()}_${_kitJob++}',
+      job: {
+        'type': 'sports_kit_previews',
+        'game_id': gameId,
+        'out_dir': await _imageDir('kits'),
+        'kits': kits,
+        'templates': templates && romPath != null,
+        if (romPath != null) 'rom_path': romPath,
+        if (slots != null && slots.isNotEmpty) 'slots': slots,
+        if (which != null && which.isNotEmpty) 'which': which,
+        if (colours != null && colours.isNotEmpty) 'colours': colours,
+        'cache_dir': await _cacheDir(),
+      },
+      outputFile: out,
+    );
+    final m = Map<String, dynamic>.from(data as Map);
+    return (
+      kits: Map<String, String>.from((m['kits'] as Map?) ?? const {}),
+      templates: [
+        for (final t in ((m['templates'] as List?) ?? const []))
+          KitTemplate.fromJson(Map<String, dynamic>.from(t as Map)),
+      ],
+    );
+  }
+
+  /// [rostersFiles] (one league per slot group) replaces [rostersFile];
+  /// [slotMapping] indices are then absolute. Kit choices normally travel in
+  /// each team's `extra.kits`; [kits] ({slot: {home, away}}) overrides them.
   static Future<PatchResult> patchRom({
     required String gameId,
     required String provider,
     required String romPath,
     required String outputDir,
     required String label,
-    required String rostersFile,
+    String? rostersFile,
+    List<RostersFile>? rostersFiles,
     List<SlotMapping>? slotMapping,
     String? language,
     bool? logos,
     bool blankUnused = false,
+    bool nationals = false,
     Map<String, String> images = const {},
     Map<int, String> teamLogos = const {},
+    Map<String, dynamic>? kits,
     void Function(double)? onProgress,
     void Function(String)? onStatus,
   }) async {
+    assert(rostersFile != null || rostersFiles != null);
     final out = _tmp('patchresult');
     final data = await _runData(
       tag: 'patch_${gameId.hashCode.abs()}',
@@ -225,9 +311,16 @@ class SportsService {
         if (language != null) 'language': language,
         if (logos != null) 'logos': logos,
         if (blankUnused) 'blank_unused': true,
+        if (nationals) 'nationals': true,
         if (images.isNotEmpty) 'images': images,
         if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},
-        'rosters_file': rostersFile,
+        if (kits != null && kits.isNotEmpty) 'kits': kits,
+        if (rostersFiles != null)
+          'rosters_files': [
+            for (final r in rostersFiles) {'file': r.file, 'first_slot': r.firstSlot, 'count': r.count},
+          ]
+        else
+          'rosters_file': rostersFile,
         'slot_mapping': slotMapping?.map((m) => m.toJson()).toList(),
         'cache_dir': await _cacheDir(),
       },

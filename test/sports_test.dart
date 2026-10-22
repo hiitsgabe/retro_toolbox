@@ -90,7 +90,36 @@ void main() {
     final plain = PatcherInfo.fromJson({'game_id': 'g'});
     expect(plain.hasVisuals, isFalse);
     expect(imageSlotLabel('title').$1, 'Title screen');
+    expect(imageSlotLabel('loading').$1, 'Loading screen');
+    expect(imageSlotLabel('match').$1, 'Match screen');
     expect(imageSlotLabel('other').$1, 'Other');
+  });
+
+  test('PatcherInfo reads kits, nationals and slot groups; a kit-only game has visuals', () {
+    final pes = PatcherInfo.fromJson({
+      'game_id': 'pes2013-ps2',
+      'supports_kits': true,
+      'kit_templates': false,
+      'supports_nationals': true,
+      'national_slot_base': 139,
+      'slot_groups': [
+        {'name': 'England', 'first': 0, 'count': 20},
+        {'name': 'Other', 'first': 98, 'count': 41},
+      ],
+      'multi_league': true,
+    });
+    expect(pes.supportsKits, isTrue);
+    expect(pes.kitTemplates, isFalse);
+    expect(pes.supportsNationals, isTrue);
+    expect(pes.nationalSlotBase, 139);
+    expect(pes.slotGroups.map((g) => (g.name, g.first, g.count)), [('England', 0, 20), ('Other', 98, 41)]);
+    expect(pes.multiLeague, isTrue);
+    expect(pes.hasVisuals, isFalse); // kits live in the team editor, not the Look step
+    final we = PatcherInfo.fromJson({'game_id': 'we2002', 'supports_kits': true, 'kit_templates': true});
+    expect(we.kitTemplates, isTrue);
+    expect(we.nationalSlotBase, isNull);
+    expect(we.slotGroups, isEmpty);
+    expect(we.multiLeague, isFalse);
   });
 
   test('PatcherInfo carries the game languages, empty when it has none', () {

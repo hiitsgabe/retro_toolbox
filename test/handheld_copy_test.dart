@@ -51,7 +51,7 @@ void main() {
         home: SportPatcherWizardScreen(
           info: const PatcherInfo(gameId: 'g', platform: 'p', sport: 's', requiresSlotMapping: false, providers: ['x']),
           initialDoc: doc,
-          initialStep: 1,
+          initialStep: 2, // Teams
         ),
       ),
     ));

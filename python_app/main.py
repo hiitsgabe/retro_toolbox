@@ -106,7 +106,7 @@ def run_3dsconv(job):
 
 
 SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_analyze', 'sports_patch',
-                'sports_images', 'sports_default_images'}
+                'sports_images', 'sports_default_images', 'sports_kit_previews', 'sports_templates'}
 
 
 def _configure_ssl():
@@ -296,10 +296,15 @@ def _assets_with_logos(base_dir, team_logos):
     return d
 
 
-def _patch_options(job, patcher):
+def _patch_options(job, patcher, team_kits=None):
     """The keyword options for patcher.patch from a sports_patch job: only the
     ones this patcher declares, so an older library or another game never sees
-    a keyword it does not take."""
+    a keyword it does not take.
+
+    `kits` = {slot: {"home": KIT, "away": KIT}}: team_kits (each mapped team's
+    own picks, see `_team_kits`) overridden per slot by the job's `kits` dict
+    (JSON keys, so slot numbers arrive as strings). Left out entirely when
+    empty so the library keeps its own defaults."""
     options = {}
     language = job.get('language')
     if language and getattr(patcher, 'languages', ()):
@@ -311,16 +316,223 @@ def _patch_options(job, patcher):
     images = job.get('images') or {}
     if getattr(patcher, 'image_slots', ()) and images:
         options['images'] = {slot: path for slot, path in images.items() if path}
+    kits = {**(team_kits or {}), **{int(s): k for s, k in (job.get('kits') or {}).items()}}
+    if getattr(patcher, 'supports_kits', False) and kits:
+        options['kits'] = kits
     return options
 
 
+def _capabilities(cls, base):
+    """The patcher class attributes the app's list_patchers payload carries
+    beyond PatcherInfo: every one read with a default so an older library
+    (without kits, nationals or slot groups) still lists cleanly."""
+    groups = getattr(cls, 'slot_groups', None) or ()
+    return {
+        'languages': list(getattr(cls, 'languages', None) or ()),
+        'supports_logos': bool(getattr(cls, 'supports_logos', False)),
+        'supports_blank_unused': bool(getattr(cls, 'supports_blank_unused', False)),
+        'image_slots': list(getattr(cls, 'image_slots', None) or ()),
+        'supports_kits': bool(getattr(cls, 'supports_kits', False)),
+        'kit_templates': _overrides(cls, 'kit_templates', base),
+        'supports_nationals': bool(getattr(cls, 'supports_nationals', False)),
+        'national_slot_base': getattr(cls, 'national_slot_base', None),
+        'slot_groups': [{'name': n, 'first': f, 'count': c} for n, f, c in groups],
+        'multi_league': bool(groups),
+    }
+
+
+def _overrides(cls, name, base):
+    """True when cls defines `name` itself rather than inheriting base's no-op
+    (an older library has neither, which also reads as False)."""
+    return getattr(cls, name, None) is not None and getattr(cls, name) is not getattr(base, name, None)
+
+
+def _load_rosters(job, slot_mapping, rrp):
+    """[(LeagueData, slot mapping)] for the job's roster file(s).
+
+    `rosters_file` is one league. `rosters_files` are several leagues sharing
+    the job's one `slot_mapping`, whose `slot_index` values are absolute. An
+    entry `{"file", "first_slot", "count"}` takes the mapping entries with
+    first_slot <= slot_index < first_slot + count (a team in two leagues then
+    lands in both their slots); a bare `{"file"}` entry takes the ones whose
+    `team_id` is in that file. A file's position in the list never matters.
+    """
+    entries = job.get('rosters_files') or [{'file': job['rosters_file']}]
+    if len(entries) > 1 and not slot_mapping:
+        raise ValueError('rosters_files needs a slot_mapping')
+    out = []
+    for entry in entries:
+        with open(entry['file']) as f:
+            data = rrp.league_data_from_dict(json.load(f))
+        mapping = slot_mapping
+        if slot_mapping and 'first_slot' in entry and 'count' in entry:
+            first, count = int(entry['first_slot']), int(entry['count'])
+            mapping = [m for m in slot_mapping if first <= m.slot_index < first + count]
+        elif slot_mapping:
+            ids = {t.team.id for t in data.teams}
+            mapping = [m for m in slot_mapping if m.team_id in ids]
+        out.append((data, mapping))
+    return out
+
+
+def _merge_rosters(patcher, sources, rom):
+    """Every (LeagueData, mapping) of sources mapped against rom and merged
+    into one MappedRosters (a slot in two leagues takes the later one's). A
+    file none of whose teams are mapped (an empty mapping) is skipped: the
+    library would refuse it as unmapped; nothing mapped at all is an error."""
+    merged = None
+    for data, mapping in sources:
+        if mapping is not None and not mapping:
+            continue
+        m = _map_rosters(patcher, data, mapping, rom)
+        merged = m if merged is None else merged.merge(m)
+    if merged is None:
+        raise ValueError('no mapped team in any rosters file')
+    return merged
+
+
+def _team_kits(sources):
+    """{slot: {"home": KIT, "away": KIT}} from the roster `extra["kits"]` of
+    each mapped team (the editor's picks), keyed by the slot the mapping puts
+    it in. A game that maps automatically (no mapping) gets none: the library
+    then draws its own defaults."""
+    kits = {}
+    for data, mapping in sources:
+        by_id = {t.team.id: t for t in data.teams}
+        for m in mapping or ():
+            k = (getattr(by_id.get(m.team_id), 'extra', None) or {}).get('kits')
+            if k:
+                kits[m.slot_index] = k
+    return kits
+
+
+def _fetch_nationals(patcher, rom, season, rrp, on_progress=None):
+    """(LeagueData, slot mapping) of the national squads: the teams of ESPN
+    league 2021 (international friendlies) paired with the disc's national rows
+    by the patcher's `national_slot_map`; squads and lineups are fetched for
+    the mapped teams only, the lineup landing in roster.extra["lineup"]."""
+    api = patcher.api
+    league = next(iter(api.get_leagues(id=2021, season=season)))
+    teams = api.get_teams(2021, season)
+    mapping = patcher.national_slot_map(
+        Path(rom), rrp.LeagueData(league=league, teams=[rrp.TeamRoster(team=t) for t in teams]))
+    wanted = [t for t in teams if t.id in {m.team_id for m in mapping}]
+    rosters = []
+    for i, team in enumerate(wanted):
+        if on_progress:
+            on_progress(0, f'National squads {i + 1}/{len(wanted)}: {team.name}')
+        r = rrp.TeamRoster(team=team)
+        try:
+            r.players = api.get_squad(team.id, season)
+            lineup = api.get_lineup(team.id, 2021)
+            if lineup:
+                r.extra['lineup'] = lineup
+        except rrp.ApiError as exc:
+            r.error = str(exc)
+        # Fielding order (starters first), as sports_fetch does: the patch
+        # writes the list as given and cuts it at the ROM's squad size.
+        try:
+            r.players = patcher.suggest_squad_order(r)
+        except Exception:
+            pass
+        rosters.append(r)
+    return rrp.LeagueData(league=league, teams=rosters), mapping
+
+
+def _render_default_images(game_id, league, season, out_dir):
+    """{slot: png path} of the app-branded screens for game_id: each game with
+    its own art module; default_art raises for the games without one."""
+    if game_id == 'pes2013-ps2':
+        import pes_art
+        return pes_art.render_default_images(league, season, out_dir)
+    import default_art
+    return default_art.render_default_images(game_id, league, season, out_dir)
+
+
+def _mounted_previews(patcher, rom, slots, whiches):
+    """(key, KIT) -> PNG of the kit on the game's own player model, for the
+    keys the job maps to a slot ({key: slot}, kit side in {key: "home"|"away"})
+    when the game draws that (we2002's `kit_preview_png`, needs the image);
+    None when it cannot, so the caller falls back to the flat drawing."""
+    fn = getattr(patcher, 'kit_preview_png', None)
+    if not (fn and rom and slots):
+        return None
+    import templates
+
+    def mounted(key, kit):
+        if key not in slots:
+            return None
+        return fn(Path(rom), templates.we2002_tex(slots[key]), (whiches or {}).get(key, 'home'), kit)
+    return mounted
+
+
+def _default_kit_specs(colours, whiches, kits_mod, team_cls):
+    """key -> KitSpec of a team's default kit, as the library draws it
+    (`default_kits` on a Team with the two colours the app sends, {key: [c1,
+    c2]}), the side from whiches; None for a key without a first colour.
+    None altogether without colours or on a library without default_kits."""
+    fn = getattr(kits_mod, 'default_kits', None)
+    if not (fn and colours):
+        return None
+
+    def default(key):
+        c = list(colours.get(key) or []) + ['', '']
+        if not c[0]:
+            return None
+        home, away = fn(team_cls(id=0, name='', color=c[0], alternate_color=c[1]))
+        return away if (whiches or {}).get(key) == 'away' else home
+    return default
+
+
+def _kit_previews(kits, out_dir, kits_mod, mounted=None, default=None):
+    """Write `<out_dir>/<key>.png` for each KIT of kits ({key: KIT}); returns
+    {key: path}. With `mounted` (see `_mounted_previews`) a key it can draw
+    shows the kit on the player, any KIT kind included (None is the slot's
+    current kit). Otherwise a spec is drawn flat as is, a {"image": path}
+    pick as the spec the game will get from it (`kit_from_image`), and None
+    as the team's default when `default` (see `_default_kit_specs`) knows it,
+    while {"template": n} picks are skipped (the templates are written
+    separately). A picked file is always copied next to its preview as
+    `<key>_source.png`."""
+    import shutil
+    os.makedirs(out_dir, exist_ok=True)
+    written = {}
+    for key, kit in (kits or {}).items():
+        if kit and 'image' in kit:
+            shutil.copy2(kit['image'], os.path.join(out_dir, f'{key}_source.png'))
+        png = mounted(key, kit) if mounted else None
+        if png is None:
+            if kit is None and default:
+                spec = default(key)
+                if spec is None:
+                    continue
+            elif not kit or 'template' in kit:
+                continue
+            elif 'image' in kit:
+                with open(kit['image'], 'rb') as f:
+                    spec = kits_mod.kit_from_image(f.read())
+            else:
+                spec = kits_mod.KitSpec.from_dict(kit)
+            png = kits_mod.render_kit(spec)
+        path = os.path.join(out_dir, f'{key}.png')
+        with open(path, 'wb') as f:
+            f.write(png)
+        written[key] = path
+    return written
+
+
 def _with_data_file(rom_path):
-    """(data file path, cleanup) for a ROM that may be a zip: the zip's data
-    track is extracted to a temp dir that cleanup removes."""
+    """(data file path, cleanup) for a ROM that may be a zip or a .cue: the
+    zip's data track is extracted to a temp dir that cleanup removes; a .cue
+    (text) resolves to its first data track next to it."""
     import shutil
     import tempfile
     import zipfile
     rom_path = str(rom_path)
+    if rom_path.lower().endswith('.cue'):
+        track = _cue_first_bin(rom_path)
+        if track:
+            rom_path = os.path.join(os.path.dirname(rom_path) or '.', track)
     if not rom_path.lower().endswith('.zip'):
         return rom_path, lambda: None
     work = tempfile.mkdtemp(prefix='rrp_zip_')
@@ -415,13 +627,7 @@ def run_sports(job):
             out = []
             for p in rrp.list_patchers():
                 cls = rrp.get_patcher(p.game_id)
-                out.append({
-                    **p.to_dict(),
-                    'languages': list(getattr(cls, 'languages', ())),
-                    'supports_logos': bool(getattr(cls, 'supports_logos', False)),
-                    'supports_blank_unused': bool(getattr(cls, 'supports_blank_unused', False)),
-                    'image_slots': list(getattr(cls, 'image_slots', ())),
-                })
+                out.append({**p.to_dict(), **_capabilities(cls, rrp.Patcher)})
             emit(out)
             _report(progress_file, 'DONE')
             return
@@ -485,9 +691,52 @@ def run_sports(job):
             return
 
         if jtype == 'sports_default_images':
-            import default_art
-            emit(default_art.render_default_images(
+            emit(_render_default_images(
                 game_id, job.get('league') or '', job.get('season') or '', job['out_dir']))
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_templates':
+            # A zip of guide PNGs (red boxes where the game shows the user's
+            # art) for the app's "download templates" button. rom_path is
+            # accepted but unused: the geometry is static.
+            import templates
+            cls = rrp.get_patcher(game_id)
+            if job.get('kind') == 'kits':
+                # One team's current kit pages: needs the image.
+                data_file, cleanup = _with_data_file(job['rom_path'])
+                try:
+                    path, names = templates.build_kits(
+                        game_id, job['out_dir'], cls(cache_dir=cache_dir, provider=provider), data_file,
+                        int(job['slot']), job.get('which') or None, job.get('template'))
+                finally:
+                    cleanup()
+            else:
+                path, names = templates.build(game_id, job['out_dir'], bool(getattr(cls, 'supports_kits', False)))
+            emit({'zip': path, 'files': names})
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_kit_previews':
+            from retro_roster_patcher.core import kits as _kits
+            out_dir = job['out_dir']
+            cls = rrp.get_patcher(game_id)
+            patcher = cls(cache_dir=cache_dir, provider=provider)
+            data_file, cleanup = _with_data_file(job['rom_path']) if job.get('rom_path') else (None, lambda: None)
+            try:
+                mounted = _mounted_previews(patcher, data_file, job.get('slots') or {}, job.get('which') or {})
+                default = _default_kit_specs(job.get('colours') or {}, job.get('which') or {}, _kits, rrp.Team)
+                written = _kit_previews(job.get('kits'), out_dir, _kits, mounted, default)
+                templates = []
+                if job.get('templates') and data_file and _overrides(cls, 'kit_templates', rrp.Patcher):
+                    for t in patcher.kit_templates(Path(data_file)):
+                        path = os.path.join(out_dir, f'template_{t.index}.png')
+                        with open(path, 'wb') as f:
+                            f.write(t.png)
+                        templates.append({'index': t.index, 'name': t.name, 'path': path})
+            finally:
+                cleanup()
+            emit({'kits': written, 'templates': templates})
             _report(progress_file, 'DONE')
             return
 
@@ -498,15 +747,26 @@ def run_sports(job):
                 patcher = _build_patcher(
                     rrp.get_patcher(game_id), cache_dir, provider,
                     assets_dir=_assets_with_logos(str(patcher.assets_dir), team_logos))
-            options = _patch_options(job, patcher)
-            with open(job['rosters_file']) as f:
-                data = rrp.league_data_from_dict(json.load(f))
             raw_map = job.get('slot_mapping')
             slot_mapping = ([rrp.SlotMapping.from_dict(m) for m in raw_map]
                             if raw_map else None)
+            sources = _load_rosters(job, slot_mapping, rrp)
+            options = _patch_options(job, patcher, _team_kits(sources))
+            nationals = bool(job.get('nationals')) and getattr(patcher, 'supports_nationals', False)
+            season = job.get('season') or sources[0][0].league.season
+
+            def rosters_for(rom):
+                # The national squads are fetched here: pairing them with the
+                # disc's rows needs the actual image.
+                merged = _merge_rosters(patcher, sources, rom)
+                if nationals:
+                    data, mapping = _fetch_nationals(patcher, rom, season, rrp, on_progress)
+                    merged = merged.merge(_map_rosters(patcher, data, mapping, rom))
+                return merged
+
             result = _patch_with_packaging(
                 patcher, job['rom_path'], job['output_dir'], job['label'],
-                lambda rom: _map_rosters(patcher, data, slot_mapping, rom), on_progress, options,
+                rosters_for, on_progress, options,
             )
             emit(result.to_dict())
             _report(progress_file, 'DONE')

@@ -117,8 +117,8 @@ Latest builds are on the [Actions page](../../actions) (GitHub login required).
 
 ### Sports — look of the patched game
 
-Games whose art the library can change (Winning Eleven 2002 today) get a
-**Look** step before the patch runs:
+Games whose art the library can change (Winning Eleven 2002 and PES 2013 on
+the PS2) get a **Look** step before the patch runs:
 
 - **Team logos** draws each team's logo as its in-game flag; tap a crest on the
   Teams step to use your own PNG for that team instead.
@@ -129,8 +129,30 @@ Games whose art the library can change (Winning Eleven 2002 today) get a
   *Branded* draws Retro Toolbox art with the league name and season into that
   screen, and the reset arrow goes back to the original.
 
-The branded images are painted by `python_app/default_art.py` from the logo and
-font in `python_app/rrp_assets/`.
+- **Download templates** (small link under the screen-art header) saves a ZIP
+  of template PNGs: each screen at its real size with red boxes around the
+  parts the game actually shows, a kit-photo guide, and a README.
+
+Kits live on each team's own screen (Teams step, tap a team). Games that take
+them show a **Kits** card under the colours: every home and away kit is drawn
+from the team's two colours by default; tap a row to pick a pattern (plain,
+stripes, hoops, halves, sash, pinstripes, chevron, sleeves) in those colours,
+one of the game's own jersey designs (WE2002: the 95 kits on the disc, shown
+as photos), or your own PNG. A PNG at the texture's exact size (128x256 for
+WE2002, 512x256 for PES 2013) replaces the texture itself; any other size is
+read as a kit photo (shirt, shorts, socks). *Download kit template* saves a
+ZIP with the team's current kit texture, red boxes around the shirt, sleeves,
+shorts and socks, ready to paint over. The wizard asks for the ROM first so
+the game's own designs are at hand.
+
+The branded images are painted by `python_app/default_art.py` (WE2002) and
+`python_app/pes_art.py` (PES 2013) from the logo and font in
+`python_app/rrp_assets/`; the templates by `python_app/templates.py`.
+
+PES 2013 fills several leagues at once: tick the leagues in the order they
+should take the disc's groups (England, France, Italy, Netherlands, Spain,
+then the unnamed slots), and switch on **National teams** to update the
+national sides from ESPN's international fixtures too.
 
 ### Sports — custom leagues
 

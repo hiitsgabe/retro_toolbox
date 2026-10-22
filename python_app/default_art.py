@@ -79,25 +79,99 @@ def _menu(img, pieces, league, season):
     _text(img, year, str(season), start=22, dy=1)
 
 
+# The boot screens are drawn in a 384x480 frame with one texel per line and
+# per column, so on a 4:3 screen a texel is ASPECT times wider than it is
+# tall. Each painter composes its screen in display units (square pixels) and
+# squashes the result to texels before placing it; the screen positions below
+# were read off a labelled grid shown in DuckStation (Oct 2026).
+ASPECT = 1.69
+
+
+def _design(w, h):
+    """A square-pixel canvas for a w x h texel region."""
+    from PIL import Image
+    return Image.new('RGBA', (round(w * ASPECT), h), (0, 0, 0, 0))
+
+
+def _squash(canvas, w, h):
+    from PIL import Image
+    return canvas.resize((w, h), Image.Resampling.LANCZOS)
+
+
+def _lines(canvas, cx, lines, top, bottom, max_w=None):
+    """Draw text lines centred on x=cx, stacked and centred between top and
+    bottom; lines = [(text, max font size, max height)]; each line fits in
+    max_w (default: the canvas width)."""
+    from PIL import ImageDraw
+    draw = ImageDraw.Draw(canvas)
+    fitted = []
+    for text, start, max_h in lines:
+        f = _fit(draw, text, (max_w or canvas.width) - 8, max_h, start)
+        l, t, r, b = draw.textbbox((0, 0), text, font=f, stroke_width=2)
+        fitted.append((text, f, l, t, r - l, b - t))
+    gap = 4
+    total = sum(h for *_, h in fitted) + gap * (len(fitted) - 1)
+    y = top + (bottom - top - total) // 2
+    for text, f, l, t, w, h in fitted:
+        draw.text((cx - w // 2 - l, y - t), text, font=f, fill=WHITE, stroke_width=2, stroke_fill=PURPLE)
+        y += h + gap
+
+
 def _boot(img, pieces, league, season):
-    """Three screens: the licence text (pieces 0-1, one 256x128 area), the JFA
-    emblem screen (2-5) and the KONAMI logo (9: upper half, 10: lower half of
-    a centred 128x256 column; 6-8 are lettering overlays, left transparent)."""
-    x, y, w, h = _rect(pieces[0])
-    licence = (x, y, w + pieces[1].w, h)
-    _text(img, licence, 'RETRO TOOLBOX', start=20, dy=14, max_h=24)
-    th = _text(img, licence, league, start=22, dy=50, max_h=28)
-    _text(img, licence, f'SEASON {season}', start=16, dy=58 + th, max_h=22)
-    # JFA screen: the emblem sprite is the top-left 96x112 of piece 3, its
-    # caption the 120x48 at (8,136) of the page, drawn under it.
-    emblem = pieces[3]
-    _logo(img, (emblem.x, emblem.y, 96, 112), 88)
-    caption = pieces[4]
-    _text(img, (caption.x + 8, caption.y + 8, 120, 48), 'RETRO TOOLBOX', start=16, dy=14, max_h=20)
-    upper, lower = _rect(pieces[9]), _rect(pieces[10])
-    _logo(img, upper, 112)
-    th = _text(img, lower, 'RETRO', start=34, dy=8)
-    _text(img, lower, 'TOOLBOX', start=34, dy=10 + th)
+    """Three screens, in display order.
+
+    KONAMI logo: pieces 9 (upper) and 10 (lower) form a 128x256 column shown
+    centred on the screen. Licence text: piece 0 and piece 1 form a 256-wide
+    area shown at x=17 of a 369-texel screen, so the screen centre is 167
+    texels into it; only its rows 0-55 and 64-95 are drawn. JFA emblem: see
+    the comments below. Pieces 6-8 are lettering overlays and stay
+    transparent.
+    """
+    from PIL import Image
+    logo = Image.open(LOGO).convert('RGBA')
+
+    # KONAMI column: logo over two lines of text, the group centred.
+    col = _design(128, 256)
+    size = 110
+    col.alpha_composite(logo.resize((size, size), Image.Resampling.LANCZOS), ((col.width - size) // 2, 22))
+    _lines(col, col.width // 2, [('RETRO', 40, 46), ('TOOLBOX', 40, 46)], 138, 236)
+    col = _squash(col, 128, 256)
+    img.alpha_composite(col.crop((0, 0, 128, 128)), (pieces[9].x, pieces[9].y))
+    img.alpha_composite(col.crop((0, 128, 128, 256)), (pieces[10].x, pieces[10].y))
+
+    # Licence text. The sprites show rows 0-55 of the 256-wide area at lines
+    # 176-232 and rows 64-91 at lines 239-266; rows 56-63 are never drawn and
+    # rows 92-121 of piece 1 repeat off to the right, so the two zones get
+    # their own lines. The area starts 16 texels in from the left of a
+    # 369-texel screen, hence the centre at 169.
+    cx = round(169 * ASPECT)
+    lic = _design(256, 96)
+    room = 2 * (lic.width - cx)  # centred text may not pass the right edge
+    _lines(lic, cx, [('RETRO TOOLBOX', 24, 24), (league, 28, 28)], 2, 54, max_w=room)
+    _lines(lic, cx, [(f'SEASON {season}', 22, 24)], 65, 90, max_w=room)
+    lic = _squash(lic, 256, 96)
+    img.alpha_composite(lic, (pieces[0].x, pieces[0].y))
+
+    # JFA emblem page. Piece 2's columns 9-122 are shown on lines 83-210
+    # centred on the screen: the logo and the app name go there. Piece 3 shows
+    # off-centre below it and stays empty; piece 5 is the page's border tiles
+    # and must stay transparent or its pixels repeat around the frame. The
+    # caption is piece 4's rows 0-57 (columns 0-127) followed by its rows
+    # 64-121 (columns 0-32): one 161-texel strip from x=104, centre 184.5.
+    emb = _design(128, 128)
+    cx = round(65 * ASPECT)
+    size = 84
+    emb.alpha_composite(logo.resize((size, size), Image.Resampling.LANCZOS), (cx - size // 2, 10))
+    _lines(emb, cx, [('RETRO TOOLBOX', 22, 24), (f'SEASON {season}', 16, 18)], 96, 128)
+    emb = _squash(emb, 128, 128)
+    img.alpha_composite(emb, (pieces[2].x, pieces[2].y))
+    # Glyphs crossing the seam at column 128 come out split, so the caption
+    # stays within columns 35-126 (91 texels around the centre).
+    cap = _design(161, 57)
+    _lines(cap, round(80.5 * ASPECT), [(league, 28, 34)], 4, 53, max_w=round(91 * ASPECT))
+    cap = _squash(cap, 161, 57)
+    img.alpha_composite(cap.crop((0, 0, 128, 57)), (pieces[4].x, pieces[4].y))
+    img.alpha_composite(cap.crop((128, 0, 161, 57)), (pieces[4].x, pieces[4].y + 64))
 
 
 _PAINTERS = {'title': _title, 'menu': _menu, 'boot': _boot}

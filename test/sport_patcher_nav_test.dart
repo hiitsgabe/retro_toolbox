@@ -11,7 +11,8 @@ void main() {
   late GlobalKey<NavigatorState> key;
   var popped = false;
 
-  Future<void> pump(WidgetTester t, {int step = 1}) async {
+  // Steps: 0 ROM, 1 Rosters, 2 Teams, 3 Patch (no Look for this game).
+  Future<void> pump(WidgetTester t, {int step = 2}) async {
     t.view.devicePixelRatio = 1;
     t.view.physicalSize = const Size(1200, 900);
     addTearDown(t.view.reset);
@@ -34,6 +35,7 @@ void main() {
                       gameId: 'g', platform: 'p', sport: 's', requiresSlotMapping: false, providers: ['x']),
                   initialDoc: doc,
                   initialStep: step,
+                  initialRomPath: '/roms/game.bin',
                 ),
               ));
               popped = true;
@@ -52,29 +54,35 @@ void main() {
     expect(find.text('Next'), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
-    // Now on the ROM step: Back is still there and the step advanced past Teams.
+    // Now on the Patch step: the step advanced past Teams.
     expect(find.text('Add team'), findsNothing);
+    expect(find.text('Output folder'), findsOneWidget);
   });
 
   testWidgets('Start pressed repeatedly advances step by step from a cold route', (t) async {
     await pump(t, step: 0);
+    expect(find.text('Select ROM'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5); // a ROM is chosen: on to Rosters
+    await t.pumpAndSettle();
+    expect(find.text('Select ROM'), findsNothing);
+    expect(find.text('Rosters'), findsWidgets);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     expect(find.text('Add team'), findsOneWidget); // Teams
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
-    expect(find.text('Select ROM'), findsOneWidget);
+    expect(find.text('Output folder'), findsOneWidget); // Patch
   });
 
   testWidgets('B goes back a step instead of leaving; on step 0 it leaves', (t) async {
     await pump(t, step: 2);
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
-    expect(find.text('Add team'), findsOneWidget); // back on Teams
+    expect(find.text('Add team'), findsNothing); // back on Rosters
     expect(popped, isFalse);
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
-    expect(find.text('Add team'), findsNothing); // rosters step
+    expect(find.text('Select ROM'), findsOneWidget); // ROM step
     expect(popped, isFalse);
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();

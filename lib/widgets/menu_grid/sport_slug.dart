@@ -46,6 +46,7 @@ const Map<String, String> _gameNames = {
   'nhl07-psp': 'NHL 07',
   'kgj-mlb-snes': 'Ken Griffey Jr. Presents MLB',
   'mvp-psp': 'MVP Baseball',
+  'pes2013-ps2': 'PES 2013',
 };
 
 /// Pretty console name for a platform slug.
@@ -81,6 +82,7 @@ const Map<String, GameRoster> _gameRosters = {
   'nhl94-snes': GameRoster(23, 12),
   'nhl05-ps2': GameRoster(25, 12),
   'nhl07-psp': GameRoster(25, 12),
+  'pes2013-ps2': GameRoster(32, 11),
 };
 
 /// ESPN athlete headshot URL, built from the player's ESPN id and sport. The
@@ -108,6 +110,7 @@ const Map<String, List<String>> _searchTerms = {
   'nhl07-psp': ['NHL 07', 'NHL 2007'],
   'kgj-mlb-snes': ['Ken Griffey Jr. Presents Major League Baseball', "Ken Griffey Jr's Winning Run"],
   'mvp-psp': ['MVP Baseball'],
+  'pes2013-ps2': ['pro evolution soccer 2013', 'pes 2013', 'world soccer winning eleven 2013'],
 };
 
 /// Preferred ROM region per game, used to break ties between matches (e.g.
@@ -143,11 +146,13 @@ const Map<String, String> _romExpectations = {
       'A 512-byte copier header is handled automatically.',
   'mvp-psp':
       'MVP Baseball (PSP). A .iso or .cso disc image (USA). Use your own dump.',
+  'pes2013-ps2':
+      'A PlayStation 2 disc image (.iso) of Pro Evolution Soccer 2013 (USA, SLUS-21955). Zips are fine.',
 };
 
 /// Games whose ROM stores per-team colors (soccer kits, MVP uniforms), so the
 /// editor should let the user set them. Read from the game code's color usage.
-bool gameUsesTeamColor(String gameId) => const {'iss-snes', 'we2002', 'mvp-psp'}.contains(gameId);
+bool gameUsesTeamColor(String gameId) => const {'iss-snes', 'we2002', 'mvp-psp', 'pes2013-ps2'}.contains(gameId);
 
 /// Which providers expose a selectable season. ESPN only serves the current
 /// year, so only the NHL source lets the user pick a season.
