@@ -303,14 +303,12 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         child: Text(text, style: theme.textTheme.titleSmall),
       );
 
-  /// A choice tile; null [onTap] greys it out.
   Widget _tile(
     ThemeData theme, {
     required String label,
     required bool selected,
-    required VoidCallback? onTap,
+    required VoidCallback onTap,
     bool autofocus = false,
-    bool busy = false,
     String? image,
     IconData icon = Icons.checkroom,
   }) =>
@@ -329,20 +327,17 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               width: selected ? 3 : 1,
             ),
           ),
-          child: Opacity(
-            opacity: onTap == null ? 0.5 : 1,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 72,
-                  height: 96,
-                  child: kitPreview(image, loading: busy || (_loading && icon == Icons.checkroom), empty: Icon(icon)),
-                ),
-                const SizedBox(height: 4),
-                Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 72,
+                height: 96,
+                child: kitPreview(image, loading: _loading && icon == Icons.checkroom, empty: Icon(icon)),
+              ),
+              const SizedBox(height: 4),
+              Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
           ),
         ),
       );
@@ -463,28 +458,27 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
             ),
           ],
           _heading(theme, 'Your PNG'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _tile(
-                theme,
-                label: image == null ? 'Choose…' : 'Custom PNG',
-                selected: image != null,
-                image: image,
-                icon: Icons.upload_file,
-                onTap: _pickPng,
-              ),
-              // The slot's kit template pack, to draw the PNG on.
-              _tile(
-                theme,
-                label: 'Template',
-                selected: false,
-                icon: Icons.download_outlined,
-                busy: _downloading,
-                onTap: widget.romPath == null || widget.slot == null || _downloading ? null : _downloadTemplate,
-              ),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: _tile(
+              theme,
+              label: image == null ? 'Choose…' : 'Custom PNG',
+              selected: image != null,
+              image: image,
+              icon: Icons.upload_file,
+              onTap: _pickPng,
+            ),
+          ),
+          // The slot's kit template pack, to draw the PNG on: a quiet link,
+          // like the screen templates' on the Look step.
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, textStyle: theme.textTheme.labelSmall),
+              onPressed: widget.romPath == null || widget.slot == null || _downloading ? null : _downloadTemplate,
+              icon: const Icon(Icons.download_outlined, size: 16),
+              label: const Text('Download kit template'),
+            ),
           ),
           if (widget.info.gameId == 'pes2013-ps2')
             Padding(

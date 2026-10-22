@@ -300,27 +300,28 @@ void main() {
       'home': {'template': 7},
       'away': null
     };
-    InkWell tile() => t.widget<InkWell>(find.ancestor(of: find.text('Template'), matching: find.byType(InkWell)).first);
+    TextButton link() =>
+        t.widget<TextButton>(find.ancestor(of: find.text('Download kit template'), matching: find.byWidgetPredicate((w) => w is TextButton)).first);
 
     await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, romPath: '/roms/we.bin', slot: 5, kitTemplateZip: fakeZip));
-    expect(find.text('Template'), findsOneWidget);
+    expect(find.text('Download kit template'), findsOneWidget);
     expect(find.text('Choose…'), findsOneWidget);
-    expect(tile().onTap, isNotNull);
-    await t.tap(find.text('Template'));
+    expect(link().onPressed, isNotNull);
+    await t.tap(find.text('Download kit template'));
     await t.pumpAndSettle();
     expect(args, [('we2002', '/roms/we.bin', 5, 7)]); // the home kit's design
     expect(find.text('Kit template: Bad state: no worker'), findsOneWidget);
-    expect(tile().onTap, isNotNull); // re-enabled after the job
+    expect(link().onPressed, isNotNull); // re-enabled after the job
 
     // The away kit is a plain default: no design goes with it.
     await t.tap(find.text('Away'));
     await t.pumpAndSettle();
-    await t.tap(find.text('Template'));
+    await t.tap(find.text('Download kit template'));
     await t.pumpAndSettle();
     expect(args.last, ('we2002', '/roms/we.bin', 5, null));
 
     await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, slot: 5, kitTemplateZip: fakeZip));
-    expect(tile().onTap, isNull); // no ROM
+    expect(link().onPressed, isNull); // no ROM
   });
 
   test('kitLabel and the default spec', () {
