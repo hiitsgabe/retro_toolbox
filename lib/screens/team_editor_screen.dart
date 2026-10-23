@@ -507,7 +507,9 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     final players = team.players;
     final compact = _compact;
     final swapping = _swapFrom != null;
-    final countLine = '${players.length} players · ROM uses $_rosterSize (first $_starters start)';
+    final mlSize = masterLeagueSize(widget.gameId, widget.slot);
+    final countLine =
+        '${players.length} players · ROM uses $_rosterSize${mlSize == null ? '' : ', Master League $mlSize'} (first $_starters start)';
     final warnings = lineupWarnings(widget.gameId, [for (final p in players) p.position], _starters);
     // Baseball stores up to 15 position players, then the pitchers. The
     // leftovers top up a short block, so up to 25 are stored either way.
@@ -613,6 +615,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                       final showBullpenLabel = _splitsPitchers && i == batters + rotationSize && pitchersKept > rotationSize;
                       final showLeftoverLabel = _splitsPitchers && i == leftovers && i < _rosterSize && i < players.length;
                       final showExtraLabel = i == firstExtra && players.length > firstExtra;
+                      final showNationalLabel = i == mlSize;
                       final picked = _swapFrom == i;
                       final subtitle = [
                         if (p.position.isNotEmpty) p.position,
@@ -626,6 +629,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                           if (showRotationLabel && !swapping) _sectionLabel(theme, 'Rotation', Colors.blue),
                           if (showBullpenLabel && !swapping) _sectionLabel(theme, 'Bullpen', Colors.blueGrey),
                           if (showLeftoverLabel && !swapping) _sectionLabel(theme, leftoverSection(widget.gameId, pitcher: isPitcher(p.position)), Colors.grey),
+                          if (showNationalLabel && !swapping) _sectionLabel(theme, 'National team only (not in the Master League)', Colors.blueGrey),
                           if (showExtraLabel && !swapping) _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
                           Opacity(
                             opacity: extra ? 0.5 : 1,

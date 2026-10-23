@@ -215,6 +215,19 @@ void main() {
     expect(find.textContaining('in goal'), findsNothing);
   });
 
+  testWidgets('a WE2002 Master League slot marks the rows only its national team keeps', (t) async {
+    expect([for (final s in [0, 17, 18, 31, 32, null]) masterLeagueSize('we2002', s)], [14, 14, 15, 15, null, null]);
+    expect(masterLeagueSize('iss-snes', 0), isNull);
+    final team = _team([_p('Keeper', 'Goalkeeper'), for (var i = 1; i < 23; i++) _p('M$i', 'Midfielder')]);
+    t.view.devicePixelRatio = 1;
+    t.view.physicalSize = const Size(800, 4000);
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(home: TeamEditorScreen(team: team, gameId: 'we2002', sport: 'soccer', slot: 5)));
+    expect(find.textContaining('ROM uses 23, Master League 14'), findsOneWidget);
+    labelAbove(t, 'NATIONAL TEAM ONLY (NOT IN THE MASTER LEAGUE)', 'M13', 'M14');
+    expect(find.text('EXTRA (NOT STORED BY THIS GAME)'), findsNothing);
+  });
+
   test('nhl94StoredRows keeps 2 goalies, 14 forwards and 7 defencemen in list order', () {
     final positions = ['G', 'G', 'G', for (var i = 0; i < 15; i++) 'LW', for (var i = 0; i < 8; i++) 'D'];
     final kept = nhl94StoredRows(positions);

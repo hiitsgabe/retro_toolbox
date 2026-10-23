@@ -74,6 +74,12 @@ class GameRoster {
 
 GameRoster gameRoster(String gameId) => _gameRosters[gameId] ?? const GameRoster(20, 11);
 
+/// WE2002 slots 0-31 are Master League clubs as well as national teams: the
+/// Master League keeps the first 14 (slots 0-17) or 15 (18-31) of the 23.
+/// Null for any other game or slot.
+int? masterLeagueSize(String gameId, int? slot) =>
+    gameId != 'we2002' || slot == null || slot >= 32 ? null : (slot < 18 ? 14 : 15);
+
 const Map<String, GameRoster> _gameRosters = {
   'iss-snes': GameRoster(15, 11), // 11 start, 4 subs; slot 0 is the keeper
   'we2002': GameRoster(23, 11), // national squads hold 23; Master League keeps 14 or 15
