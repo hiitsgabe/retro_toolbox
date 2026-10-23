@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
@@ -10,8 +12,9 @@ import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 /// Edits one team's squad: reorder, add, remove, edit players (incl. stats),
 /// set the team color for games that use it, and its kits for games whose
 /// patch draws them. Player order is the ROM order, so the list is split into
-/// starting lineup, bench, and extras the ROM won't store. Mutates the
-/// [RosterTeam] in place.
+/// starting lineup, bench, and extras the ROM won't store, with a warning when
+/// the game will start someone else. Baseball keeps pitchers after the
+/// position players, as the game writes them. Mutates the [RosterTeam] in place.
 class TeamEditorScreen extends StatefulWidget {
   final RosterTeam team;
   final String gameId;
@@ -53,10 +56,17 @@ class TeamEditorScreen extends StatefulWidget {
 class _TeamEditorScreenState extends State<TeamEditorScreen> {
   RosterTeam get team => widget.team;
   late final GameRoster _roster = gameRoster(widget.gameId);
-  int get _starters => _roster.starters;
+  late final int _starters = (team.extraRaw['lineup_size'] as num?)?.toInt() ?? _roster.starters;
   int get _rosterSize => _roster.rosterSize;
+  bool get _splitsPitchers => gameSplitsPitchers(widget.gameId);
   bool get _usesColor => gameUsesTeamColor(widget.gameId);
   bool get _hasKits => widget.info?.supportsKits == true;
+
+  /// Baseball: regroups the list the way the game writes it, so the labels
+  /// show who is stored where. Call after every change to the order.
+  void _regroup() {
+    if (_splitsPitchers) team.players.setAll(0, splitPitchers(team.players));
+  }
 
   // -- Kits ---------------------------------------------------------------
 
@@ -85,6 +95,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   @override
   void initState() {
     super.initState();
+    _regroup();
     if (_hasKits) _refreshKits();
   }
 
@@ -276,16 +287,15 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
       _editPlayer(p);
       return;
     }
+    final players = team.players;
+    final picked = players[from];
     setState(() {
-      if (from != i) {
-        final players = team.players;
-        final a = players[from];
-        players[from] = players[i];
-        players[i] = a;
-      }
+      players[from] = players[i];
+      players[i] = picked;
+      _regroup();
       _swapFrom = null;
     });
-    _focusOn(i);
+    _focusOn(players.indexOf(picked));
   }
 
   Future<void> _removePlayer(int i) async {
@@ -302,7 +312,10 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
       ),
     );
     if (ok != true || !mounted) return;
-    setState(() => team.players.removeAt(i));
+    setState(() {
+      team.players.removeAt(i);
+      _regroup();
+    });
     final n = team.players.length;
     if (n > 0) _focusOn(i < n ? i : n - 1);
   }
@@ -376,6 +389,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         }
         team.setStats(pl.id, stats);
       }
+      _regroup(); // a new player, or a new position
     });
   }
 
@@ -492,6 +506,18 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     final compact = _compact;
     final swapping = _swapFrom != null;
     final countLine = '${players.length} players · ROM uses $_rosterSize (first $_starters start)';
+    final warnings = lineupWarnings(widget.gameId, [for (final p in players) p.position], _starters);
+    // Baseball stores up to 15 position players, then the pitchers. The
+    // leftovers top up a short block, so up to 25 are stored either way.
+    final pitchers = _splitsPitchers ? players.where((p) => isPitcher(p.position)).length : 0;
+    final batters = _splitsPitchers ? min(battersStored, players.length - pitchers) : players.length;
+    final pitchersKept = min(pitchersStored, pitchers);
+    final leftovers = batters + pitchersKept; // baseball: rows that fill a short block
+    final lineup = min(_starters, batters);
+    final notes = lineupNotes(widget.gameId);
+    // NHL 94 stores per position, not by row; everyone else the first rows.
+    final stored = gameStoresByPosition(widget.gameId) ? nhl94StoredRows([for (final p in players) p.position]) : null;
+    final firstExtra = stored == null ? _rosterSize : Iterable<int>.generate(players.length).firstWhere((i) => !stored.contains(i), orElse: () => players.length);
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: compact ? 48 : null,
@@ -557,6 +583,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                     onReorder: (oldI, newI) => setState(() {
                       if (newI > oldI) newI--;
                       players.insert(newI, players.removeAt(oldI));
+                      _regroup();
                     }),
                     // Colors live in the header so they scroll away instead of
                     // pinning two tall tiles above the squad.
@@ -568,16 +595,21 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                             children: [
                               if (_usesColor) _colorRow(theme),
                               if (_hasKits) _kitsSection(theme),
+                              for (final w in warnings) _warning(theme, w),
+                              for (final n in notes) _note(theme, n),
                               _sectionLabel(theme, 'Starting lineup', Colors.green),
                             ],
                           ),
                     buildDefaultDragHandles: !swapping && !Handheld.current,
                     itemBuilder: (context, i) {
                       final p = players[i];
-                      final starter = i < _starters;
-                      final extra = i >= _rosterSize;
-                      final showBenchLabel = i == _starters && players.length > _starters;
-                      final showExtraLabel = i == _rosterSize && players.length > _rosterSize;
+                      final starter = i < lineup;
+                      final extra = stored == null ? i >= _rosterSize : !stored.contains(i);
+                      final showBenchLabel = i == lineup && batters > lineup;
+                      final showRotationLabel = _splitsPitchers && i == batters && pitchersKept > 0;
+                      final showBullpenLabel = _splitsPitchers && i == batters + rotationSize && pitchersKept > rotationSize;
+                      final showLeftoverLabel = _splitsPitchers && i == leftovers && i < _rosterSize && i < players.length;
+                      final showExtraLabel = i == firstExtra && players.length > firstExtra;
                       final picked = _swapFrom == i;
                       final subtitle = [
                         if (p.position.isNotEmpty) p.position,
@@ -588,6 +620,10 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           if (showBenchLabel && !swapping) _sectionLabel(theme, 'Bench', Colors.grey),
+                          if (showRotationLabel && !swapping) _sectionLabel(theme, 'Rotation', Colors.blue),
+                          if (showBullpenLabel && !swapping) _sectionLabel(theme, 'Bullpen', Colors.blueGrey),
+                          if (showLeftoverLabel && !swapping)
+                            _sectionLabel(theme, leftoverSection(widget.gameId, pitcher: isPitcher(p.position)), Colors.grey),
                           if (showExtraLabel && !swapping) _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
                           Opacity(
                             opacity: extra ? 0.5 : 1,
@@ -640,6 +676,30 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
       ),
     );
   }
+
+  Widget _warning(ThemeData theme, String text) => Padding(
+        padding: const EdgeInsets.only(top: 8, left: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.warning_amber, size: 18, color: theme.colorScheme.error),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error))),
+          ],
+        ),
+      );
+
+  Widget _note(ThemeData theme, String text) => Padding(
+        padding: const EdgeInsets.only(top: 8, left: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_outline, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant))),
+          ],
+        ),
+      );
 
   Widget _sectionLabel(ThemeData theme, String text, Color dot) => Padding(
         padding: const EdgeInsets.only(top: 10, bottom: 4, left: 4),

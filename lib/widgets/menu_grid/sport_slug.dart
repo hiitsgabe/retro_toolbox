@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
 
 /// Art (logo + color + icon) for sport and game cards.
 ///
@@ -61,9 +62,10 @@ const Map<String, String> _platformLabels = {
 };
 
 /// Per-game ROM roster structure, read from the retro_roster_patcher game code
-/// (each game's PLAYERS_PER_TEAM and its stat_mapper's starting-lineup split).
+/// (each game's PLAYERS_PER_TEAM and the players it puts in the game's lineup).
 /// [rosterSize] is how many players the ROM stores per team; players beyond it
 /// are ignored on patch. [starters] is the starting lineup; the rest are bench.
+/// A team's own `extra["lineup_size"]` overrides [starters] (KGJ: 8 for NL clubs).
 class GameRoster {
   final int rosterSize;
   final int starters;
@@ -73,17 +75,104 @@ class GameRoster {
 GameRoster gameRoster(String gameId) => _gameRosters[gameId] ?? const GameRoster(20, 11);
 
 const Map<String, GameRoster> _gameRosters = {
-  'iss-snes': GameRoster(15, 11), // 4-4-2: 11 start, 4 subs
-  'we2002': GameRoster(22, 11), // starting XI first 11; the library writes 22
+  'iss-snes': GameRoster(15, 11), // 11 start, 4 subs; slot 0 is the keeper
+  'we2002': GameRoster(23, 11), // national squads hold 23; Master League keeps 14 or 15
   'nbalive95-genesis': GameRoster(12, 5),
   'kgj-mlb-snes': GameRoster(25, 9), // 25 roster, 9 batting lineup
   'mvp-psp': GameRoster(25, 9),
-  'nhl94-genesis': GameRoster(23, 12), // 2G/14F/7D dressed; ~12 top skaters
-  'nhl94-snes': GameRoster(23, 12),
-  'nhl05-ps2': GameRoster(25, 12),
-  'nhl07-psp': GameRoster(25, 12),
+  // Hockey starts six: a goalie, a forward line and a defence pair.
+  'nhl94-genesis': GameRoster(23, 6),
+  'nhl94-snes': GameRoster(23, 6),
+  'nhl05-ps2': GameRoster(25, 6),
+  'nhl07-psp': GameRoster(25, 6),
   'pes2013-ps2': GameRoster(32, 11),
 };
+
+/// Why the game will not start the first [starters] of [positions] (the squad's
+/// positions in list order) as listed: one sentence per problem, none when it will.
+List<String> lineupWarnings(String gameId, List<String> positions, int starters) {
+  final n = positions.length;
+  final top = positions.take(starters);
+  int count(String pos) => top.where((p) => p == pos).length;
+  final full = n >= starters;
+  // Baseball pitchers never bat in the lineup, so count only the rest.
+  final batters = positions.where((p) => !isPitcher(p)).length;
+  return [
+    if (!full && gameId == 'we2002')
+      "Only $n players: blank 'PLAYER' records with no abilities fill the other ${starters - n} starting places."
+    else if (!full && !gameSplitsPitchers(gameId))
+      "Only $n players: the game's old players fill the other ${starters - n} starting places.",
+    if (gameId == 'kgj-mlb-snes' && batters < starters)
+      "Only $batters position players: pitchers past the first $pitchersStored, then the game's old players, "
+          'fill the other ${starters - batters} lineup places.',
+    if (gameId == 'mvp-psp' && batters < starters) 'Only $batters position players: the batting order is ${starters - batters} short.',
+    if ((gameId == 'iss-snes' || gameId == 'we2002') && n > 0 && positions.first != 'Goalkeeper')
+      'The game puts the first player in goal: move a goalkeeper to the top.',
+    if (gameId == 'pes2013-ps2' && full && count('Goalkeeper') != 1)
+      'The game plays exactly one goalkeeper: keep one, and only one, in the first $starters.',
+    if ((gameId == 'nhl05-ps2' || gameId == 'nhl07-psp') &&
+        full &&
+        !(count('G') == 1 && count('C') == 1 && count('LW') == 1 && count('RW') == 1 && count('D') == 2))
+      'The game starts the first G, C, LW, RW and two D in the list: make the first $starters exactly those.',
+    // Genesis is left out until a Genesis cartridge confirms its line table.
+    if (gameId == 'nhl94-snes' &&
+        full &&
+        // NHL 94 plays anyone but a G or D as a forward.
+        !(count('G') == 1 && count('D') == 2 && top.where((p) => p != 'G' && p != 'D').length == 3))
+      'The game starts the first G, three forwards and two D in the list: make the first $starters exactly those.',
+    if ((gameId == 'nhl94-genesis' || gameId == 'nhl94-snes') && n > 0 && positions.where((p) => p == 'G').length < 2)
+      'NHL 94 needs two goalies: add one, or the patch stops.',
+  ];
+}
+
+/// Things true of the game's lineup that the order alone does not show.
+List<String> lineupNotes(String gameId) => [
+      if (gameId == 'nhl94-genesis') 'Not yet checked on a Genesis cartridge: the game may not start the first six as listed.',
+      if (gameId == 'mvp-psp') 'At NL parks the DH sits, the hitters behind him move up, and the first starting pitcher bats ninth.',
+    ];
+
+/// NHL 94 keeps up to 2 goalies, 14 forwards and 7 defencemen, each taken in
+/// list order wherever they sit (an SNES slot may hold fewer forwards or D):
+/// the rows of [positions] the game stores.
+Set<int> nhl94StoredRows(List<String> positions) {
+  const caps = {'G': 2, 'F': 14, 'D': 7};
+  final taken = {'G': 0, 'F': 0, 'D': 0};
+  final kept = <int>{};
+  for (final (i, p) in positions.indexed) {
+    final group = p == 'G' || p == 'D' ? p : 'F';
+    taken[group] = taken[group]! + 1;
+    if (taken[group]! <= caps[group]!) kept.add(i);
+  }
+  return kept;
+}
+
+bool gameStoresByPosition(String gameId) => gameId == 'nhl94-genesis' || gameId == 'nhl94-snes';
+
+/// Baseball games write up to 15 non-pitchers (lineup, then bench) and then up
+/// to 10 pitchers (five starters, then the bullpen), so up to 25 are stored.
+/// Leftovers fill a short block: KGJ bats spare pitchers on the bench and
+/// pitches spare batters in relief; MVP benches spare batters and puts spare
+/// pitchers in long relief.
+bool gameSplitsPitchers(String gameId) => gameId == 'kgj-mlb-snes' || gameId == 'mvp-psp';
+
+/// The section a baseball game puts its leftover players in, by the first
+/// leftover's role.
+String leftoverSection(String gameId, {required bool pitcher}) => gameId == 'kgj-mlb-snes'
+    ? (pitcher ? 'Bench (bats)' : 'Bullpen (pitches)')
+    : (pitcher ? 'Bullpen (long relief)' : 'Bench');
+const battersStored = 15, pitchersStored = 10, rotationSize = 5;
+
+/// The position strings both baseball patchers read as a pitcher.
+bool isPitcher(String position) => const {'P', 'SP', 'RP', 'CL', 'CP'}.contains(position.toUpperCase());
+
+/// [players] in the order a baseball game writes them: the first 15
+/// non-pitchers, the first 10 pitchers, then everyone else as listed.
+List<RosterPlayer> splitPitchers(List<RosterPlayer> players) {
+  final batters = players.where((p) => !isPitcher(p.position)).take(battersStored);
+  final pitchers = players.where((p) => isPitcher(p.position)).take(pitchersStored);
+  final kept = Set<RosterPlayer>.identity()..addAll(batters)..addAll(pitchers);
+  return [...batters, ...pitchers, ...players.where((p) => !kept.contains(p))];
+}
 
 /// ESPN athlete headshot URL, built from the player's ESPN id and sport. The
 /// library leaves photo_url empty, but ESPN serves headshots at a stable path.
