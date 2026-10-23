@@ -76,6 +76,12 @@ void main() {
     });
   });
 
+  test('ISS screen slots have their own names', () {
+    expect(imageSlotLabel('konami', 'iss-snes').$1, 'Konami screen');
+    expect(imageSlotLabel('menu', 'iss-snes').$1, 'Menu wallpaper');
+    expect(imageSlotLabel('title', 'iss-snes').$2, contains('PRESS START'));
+  });
+
   test('a roster names the season the provider fetched', () {
     final doc = RosterDoc.fromJson({'league': {'name': 'Brasileirao Serie A', 'season': 2026}, 'teams': []});
     expect(doc.season, 2026);

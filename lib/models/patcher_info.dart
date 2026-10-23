@@ -121,6 +121,11 @@ const _slotNames = {
 
 /// Per-game wording where a slot shows something else than in WE2002/PES.
 const _gameSlotNames = {
+  'iss-snes': {
+    'konami': ('Konami screen', 'The logo screen at boot; a line sweeps it in from the top.'),
+    'title': ('Title screen', 'Behind the ISS logo, PRESS START, the two players and the copyright lines.'),
+    'menu': ('Menu wallpaper', 'A pattern the menus scroll: it repeats both ways, so match its edges.'),
+  },
   'nhl07-psp': {
     'boot': ('Boot screen', 'The splash before the autosave prompt; the game draws its loading bar over it.'),
     'title': ('Title screen', 'Behind PRESS START; the game writes its own lines in the bottom quarter.'),

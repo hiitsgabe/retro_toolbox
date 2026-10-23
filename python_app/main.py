@@ -448,15 +448,20 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'nhl07-psp':
         import nhl07_art
         return nhl07_art.render_default_images(league, season, out_dir)
+    if game_id == 'iss-snes':
+        import iss_art
+        return iss_art.render_default_images(league, season, out_dir)
     import default_art
     return default_art.render_default_images(game_id, league, season, out_dir)
 
 
-def _mounted_previews(patcher, rom, slots, whiches):
+def _mounted_previews(patcher, rom, slots, whiches, game_id, homes=None):
     """(key, KIT) -> PNG of the kit on the game's own player model, for the
     keys the job maps to a slot ({key: slot}, kit side in {key: "home"|"away"})
-    when the game draws that (we2002's `kit_preview_png`, needs the image);
-    None when it cannot, so the caller falls back to the flat drawing."""
+    when the game draws that (`kit_preview_png`, needs the image); None when
+    it cannot, so the caller falls back to the flat drawing. A WE2002 slot is
+    drawn from its TEX index; on ISS an away kit wears the chest design of
+    the team's home KIT in homes ({key: KIT}), the design being the team's."""
     fn = getattr(patcher, 'kit_preview_png', None)
     if not (fn and rom and slots):
         return None
