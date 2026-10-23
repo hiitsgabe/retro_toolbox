@@ -327,6 +327,8 @@ def _capabilities(cls, base):
     beyond PatcherInfo: every one read with a default so an older library
     (without kits, nationals or slot groups) still lists cleanly."""
     groups = getattr(cls, 'slot_groups', None) or ()
+    # Absent on an older library: one league, which can never overwrite a group.
+    leagues = int(getattr(cls, 'max_leagues', 1) or 1)
     return {
         'languages': list(getattr(cls, 'languages', None) or ()),
         'supports_logos': bool(getattr(cls, 'supports_logos', False)),
@@ -337,7 +339,8 @@ def _capabilities(cls, base):
         'supports_nationals': bool(getattr(cls, 'supports_nationals', False)),
         'national_slot_base': getattr(cls, 'national_slot_base', None),
         'slot_groups': [{'name': n, 'first': f, 'count': c} for n, f, c in groups],
-        'multi_league': bool(groups),
+        'max_leagues': leagues,
+        'multi_league': leagues > 1 and bool(groups),
     }
 
 

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -159,6 +158,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   String? _localRomPath;
   String? _localRomBoxart;
 
+  /// Lookups ([_lookupRom], [_findLocalRom]) still running: the ROM step
+  /// holds a placeholder where their card will appear.
+  int _romLookups = 0;
+
   /// Team picked to swap on the teams step (its league in [_teamSwapDoc]);
   /// the next row chosen trades places with it. Null when not swapping.
   int? _teamSwapFrom;
@@ -253,6 +256,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     if (!ref.read(settingsProvider).isLibraryEnabled) return;
     final consoles = ref.read(appStateProvider).consolesList;
     if (consoles.isEmpty) return;
+    _romLookups++;
     try {
       final match = await SportsRomLookup.find(
         consoles: consoles,
@@ -267,6 +271,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       }
     } catch (_) {
       // ignore — manual pick remains
+    } finally {
+      if (mounted) setState(() => _romLookups--);
     }
   }
 
@@ -288,15 +294,16 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     // copies of the same title (a PS2 disc for the PSP game) are not this ROM.
     final skip = [for (final console in ref.read(appStateProvider).consolesList) settings.getDownloadDir(console.id)];
     final gameId = info.gameId;
+    _romLookups++;
     try {
-      // A full-set folder takes a moment to score; the ROM step is the first
-      // screen, so keep its frames and d-pad free.
-      final found = await Isolate.run(() => SportsRomLookup.findLocal(dirs: dirs, gameId: gameId, looseDirs: general, skip: skip));
+      final found = await SportsRomLookup.findLocalInBackground(dirs: dirs, gameId: gameId, looseDirs: general, skip: skip);
       if (found == null || !mounted) return;
       setState(() => _localRomPath = found);
       await _loadLocalBoxart(found, consoles);
     } catch (_) {
       // ignore — manual pick remains
+    } finally {
+      if (mounted) setState(() => _romLookups--);
     }
   }
 
@@ -940,18 +947,28 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       );
 
   /// Multi-league games: tick one league per slot group, in the order they
-  /// fill the groups; plus the national sides when the patch can do them.
+  /// fill the groups, up to the game's league cap; plus the national sides
+  /// when the patch can do them.
   Widget _leagueChecklist(ThemeData theme) {
     final groups = info.slotGroups;
-    final full = _selectedLeagues.length >= groups.length;
+    final cap = info.leagueCap;
+    final full = _selectedLeagues.length >= cap;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Leagues', style: theme.textTheme.labelLarge),
+          Row(
+            children: [
+              Expanded(child: Text('Leagues', style: theme.textTheme.labelLarge)),
+              Text(
+                '${_selectedLeagues.length} of $cap leagues',
+                style: theme.textTheme.labelLarge?.copyWith(color: full ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
           Text(
-            'Each league you tick fills one group of team slots, in that order (up to ${groups.length}).',
+            'The game holds up to $cap leagues. Each one you tick fills the next group of team slots, in that order.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 4),
@@ -1094,10 +1111,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   child: Row(
                     children: [
                       Expanded(child: Text(doc.leagueName, style: theme.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
-                      Text(
-                        d < groups.length ? 'slots ${groups[d].first + 1}–${groups[d].first + groups[d].count}' : 'no slots',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
+                      _slotsLabel(theme, doc, d < groups.length ? groups[d] : null),
                       const SizedBox(width: 8),
                       _addButton(doc, iconOnly: true),
                     ],
@@ -1109,6 +1123,17 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// A league section's slot range; when the league has more teams than its
+  /// group has slots, how many the patch leaves out (the greyed rows).
+  Widget _slotsLabel(ThemeData theme, RosterDoc doc, SlotGroup? g) {
+    final over = g == null ? 0 : doc.teams.length - g.count;
+    final range = g == null ? 'no slots' : 'slots ${g.first + 1}–${g.first + g.count}';
+    return Text(
+      over > 0 ? '$range · $over ${over == 1 ? 'team gets' : 'teams get'} no slot' : range,
+      style: theme.textTheme.bodySmall?.copyWith(color: over > 0 ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant),
     );
   }
 
@@ -1366,63 +1391,123 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   // -- Step 1: the ROM ---------------------------------------------------
 
-  Widget _romStep(ThemeData theme) => ListView(
+  Widget _romStep(ThemeData theme) {
+    // A ROM already chosen: offering the game again is noise.
+    final catalog = _catalogMatch != null && _romPath == null;
+    final local = _localRomPath != null && _romPath == null && _downloadedPath == null;
+    final looking = _romLookups > 0 && _romPath == null && !catalog && !local;
+    return ListView(
+      children: [
+        _sectionTitle(theme, Icons.sd_card, 'Select ROM', 'Choose the game file to patch.'),
+        // What the lookups found comes first, so its Use/Download button is the
+        // step's first control (and takes focus when nothing has it yet); the
+        // file row below stays the alternative. The file on the device before
+        // the download: it is instant. Everything keyed: cards and the
+        // placeholder come and go above the note and the file row, and a
+        // control must keep its focus (A on "Use this file" never turning into
+        // a download, "Choose" never dropping focus when the lookup ends).
+        if (local) ...[
+          KeyedSubtree(key: const ValueKey('rom-local-card'), child: _localRomCard(theme)),
+          const SizedBox(height: 16),
+        ],
+        if (catalog) ...[
+          KeyedSubtree(key: const ValueKey('rom-catalog-card'), child: _catalogCard(theme)),
+          const SizedBox(height: 16),
+        ],
+        if (looking) ...[
+          KeyedSubtree(key: const ValueKey('rom-lookup-skeleton'), child: _romLookupSkeleton(theme)),
+          const SizedBox(height: 16),
+        ],
+        Container(
+          key: const ValueKey('rom-note'),
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  romExpectation(info.gameId),
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          key: const ValueKey('rom-file-row'),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.insert_drive_file_outlined, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
+              OutlinedButton(
+                onPressed: _pickRom,
+                child: Text(_romPath != null ? 'Change' : (catalog || local ? 'Pick a file instead' : 'Choose')),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Where the found card will appear, while the lookups run: the card's
+  /// outline in grey bars over a running line.
+  Widget _romLookupSkeleton(ThemeData theme) {
+    final grey = theme.colorScheme.surfaceContainerHighest;
+    Widget bar(double widthFactor, double height) => FractionallySizedBox(
+          widthFactor: widthFactor,
+          alignment: Alignment.centerLeft,
+          child: Container(height: height, decoration: BoxDecoration(color: grey, borderRadius: BorderRadius.circular(4))),
+        );
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
         children: [
-          _sectionTitle(theme, Icons.sd_card, 'Select ROM', 'Choose the game file to patch.'),
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 10),
+                Container(width: 56, height: 78, decoration: BoxDecoration(color: grey, borderRadius: BorderRadius.circular(4))),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    romExpectation(info.gameId),
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Looking for ${gameName(info)}…',
+                          style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                      const SizedBox(height: 8),
+                      // As tall as the found card's title, file name and button.
+                      bar(0.7, 16),
+                      const SizedBox(height: 6),
+                      bar(0.4, 12),
+                      const SizedBox(height: 12),
+                      bar(0.35, 40),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.insert_drive_file_outlined, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
-                OutlinedButton(
-                  onPressed: _pickRom,
-                  child: Text(_romPath != null ? 'Change' : (_catalogMatch == null ? 'Choose' : 'Pick a file instead')),
-                ),
-              ],
-            ),
-          ),
-          // A ROM is already chosen: offering to download the game is noise.
-          // Keyed: the catalog card can arrive after the local one, and their
-          // buttons must not trade focus (A on "Use this file" turning into
-          // a download).
-          if (_catalogMatch != null && _romPath == null) ...[
-            const SizedBox(height: 16),
-            KeyedSubtree(key: const ValueKey('rom-catalog-card'), child: _catalogCard(theme)),
-          ],
-          if (_localRomPath != null && _romPath == null && _downloadedPath == null) ...[
-            const SizedBox(height: 16),
-            KeyedSubtree(key: const ValueKey('rom-local-card'), child: _localRomCard(theme)),
-          ],
+          const LinearProgressIndicator(minHeight: 2),
         ],
-      );
+      ),
+    );
+  }
 
   /// The game found among the device's files, when the catalog has no entry
   /// or its download is not on the device.
@@ -1458,7 +1543,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   Text(p.basename(path),
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 10),
+                  // Autofocus applies only while nothing in the route has focus,
+                  // so a card arriving late never takes it from the user.
                   FilledButton.icon(
+                    autofocus: true,
                     onPressed: () => setState(() => _romPath = path),
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('Use this file'),
@@ -1513,6 +1601,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   const SizedBox(height: 10),
                   if (downloaded != null)
                     FilledButton.icon(
+                      autofocus: true,
                       onPressed: () => setState(() => _romPath = downloaded),
                       icon: const Icon(Icons.check, size: 18),
                       label: const Text('Use downloaded file'),
@@ -1531,6 +1620,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                     )
                   else
                     FilledButton.icon(
+                      autofocus: true,
                       onPressed: _downloadCatalogGame,
                       icon: const Icon(Icons.download, size: 18),
                       label: Text(sizeMb.isEmpty ? 'Download' : 'Download ($sizeMb)'),

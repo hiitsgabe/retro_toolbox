@@ -182,6 +182,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         supports_nationals = True
         national_slot_base = 1000
         slot_groups = (('english', 0, 20), ('other', 98, 36))
+        max_leagues = 2
 
         def kit_templates(self, rom_path):
             return ['t']
@@ -189,15 +190,20 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
     class Old(Base):  # an older library: none of the new attributes
         supports_logos = True
 
+    class SlotsOnly(Base):  # groups that describe the slots (WE2002): one league
+        slot_groups = (('Master League', 0, 32), ('National only', 32, 31))
+
     assert main._capabilities(Full, Base) == {
         'languages': ['en'], 'supports_logos': True, 'supports_blank_unused': True, 'image_slots': ['title'],
         'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'national_slot_base': 1000,
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
-        'multi_league': True}
+        'max_leagues': 2, 'multi_league': True}
     assert main._capabilities(Old, Base) == {
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'image_slots': [],
         'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'national_slot_base': None,
-        'slot_groups': [], 'multi_league': False}
+        'slot_groups': [], 'max_leagues': 1, 'multi_league': False}
+    slots_only = main._capabilities(SlotsOnly, Base)
+    assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
 
 
 class FakeRrp:

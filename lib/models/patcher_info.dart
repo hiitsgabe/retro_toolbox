@@ -33,9 +33,13 @@ class PatcherInfo {
   final bool supportsNationals;
   final int? nationalSlotBase;
 
-  /// Team-slot groups the game splits its clubs into (one league each);
-  /// empty for single-league games.
+  /// Team-slot groups the game splits its clubs into; empty when it has none.
   final List<SlotGroup> slotGroups;
+
+  /// How many leagues one patch takes, the k-th filling slot group k. 1 when
+  /// the groups only describe the slots (WE2002): a second league would
+  /// overwrite the next group.
+  final int maxLeagues;
 
   const PatcherInfo({
     required this.gameId,
@@ -52,13 +56,18 @@ class PatcherInfo {
     this.supportsNationals = false,
     this.nationalSlotBase,
     this.slotGroups = const [],
+    this.maxLeagues = 1,
   });
 
   /// Whether the wizard has a visuals step to show for this game.
   bool get hasVisuals => supportsLogos || supportsBlankUnused || imageSlots.isNotEmpty;
 
   /// One league per slot group: the wizard fetches several leagues.
-  bool get multiLeague => slotGroups.isNotEmpty;
+  bool get multiLeague => leagueCap > 1;
+
+  /// Leagues the wizard lets the user tick: one per slot group, at most
+  /// [maxLeagues].
+  int get leagueCap => maxLeagues < slotGroups.length ? maxLeagues : slotGroups.length;
 
   factory PatcherInfo.fromJson(Map<String, dynamic> j) => PatcherInfo(
         gameId: (j['game_id'] ?? '') as String,
@@ -77,6 +86,7 @@ class PatcherInfo {
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
+        maxLeagues: ((j['max_leagues'] ?? 1) as num).toInt(),
       );
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -74,6 +75,18 @@ class SportsRomLookup {
     return best;
   }
 
+  /// [findLocal] on another isolate: a full-set folder takes a moment to
+  /// score, and the ROM step is the first screen, so its frames and d-pad stay
+  /// free. Static so the closure sent over holds only these arguments: one
+  /// built in a widget's method captures the State too, which cannot be sent.
+  static Future<String?> findLocalInBackground({
+    required List<String> dirs,
+    required String gameId,
+    List<String> looseDirs = const [],
+    List<String> skip = const [],
+  }) =>
+      Isolate.run(() => findLocal(dirs: dirs, gameId: gameId, looseDirs: looseDirs, skip: skip));
+
   /// "Track 2" and up, with or without parentheses or leading zeros: the
   /// audio tracks of a .bin set. "Track 1" / "(Track 01)" is the data track.
   static final _extraTrack = RegExp(r'\btrack\s*0*([2-9]|[1-9]\d+)\b', caseSensitive: false);
@@ -133,6 +146,10 @@ class SportsRomLookup {
     }
   }
 
+  /// The catalog service [find] loads consoles' games with. A seam for tests.
+  @visibleForTesting
+  static CatalogService Function() catalogService = CatalogService.new;
+
   /// Finds [gameName] on any catalog console matching [platform] (e.g. "snes").
   /// Loads each candidate console's games via CatalogService (which returns a
   /// list without disturbing the app's selected-console state). Returns the
@@ -147,7 +164,7 @@ class SportsRomLookup {
     final region = gamePreferredRegion(gameId);
     debugPrint('[SportsRomLookup] gameId=$gameId platform="$platform" wantSlug=$wantSlug terms=$terms region=$region consoles=${consoles.length}');
     if (wantSlug == null) return null;
-    final service = CatalogService();
+    final service = catalogService();
 
     for (final console in consoles) {
       final slug = consoleArtSlug(console);

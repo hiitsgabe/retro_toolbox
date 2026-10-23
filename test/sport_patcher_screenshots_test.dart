@@ -191,6 +191,7 @@ void main() {
       SlotGroup('Spain', 78, 20),
       SlotGroup('Other', 98, 41),
     ],
+    maxLeagues: 5,
   );
 
   const leagues = [

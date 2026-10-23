@@ -129,6 +129,7 @@ void main() {
         {'name': 'England', 'first': 0, 'count': 20},
         {'name': 'Other', 'first': 98, 'count': 41},
       ],
+      'max_leagues': 5,
       'multi_league': true,
     });
     expect(pes.supportsKits, isTrue);
@@ -136,6 +137,8 @@ void main() {
     expect(pes.supportsNationals, isTrue);
     expect(pes.nationalSlotBase, 139);
     expect(pes.slotGroups.map((g) => (g.name, g.first, g.count)), [('England', 0, 20), ('Other', 98, 41)]);
+    expect(pes.maxLeagues, 5);
+    expect(pes.leagueCap, 2); // only two groups listed here
     expect(pes.multiLeague, isTrue);
     expect(pes.hasVisuals, isFalse); // kits live in the team editor, not the Look step
     final we = PatcherInfo.fromJson({'game_id': 'we2002', 'supports_kits': true, 'kit_templates': true});
@@ -143,6 +146,16 @@ void main() {
     expect(we.nationalSlotBase, isNull);
     expect(we.slotGroups, isEmpty);
     expect(we.multiLeague, isFalse);
+    // Groups that only describe the slots, with no max_leagues (or 1): one league.
+    final grouped = PatcherInfo.fromJson({
+      'game_id': 'we2002',
+      'slot_groups': [
+        {'name': 'Master League', 'first': 0, 'count': 32},
+        {'name': 'National only', 'first': 32, 'count': 31},
+      ],
+    });
+    expect(grouped.maxLeagues, 1);
+    expect(grouped.multiLeague, isFalse);
   });
 
   test('PatcherInfo carries the game languages, empty when it has none', () {
