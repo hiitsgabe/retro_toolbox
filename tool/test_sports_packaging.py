@@ -381,6 +381,74 @@ def test_kit_previews_default_from_the_team_colours():
     assert main._default_kit_specs(colours, {}, object(), Team) is None  # an older library
 
 
+def test_kit_previews_job_returns_the_default_each_null_kit_stands_for():
+    class Spec:
+        def __init__(self, pattern):
+            self.pattern = pattern
+
+        def to_dict(self):
+            return {'pattern': self.pattern}
+
+    class Kits:
+        @staticmethod
+        def default_kits(team):
+            # Galo's catalogue kit is striped; an unknown team gets nothing.
+            return (Spec('stripes'), Spec('plain')) if team.id == 7632 else (None, None)
+
+    class Team:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    galo = {'id': 7632, 'name': 'Atletico-MG'}
+    teams = {'h': galo, 'a': galo, 'chosen': galo, 'x': {'id': 1}}
+    default = main._default_kit_specs({}, {'a': 'away'}, Kits, Team, teams)
+    kits = {'h': None, 'a': None, 'chosen': KIT, 'x': None}
+    # Only null kits, each on its side; a key with no known default is left out.
+    assert main._default_kit_dicts(kits, default) == {'h': {'pattern': 'stripes'}, 'a': {'pattern': 'plain'}}
+    assert main._default_kit_dicts(kits, None) == {}  # an older library
+
+
+def test_kit_previews_job_sends_the_defaults_without_opening_the_rom():
+    import json
+    import types
+
+    class Spec:
+        def __init__(self, pattern):
+            self.pattern = pattern
+
+        def to_dict(self):
+            return {'pattern': self.pattern}
+
+    kits = types.ModuleType('retro_roster_patcher.core.kits')
+    kits.default_kits = lambda team: (Spec('stripes'), Spec('plain'))
+    kits.render_kit = lambda spec: b'FLAT'
+    core = types.ModuleType('retro_roster_patcher.core')
+    core.kits = kits
+    rrp = types.ModuleType('retro_roster_patcher')
+    rrp.core, rrp.Patcher, rrp.Team, rrp.RetroRosterError = core, object, lambda **kw: types.SimpleNamespace(**kw), ValueError
+    rrp.get_patcher = lambda game_id: lambda **kw: object()
+    names = ('retro_roster_patcher', 'retro_roster_patcher.core', 'retro_roster_patcher.core.kits')
+    saved = {k: sys.modules.get(k) for k in names}
+    sys.modules.update(zip(names, (rrp, core, kits)))
+    d = tempfile.mkdtemp()
+    out, progress = os.path.join(d, 'out.json'), os.path.join(d, 'progress')
+    try:
+        # The zip is not there: flat previews (no slots, no designs) never open it.
+        main.run_sports({'type': 'sports_kit_previews', 'game_id': 'iss-snes', 'out_dir': d, 'rom_path': os.path.join(d, 'gone.zip'),
+                         'kits': {'home': None, 'away': None}, 'which': {'home': 'home', 'away': 'away'},
+                         'teams': {'home': {'id': 7632}, 'away': {'id': 7632}}, 'output_file': out, 'progress_file': progress})
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+    assert open(progress).read().splitlines()[-1] == 'DONE', open(progress).read()
+    sent = json.load(open(out))
+    assert sent['defaults'] == {'home': {'pattern': 'stripes'}, 'away': {'pattern': 'plain'}}
+    assert sorted(sent['kits']) == ['away', 'home'] and sent['templates'] == []
+
+
 def test_kit_previews_job_writes_a_png_per_kit():
     class Kits:
         class KitSpec:

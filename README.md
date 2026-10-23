@@ -134,11 +134,17 @@ the PS2) get a **Look** step before the patch runs:
   parts the game actually shows, a kit-photo guide, and a README.
 
 Kits live on each team's own screen (Teams step, tap a team). Games that take
-them show a **Kits** card under the colours: every home and away kit is drawn
-from the team's two colours by default; tap a row to pick a pattern (plain,
-stripes, hoops, halves, sash, pinstripes, chevron, sleeves) in those colours,
-one of the game's own jersey designs (WE2002: the 95 kits on the disc, shown
-as photos), or your own PNG. A PNG at the texture's exact size (128x256 for
+them show a **Kits** card under the colours: by default every home and away
+kit is the club's real kit from the library's kit catalogue (a plain kit in
+the team's two colours for a club it does not know), and the picker shows it
+picked in its own pattern and colours (Atlético-MG reads as black and white
+stripes). Tap a row to pick a pattern (plain, stripes, hoops, halves, sash,
+pinstripes, chevron, sleeves) in those colours, recolour the shirt, secondary,
+shorts, socks or a catalogue kit's sleeves, or choose your own PNG. The
+game's own jersey designs (WE2002: the 95 kits on the disc, shown as photos)
+show after turning on **Use a model from the game**, in place of the patterns
+and colours; turning it off with a design chosen goes back to the default.
+A PNG at the texture's exact size (128x256 for
 WE2002, 512x256 for PES 2013) replaces the texture itself; any other size is
 read as a kit photo (shirt, shorts, socks). *Download kit template* saves a
 ZIP with the team's current kit texture, red boxes around the shirt, sleeves,

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,6 +39,8 @@ void main() {
   tearDown(() => Handheld.current = savedHandheld);
 
   final requested = <({Map<String, dynamic> kits, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours, Map<String, dynamic>? home})>[];
+  // What the worker resolves a null kit to, by side; empty: an older worker.
+  var defaults = <String, Map<String, dynamic>>{};
   // Header previews get a path naming the choice, so a refresh is visible by key.
   Future<KitPreviews> fakeLoader(Map<String, dynamic> kits,
       {bool templates = false,
@@ -52,13 +55,25 @@ void main() {
         for (final k in kits.keys)
           if (k.startsWith('current_')) k: '/p/$k=${kitLabel(kits[k])}.png'
       },
+      defaults: {
+        for (final k in kits.keys)
+          if (kits[k] == null && defaults[(which?[k] ?? 'home')] != null) k: defaults[which?[k] ?? 'home']!
+      },
       templates: <KitTemplate>[],
     );
   }
 
   Iterable<Map<String, dynamic>> patternJobs() => requested.map((r) => r.kits).where((k) => k.length == 16);
 
-  setUp(requested.clear);
+  setUp(() {
+    requested.clear();
+    defaults = {};
+  });
+
+  // A tile is drawn picked with a thick border.
+  bool picked(WidgetTester t, String label) => t
+      .widgetList<Container>(find.ancestor(of: find.text(label), matching: find.byType(Container)))
+      .any((c) => (c.decoration as BoxDecoration?)?.border?.top.width == 3);
 
   Future<void> pump(WidgetTester t, Widget page) async {
     t.view.devicePixelRatio = 1;
@@ -123,7 +138,7 @@ void main() {
     expect(patternJobs().single['away_hoops'], containsPair('shirt', '#000000'));
     // The header shows the current (default) choice, mounted on this slot.
     expect(find.byKey(const ValueKey('/p/current_home=Default.png')), findsOneWidget);
-    final header = requested.last;
+    final header = requested.lastWhere((r) => r.kits.containsKey('current_home'));
     expect(header.kits, {'current_home': null});
     expect(header.slots, {'current_home': 3});
     expect(header.which, {'current_home': 'home'});
@@ -133,6 +148,8 @@ void main() {
     // The grid's specs come with the colours too.
     expect(patternJobs().length, 1);
     expect(requested.firstWhere((r) => r.kits.length == 16).colours?['home_stripes'], ['#c60000', '#000000']);
+    // The worker sent no default (an older one): the team's colours, plain.
+    expect(picked(t, 'Plain'), isTrue);
 
     await t.sendKeyEvent(LogicalKeyboardKey.arrowRight); // Plain is autofocused
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -182,6 +199,7 @@ void main() {
           for (final e in kits.entries)
             if ((e.value is! Map || e.value['template'] == null) && !(e.key == 'away' && calls > 1)) e.key: '/p/${e.key}$calls.png',
         },
+        defaults: const <String, Map<String, dynamic>>{},
         templates: templates ? const [KitTemplate(index: 44, name: 'Design 44', path: '/t/44.png')] : const <KitTemplate>[],
       );
     }
@@ -192,6 +210,8 @@ void main() {
     expect(find.byKey(const ValueKey('/p/away1.png')), findsOneWidget);
 
     await t.tap(find.text('Home kit'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Use a model from the game'));
     await t.pumpAndSettle();
     await t.tap(find.text('Design 44'));
     await t.pumpAndSettle();
@@ -379,6 +399,213 @@ void main() {
     await t.tap(find.text('Team 3'));
     await t.pumpAndSettle();
     expect(tm.extraRaw['kits']['home'], {'template': 3});
+  });
+
+  // Galo's catalogue kits, as the worker resolves its default.
+  const black = {'shirt': '#040404', 'secondary': '#fcfcfc', 'pattern': 'stripes', 'shorts': '#040404', 'socks': '#000000', 'sleeves': null};
+  const white = {'shirt': '#fcfcfc', 'secondary': '#000000', 'pattern': 'plain', 'shorts': '#fcfcfc', 'socks': '#ffffff', 'sleeves': null};
+  const we =
+      PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
+
+  // The label of the control holding focus; null when only a scope holds it.
+  String? focused() {
+    final node = FocusManager.instance.primaryFocus;
+    if (node == null || node is FocusScopeNode) return null;
+    final texts = find.descendant(of: find.byElementPredicate((e) => e == node.context), matching: find.byType(Text)).evaluate();
+    return texts.isEmpty ? null : (texts.first.widget as Text).data;
+  }
+
+  testWidgets('focus starts only on the picked tile, never on a design nobody chose (mouse: the outline shows)', (t) async {
+    defaults = {'home': black, 'away': white};
+    const designs = [KitTemplate(index: 44, name: 'Paraguay', path: '/t/44.png'), KitTemplate(index: 45, name: 'Peru', path: '/t/45.png')];
+    final tm = team();
+    Widget sheet() => KitPickerSheet(team: tm, info: we, templates: designs, loader: fakeLoader, romPath: '/roms/we.bin', slot: 0);
+
+    await pump(t, sheet());
+    // The default reads as Stripes: focus is there, not on Plain.
+    expect(focused(), 'Stripes');
+    expect(picked(t, 'Stripes'), isTrue);
+
+    // A key press sets the traditional highlight mode (a desktop's), where
+    // DpadScope draws the outline, and a mouse keeps it. Switched on by
+    // mouse, the designs show and none takes focus.
+    await t.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+    await t.tap(find.text('Use a model from the game'), kind: PointerDeviceKind.mouse);
+    await t.pumpAndSettle();
+    expect(FocusManager.instance.highlightMode, FocusHighlightMode.traditional);
+    expect(find.text('Paraguay'), findsOneWidget);
+    expect(focused(), isNull);
+    expect(kitChoice(tm, home: true), isNull);
+
+    // Off again, then the other side by mouse: focus follows to that side's
+    // picked tile instead of staying on this side's Stripes.
+    await t.tap(find.text('Use a model from the game'), kind: PointerDeviceKind.mouse);
+    await t.pumpAndSettle();
+    expect(focused(), 'Stripes');
+    await t.tap(find.text('Away'), kind: PointerDeviceKind.mouse);
+    await t.pumpAndSettle();
+    expect(focused(), 'Plain');
+    expect(picked(t, 'Plain'), isTrue);
+
+    // A side wearing a design opens with focus on that design.
+    setKitChoice(tm, home: true, kit: {'template': 45});
+    await pump(t, sheet());
+    expect(focused(), 'Peru');
+    expect(picked(t, 'Peru'), isTrue);
+  });
+
+  testWidgets('the patterns and colours wait for the default, so a pick never keeps the fallback colours', (t) async {
+    defaults = {'home': black, 'away': white};
+    final answer = Completer<void>();
+    Future<KitPreviews> slow(Map<String, dynamic> kits,
+        {bool templates = false,
+        Map<String, int>? slots,
+        Map<String, String>? which,
+        Map<String, List<String>>? colours,
+        Map<String, Map<String, Object?>>? teams,
+        Map<String, dynamic>? home}) async {
+      if (kits.length == 2) await answer.future; // the defaults job
+      return fakeLoader(kits, templates: templates, slots: slots, which: which, colours: colours, teams: teams, home: home);
+    }
+
+    final tm = team();
+    t.view.devicePixelRatio = 1;
+    t.view.physicalSize = const Size(1000, 1400);
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(home: KitPickerSheet(team: tm, info: info, loader: slow)));
+    await t.pump();
+    await t.tap(find.text('Hoops'));
+    await t.pump();
+    expect(kitChoice(tm, home: true), isNull);
+    expect(picked(t, 'Plain'), isFalse); // nothing reads as the default yet
+    expect(t.widget<ListTile>(find.widgetWithText(ListTile, 'Shirt')).enabled, isFalse);
+
+    answer.complete();
+    await t.pumpAndSettle();
+    expect(picked(t, 'Stripes'), isTrue);
+    expect(t.widget<ListTile>(find.widgetWithText(ListTile, 'Shirt')).enabled, isTrue);
+    await t.tap(find.text('Hoops'));
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: true), {...black, 'pattern': 'hoops'});
+  });
+
+  testWidgets('a club kit\'s own sleeve colour shows as a row that clears it', (t) async {
+    // São Paulo's away kit: red and black stripes, black sleeves.
+    const sp = {'shirt': '#ff0000', 'secondary': '#000000', 'pattern': 'stripes', 'shorts': '#000000', 'socks': '#000000', 'sleeves': '#000000'};
+    defaults = {'home': black, 'away': sp};
+    final tm = team();
+    await pump(t, KitPickerSheet(team: tm, info: info, loader: fakeLoader));
+    expect(find.text('Sleeves'), findsOneWidget); // the pattern tile
+    expect(find.widgetWithText(ListTile, 'Sleeves'), findsNothing); // the home kit has none
+
+    await t.tap(find.text('Away'));
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Sleeves'), findsOneWidget);
+    expect(patternJobs().single['away_plain'], {...sp, 'pattern': 'plain'});
+    await t.tap(find.byTooltip('Sleeves in the shirt colour'));
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: false), {...sp, 'sleeves': null});
+    expect(find.widgetWithText(ListTile, 'Sleeves'), findsNothing);
+    expect(patternJobs().last['away_plain'], {...sp, 'pattern': 'plain', 'sleeves': null});
+  });
+
+  testWidgets('the default is the kit the worker resolves: a striped club kit reads as Stripes, in its colours', (t) async {
+    defaults = {'home': black, 'away': white};
+    final tm = team();
+    Color? swatch(String label) => ((t.widget<ListTile>(find.widgetWithText(ListTile, label)).leading as Container).decoration as BoxDecoration).color;
+
+    await pump(t, KitPickerSheet(team: tm, info: info, loader: fakeLoader));
+    // One job asks both sides' default; the patterns wait for it.
+    expect(requested.first.kits, {'home': null, 'away': null});
+    expect(requested.first.which, {'home': 'home', 'away': 'away'});
+    expect(requested.first.colours?['away'], ['#c60000', '#000000']);
+    expect(picked(t, 'Stripes'), isTrue);
+    expect(picked(t, 'Plain'), isFalse);
+    expect(swatch('Shirt'), const Color(0xff040404));
+    // Every pattern is drawn in the default's colours, each side its own.
+    final grid = patternJobs().single;
+    expect(grid['home_hoops'], {...black, 'pattern': 'hoops'});
+    expect(grid['away_sash'], {...white, 'pattern': 'sash'});
+
+    await t.tap(find.text('Away'));
+    await t.pumpAndSettle();
+    expect(picked(t, 'Plain'), isTrue);
+    expect(swatch('Shirt'), const Color(0xfffcfcfc));
+
+    // A colour change makes a spec of the default; Back to default restores
+    // its colours and re-renders the patterns in them.
+    await t.tap(find.text('Shorts'));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: false), {...white, 'shorts': '#c2185b'});
+    expect(patternJobs().length, 2);
+    await t.tap(find.text('Back to default'));
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: false), isNull);
+    expect(swatch('Shorts'), const Color(0xfffcfcfc));
+    expect(patternJobs().last['away_plain'], white);
+    expect(picked(t, 'Plain'), isTrue);
+  });
+
+  testWidgets('the game\'s designs sit behind a switch; only the chosen one looks picked', (t) async {
+    const designs = [KitTemplate(index: 44, name: 'Paraguay (red stripes)', path: '/t/44.png'), KitTemplate(index: 45, name: 'Peru', path: '/t/45.png')];
+    bool on() => t.widget<SwitchListTile>(find.byType(SwitchListTile)).value;
+    final tm = team();
+    Widget sheet() => KitPickerSheet(team: tm, info: we, templates: designs, loader: fakeLoader, romPath: '/roms/we.bin', slot: 0);
+
+    await pump(t, sheet());
+    // Off: the generated patterns and the colours, no design.
+    expect(on(), isFalse);
+    expect(find.text('Plain'), findsOneWidget);
+    expect(find.text('Shirt'), findsOneWidget);
+    expect(find.text('Paraguay'), findsNothing);
+
+    // On, from the d-pad (up from the autofocused Plain): the designs replace
+    // them, none picked, and the choice stays the default.
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(on(), isTrue);
+    expect(find.text('Plain'), findsNothing);
+    expect(find.text('Shirt'), findsNothing);
+    expect(find.text('Paraguay'), findsOneWidget);
+    expect(picked(t, 'Paraguay') || picked(t, 'Peru'), isFalse);
+    expect(kitChoice(tm, home: true), isNull);
+
+    // Down lands on the designs (the one under the switch's centre); Left
+    // to the first, Enter picks it.
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: true), {'template': 44});
+    expect(picked(t, 'Paraguay'), isTrue);
+    expect(picked(t, 'Peru'), isFalse);
+
+    // The switch is per side: the away kit wears no design.
+    await t.tap(find.text('Away'));
+    await t.pumpAndSettle();
+    expect(on(), isFalse);
+    expect(find.text('Plain'), findsOneWidget);
+    await t.tap(find.text('Home'));
+    await t.pumpAndSettle();
+    expect(on(), isTrue);
+
+    // Off with a design chosen goes back to the default.
+    await t.tap(find.text('Use a model from the game'));
+    await t.pumpAndSettle();
+    expect(kitChoice(tm, home: true), isNull);
+    expect(find.text('Plain'), findsOneWidget);
+    expect(find.text('Paraguay'), findsNothing);
+
+    // A side wearing a design opens with the switch on and that design picked.
+    setKitChoice(tm, home: true, kit: {'template': 45});
+    await pump(t, sheet());
+    expect(on(), isTrue);
+    expect(picked(t, 'Peru'), isTrue);
+    expect(picked(t, 'Paraguay'), isFalse);
   });
 
   test('designGroups and designLabel', () {

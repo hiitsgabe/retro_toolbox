@@ -9,9 +9,10 @@ import 'package:retro_toolbox/services/python_worker.dart';
 /// One league's edited rosters and the run of team slots it fills.
 typedef RostersFile = ({String file, int firstSlot, int count});
 
-/// Kit preview PNGs by request key, plus the game's own jersey designs when
-/// they were asked for.
-typedef KitPreviews = ({Map<String, String> kits, List<KitTemplate> templates});
+/// Kit preview PNGs by request key, the kit spec each null (default) KIT
+/// stands for (empty from an older worker or library), plus the game's own
+/// jersey designs when they were asked for.
+typedef KitPreviews = ({Map<String, String> kits, Map<String, Map<String, dynamic>> defaults, List<KitTemplate> templates});
 
 /// Drives the retro_roster_patcher library over the shared [PythonWorker].
 ///
@@ -240,6 +241,7 @@ class SportsService {
   /// let the worker draw the kit as the game mounts it. With [templates] and
   /// a ROM, also the game's own jersey designs. [home] ({away key: the
   /// team's home KIT}) gives an away kit the home kit's chest design (ISS).
+  /// Each null KIT's resolved spec comes back in `defaults`.
   static Future<KitPreviews> kitPreviews({
     required String gameId,
     required Map<String, dynamic> kits,
@@ -275,6 +277,9 @@ class SportsService {
     final m = Map<String, dynamic>.from(data as Map);
     return (
       kits: Map<String, String>.from((m['kits'] as Map?) ?? const {}),
+      defaults: {
+        for (final e in ((m['defaults'] as Map?) ?? const {}).entries) '${e.key}': Map<String, dynamic>.from(e.value as Map),
+      },
       templates: [
         for (final t in ((m['templates'] as List?) ?? const []))
           KitTemplate.fromJson(Map<String, dynamic>.from(t as Map)),

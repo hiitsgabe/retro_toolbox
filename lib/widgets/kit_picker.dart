@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/patcher_info.dart';
@@ -46,10 +47,10 @@ List<String> teamColours(RosterTeam t) {
   return [shirt, _hex(t.alternateColor, contrast)];
 }
 
-/// The kit the patch draws when the team has no choice, mirroring the
-/// library's `default_kits`: a plain shirt in the team's colour (the
-/// alternate away), white shorts unless the shirt is white (then the
-/// secondary), socks like the shirt.
+/// The team's default kit when the worker sends none (an older library):
+/// the library's `default_kits` for a club its catalogue does not know, a
+/// plain shirt in the team's colour (the alternate away), white shorts unless
+/// the shirt is white (then the secondary), socks like the shirt.
 Map<String, dynamic> defaultKitSpec(RosterTeam t, {required bool home, String pattern = 'plain'}) {
   final [a, b] = teamColours(t);
   final shirt = home ? a : b, secondary = home ? b : a;
@@ -226,9 +227,21 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     for (final h in [true, false]) h: _specOf(h)
   };
 
-  /// `<side>_<pattern>` -> png.
+  /// side -> the default kit the patch writes, as the worker resolved it
+  /// (the club's real kit when the library's catalogue knows it); null until
+  /// it answers, empty when it sent none.
+  Map<String, Map<String, dynamic>>? _defaults;
+
+  /// side -> the game's designs show instead of the generated patterns; on
+  /// for a side that wears one.
+  late final Map<bool, bool> _useDesign = {
+    for (final h in [true, false]) h: kitTemplateIndex(kitChoice(team, home: h)) != null
+  };
+
+  /// `<side>_<pattern>` -> png. Loading from the start: the patterns wait
+  /// for the default.
   final _previews = <String, String>{};
-  bool _loading = false;
+  bool _loading = true;
   String? _error;
 
   /// side -> png of the current choice, drawn as the game shows it.
@@ -263,8 +276,11 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
 
   Map<String, dynamic> _specOf(bool home) {
     final k = kitChoice(team, home: home);
-    return _isSpec(k) ? Map<String, dynamic>.from(k as Map) : defaultKitSpec(team, home: home);
+    return _isSpec(k) ? Map<String, dynamic>.from(k as Map) : _defaultSpec(home);
   }
+
+  Map<String, dynamic> _defaultSpec(bool home) =>
+      Map<String, dynamic>.from(_defaults?[home ? 'home' : 'away'] ?? defaultKitSpec(team, home: home));
 
   String get _side => _home ? 'home' : 'away';
   dynamic get _current => kitChoice(team, home: _home);
@@ -284,8 +300,33 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   void initState() {
     super.initState();
     _showDesign(kitTemplateIndex(_current));
-    _loadPatterns();
+    _loadDefaults();
     _refreshCurrent();
+  }
+
+  /// Asks the worker what the default kit is on both sides, then renders the
+  /// patterns: a side without a spec of its own edits that default.
+  Future<void> _loadDefaults() async {
+    const sides = {'home': 'home', 'away': 'away'};
+    try {
+      final r = await widget.loader(
+        {for (final s in sides.keys) s: null},
+        which: sides,
+        colours: {for (final s in sides.keys) s: teamColours(team)},
+        teams: {for (final s in sides.keys) s: teamIdentity(team)},
+      );
+      _defaults = r.defaults;
+    } catch (_) {
+      // The pattern job below reports a failing worker.
+    }
+    if (!mounted) return;
+    setState(() {
+      _defaults ??= const {};
+      for (final h in [true, false]) {
+        if (!_isSpec(kitChoice(team, home: h))) _spec[h] = _defaultSpec(h);
+      }
+    });
+    await _loadPatterns();
   }
 
   /// Re-renders the header: the side's current choice (null = default).
@@ -344,6 +385,15 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     _refreshCurrent();
   }
 
+  /// Clears the side's choice; the colour rows and patterns go back to the
+  /// default too.
+  void _backToDefault() {
+    final was = _cur, now = _defaultSpec(_home);
+    _spec[_home] = now;
+    _choose(null);
+    if (!mapEquals(was, now)) _loadPatterns();
+  }
+
   Future<void> _pickPng() async {
     final path = await pickFile(context, title: 'Select a kit PNG', extensions: ['png']);
     if (path == null || !mounted) return;
@@ -378,7 +428,12 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   Future<void> _pickColour(String key, String label) async {
     final c = await showPaletteDialog(context, current: hexToColor('${_cur[key] ?? ''}'), title: label);
     if (c == null || !mounted) return;
-    _cur[key] = '#${colorToHex(c).toLowerCase()}';
+    _setColour(key, '#${colorToHex(c).toLowerCase()}');
+  }
+
+  /// One colour of the side's spec; null clears it (sleeves only).
+  void _setColour(String key, String? hex) {
+    _cur[key] = hex;
     _choose(Map<String, dynamic>.from(_cur));
     _loadPatterns();
   }
@@ -388,17 +443,20 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         child: Text(text, style: theme.textTheme.titleSmall),
       );
 
+  /// A choice tile. Focus starts only on the picked one, and the picked one is
+  /// filled and ticked like the Home/Away toggle's: DpadScope's outline looks
+  /// like the picked border, so focus on another tile (a mouse click does not
+  /// move it) must not read as a second choice.
   Widget _tile(
     ThemeData theme, {
     required String label,
     required bool selected,
-    required VoidCallback onTap,
-    bool autofocus = false,
+    required VoidCallback? onTap,
     String? image,
     IconData icon = Icons.checkroom,
   }) =>
       InkWell(
-        autofocus: autofocus,
+        autofocus: selected,
         focusColor: Colors.transparent, // DpadScope draws the one outline
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
@@ -406,6 +464,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
           width: 88,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
+            color: selected ? theme.colorScheme.secondaryContainer : null,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: selected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
@@ -421,15 +480,24 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                 child: kitPreview(image, loading: _loading && icon == Icons.checkroom, empty: Icon(icon)),
               ),
               const SizedBox(height: 4),
-              Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected) Icon(Icons.check, size: 12, color: theme.colorScheme.onSecondaryContainer),
+                  Flexible(child: Text(label, style: theme.textTheme.labelSmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ],
+              ),
             ],
           ),
         ),
       );
 
-  Widget _colourRow(ThemeData theme, String label, String key) {
+  /// A colour of the side's spec; off until the default is known, so an edit
+  /// never starts from the fallback colours. [onClear] adds a reset button.
+  Widget _colourRow(ThemeData theme, String label, String key, {VoidCallback? onClear, String? clearTip}) {
     final c = hexToColor('${_cur[key] ?? ''}');
     return ListTile(
+      enabled: _defaults != null,
       leading: Container(
         width: 32,
         height: 32,
@@ -440,7 +508,15 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         ),
       ),
       title: Text(label),
-      trailing: const Icon(Icons.palette),
+      trailing: onClear == null
+          ? const Icon(Icons.palette)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(tooltip: clearTip, onPressed: _defaults == null ? null : onClear, icon: const Icon(Icons.close)),
+                const Icon(Icons.palette),
+              ],
+            ),
       onTap: () => _pickColour(key, label),
     );
   }
@@ -449,10 +525,15 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final current = _current;
-    // The default is a plain shirt in the team's colours, so it reads as Plain.
-    final pattern = current == null ? 'plain' : (_isSpec(current) ? '${current['pattern']}' : null);
+    // The default reads as its own pattern (Galo's is striped) once the
+    // worker has said what it is.
+    final pattern = current == null ? (_defaults == null ? null : '${_cur['pattern']}') : (_isSpec(current) ? '${current['pattern']}' : null);
     final image = current is Map ? current['image'] as String? : null;
     final template = current is Map ? current['template'] : null;
+    // The game's own designs sit behind a switch, so they never read as
+    // chosen; on, they replace the patterns and colours.
+    final noRom = widget.info.kitTemplates && widget.templates.isEmpty && widget.romPath == null;
+    final designs = widget.templates.isNotEmpty && _useDesign[_home]!;
     return Scaffold(
       appBar: AppBar(title: Text('${team.name} kits')),
       body: ListView(
@@ -483,7 +564,10 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                       ],
                       selected: {_home},
                       onSelectionChanged: (s) {
-                        setState(() => _home = s.first);
+                        setState(() {
+                          _home = s.first;
+                          _showDesign(kitTemplateIndex(_current));
+                        });
                         if (_currentPng[_side] == null) _refreshCurrent();
                       },
                     ),
@@ -499,43 +583,61 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ),
-          _heading(theme, 'Pattern'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final (n, p) in kitPatterns.indexed)
-                _tile(
-                  theme,
-                  label: kitLabel({'pattern': p}),
-                  selected: pattern == p,
-                  autofocus: n == 0,
-                  image: _previews['${_side}_$p'],
-                  onTap: () {
-                    _cur['pattern'] = p;
-                    _choose(Map<String, dynamic>.from(_cur));
-                  },
-                ),
-            ],
-          ),
-          if (widget.info.gameId == 'iss-snes')
+          if (widget.templates.isNotEmpty || noRom)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'ISS draws stripes and pinstripes as the cartridge\'s stripes, hoops, sash and chevron as its chest band, '
-                'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              padding: const EdgeInsets.only(top: 8),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Use a model from the game'),
+                subtitle: noRom ? const Text('Pick the ROM first to see the game\'s own designs.') : null,
+                value: designs,
+                onChanged: noRom
+                    ? null
+                    : (on) {
+                        setState(() => _useDesign[_home] = on);
+                        // Hidden, a design would still be the kit: off goes back to the default.
+                        if (!on && template != null) _backToDefault();
+                      },
               ),
             ),
-          if (widget.info.kitTemplates && widget.templates.isEmpty && widget.romPath == null) ...[
-            _heading(theme, 'Game designs'),
-            Text(
-              'Pick the ROM first to see the game\'s own designs.',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          if (!designs) ...[
+            _heading(theme, 'Pattern'),
+            Wrap(
+              // New tiles per side: a mouse leaves focus on the side it left,
+              // so this drops it and the new side's picked tile takes it.
+              key: ValueKey(_home),
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in kitPatterns)
+                  _tile(
+                    theme,
+                    label: kitLabel({'pattern': p}),
+                    selected: pattern == p,
+                    image: _previews['${_side}_$p'],
+                    // Off until the default is known: a pick then would keep
+                    // the fallback colours.
+                    onTap: _defaults == null
+                        ? null
+                        : () {
+                            _cur['pattern'] = p;
+                            _choose(Map<String, dynamic>.from(_cur));
+                          },
+                  ),
+              ],
             ),
+            if (widget.info.gameId == 'iss-snes')
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'ISS draws stripes and pinstripes as the cartridge\'s stripes, hoops, sash and chevron as its chest band, '
+                  'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
           ],
-          if (widget.templates.isNotEmpty) ...[
-            _heading(theme, 'Game designs'),
+          if (designs) ...[
+            const SizedBox(height: 8),
             if (_groups.length > 1)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -555,6 +657,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                 ),
               ),
             Wrap(
+              key: ValueKey(_home),
               spacing: 8,
               runSpacing: 8,
               children: [
@@ -619,26 +722,40 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
-          _heading(theme, 'Colours'),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Column(
-              children: [
-                _colourRow(theme, 'Shirt', 'shirt'),
-                const Divider(height: 1),
-                _colourRow(theme, 'Secondary', 'secondary'),
-                const Divider(height: 1),
-                _colourRow(theme, 'Shorts', 'shorts'),
-                const Divider(height: 1),
-                _colourRow(theme, 'Socks', 'socks'),
-              ],
+          if (!designs) ...[
+            _heading(theme, 'Colours'),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  _colourRow(theme, 'Shirt', 'shirt'),
+                  const Divider(height: 1),
+                  _colourRow(theme, 'Secondary', 'secondary'),
+                  const Divider(height: 1),
+                  _colourRow(theme, 'Shorts', 'shorts'),
+                  const Divider(height: 1),
+                  _colourRow(theme, 'Socks', 'socks'),
+                  // A club kit from the catalogue can carry its own sleeve
+                  // colour; shown so it can be seen and cleared.
+                  if (_cur['sleeves'] != null) ...[
+                    const Divider(height: 1),
+                    _colourRow(
+                      theme,
+                      'Sleeves',
+                      'sleeves',
+                      onClear: () => _setColour('sleeves', null),
+                      clearTip: _cur['pattern'] == 'sleeves' ? 'Sleeves in the secondary colour' : 'Sleeves in the shirt colour',
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: current == null ? null : () => _choose(null),
+              onPressed: current == null ? null : _backToDefault,
               icon: const Icon(Icons.restart_alt, size: 18),
               label: const Text('Back to default'),
             ),

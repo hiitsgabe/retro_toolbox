@@ -93,7 +93,7 @@ void main() {
         out[k] = generic.path;
       }
     }
-    return (kits: out, templates: <KitTemplate>[]);
+    return (kits: out, defaults: <String, Map<String, dynamic>>{}, templates: <KitTemplate>[]);
   }
 
   Future<void> shoot(WidgetTester t, String name, Widget Function(Map<String, String> images) page,
@@ -342,6 +342,7 @@ void main() {
         slot: 0,
         initialHome: true,
       ),
+      act: (t) => t.tap(find.text('Use a model from the game')),
       size: const Size(1000, 3000),
     ),
     skip: !enabled,

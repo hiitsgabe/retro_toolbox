@@ -502,6 +502,17 @@ def _default_kit_specs(colours, whiches, kits_mod, team_cls, teams=None):
     return default
 
 
+def _default_kit_dicts(kits, default):
+    """{key: spec dict} of the default kit each null KIT of kits ({key: KIT})
+    stands for (`default`: see `_default_kit_specs`), so the app's picker can
+    show the default the patch writes; a key whose default is unknown is left
+    out."""
+    if not default:
+        return {}
+    specs = {key: default(key) for key, kit in (kits or {}).items() if kit is None}
+    return {key: spec.to_dict() for key, spec in specs.items() if hasattr(spec, 'to_dict')}
+
+
 def _kit_previews(kits, out_dir, kits_mod, mounted=None, default=None):
     """Write `<out_dir>/<key>.png` for each KIT of kits ({key: KIT}); returns
     {key: path}. With `mounted` (see `_mounted_previews`) a key it can draw
@@ -763,7 +774,10 @@ def run_sports(job):
             out_dir = job['out_dir']
             cls = rrp.get_patcher(game_id)
             patcher = cls(cache_dir=cache_dir, provider=provider)
-            data_file, cleanup = _with_data_file(job['rom_path']) if job.get('rom_path') else (None, lambda: None)
+            # Only mounted previews and the game's designs read the ROM; flat
+            # ones (the picker's patterns and defaults) skip extracting a zip.
+            needs_rom = job.get('rom_path') and (job.get('slots') or job.get('templates'))
+            data_file, cleanup = _with_data_file(job['rom_path']) if needs_rom else (None, lambda: None)
             try:
                 default = _default_kit_specs(job.get('colours') or {}, job.get('which') or {}, _kits, rrp.Team, job.get('teams') or {})
                 # An away kit's home KIT (null: the team's default home kit).
@@ -775,6 +789,7 @@ def run_sports(job):
                         homes[key] = spec.to_dict()
                 mounted = _mounted_previews(patcher, data_file, job.get('slots') or {}, job.get('which') or {}, game_id, homes)
                 written = _kit_previews(job.get('kits'), out_dir, _kits, mounted, default)
+                defaults = _default_kit_dicts(job.get('kits'), default)
                 templates = []
                 if job.get('templates') and data_file and _overrides(cls, 'kit_templates', rrp.Patcher):
                     for t in patcher.kit_templates(Path(data_file)):
@@ -784,7 +799,7 @@ def run_sports(job):
                         templates.append({'index': t.index, 'name': t.name, 'path': path})
             finally:
                 cleanup()
-            emit({'kits': written, 'templates': templates})
+            emit({'kits': written, 'defaults': defaults, 'templates': templates})
             _report(progress_file, 'DONE')
             return
 
