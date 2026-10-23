@@ -531,6 +531,20 @@ def _kit_previews(kits, out_dir, kits_mod, mounted=None, default=None):
     return written
 
 
+def _league_season(league_id, code=None):
+    """The season to fetch for a soccer league the app sent no season for: the
+    library's per-league calendar (August-to-May leagues are named by their start
+    year, calendar-year ones by their year). An older library without it gets the
+    calendar year."""
+    from retro_roster_patcher.sports import espn as _espn
+    code = code or next((l['code'] for l in _espn.ESPN_LEAGUES if l['id'] == league_id), '')
+    pick = getattr(_espn, 'default_season', None)
+    if pick is None or not code:
+        import datetime
+        return datetime.date.today().year
+    return pick(code)
+
+
 def _with_data_file(rom_path):
     """(data file path, cleanup) for a ROM that may be a zip or a .cue: the
     zip's data track is extracted to a temp dir that cleanup removes; a .cue
@@ -669,9 +683,13 @@ def run_sports(job):
             if league and league.get('code'):
                 _register_league(league)
             patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
+            league_id = job.get('league_id') or (league or {}).get('id')
+            season = job.get('season')
+            if season is None:
+                season = _league_season(league_id, (league or {}).get('code'))
             data = patcher.fetch(
-                season=int(job['season']),
-                league_id=job.get('league_id') or (league or {}).get('id'),
+                season=int(season),
+                league_id=league_id,
                 on_progress=on_progress,
             )
             # Reorder each squad into the game's fielding order (starters first)

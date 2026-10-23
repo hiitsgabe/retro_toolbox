@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/services/python_worker.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
@@ -73,6 +74,12 @@ void main() {
       expect(data.teams.length, 2);
       expect(data.teams.first.playerCount, 3);
     });
+  });
+
+  test('a roster names the season the provider fetched', () {
+    final doc = RosterDoc.fromJson({'league': {'name': 'Brasileirao Serie A', 'season': 2026}, 'teams': []});
+    expect(doc.season, 2026);
+    expect(RosterDoc.fromJson({'league': {'name': 'Custom'}, 'teams': []}).season, isNull);
   });
 
   test('defaultSeason uses the hockey season start year and the calendar year otherwise', () {

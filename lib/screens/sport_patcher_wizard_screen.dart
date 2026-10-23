@@ -409,7 +409,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         final (_, file) = await SportsService.fetchRosters(
           gameId: info.gameId,
           provider: _provider,
-          season: _season,
+          // Soccer leagues keep their own calendars (August to May, or the
+          // calendar year): the worker picks each league's current season.
+          season: _isSoccer ? null : _season,
           league: league,
           onProgress: (v) => setState(() => _progress = v),
           onStatus: (s) => setState(() => _status = '$prefix$s'),
@@ -420,6 +422,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       // editor instead of making the user press a separate Next.
       setState(() {
         _docs = docs;
+        // The art and the patch label name the season actually fetched.
+        if (_isSoccer) _season = docs.first.season ?? _season;
         if (_step == _Step.rosters) _index++;
       });
     } catch (e) {

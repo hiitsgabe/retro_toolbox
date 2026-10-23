@@ -119,7 +119,7 @@ class SportsService {
   static Future<(LeagueData, String)> fetchRosters({
     required String gameId,
     required String provider,
-    required int season,
+    required int? season,
     League? league,
     void Function(double)? onProgress,
     void Function(String)? onStatus,
@@ -131,7 +131,8 @@ class SportsService {
         'type': 'sports_fetch',
         'game_id': gameId,
         'provider': provider,
-        'season': season,
+        // Null for soccer: the worker picks the league's own current season.
+        if (season != null) 'season': season,
         'league_id': league?.id,
         if (league != null) 'league': league.toJson(),
         'cache_dir': await _cacheDir(),

@@ -24,6 +24,9 @@ class RosterDoc {
 
   String get leagueName => (leagueRaw['name'] ?? 'League') as String;
 
+  /// The season the provider fetched, when it says.
+  int? get season => (leagueRaw['season'] as num?)?.toInt();
+
   /// A fresh team id that doesn't collide with an existing one.
   int _nextTeamId() {
     var max = 0;
