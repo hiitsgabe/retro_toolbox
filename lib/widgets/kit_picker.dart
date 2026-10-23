@@ -15,8 +15,10 @@ const kitPatterns = ['plain', 'stripes', 'hoops', 'halves', 'sash', 'pinstripes'
 /// Renders kit previews: {key: KIT} -> {key: png path}. A null KIT is the
 /// team's default: its real kit when the library's catalogue knows the team
 /// ([teams], per key: {id, name}), else drawn from [colours] (per key).
-/// [slots] and [which] let the worker mount the kit on the player. Injected
-/// so tests run without the worker.
+/// [slots] and [which] let the worker mount the kit on the player; [home]
+/// (per away key: the team's home KIT, null for its default) gives an away
+/// kit the home kit's chest design, which on ISS belongs to the team.
+/// Injected so tests run without the worker.
 typedef KitPreviewLoader = Future<KitPreviews> Function(
   Map<String, dynamic> kits, {
   bool templates,
@@ -24,6 +26,7 @@ typedef KitPreviewLoader = Future<KitPreviews> Function(
   Map<String, String>? which,
   Map<String, List<String>>? colours,
   Map<String, Map<String, Object?>>? teams,
+  Map<String, dynamic>? home,
 });
 
 /// Who the team is, for the worker's kit catalogue lookup.
@@ -297,6 +300,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
         which: {key: side},
         colours: {key: teamColours(team)},
         teams: {key: teamIdentity(team)},
+        home: _home ? null : {key: kitChoice(team, home: true)},
       );
       if (!mounted) return;
       setState(() {
@@ -514,6 +518,15 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                 ),
             ],
           ),
+          if (widget.info.gameId == 'iss-snes')
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'ISS draws stripes and pinstripes as the cartridge\'s stripes, hoops, sash and chevron as its chest band, '
+                'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
           if (widget.info.kitTemplates && widget.templates.isEmpty && widget.romPath == null) ...[
             _heading(theme, 'Game designs'),
             Text(
@@ -598,11 +611,11 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               label: const Text('Download kit template'),
             ),
           ),
-          if (widget.info.gameId == 'pes2013-ps2')
+          if (widget.info.gameId == 'pes2013-ps2' || widget.info.gameId == 'iss-snes')
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                'PES uses the picture for its colours and pattern only.',
+                '${widget.info.gameId == 'iss-snes' ? 'ISS' : 'PES'} uses the picture for its colours and pattern only.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),

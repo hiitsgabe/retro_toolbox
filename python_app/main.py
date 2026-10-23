@@ -470,7 +470,12 @@ def _mounted_previews(patcher, rom, slots, whiches, game_id, homes=None):
     def mounted(key, kit):
         if key not in slots:
             return None
-        return fn(Path(rom), templates.we2002_tex(slots[key]), (whiches or {}).get(key, 'home'), kit)
+        which = (whiches or {}).get(key, 'home')
+        if game_id == 'we2002':
+            return fn(Path(rom), templates.we2002_tex(slots[key]), which, kit)
+        if which == 'away' and (homes or {}).get(key) is not None:
+            return fn(Path(rom), int(slots[key]), which, kit, home=homes[key])
+        return fn(Path(rom), int(slots[key]), which, kit)
     return mounted
 
 
@@ -757,8 +762,15 @@ def run_sports(job):
             patcher = cls(cache_dir=cache_dir, provider=provider)
             data_file, cleanup = _with_data_file(job['rom_path']) if job.get('rom_path') else (None, lambda: None)
             try:
-                mounted = _mounted_previews(patcher, data_file, job.get('slots') or {}, job.get('which') or {})
                 default = _default_kit_specs(job.get('colours') or {}, job.get('which') or {}, _kits, rrp.Team, job.get('teams') or {})
+                # An away kit's home KIT (null: the team's default home kit).
+                homes = dict(job.get('home') or {})
+                default_home = _default_kit_specs(job.get('colours') or {}, {}, _kits, rrp.Team, job.get('teams') or {})
+                for key, kit in homes.items():
+                    spec = default_home(key) if kit is None and default_home else None
+                    if spec is not None and hasattr(spec, 'to_dict'):
+                        homes[key] = spec.to_dict()
+                mounted = _mounted_previews(patcher, data_file, job.get('slots') or {}, job.get('which') or {}, game_id, homes)
                 written = _kit_previews(job.get('kits'), out_dir, _kits, mounted, default)
                 templates = []
                 if job.get('templates') and data_file and _overrides(cls, 'kit_templates', rrp.Patcher):

@@ -81,7 +81,8 @@ void main() {
       Map<String, int>? slots,
       Map<String, String>? which,
       Map<String, List<String>>? colours,
-      Map<String, Map<String, Object?>>? teams}) async {
+      Map<String, Map<String, Object?>>? teams,
+      Map<String, dynamic>? home}) async {
     final generic = File('$previews/kit.png');
     final out = <String, String>{};
     for (final k in kits.keys) {

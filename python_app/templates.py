@@ -277,6 +277,21 @@ def pes_kit_files(rom, slot, whiches):
     return files
 
 
+def iss_kit_files(patcher, rom, slot, whiches):
+    """[(name, png, description)]: an ISS slot's kits as the game draws them
+    (`kit_preview_png`); ISS has no page to paint, its kits are colours and a
+    chest design."""
+    from pathlib import Path
+    files = []
+    for which in whiches:
+        try:
+            files.append((f'{which}-preview.png', patcher.kit_preview_png(Path(rom), int(slot), which, None),
+                          f'The current {which} kit of slot {slot} on the Team Colors player.'))
+        except Exception:
+            pass
+    return files
+
+
 def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
     """`<out_dir>/<game_id>-kit-template-slot<slot>.zip`: the team's current
     home/away kit pages (which=None for both), their mounted previews and a
@@ -287,6 +302,15 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
         files = we2002_kit_files(patcher, rom, slot, whiches, template)
     elif game_id == 'pes2013-ps2':
         files = pes_kit_files(rom, slot, whiches)
+    elif game_id == 'iss-snes':
+        files = iss_kit_files(patcher, rom, slot, whiches)
+        files.append(kit_photo_guide())
+        intro = ('ISS kits are colours: the shirt, shorts and socks, plus a chest design. Upload a kit photo '
+                 '(shirt at the top, shorts in the middle, socks at the bottom, see kit-photo-guide.png): its '
+                 'colours are read, and stripes or hoops pick the cartridge\'s striped or banded chest design. '
+                 'The design is the team\'s, so the away shirt wears the home kit\'s. home-preview.png and '
+                 'away-preview.png show the kits the slot has now.')
+        return write_zip(out_dir, f'{game_id}-kit-template-slot{slot}', files, intro)
     else:
         raise ValueError(f'No kit templates for {game_id}')
     files.append(kit_photo_guide())

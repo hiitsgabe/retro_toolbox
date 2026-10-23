@@ -74,7 +74,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   static final _templatesFor = <String, List<KitTemplate>>{};
 
   late final KitPreviewLoader _loadKits = widget.kitLoader ??
-      (kits, {templates = false, slots, which, colours, teams}) => SportsService.kitPreviews(
+      (kits, {templates = false, slots, which, colours, teams, home}) => SportsService.kitPreviews(
             gameId: widget.gameId,
             kits: kits,
             templates: templates,
@@ -83,6 +83,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
             which: which,
             colours: colours,
             teams: teams,
+            home: home,
           );
 
   /// 'home' / 'away' -> png.
@@ -121,6 +122,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         which: {for (final s in sides) s: s},
         colours: {for (final s in sides) s: teamColours(team)},
         teams: {for (final s in sides) s: teamIdentity(team)},
+        home: {'away': kits['home']},
       );
       if (!mounted) return;
       setState(() {
@@ -517,7 +519,8 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     final notes = lineupNotes(widget.gameId);
     // NHL 94 stores per position, not by row; everyone else the first rows.
     final stored = gameStoresByPosition(widget.gameId) ? nhl94StoredRows([for (final p in players) p.position]) : null;
-    final firstExtra = stored == null ? _rosterSize : Iterable<int>.generate(players.length).firstWhere((i) => !stored.contains(i), orElse: () => players.length);
+    final firstExtra =
+        stored == null ? _rosterSize : Iterable<int>.generate(players.length).firstWhere((i) => !stored.contains(i), orElse: () => players.length);
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: compact ? 48 : null,
@@ -622,8 +625,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                           if (showBenchLabel && !swapping) _sectionLabel(theme, 'Bench', Colors.grey),
                           if (showRotationLabel && !swapping) _sectionLabel(theme, 'Rotation', Colors.blue),
                           if (showBullpenLabel && !swapping) _sectionLabel(theme, 'Bullpen', Colors.blueGrey),
-                          if (showLeftoverLabel && !swapping)
-                            _sectionLabel(theme, leftoverSection(widget.gameId, pitcher: isPitcher(p.position)), Colors.grey),
+                          if (showLeftoverLabel && !swapping) _sectionLabel(theme, leftoverSection(widget.gameId, pitcher: isPitcher(p.position)), Colors.grey),
                           if (showExtraLabel && !swapping) _sectionLabel(theme, 'Extra (not stored by this game)', theme.colorScheme.error),
                           Opacity(
                             opacity: extra ? 0.5 : 1,

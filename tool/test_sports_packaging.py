@@ -434,9 +434,9 @@ def test_kit_previews_mount_on_the_player_when_the_game_draws_it():
     kits = {'7_home': KIT, '7_away': {'image': pick}, '8_home': {'template': 2}, '8_away': None, '9_home': KIT}
     slots, which = {'7_home': 7, '7_away': 7, '8_home': 8, '8_away': 8}, {'7_away': 'away', '8_away': 'away'}
     # No ROM, or a game without the method: nothing is mounted.
-    assert main._mounted_previews(We(), None, slots, which) is None
-    assert main._mounted_previews(Plain(), '/d/we.bin', slots, which) is None
-    mounted = main._mounted_previews(We(), '/d/we.bin', slots, which)
+    assert main._mounted_previews(We(), None, slots, which, 'we2002') is None
+    assert main._mounted_previews(Plain(), '/d/we.bin', slots, which, 'we2002') is None
+    mounted = main._mounted_previews(We(), '/d/we.bin', slots, which, 'we2002')
     written = main._kit_previews(kits, out, Kits, mounted)
     # Every keyed kit kind is mounted, None and templates included; the unkeyed one is drawn flat.
     assert sorted(written) == ['7_away', '7_home', '8_away', '8_home', '9_home']
@@ -446,6 +446,34 @@ def test_kit_previews_mount_on_the_player_when_the_game_draws_it():
     assert open(written['9_home'], 'rb').read() == b"FLAT:('spec', 'stripes')"
     assert open(os.path.join(out, '7_away_source.png'), 'rb').read() == b'picked'
 
+
+def test_iss_kit_previews_take_the_slot_and_the_home_kits_chest():
+    calls = []
+
+    class Iss:
+        def kit_preview_png(self, rom, slot, which, kit, home=None):
+            calls.append((slot, which, kit, home))
+            return b'MOUNTED'
+
+    slots, which = {'h': 7, 'a': 7}, {'h': 'home', 'a': 'away'}
+    mounted = main._mounted_previews(Iss(), '/d/iss.sfc', slots, which, 'iss-snes', {'a': KIT})
+    mounted('h', None)
+    mounted('a', {'template': 2})
+    # The slot as-is (no TEX index); the away kit wears the home KIT's chest.
+    assert calls == [(7, 'home', None, None), (7, 'away', {'template': 2}, KIT)]
+
+
+def test_iss_kit_template_zip_is_the_previews_and_the_photo_guide():
+    import templates
+
+    class Iss:
+        def kit_preview_png(self, rom, slot, which, kit=None):
+            return templates.render(96, 144, [])
+
+    path, names = templates.build_kits('iss-snes', tempfile.mkdtemp(), Iss(), '/d/iss.sfc', 3)
+    assert names == ['home-preview.png', 'away-preview.png', 'kit-photo-guide.png', 'README.txt']
+    with zipfile.ZipFile(path) as zf:
+        assert zf.read('README.txt').decode().startswith('ISS kits are colours')
 
 def test_default_images_dispatch_by_game():
     import types

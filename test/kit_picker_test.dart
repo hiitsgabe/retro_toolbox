@@ -37,15 +37,16 @@ void main() {
   final savedHandheld = Handheld.current;
   tearDown(() => Handheld.current = savedHandheld);
 
-  final requested = <({Map<String, dynamic> kits, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours})>[];
+  final requested = <({Map<String, dynamic> kits, Map<String, int>? slots, Map<String, String>? which, Map<String, List<String>>? colours, Map<String, dynamic>? home})>[];
   // Header previews get a path naming the choice, so a refresh is visible by key.
   Future<KitPreviews> fakeLoader(Map<String, dynamic> kits,
       {bool templates = false,
       Map<String, int>? slots,
       Map<String, String>? which,
       Map<String, List<String>>? colours,
-      Map<String, Map<String, Object?>>? teams}) async {
-    requested.add((kits: kits, slots: slots, which: which, colours: colours));
+      Map<String, Map<String, Object?>>? teams,
+      Map<String, dynamic>? home}) async {
+    requested.add((kits: kits, slots: slots, which: which, colours: colours, home: home));
     return (
       kits: {
         for (final k in kits.keys)
@@ -108,6 +109,8 @@ void main() {
     expect(first.kits, {'home': null, 'away': null});
     expect(first.slots, {'home': 3, 'away': 3});
     expect(first.which, {'home': 'home', 'away': 'away'});
+    // The away kit learns the home choice: on ISS it wears the home kit's chest design.
+    expect(first.home, {'away': null});
     expect(first.colours, {
       'home': ['#c60000', '#000000'],
       'away': ['#c60000', '#000000']
@@ -150,6 +153,7 @@ void main() {
     expect(find.text('Stripes'), findsOneWidget); // the row shows the choice
     expect(requested.length, before + 1); // the rows re-rendered on return
     expect(requested.last.kits['home'], containsPair('pattern', 'stripes'));
+    expect(requested.last.home?['away'], containsPair('pattern', 'stripes'));
   });
 
   testWidgets('without a ROM the default is still the worker\'s, drawn from the colours sent', (t) async {
@@ -169,7 +173,8 @@ void main() {
         Map<String, int>? slots,
         Map<String, String>? which,
         Map<String, List<String>>? colours,
-        Map<String, Map<String, Object?>>? teams}) async {
+        Map<String, Map<String, Object?>>? teams,
+        Map<String, dynamic>? home}) async {
       calls++;
       return (
         // No preview for a design; after the first call none for the away kit either.
