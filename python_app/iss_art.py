@@ -32,13 +32,14 @@ def _font(size):
     return ImageFont.truetype(FONT, size)
 
 
-def _text(img, cx, cy, text, size, fill=WHITE, stroke=PURPLE):
-    """`text` centred on (cx, cy), shrunk until it fits the image width."""
+def _text(img, cx, cy, text, size, fill=WHITE, stroke=PURPLE, max_w=None):
+    """`text` centred on (cx, cy), shrunk until it fits max_w (the image width
+    less a margin by default)."""
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
     while size > 8:
         l, t, r, b = draw.textbbox((0, 0), text, font=_font(size), stroke_width=2)
-        if r - l <= img.width - 8:
+        if r - l <= (max_w or img.width - 8):
             break
         size -= 1
     draw.text((cx - (r - l) // 2 - l, cy - (b - t) // 2 - t), text, font=_font(size), fill=fill,
@@ -63,17 +64,23 @@ def _vertical(img, top, bottom, a, b):
         draw.line((0, y, img.width, y), fill=tuple(round(p + (q - p) * t) for p, q in zip(a, b)))
 
 
-def season_mark(league, season):
-    """'2026' for a calendar-year league (the Brasileirao, MLS), '26-27' for one
-    that runs August to May, as ESPN names them; the update is named by its
-    season, never as one of Konami's games."""
+#: Leagues whose season is a calendar year, by the name the library gives them.
+CALENDAR_SPORTS = ('mlb',)
+
+
+def season_mark(league, season, fallback='SOCCER'):
+    """'2026' for a calendar-year league (the Brasileirao, MLS, MLB), '26-27'
+    for one that runs August to May (the NHL too), as ESPN names them; the
+    update is named by its season, never as one of the publisher's games."""
     try:
         year = int(season)
     except (TypeError, ValueError):
-        return 'SOCCER'
+        return fallback
+    names = [s.strip().lower() for s in str(league or '').split('+')]
+    if all(n in CALENDAR_SPORTS for n in names):
+        return str(year)
     try:
         from retro_roster_patcher.sports import espn
-        names = [s.strip().lower() for s in str(league or '').split('+')]
         codes = [lg['code'] for lg in espn.ESPN_LEAGUES if lg['name'].lower() in names]
         calendar = getattr(espn, 'CALENDAR_YEAR_LEAGUES', ())
         if codes and all(c.lower().startswith(calendar) for c in codes):
@@ -83,13 +90,19 @@ def season_mark(league, season):
     return f'{year % 100:02d}-{(year + 1) % 100:02d}'
 
 
-def _konami(img, league, season):
-    """The logo screen: the app's logo and name on deep purple. A line sweeps
-    it in from the top, as the cartridge's logo is."""
+def splash(img, mark):
+    """A boot screen: the app's logo and name on a purple gradient, `mark`
+    ROSTER UPDATE below."""
     _vertical(img, 0, img.height, DEEP, PURPLE)
     _logo(img, img.width // 2, 92, 104)
     _text(img, img.width // 2, 166, 'RETRO TOOLBOX', 26)
-    _text(img, img.width // 2, 192, f'{season_mark(league, season)}  ROSTER UPDATE', 12, stroke=DEEP)
+    _text(img, img.width // 2, 192, f'{mark}  ROSTER UPDATE', 12, stroke=DEEP)
+
+
+def _konami(img, league, season):
+    """The logo screen (a line sweeps it in from the top, as the cartridge's
+    logo is)."""
+    splash(img, season_mark(league, season))
 
 
 def _title(img, league, season):
@@ -140,4 +153,28 @@ def render_default_images(league, season, out_dir):
         path = os.path.join(out_dir, f'{name}.png')
         img.convert('RGB').save(path)
         written[name] = path
+    return written
+
+
+def slots(package):
+    """{name: Slot} of an SNES game's screen slots, from the library's
+    `<package>.screens.SLOTS`."""
+    import importlib
+    return {s.name: s for s in importlib.import_module(f'retro_roster_patcher.games.{package}.screens').SLOTS}
+
+
+def render_slots(package, painters, league, season, out_dir):
+    """Write `<out_dir>/<slot>.png` for each of package's slots that painters
+    ({name: painter(img, league, season, slot)}) draws, on deep purple at the
+    slot's size; returns {slot: path}. A slot the library adds later keeps the
+    cartridge's art until it has a painter."""
+    from PIL import Image
+    os.makedirs(out_dir, exist_ok=True)
+    written = {}
+    for name, slot in slots(package).items():
+        if name in painters:
+            img = Image.new('RGBA', slot.size, DEEP)
+            painters[name](img, league, season, slot)
+            written[name] = os.path.join(out_dir, f'{name}.png')
+            img.convert('RGB').save(written[name])
     return written

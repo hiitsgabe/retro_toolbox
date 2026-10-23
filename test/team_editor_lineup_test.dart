@@ -70,9 +70,11 @@ void main() {
       expect(lineupWarnings('nhl94-snes', ['G', 'G', 'C', 'LW', 'D', 'D'], 6).single, contains('three forwards'));
     });
 
-    test('NHL 94 needs two goalies, or the patch stops', () {
+    test('NHL 94 needs two goalies: Genesis stops, SNES keeps the cartridge team', () {
+      const one = ['G', 'C', 'C', 'LW', 'D', 'D', 'RW'];
+      expect(lineupWarnings('nhl94-genesis', one, 6).single, 'NHL 94 needs two goalies: add one, or the patch stops.');
+      expect(lineupWarnings('nhl94-snes', one, 6).single, "NHL 94 needs two goalies: add one, or the slot keeps the cartridge's team.");
       for (final g in ['nhl94-genesis', 'nhl94-snes']) {
-        expect(lineupWarnings(g, ['G', 'C', 'C', 'LW', 'D', 'D', 'RW'], 6).single, 'NHL 94 needs two goalies: add one, or the patch stops.', reason: g);
         expect(lineupWarnings(g, ['G', 'C', 'C', 'LW', 'D', 'D', 'G'], 6), isEmpty, reason: g);
       }
     });
@@ -170,7 +172,10 @@ void main() {
       for (var i = 1; i <= 2; i++) _p('D$i', 'D'),
     ]);
     await pump(t, team, 'nhl94-snes', 'hockey');
-    labelAbove(t, 'EXTRA (NOT STORED BY THIS GAME)', 'F3', 'G3');
+    // Each left-out row says so itself: no heading with stored rows under it.
+    expect(find.text('EXTRA (NOT STORED BY THIS GAME)'), findsNothing);
+    expect(find.textContaining('not stored'), findsOneWidget);
+    expect(find.text('G · not stored'), findsOneWidget);
     final dimmed = t.widget<Opacity>(find.ancestor(of: find.text('G3'), matching: find.byType(Opacity)).first);
     expect(dimmed.opacity, 0.5);
     final kept = t.widget<Opacity>(find.ancestor(of: find.text('D2'), matching: find.byType(Opacity)).first);
@@ -235,6 +240,40 @@ void main() {
     expect(kept.contains(2), isFalse); // the third goalie
     expect(kept.contains(17), isFalse); // the 15th forward
     expect(kept.contains(25), isFalse); // the 8th defenceman
+  });
+
+  test("nhl94StoredRows takes the slot's own counts", () {
+    final positions = ['G', 'G', for (var i = 0; i < 12; i++) 'C', for (var i = 0; i < 8; i++) 'D'];
+    final kept = nhl94StoredRows(positions, [2, 9, 7]);
+    expect(kept.length, 18);
+    expect(kept.contains(10), isTrue); // the 9th forward
+    expect(kept.contains(11), isFalse); // the 10th
+    expect(kept.contains(21), isFalse); // the 8th defenceman
+  });
+
+  testWidgets("NHL 94 marks the extras from the slot's counts", (t) async {
+    final team = _team([_p('G1', 'G'), _p('G2', 'G'), for (var i = 1; i <= 10; i++) _p('F$i', 'C'), for (var i = 1; i <= 7; i++) _p('D$i', 'D')]);
+    t.view.devicePixelRatio = 1;
+    t.view.physicalSize = const Size(800, 3000);
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(home: TeamEditorScreen(team: team, gameId: 'nhl94-snes', sport: 'hockey', slot: 3, rosterCounts: const [2, 9, 7])));
+    expect(find.textContaining('ROM uses 2 G, 9 F, 7 D'), findsOneWidget);
+    // F10 is left out; the seven D after him are all stored, under no Extra heading.
+    expect(find.text('EXTRA (NOT STORED BY THIS GAME)'), findsNothing);
+    expect(find.textContaining('not stored'), findsOneWidget);
+    expect(find.text('C · not stored'), findsOneWidget);
+    expect(find.textContaining('counts are not known'), findsNothing);
+    // Without the slot's counts it says it is guessing.
+    await t.pumpWidget(MaterialApp(home: TeamEditorScreen(team: team, gameId: 'nhl94-snes', sport: 'hockey', slot: 3)));
+    expect(find.textContaining("This slot's own counts are not known"), findsOneWidget);
+  });
+
+  testWidgets('KGJ names its lineup the batting order', (t) async {
+    await pump(t, _team([for (var i = 1; i <= 9; i++) _p('B$i', 'SS'), _p('P1', 'SP')]), 'kgj-mlb-snes', 'baseball');
+    expect(find.text('BATTING ORDER'), findsOneWidget);
+    expect(find.textContaining('bats in this order'), findsOneWidget);
+    await pump(t, _team([_p('G1', 'G'), _p('G2', 'G')]), 'nhl94-snes', 'hockey');
+    expect(find.text('STARTING LINEUP'), findsOneWidget);
   });
 
   test('NHL 94 Genesis drops the six-starters claim until a cartridge confirms it', () {

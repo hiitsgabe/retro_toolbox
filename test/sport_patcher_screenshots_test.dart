@@ -342,7 +342,7 @@ void main() {
         slot: 0,
         initialHome: true,
       ),
-      act: (t) => t.tap(find.text('Use a model from the game')),
+      act: (t) => t.tap(find.text('Model')),
       size: const Size(1000, 3000),
     ),
     skip: !enabled,

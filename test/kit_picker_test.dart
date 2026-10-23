@@ -211,7 +211,7 @@ void main() {
 
     await t.tap(find.text('Home kit'));
     await t.pumpAndSettle();
-    await t.tap(find.text('Use a model from the game'));
+    await t.tap(find.text('Model'));
     await t.pumpAndSettle();
     await t.tap(find.text('Design 44'));
     await t.pumpAndSettle();
@@ -247,18 +247,24 @@ void main() {
       'away': null
     };
     await pump(t, editor(tm, romPath: '${dir.path}/we2002.bin', zip: fakeZip));
-    final button = find.widgetWithText(TextButton, 'Download kit template');
+    // The team page has no download of its own: it moved to the picker's Custom tab.
+    expect(find.text('Download kit template'), findsNothing);
+    await t.tap(find.text('Change kits'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Custom'));
+    await t.pumpAndSettle();
+    final button = find.ancestor(of: find.text('Download kit template'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
     await t.tap(button);
     await t.pump();
     expect(args, [('${dir.path}/we2002.bin', 3, 7)]);
-    expect(t.widget<TextButton>(button).onPressed, isNull); // in flight
+    expect(t.widget<ButtonStyleButton>(button).onPressed, isNull); // in flight
     // The copy is real file IO, which only completes outside the fake async zone.
     await t.runAsync(() async {
       job.complete(zip.path);
       await Future<void>.delayed(const Duration(milliseconds: 100));
     });
     await t.pumpAndSettle();
-    expect(t.widget<TextButton>(button).onPressed, isNotNull);
+    expect(t.widget<ButtonStyleButton>(button).onPressed, isNotNull);
     expect(File('${dir.path}/we2002-kits.zip').existsSync(), isTrue);
     expect(find.text('Kit template saved to ${dir.path}/we2002-kits.zip'), findsOneWidget);
   });
@@ -288,6 +294,9 @@ void main() {
     expect((tm.extraRaw['kits'] as Map)['away']['shorts'], '#c2185b');
     expect(patternJobs().length, 2); // the grid re-rendered in the new colours
     expect(find.byKey(const ValueKey('/p/current_away=Plain.png')), findsOneWidget);
+    expect(find.text('PES uses the picture for its colours and pattern only.'), findsNothing); // Custom tab only
+    await t.tap(find.text('Custom'));
+    await t.pumpAndSettle();
     expect(find.text('PES uses the picture for its colours and pattern only.'), findsOneWidget);
   });
 
@@ -302,21 +311,31 @@ void main() {
   });
 
   testWidgets('the kit template button needs a ROM and a slot', (t) async {
-    await pump(t, editor(team()));
-    final button = find.widgetWithText(TextButton, 'Download kit template');
-    expect(button, findsOneWidget);
-    expect(t.widget<TextButton>(button).onPressed, isNotNull);
-    await pump(t, editor(team(), romPath: null));
-    expect(t.widget<TextButton>(find.widgetWithText(TextButton, 'Download kit template')).onPressed, isNull);
+    final button = find.ancestor(of: find.text('Download kit template'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton));
+    for (final (rom, slot, on) in [('/roms/pes.iso', 3, true), (null, 3, false), ('/roms/pes.iso', null, false)]) {
+      await pump(t, KitPickerSheet(team: team(), info: info, loader: fakeLoader, romPath: rom, slot: slot));
+      await t.tap(find.text('Custom'));
+      await t.pumpAndSettle();
+      expect(t.widget<ButtonStyleButton>(button).onPressed != null, on, reason: '$rom $slot');
+    }
   });
 
   testWidgets('without a ROM the picker says where the game designs come from', (t) async {
     const we =
         PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true, kitTemplates: true);
     await pump(t, KitPickerSheet(team: team(), info: we, loader: fakeLoader));
+    await t.tap(find.text('Model'));
+    await t.pumpAndSettle();
     expect(find.text('Pick the ROM first to see the game\'s own designs.'), findsOneWidget);
+    // With the ROM but no designs exported (yet): no Model tab at all.
     await pump(t, KitPickerSheet(team: team(), info: we, loader: fakeLoader, romPath: '/roms/we.bin'));
+    expect(find.text('Model'), findsNothing);
     expect(find.textContaining('Pick the ROM first'), findsNothing);
+    // A game without designs (ISS, PES here) has Pattern and Custom only.
+    await pump(t, KitPickerSheet(team: team(), info: info, loader: fakeLoader, romPath: '/roms/pes.iso'));
+    expect(find.text('Pattern'), findsOneWidget);
+    expect(find.text('Model'), findsNothing);
+    expect(find.text('Custom'), findsOneWidget);
   });
 
   testWidgets('the picker\'s Template tile downloads this slot\'s kit template', (t) async {
@@ -333,10 +352,18 @@ void main() {
       'home': {'template': 7},
       'away': null
     };
-    TextButton link() =>
-        t.widget<TextButton>(find.ancestor(of: find.text('Download kit template'), matching: find.byWidgetPredicate((w) => w is TextButton)).first);
+    ButtonStyleButton link() =>
+        t.widget<ButtonStyleButton>(find.ancestor(of: find.text('Download kit template'), matching: find.byWidgetPredicate((w) => w is ButtonStyleButton)).first);
+    Future<void> custom() async {
+      await t.tap(find.text('Custom'));
+      await t.pumpAndSettle();
+    }
 
     await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, romPath: '/roms/we.bin', slot: 5, kitTemplateZip: fakeZip));
+    // Your PNG and the template only show on the Custom tab.
+    expect(find.text('Download kit template'), findsNothing);
+    expect(find.text('Choose…'), findsNothing);
+    await custom();
     expect(find.text('Download kit template'), findsOneWidget);
     expect(find.text('Choose…'), findsOneWidget);
     expect(link().onPressed, isNotNull);
@@ -349,11 +376,13 @@ void main() {
     // The away kit is a plain default: no design goes with it.
     await t.tap(find.text('Away'));
     await t.pumpAndSettle();
+    await custom(); // the tab is per side
     await t.tap(find.text('Download kit template'));
     await t.pumpAndSettle();
     expect(args.last, ('we2002', '/roms/we.bin', 5, null));
 
     await pump(t, KitPickerSheet(team: tm, info: we, loader: fakeLoader, slot: 5, kitTemplateZip: fakeZip));
+    await custom();
     expect(link().onPressed, isNull); // no ROM
   });
 
@@ -427,19 +456,19 @@ void main() {
     expect(picked(t, 'Stripes'), isTrue);
 
     // A key press sets the traditional highlight mode (a desktop's), where
-    // DpadScope draws the outline, and a mouse keeps it. Switched on by
+    // DpadScope draws the outline, and a mouse keeps it. On the Model tab by
     // mouse, the designs show and none takes focus.
     await t.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
-    await t.tap(find.text('Use a model from the game'), kind: PointerDeviceKind.mouse);
+    await t.tap(find.text('Model'), kind: PointerDeviceKind.mouse);
     await t.pumpAndSettle();
     expect(FocusManager.instance.highlightMode, FocusHighlightMode.traditional);
     expect(find.text('Paraguay'), findsOneWidget);
     expect(focused(), isNull);
     expect(kitChoice(tm, home: true), isNull);
 
-    // Off again, then the other side by mouse: focus follows to that side's
-    // picked tile instead of staying on this side's Stripes.
-    await t.tap(find.text('Use a model from the game'), kind: PointerDeviceKind.mouse);
+    // Back to Pattern, then the other side by mouse: focus follows to that
+    // side's picked tile instead of staying on this side's Stripes.
+    await t.tap(find.text('Pattern'), kind: PointerDeviceKind.mouse);
     await t.pumpAndSettle();
     expect(focused(), 'Stripes');
     await t.tap(find.text('Away'), kind: PointerDeviceKind.mouse);
@@ -549,33 +578,34 @@ void main() {
     expect(picked(t, 'Plain'), isTrue);
   });
 
-  testWidgets('the game\'s designs sit behind a switch; only the chosen one looks picked', (t) async {
+  testWidgets('three tabs: the designs have their own, only the chosen one looks picked, and a tab is only a view', (t) async {
     const designs = [KitTemplate(index: 44, name: 'Paraguay (red stripes)', path: '/t/44.png'), KitTemplate(index: 45, name: 'Peru', path: '/t/45.png')];
-    bool on() => t.widget<SwitchListTile>(find.byType(SwitchListTile)).value;
+    KitTab tab() => t.widget<SegmentedButton<KitTab>>(find.byType(SegmentedButton<KitTab>)).selected.single;
     final tm = team();
     Widget sheet() => KitPickerSheet(team: tm, info: we, templates: designs, loader: fakeLoader, romPath: '/roms/we.bin', slot: 0);
 
     await pump(t, sheet());
-    // Off: the generated patterns and the colours, no design.
-    expect(on(), isFalse);
+    // Pattern: the generated patterns and the colours; no design, no PNG.
+    expect(tab(), KitTab.pattern);
     expect(find.text('Plain'), findsOneWidget);
     expect(find.text('Shirt'), findsOneWidget);
     expect(find.text('Paraguay'), findsNothing);
+    expect(find.text('Choose…'), findsNothing);
 
-    // On, from the d-pad (up from the autofocused Plain): the designs replace
-    // them, none picked, and the choice stays the default.
+    // Model, from the d-pad (up from the autofocused Plain to the tabs, right,
+    // A): the designs replace them, none picked, the choice stays the default.
     await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(on(), isTrue);
+    expect(tab(), KitTab.model);
     expect(find.text('Plain'), findsNothing);
     expect(find.text('Shirt'), findsNothing);
     expect(find.text('Paraguay'), findsOneWidget);
     expect(picked(t, 'Paraguay') || picked(t, 'Peru'), isFalse);
     expect(kitChoice(tm, home: true), isNull);
 
-    // Down lands on the designs (the one under the switch's centre); Left
-    // to the first, Enter picks it.
+    // Down lands on the designs; Left to the first, Enter picks it.
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -584,28 +614,54 @@ void main() {
     expect(picked(t, 'Paraguay'), isTrue);
     expect(picked(t, 'Peru'), isFalse);
 
-    // The switch is per side: the away kit wears no design.
+    // The tab is per side: the away kit wears no design.
     await t.tap(find.text('Away'));
     await t.pumpAndSettle();
-    expect(on(), isFalse);
-    expect(find.text('Plain'), findsOneWidget);
+    expect(tab(), KitTab.pattern);
     await t.tap(find.text('Home'));
     await t.pumpAndSettle();
-    expect(on(), isTrue);
+    expect(tab(), KitTab.model);
 
-    // Off with a design chosen goes back to the default.
-    await t.tap(find.text('Use a model from the game'));
+    // Another tab only shows other choices: the design is still the kit.
+    await t.tap(find.text('Pattern'));
     await t.pumpAndSettle();
-    expect(kitChoice(tm, home: true), isNull);
-    expect(find.text('Plain'), findsOneWidget);
-    expect(find.text('Paraguay'), findsNothing);
+    expect(kitChoice(tm, home: true), {'template': 44});
+    expect(picked(t, 'Plain'), isFalse);
+    await t.tap(find.text('Custom'));
+    await t.pumpAndSettle();
+    expect(find.text('Choose…'), findsOneWidget);
+    expect(find.text('Download kit template'), findsOneWidget);
 
-    // A side wearing a design opens with the switch on and that design picked.
+    // A side wearing a design opens on Model with that design picked; one
+    // wearing a PNG opens on Custom.
     setKitChoice(tm, home: true, kit: {'template': 45});
     await pump(t, sheet());
-    expect(on(), isTrue);
+    expect(tab(), KitTab.model);
     expect(picked(t, 'Peru'), isTrue);
     expect(picked(t, 'Paraguay'), isFalse);
+    setKitChoice(tm, home: true, kit: {'image': '/k/mine.png'});
+    await pump(t, sheet());
+    expect(tab(), KitTab.custom);
+    expect(picked(t, 'Custom PNG'), isTrue);
+  });
+
+  testWidgets('the team page shows both kits side by side, and Change kits opens the picker', (t) async {
+    final tm = team();
+    await pump(t, editor(tm));
+    final home = t.getCenter(find.text('Home kit')), away = t.getCenter(find.text('Away kit'));
+    expect(home.dy, away.dy); // one row
+    expect(home.dx, lessThan(away.dx));
+    expect(t.getCenter(find.text('Change kits')).dx, greaterThan(away.dx));
+
+    // D-pad: from the home kit, Right to the away kit, Right to Change kits, A.
+    Focus.of(t.element(find.text('Home kit'))).requestFocus();
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(find.byType(KitPickerSheet), findsOneWidget);
+    expect(t.widget<KitPickerSheet>(find.byType(KitPickerSheet)).initialHome, isTrue);
   });
 
   test('designGroups and designLabel', () {

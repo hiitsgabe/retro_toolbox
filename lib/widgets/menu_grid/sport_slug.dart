@@ -126,8 +126,9 @@ List<String> lineupWarnings(String gameId, List<String> positions, int starters)
         // NHL 94 plays anyone but a G or D as a forward.
         !(count('G') == 1 && count('D') == 2 && top.where((p) => p != 'G' && p != 'D').length == 3))
       'The game starts the first G, three forwards and two D in the list: make the first $starters exactly those.',
-    if ((gameId == 'nhl94-genesis' || gameId == 'nhl94-snes') && n > 0 && positions.where((p) => p == 'G').length < 2)
-      'NHL 94 needs two goalies: add one, or the patch stops.',
+    if (gameId == 'nhl94-genesis' && n > 0 && positions.where((p) => p == 'G').length < 2) 'NHL 94 needs two goalies: add one, or the patch stops.',
+    if (gameId == 'nhl94-snes' && n > 0 && positions.where((p) => p == 'G').length < 2)
+      "NHL 94 needs two goalies: add one, or the slot keeps the cartridge's team.",
   ];
 }
 
@@ -135,13 +136,26 @@ List<String> lineupWarnings(String gameId, List<String> positions, int starters)
 List<String> lineupNotes(String gameId) => [
       if (gameId == 'nhl94-genesis') 'Not yet checked on a Genesis cartridge: the game may not start the first six as listed.',
       if (gameId == 'mvp-psp') 'At NL parks the DH sits, the hitters behind him move up, and the first starting pitcher bats ninth.',
+      if (gameId == 'kgj-mlb-snes') 'The lineup bats in this order. NL clubs bat eight, and their pitcher bats ninth.',
     ];
 
-/// NHL 94 keeps up to 2 goalies, 14 forwards and 7 defencemen, each taken in
-/// list order wherever they sit (an SNES slot may hold fewer forwards or D):
-/// the rows of [positions] the game stores.
-Set<int> nhl94StoredRows(List<String> positions) {
-  const caps = {'G': 2, 'F': 14, 'D': 7};
+/// What the Look step's Team logos switch draws, in [gameId]'s own terms.
+String logosNote(String gameId) => '${switch (gameId) {
+      'nhl94-snes' => "Draw each team's logo in the menus and at center ice, and on the title pucks while the cartridge's title stays.",
+      'kgj-mlb-snes' => "Draw each club's logo on team select, Today's Game and the season screens.",
+      _ => "Draw each team's logo as its in-game flag.",
+    }} Tap a crest on the Teams step to use your own PNG.';
+
+/// What the editor calls the players who start: baseball's lineup is also the
+/// order they bat in.
+String startersLabel(String gameId) => gameId == 'kgj-mlb-snes' ? 'Batting order' : 'Starting lineup';
+
+/// NHL 94 keeps up to [counts] (goalies, forwards, defencemen; 2, 14 and 7
+/// when the slot's own are unknown), each taken in list order wherever they
+/// sit: the rows of [positions] the game stores.
+Set<int> nhl94StoredRows(List<String> positions, [List<int>? counts]) {
+  final c = counts != null && counts.length == 3 ? counts : const [2, 14, 7];
+  final caps = {'G': c[0], 'F': c[1], 'D': c[2]};
   final taken = {'G': 0, 'F': 0, 'D': 0};
   final kept = <int>{};
   for (final (i, p) in positions.indexed) {

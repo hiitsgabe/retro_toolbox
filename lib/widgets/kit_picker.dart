@@ -182,6 +182,9 @@ String designLabel(KitTemplate t) {
   return cut > 0 ? t.name.substring(0, cut) : t.name;
 }
 
+/// The picker's tabs: generated patterns, the game's own designs, the user's PNG.
+enum KitTab { pattern, model, custom }
+
 class KitPickerSheet extends StatefulWidget {
   final RosterTeam team;
   final PatcherInfo info;
@@ -232,11 +235,17 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
   /// it answers, empty when it sent none.
   Map<String, Map<String, dynamic>>? _defaults;
 
-  /// side -> the game's designs show instead of the generated patterns; on
-  /// for a side that wears one.
-  late final Map<bool, bool> _useDesign = {
-    for (final h in [true, false]) h: kitTemplateIndex(kitChoice(team, home: h)) != null
+  /// side -> the tab shown: opens on the one holding the side's choice.
+  /// Only a view: switching tabs never changes the choice.
+  late final Map<bool, KitTab> _tab = {
+    for (final h in [true, false]) h: _tabOf(kitChoice(team, home: h))
   };
+
+  static KitTab _tabOf(dynamic kit) => kitTemplateIndex(kit) != null
+      ? KitTab.model
+      : kit is Map && kit['image'] != null
+          ? KitTab.custom
+          : KitTab.pattern;
 
   /// `<side>_<pattern>` -> png. Loading from the start: the patterns wait
   /// for the default.
@@ -530,10 +539,12 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     final pattern = current == null ? (_defaults == null ? null : '${_cur['pattern']}') : (_isSpec(current) ? '${current['pattern']}' : null);
     final image = current is Map ? current['image'] as String? : null;
     final template = current is Map ? current['template'] : null;
-    // The game's own designs sit behind a switch, so they never read as
-    // chosen; on, they replace the patterns and colours.
+    // The game's own designs get a tab of their own, so they never read as
+    // chosen beside the patterns. Without the ROM it says where they come from.
     final noRom = widget.info.kitTemplates && widget.templates.isEmpty && widget.romPath == null;
-    final designs = widget.templates.isNotEmpty && _useDesign[_home]!;
+    final hasModels = widget.templates.isNotEmpty || noRom;
+    var tab = _tab[_home]!;
+    if (tab == KitTab.model && !hasModels) tab = KitTab.pattern;
     return Scaffold(
       appBar: AppBar(title: Text('${team.name} kits')),
       body: ListView(
@@ -583,174 +594,23 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               padding: const EdgeInsets.only(top: 8),
               child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ),
-          if (widget.templates.isNotEmpty || noRom)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use a model from the game'),
-                subtitle: noRom ? const Text('Pick the ROM first to see the game\'s own designs.') : null,
-                value: designs,
-                onChanged: noRom
-                    ? null
-                    : (on) {
-                        setState(() => _useDesign[_home] = on);
-                        // Hidden, a design would still be the kit: off goes back to the default.
-                        if (!on && template != null) _backToDefault();
-                      },
-              ),
-            ),
-          if (!designs) ...[
-            _heading(theme, 'Pattern'),
-            Wrap(
-              // New tiles per side: a mouse leaves focus on the side it left,
-              // so this drops it and the new side's picked tile takes it.
-              key: ValueKey(_home),
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final p in kitPatterns)
-                  _tile(
-                    theme,
-                    label: kitLabel({'pattern': p}),
-                    selected: pattern == p,
-                    image: _previews['${_side}_$p'],
-                    // Off until the default is known: a pick then would keep
-                    // the fallback colours.
-                    onTap: _defaults == null
-                        ? null
-                        : () {
-                            _cur['pattern'] = p;
-                            _choose(Map<String, dynamic>.from(_cur));
-                          },
-                  ),
-              ],
-            ),
-            if (widget.info.gameId == 'iss-snes')
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'ISS draws stripes and pinstripes as the cartridge\'s stripes, hoops, sash and chevron as its chest band, '
-                  'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ),
-          ],
-          if (designs) ...[
-            const SizedBox(height: 8),
-            if (_groups.length > 1)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final (n, g) in _groups.indexed)
-                      ChoiceChip(
-                        label: Text('${g.name} (${widget.templates.where((t) => t.index >= g.first && t.index <= g.last).length})'),
-                        selected: n == _group,
-                        onSelected: (_) => setState(() {
-                          _group = n;
-                          _page = 0;
-                        }),
-                      ),
-                  ],
-                ),
-              ),
-            Wrap(
-              key: ValueKey(_home),
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final t in _inGroup.skip(_page * designsPerPage).take(designsPerPage))
-                  Tooltip(
-                    message: t.name,
-                    child: _tile(
-                      theme,
-                      label: designLabel(t),
-                      selected: template == t.index,
-                      image: t.path,
-                      onTap: () => _choose({'template': t.index}),
-                    ),
-                  ),
-              ],
-            ),
-            if (_pages > 1)
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Previous designs',
-                    onPressed: _page > 0 ? () => setState(() => _page--) : null,
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  Text('${_page + 1} / $_pages', style: theme.textTheme.labelMedium),
-                  IconButton(
-                    tooltip: 'More designs',
-                    onPressed: _page < _pages - 1 ? () => setState(() => _page++) : null,
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
-              ),
-          ],
-          _heading(theme, 'Your PNG'),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _tile(
-              theme,
-              label: image == null ? 'Choose…' : 'Custom PNG',
-              selected: image != null,
-              image: image,
-              icon: Icons.upload_file,
-              onTap: _pickPng,
-            ),
+          const SizedBox(height: 16),
+          SegmentedButton<KitTab>(
+            showSelectedIcon: false,
+            segments: [
+              const ButtonSegment(value: KitTab.pattern, icon: Icon(Icons.texture), label: Text('Pattern')),
+              if (hasModels) const ButtonSegment(value: KitTab.model, icon: Icon(Icons.checkroom), label: Text('Model')),
+              const ButtonSegment(value: KitTab.custom, icon: Icon(Icons.upload_file), label: Text('Custom')),
+            ],
+            selected: {tab},
+            onSelectionChanged: (s) => setState(() => _tab[_home] = s.first),
           ),
-          // The slot's kit template pack, to draw the PNG on: a quiet link,
-          // like the screen templates' on the Look step.
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(visualDensity: VisualDensity.compact, textStyle: theme.textTheme.labelSmall),
-              onPressed: widget.romPath == null || widget.slot == null || _downloading ? null : _downloadTemplate,
-              icon: const Icon(Icons.download_outlined, size: 16),
-              label: const Text('Download kit template'),
-            ),
-          ),
-          if (widget.info.gameId == 'pes2013-ps2' || widget.info.gameId == 'iss-snes')
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '${widget.info.gameId == 'iss-snes' ? 'ISS' : 'PES'} uses the picture for its colours and pattern only.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ),
-          if (!designs) ...[
-            _heading(theme, 'Colours'),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Column(
-                children: [
-                  _colourRow(theme, 'Shirt', 'shirt'),
-                  const Divider(height: 1),
-                  _colourRow(theme, 'Secondary', 'secondary'),
-                  const Divider(height: 1),
-                  _colourRow(theme, 'Shorts', 'shorts'),
-                  const Divider(height: 1),
-                  _colourRow(theme, 'Socks', 'socks'),
-                  // A club kit from the catalogue can carry its own sleeve
-                  // colour; shown so it can be seen and cleared.
-                  if (_cur['sleeves'] != null) ...[
-                    const Divider(height: 1),
-                    _colourRow(
-                      theme,
-                      'Sleeves',
-                      'sleeves',
-                      onClear: () => _setColour('sleeves', null),
-                      clearTip: _cur['pattern'] == 'sleeves' ? 'Sleeves in the secondary colour' : 'Sleeves in the shirt colour',
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+          const SizedBox(height: 12),
+          ...switch (tab) {
+            KitTab.pattern => _patternTab(theme, pattern),
+            KitTab.model => _modelTab(theme, template, noRom),
+            KitTab.custom => _customTab(theme, image),
+          },
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
@@ -764,4 +624,169 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
       ),
     );
   }
+
+  /// Generated patterns in the side's colours, and those colours.
+  List<Widget> _patternTab(ThemeData theme, String? pattern) => [
+        Wrap(
+          // New tiles per side and tab: a mouse leaves focus where it was,
+          // so this drops it and the new view's picked tile takes it.
+          key: ValueKey((_home, KitTab.pattern)),
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in kitPatterns)
+              _tile(
+                theme,
+                label: kitLabel({'pattern': p}),
+                selected: pattern == p,
+                image: _previews['${_side}_$p'],
+                // Off until the default is known: a pick then would keep
+                // the fallback colours.
+                onTap: _defaults == null
+                    ? null
+                    : () {
+                        _cur['pattern'] = p;
+                        _choose(Map<String, dynamic>.from(_cur));
+                      },
+              ),
+          ],
+        ),
+        if (widget.info.gameId == 'iss-snes')
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'ISS draws stripes and pinstripes as the cartridge\'s stripes, hoops, sash and chevron as its chest band, '
+              'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+        _heading(theme, 'Colours'),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _colourRow(theme, 'Shirt', 'shirt'),
+              const Divider(height: 1),
+              _colourRow(theme, 'Secondary', 'secondary'),
+              const Divider(height: 1),
+              _colourRow(theme, 'Shorts', 'shorts'),
+              const Divider(height: 1),
+              _colourRow(theme, 'Socks', 'socks'),
+              // A club kit from the catalogue can carry its own sleeve
+              // colour; shown so it can be seen and cleared.
+              if (_cur['sleeves'] != null) ...[
+                const Divider(height: 1),
+                _colourRow(
+                  theme,
+                  'Sleeves',
+                  'sleeves',
+                  onClear: () => _setColour('sleeves', null),
+                  clearTip: _cur['pattern'] == 'sleeves' ? 'Sleeves in the secondary colour' : 'Sleeves in the shirt colour',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ];
+
+  /// The game's own designs, one group and one page at a time.
+  List<Widget> _modelTab(ThemeData theme, dynamic template, bool noRom) => [
+        if (noRom) Text('Pick the ROM first to see the game\'s own designs.', style: theme.textTheme.bodyMedium),
+        if (_groups.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(
+              spacing: 8,
+              children: [
+                for (final (n, g) in _groups.indexed)
+                  ChoiceChip(
+                    label: Text('${g.name} (${widget.templates.where((t) => t.index >= g.first && t.index <= g.last).length})'),
+                    selected: n == _group,
+                    onSelected: (_) => setState(() {
+                      _group = n;
+                      _page = 0;
+                    }),
+                  ),
+              ],
+            ),
+          ),
+        Wrap(
+          key: ValueKey((_home, KitTab.model)),
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final t in _inGroup.skip(_page * designsPerPage).take(designsPerPage))
+              Tooltip(
+                message: t.name,
+                child: _tile(
+                  theme,
+                  label: designLabel(t),
+                  selected: template == t.index,
+                  image: t.path,
+                  onTap: () => _choose({'template': t.index}),
+                ),
+              ),
+          ],
+        ),
+        if (_pages > 1)
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Previous designs',
+                onPressed: _page > 0 ? () => setState(() => _page--) : null,
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text('${_page + 1} / $_pages', style: theme.textTheme.labelMedium),
+              IconButton(
+                tooltip: 'More designs',
+                onPressed: _page < _pages - 1 ? () => setState(() => _page++) : null,
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+      ];
+
+  /// The user's PNG, and this slot's kit template pack to draw it on.
+  List<Widget> _customTab(ThemeData theme, String? image) => [
+        Row(
+          key: ValueKey((_home, KitTab.custom)),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _tile(
+              theme,
+              label: image == null ? 'Choose…' : 'Custom PNG',
+              selected: image != null,
+              image: image,
+              icon: Icons.upload_file,
+              onTap: _pickPng,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Draw the kit on this slot\'s template, then choose the PNG.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: widget.romPath == null || widget.slot == null || _downloading ? null : _downloadTemplate,
+                    icon: const Icon(Icons.download_outlined, size: 18),
+                    label: const Text('Download kit template'),
+                  ),
+                  if (widget.info.gameId == 'pes2013-ps2' || widget.info.gameId == 'iss-snes')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        '${widget.info.gameId == 'iss-snes' ? 'ISS' : 'PES'} uses the picture for its colours and pattern only.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ];
 }

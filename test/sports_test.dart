@@ -82,6 +82,40 @@ void main() {
     expect(imageSlotLabel('title', 'iss-snes').$2, contains('PRESS START'));
   });
 
+  test("NHL '94 and KGJ screen slots have their own names", () {
+    expect(imageSlotLabel('boot', 'nhl94-snes').$2, contains('EA SPORTS'));
+    expect(imageSlotLabel('menu', 'nhl94-snes').$1, 'Menu wallpaper');
+    expect(imageSlotLabel('title', 'kgj-mlb-snes').$1, 'Stadium');
+    expect(imageSlotLabel('boot', 'kgj-mlb-snes').$2, contains('licence screen'));
+    expect(logosNote('nhl94-snes'), contains('center ice'));
+    expect(logosNote('nhl94-snes'), contains("while the cartridge's title stays"));
+    expect(logosNote('kgj-mlb-snes'), contains("Today's Game"));
+    expect(logosNote('we2002'), contains('in-game flag'));
+  });
+
+  test("RomInfo pairs a team code with its slot's roster counts", () {
+    final info = RomInfo.fromJson({
+      'is_valid': true,
+      'slots': [],
+      'extra': {
+        'roster_counts': [
+          [2, 9, 7],
+          [2, 15, 7],
+        ],
+      },
+      'team_slots': {'BOS': 1},
+    });
+    expect(info.countsFor('BOS'), [2, 15, 7]);
+    expect(info.countsFor('ANA'), isNull); // not asked
+    expect(RomInfo.fromJson({'is_valid': true}).countsFor('BOS'), isNull);
+  });
+
+  test('PatchResult carries what mapping said, none from an older worker', () {
+    final r = PatchResult.fromJson({'output_path': 'o', 'teams_patched': 27, 'players_patched': 600, 'notes': ['Edmonton skipped']});
+    expect(r.notes, ['Edmonton skipped']);
+    expect(PatchResult.fromJson({'output_path': 'o'}).notes, isEmpty);
+  });
+
   test('a roster names the season the provider fetched', () {
     final doc = RosterDoc.fromJson({'league': {'name': 'Brasileirao Serie A', 'season': 2026}, 'teams': []});
     expect(doc.season, 2026);

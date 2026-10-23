@@ -146,6 +146,15 @@ const _gameSlotNames = {
     'league_badge': ('League badge', 'Where the NHL shield shows on the legal and title screens.'),
     'players_badge': ('Players badge', 'Where the NHLPA logo shows on the legal and title screens.'),
   },
+  'nhl94-snes': {
+    'boot': ('Boot screen', 'The EA SPORTS screen at power-on, held still about 12 seconds.'),
+    'title': ('Title screen', 'The whole title; the credits and the NHL and NHLPA shields sit over the bottom.'),
+    'menu': ('Menu wallpaper', 'Behind every menu and pause screen; keep the logo boxes plain and the lower part dark.'),
+  },
+  'kgj-mlb-snes': {
+    'boot': ('Boot screen', 'The licence screen at power-on, faded in and out.'),
+    'title': ('Stadium', 'Behind the title and the menus; the logo, Griffey, PUSH START and the menu box sit over most of it.'),
+  },
 };
 
 /// Display name and one-line description of a screen art slot, worded for
@@ -197,12 +206,30 @@ class RomSlot {
 class RomInfo {
   final bool isValid;
   final List<RomSlot> slots;
-  const RomInfo({required this.isValid, required this.slots});
+
+  /// Per slot, the (goalies, forwards, defencemen) the image keeps (NHL '94);
+  /// empty when the game does not say.
+  final List<List<int>> rosterCounts;
+
+  /// The slot each asked team code lands in, for games that slot by code.
+  final Map<String, int> teamSlots;
+  const RomInfo({required this.isValid, required this.slots, this.rosterCounts = const [], this.teamSlots = const {}});
 
   factory RomInfo.fromJson(Map<String, dynamic> j) => RomInfo(
         isValid: (j['is_valid'] ?? false) as bool,
         slots: ((j['slots'] as List?) ?? const []).map((e) => RomSlot.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+        rosterCounts: [
+          for (final row in (((j['extra'] as Map?)?['roster_counts'] as List?) ?? const []))
+            [for (final n in row as List) (n as num).toInt()],
+        ],
+        teamSlots: {for (final e in ((j['team_slots'] as Map?) ?? const {}).entries) '${e.key}': (e.value as num).toInt()},
       );
+
+  /// The (goalies, forwards, defencemen) of the slot team [code] lands in, or null.
+  List<int>? countsFor(String code) {
+    final slot = teamSlots[code];
+    return slot != null && slot < rosterCounts.length ? rosterCounts[slot] : null;
+  }
 }
 
 class LeagueTeam {
@@ -243,16 +270,21 @@ class PatchResult {
   final String outputPath;
   final int teamsPatched;
   final int playersPatched;
+
+  /// What mapping said, e.g. a team it left out and why.
+  final List<String> notes;
   const PatchResult({
     required this.outputPath,
     required this.teamsPatched,
     required this.playersPatched,
+    this.notes = const [],
   });
 
   factory PatchResult.fromJson(Map<String, dynamic> j) => PatchResult(
         outputPath: (j['output_path'] ?? '') as String,
         teamsPatched: (j['teams_patched'] ?? 0) as int,
         playersPatched: (j['players_patched'] ?? 0) as int,
+        notes: [for (final n in (j['notes'] as List?) ?? const []) '$n'],
       );
 }
 

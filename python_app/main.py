@@ -454,6 +454,12 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'iss-snes':
         import iss_art
         return iss_art.render_default_images(league, season, out_dir)
+    if game_id == 'nhl94-snes':
+        import nhl94_art
+        return nhl94_art.render_default_images(league, season, out_dir)
+    if game_id == 'kgj-mlb-snes':
+        import kgj_art
+        return kgj_art.render_default_images(league, season, out_dir)
     import default_art
     return default_art.render_default_images(game_id, league, season, out_dir)
 
@@ -715,8 +721,17 @@ def run_sports(job):
 
         if jtype == 'sports_analyze':
             patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir, provider=provider)
-            info = patcher.analyze_rom(Path(job['rom_path']))
-            emit(info.to_dict())
+            data_file, cleanup = _with_data_file(job['rom_path'])
+            try:
+                out = patcher.analyze_rom(Path(data_file)).to_dict()
+            finally:
+                cleanup()
+            # A game that slots teams by their code (NHL '94): where each of
+            # the job's `codes` lands, to pair a team with its slot's extra.
+            slot_of = getattr(getattr(patcher, 'mapper', None), 'get_team_slot', None)
+            if slot_of and job.get('codes'):
+                out['team_slots'] = {c: s for c in job['codes'] if (s := slot_of(c)) is not None}
+            emit(out)
             _report(progress_file, 'DONE')
             return
 
@@ -839,21 +854,39 @@ def run_sports(job):
             options = _patch_options(job, patcher, _team_kits(sources))
             nationals = bool(job.get('nationals')) and getattr(patcher, 'supports_nationals', False)
             season = job.get('season') or sources[0][0].league.season
+            # The library's own lines show as the patch runs; what mapping
+            # says (a team it leaves out, and why), and any later line about
+            # something skipped (a logo it could not draw), also come back as
+            # notes for the Done card.
+            notes = []
+
+            def live(m):
+                _report(progress_file, f'STATUS:{m}')
+                if 'skipped' in m.lower():
+                    notes.append(m)
+            patcher.on_status = live
+
+            def noted(fn, *args):
+                patcher.on_status = notes.append
+                try:
+                    return fn(*args)
+                finally:
+                    patcher.on_status = live
 
             def rosters_for(rom):
                 # The national squads are fetched here: pairing them with the
                 # disc's rows needs the actual image.
-                merged = _merge_rosters(patcher, sources, rom)
+                merged = noted(_merge_rosters, patcher, sources, rom)
                 if nationals:
                     data, mapping = _fetch_nationals(patcher, rom, season, rrp, on_progress)
-                    merged = merged.merge(_map_rosters(patcher, data, mapping, rom))
+                    merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
                 return merged
 
             result = _patch_with_packaging(
                 patcher, job['rom_path'], job['output_dir'], job['label'],
                 rosters_for, on_progress, options,
             )
-            emit(result.to_dict())
+            emit({**result.to_dict(), 'notes': list(dict.fromkeys(notes))})
             _report(progress_file, 'DONE')
             return
 

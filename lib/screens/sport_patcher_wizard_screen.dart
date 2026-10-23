@@ -57,9 +57,17 @@ class SportPatcherWizardScreen extends ConsumerStatefulWidget {
   @visibleForTesting
   final Future<String> Function(String gameId, {String? romPath})? templatesZip;
 
+  /// Replaces the worker's ROM analysis. Tests only.
+  @visibleForTesting
+  final Future<RomInfo> Function({required String gameId, required String romPath, List<String> codes})? analyzeRom;
+
   /// A ROM already chosen. Tests only.
   @visibleForTesting
   final String? initialRomPath;
+
+  /// A patch already done, shown on the Patch step. Tests and screenshots only.
+  @visibleForTesting
+  final PatchResult? initialResult;
 
   /// Screen art previews ({slot: png path}) to show on the Look step instead
   /// of exporting them from [initialRomPath]. Tests and screenshots only.
@@ -75,7 +83,9 @@ class SportPatcherWizardScreen extends ConsumerStatefulWidget {
     this.initialImages,
     this.initialLeagues,
     this.templatesZip,
+    this.analyzeRom,
     this.initialRomPath,
+    this.initialResult,
   });
 
   @override
@@ -170,10 +180,31 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   int? _teamFocusRow;
   int _teamFocusDoc = 0;
 
+  /// The picked row's move buttons: focus stays on the one pressed.
+  final _teamUpFocus = FocusNode(), _teamDownFocus = FocusNode();
+
   @override
   void dispose() {
     _teamFocus.dispose();
+    _teamUpFocus.dispose();
+    _teamDownFocus.dispose();
     super.dispose();
+  }
+
+  /// Moves the picked team one place up ([delta] -1) or down in its league,
+  /// keeping it picked: the d-pad's way to reorder without a drag.
+  void _moveTeamBy(int delta) {
+    final teams = _docs[_teamSwapDoc].teams, from = _teamSwapFrom!, to = from + delta;
+    setState(() {
+      teams.insert(to, teams.removeAt(from));
+      _teamSwapFrom = to;
+    });
+    _teamFocusDoc = _teamSwapDoc;
+    _teamFocusRow = to;
+    final node = delta < 0 ? (to > 0 ? _teamUpFocus : _teamFocus) : (to < teams.length - 1 ? _teamDownFocus : _teamFocus);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) node.requestFocus();
+    });
   }
 
   void _focusTeam(int d, int i) {
@@ -207,6 +238,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
     if (ok != true || !mounted) return;
     setState(() => teams.removeAt(i));
+    _loadSlotInfo();
     if (teams.isNotEmpty) _focusTeam(d, i < teams.length ? i : teams.length - 1);
   }
 
@@ -214,7 +246,43 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   double _progress = 0;
   String? _status;
   String? _error;
-  PatchResult? _result;
+  late PatchResult? _result = widget.initialResult;
+
+  /// Games that slot teams by code (NHL '94): the ROM's per-slot counts and
+  /// the slot each team's code lands in, asked once per ROM and set of codes.
+  /// [_slotInfo] is null until known; a failed ask is not kept, so the next
+  /// tap asks again (the editor meanwhile says it does not know the counts).
+  RomInfo? _slotInfo;
+  Future<RomInfo?>? _slotJob;
+  String? _slotInfoFor;
+  bool _openingTeam = false;
+
+  Future<RomInfo?> _loadSlotInfo() {
+    final rom = _romPath;
+    if (rom == null || !gameStoresByPosition(info.gameId)) return Future.value(null);
+    final codes = ({for (final d in _docs) for (final t in d.teams) t.code}..remove('')).toList()..sort();
+    final key = '$rom|${codes.join(',')}';
+    if (_slotInfoFor != key) {
+      _slotInfoFor = key;
+      _slotInfo = null;
+      _slotJob = (widget.analyzeRom ?? SportsService.analyzeRom)(gameId: info.gameId, romPath: rom, codes: codes).then<RomInfo?>(
+        (r) {
+          if (mounted && _slotInfoFor == key) setState(() => _slotInfo = r);
+          return r;
+        },
+        onError: (_) {
+          if (_slotInfoFor == key) _slotInfoFor = null;
+          return null;
+        },
+      );
+    }
+    return _slotJob!;
+  }
+
+  bool get _slotsPending => _slotInfoFor != null && _slotInfo == null;
+
+  /// A team the patch leaves out: this ROM has no slot for its code.
+  bool _slotless(RosterTeam t) => _slotInfo != null && !_slotInfo!.teamSlots.containsKey(t.code);
 
   PatcherInfo get info => widget.info;
   _Step get _step => _steps[_index];
@@ -236,8 +304,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   void initState() {
     super.initState();
     if (_isSoccer && widget.initialLeagues == null) _loadLeagues();
-    _lookupRom();
-    _findLocalRom();
+    _startRomLookups();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _enterStep();
     });
@@ -246,8 +313,26 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   /// Work a step starts on arrival: Look exports the ROM's art; Rosters with
   /// nothing to choose fetches at once.
   void _enterStep() {
+    if (_step == _Step.teams) _loadSlotInfo();
     if (_step == _Step.look) _loadRomImages();
     if (_step == _Step.rosters && !_rostersHasOptions && _docs.isEmpty) _fetch();
+  }
+
+  /// The lookups need the saved settings (download folders, library on) and
+  /// the console list. Opened first thing after launch, neither may be loaded
+  /// yet (the app state is only created by its first reader): the lookups
+  /// would search nowhere and never run again. The placeholder shows meanwhile.
+  Future<void> _startRomLookups() async {
+    _romLookups++;
+    try {
+      await Future.wait([ref.read(settingsProvider.notifier).loaded, ref.read(appStateProvider.notifier).loaded]);
+    } catch (_) {
+      // Look with whatever is there.
+    }
+    if (!mounted) return;
+    _lookupRom();
+    _findLocalRom();
+    setState(() => _romLookups--);
   }
 
   /// Search the console catalog for this game so the ROM step can offer a
@@ -433,6 +518,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         if (_isSoccer) _season = docs.first.season ?? _season;
         if (_step == _Step.rosters) _index++;
       });
+      _loadSlotInfo();
     } catch (e) {
       setState(() => _error = '$e');
     } finally {
@@ -1083,8 +1169,12 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     );
   }
 
-  String get _reorderHint =>
-      Handheld.current ? 'Swap to reorder (slot order), tap to edit a squad.' : 'Drag or swap to reorder (slot order), tap to edit a squad.';
+  String get _reorderHint => gameStoresByPosition(info.gameId)
+      // The library slots these by team code, whatever the order.
+      ? (_slotsPending ? "Reading the ROM's slots…" : 'Each team goes to its own slot; tap to edit a squad.')
+      : Handheld.current
+          ? 'Move or swap to reorder (slot order), tap to edit a squad.'
+          : 'Drag, move or swap to reorder (slot order), tap to edit a squad.';
 
   Widget _addButton(RosterDoc doc, {required bool iconOnly}) => iconOnly
       ? IconButton.filledTonal(onPressed: () => _addTeam(doc), icon: const Icon(Icons.add), tooltip: 'Add team')
@@ -1151,7 +1241,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         if (newI > oldI) newI--;
         teams.insert(newI, teams.removeAt(oldI));
       }),
-      itemBuilder: (context, i) => _teamRow(theme, d, i, noSlot: slots != null && i >= slots),
+      itemBuilder: (context, i) => _teamRow(theme, d, i, noSlot: (slots != null && i >= slots) || _slotless(teams[i])),
     );
   }
 
@@ -1171,61 +1261,78 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       margin: EdgeInsets.symmetric(vertical: _compact ? 2 : 4),
       child: Opacity(
         opacity: noSlot ? 0.5 : 1,
-        child: ListTile(
-          focusNode: _teamFocusDoc == d && _teamFocusRow == i ? _teamFocus : null,
-          dense: _compact,
-          visualDensity: _compact ? VisualDensity.compact : null,
-          leading: _teamCrest(theme, t),
-          title: Text(t.name),
-          subtitle: Text(noSlot ? 'no slot' : '${t.players.length} players'),
-          trailing: swapping
-              ? null
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.swap_vert),
-                      tooltip: 'Swap with another team',
-                      onPressed: () => _startTeamSwap(d, i),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      tooltip: 'Remove',
-                      onPressed: () => _removeTeam(d, i),
-                    ),
-                    if (!Handheld.current) const Icon(Icons.drag_handle),
-                  ],
-                ),
-          onTap: () async {
-            final from = _teamSwapFrom;
-            if (from != null) {
-              // Swaps work across leagues too: it is just two list slots.
-              setState(() {
-                final fromTeams = _docs[_teamSwapDoc].teams;
-                if (_teamSwapDoc != d || from != i) {
-                  final a = fromTeams[from];
-                  fromTeams[from] = teams[i];
-                  teams[i] = a;
-                }
-                _teamSwapFrom = null;
-              });
-              _focusTeam(d, i);
-              return;
-            }
-            await Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => TeamEditorScreen(
-                  team: t,
-                  gameId: info.gameId,
-                  sport: info.sport,
-                  info: info,
-                  romPath: _romPath,
-                  slot: noSlot ? null : (info.multiLeague ? info.slotGroups[d].first + i : i),
-                ),
+        // The crest and buttons sit beside the tile, not in it: the d-pad
+        // only moves to what lies past the tile's edge.
+        child: Row(
+          children: [
+            Padding(padding: const EdgeInsets.only(left: 12), child: _teamCrest(theme, t)),
+            Expanded(
+              child: ListTile(
+                focusNode: _teamFocusDoc == d && _teamFocusRow == i ? _teamFocus : null,
+                dense: _compact,
+                visualDensity: _compact ? VisualDensity.compact : null,
+                title: Text(t.name),
+                subtitle: Text(noSlot ? 'no slot' : '${t.players.length} players'),
+                onTap: () async {
+                  final from = _teamSwapFrom;
+                  if (from != null) {
+                    // Swaps work across leagues too: it is just two list slots.
+                    setState(() {
+                      final fromTeams = _docs[_teamSwapDoc].teams;
+                      if (_teamSwapDoc != d || from != i) {
+                        final a = fromTeams[from];
+                        fromTeams[from] = teams[i];
+                        teams[i] = a;
+                      }
+                      _teamSwapFrom = null;
+                    });
+                    _focusTeam(d, i);
+                    return;
+                  }
+                  // A game that slots teams by code knows the team's slot better
+                  // than its place in the list. One editor at a time while it asks.
+                  if (_openingTeam) return;
+                  _openingTeam = true;
+                  try {
+                    final slotInfo = await _loadSlotInfo();
+                    if (!mounted) return;
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => TeamEditorScreen(
+                          team: t,
+                          gameId: info.gameId,
+                          sport: info.sport,
+                          info: info,
+                          romPath: _romPath,
+                          slot: noSlot ? null : (slotInfo?.teamSlots[t.code] ?? (info.multiLeague ? info.slotGroups[d].first + i : i)),
+                          rosterCounts: slotInfo?.countsFor(t.code),
+                          teamLogos: info.supportsLogos ? _teamLogos : null,
+                        ),
+                      ),
+                    );
+                  } finally {
+                    _openingTeam = false;
+                  }
+                  if (mounted) setState(() {});
+                },
               ),
-            );
-            setState(() {});
-          },
+            ),
+            if (!swapping) ...[
+              IconButton(
+                icon: const Icon(Icons.swap_vert),
+                tooltip: 'Move or swap',
+                onPressed: () => _startTeamSwap(d, i),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Remove',
+                onPressed: () => _removeTeam(d, i),
+              ),
+              if (!Handheld.current) const Icon(Icons.drag_handle),
+            ],
+            if (armed) ...moveButtons(i, teams.length, _moveTeamBy, up: _teamUpFocus, down: _teamDownFocus),
+            const SizedBox(width: 12),
+          ],
         ),
       ),
     );
@@ -1243,22 +1350,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Widget _teamCrest(ThemeData theme, RosterTeam t) {
-    final url = t.logoUrl;
     final override = _teamLogos[t.id];
-    final fallback = CircleAvatar(child: Text(t.name.isEmpty ? '?' : t.name[0]));
-    final Widget crest;
-    if (override != null) {
-      crest = Image.file(File(override), fit: BoxFit.contain, errorBuilder: (_, __, ___) => fallback);
-    } else if (url.isEmpty) {
-      crest = fallback;
-    } else {
-      crest = CachedNetworkImage(
-        imageUrl: url,
-        fit: BoxFit.contain,
-        placeholder: (_, __) => const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
-        errorWidget: (_, __, ___) => fallback,
-      );
-    }
+    final crest = teamCrest(t, override: override);
     if (!info.supportsLogos) return SizedBox(width: 40, height: 40, child: crest);
     // The crest is a button: the patch draws it into the game, so it can be
     // swapped for the user's own PNG here.
@@ -1386,7 +1479,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         ),
       ),
     );
-    if (result == true) setState(() {});
+    if (result != true) return;
+    setState(() {});
+    _loadSlotInfo();
   }
 
   // -- Step 1: the ROM ---------------------------------------------------
@@ -1650,7 +1745,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   SwitchListTile(
                     secondary: const Icon(Icons.shield_outlined),
                     title: const Text('Team logos'),
-                    subtitle: const Text('Draw each team\'s logo as its in-game flag. Tap a crest on the Teams step to use your own PNG.'),
+                    subtitle: Text(logosNote(info.gameId)),
                     value: _useLogos,
                     onChanged: (v) => setState(() => _useLogos = v),
                   ),
@@ -1810,6 +1905,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   Text(p.basename(_result!.outputPath), style: const TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   Text('Teams: ${_result!.teamsPatched}   Players: ${_result!.playersPatched}'),
+                  for (final note in _result!.notes) ...[
+                    const SizedBox(height: 6),
+                    Text(note, style: theme.textTheme.bodySmall),
+                  ],
                 ],
               ),
             ),

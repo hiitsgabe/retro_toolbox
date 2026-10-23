@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,8 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
   _FakeSettings(this.dir, {bool library = false}) : super(AppSettings(libraryEnabled: library));
   final String dir;
   @override
+  Future<void> get loaded async {}
+  @override
   String getDownloadDir(String? consoleId) => dir;
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -35,6 +38,41 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
 /// One PlayStation console in the library.
 class _FakeAppState extends StateNotifier<AppState> implements AppStateNotifier {
   _FakeAppState() : super(const AppState(consoles: {'psx': Console(id: 'psx', name: 'PlayStation', urls: [])}));
+  @override
+  Future<void> get loaded async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Settings and consoles still loading, as on the first screen opened after
+/// launch: no download folder and no console until [finish].
+class _LateSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
+  _LateSettings() : super(const AppSettings());
+  final _done = Completer<void>();
+  String _dir = '';
+  @override
+  Future<void> get loaded => _done.future;
+  void finish(String dir) {
+    _dir = dir;
+    _done.complete();
+  }
+
+  @override
+  String getDownloadDir(String? consoleId) => _dir;
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _LateAppState extends StateNotifier<AppState> implements AppStateNotifier {
+  _LateAppState() : super(const AppState());
+  final _done = Completer<void>();
+  @override
+  Future<void> get loaded => _done.future;
+  void finish() {
+    state = const AppState(consoles: {'psx': Console(id: 'psx', name: 'PlayStation', urls: [])});
+    _done.complete();
+  }
+
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -272,6 +310,33 @@ void main() {
       expect(ft.find.text('Winning Eleven 2002 (Japan).bin'), findsOneWidget);
       expect(ft.find.text('Change'), findsOneWidget);
       expect(t.widget<FilledButton>(ft.find.widgetWithText(FilledButton, 'Next')).onPressed, isNotNull);
+    });
+
+    testWidgets('first open after launch: the placeholder waits for settings and consoles, then the file shows', (t) async {
+      touch('Winning Eleven 2002 (Japan).bin');
+      t.view.devicePixelRatio = 1;
+      t.view.physicalSize = const Size(1200, 900);
+      addTearDown(t.view.reset);
+      final settings = _LateSettings();
+      final app = _LateAppState();
+      await t.pumpWidget(ProviderScope(
+        overrides: [
+          settingsProvider.overrideWith((_) => settings),
+          appStateProvider.overrideWith((_) => app),
+        ],
+        child: const MaterialApp(home: SportPatcherWizardScreen(info: info, initialLeagues: [])),
+      ));
+      expect(ft.find.byKey(skeleton), findsOneWidget);
+      // Still loading: the placeholder stays rather than a lookup of nowhere.
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await t.pump();
+      expect(ft.find.byKey(skeleton), findsOneWidget);
+
+      settings.finish(root.path);
+      app.finish();
+      await t.pump();
+      await settleLookup(t);
+      expect(ft.find.byKey(const ValueKey('rom-local-card')), findsOneWidget);
     });
 
     testWidgets('a file found late takes no focus from the picker', (t) async {

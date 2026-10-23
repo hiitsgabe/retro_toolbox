@@ -105,11 +105,15 @@ class SportsService {
     await (await _customLeaguesFile()).writeAsString(jsonEncode(raw));
   }
 
-  static Future<RomInfo> analyzeRom({required String gameId, required String romPath}) async {
+  /// The image's slots and per-slot extras; [codes] also asks where those
+  /// team codes land, for games that slot teams by code.
+  static Future<RomInfo> analyzeRom({required String gameId, required String romPath, List<String> codes = const []}) async {
     final out = _tmp('rominfo');
     final data = await _runData(
-      tag: 'analyze_${gameId.hashCode.abs()}',
-      job: {'type': 'sports_analyze', 'game_id': gameId, 'rom_path': romPath, 'cache_dir': await _cacheDir()},
+      // Each analysis its own progress file: the wizard may ask again while
+      // an earlier one still runs.
+      tag: 'analyze_${gameId.hashCode.abs()}_${_kitJob++}',
+      job: {'type': 'sports_analyze', 'game_id': gameId, 'rom_path': romPath, 'codes': codes, 'cache_dir': await _cacheDir()},
       outputFile: out,
     );
     return RomInfo.fromJson(Map<String, dynamic>.from(data as Map));
@@ -231,6 +235,7 @@ class SportsService {
     return '${(data as Map)['zip']}';
   }
 
+  /// Numbers jobs that may overlap (kit previews, analyses).
   static var _kitJob = 0;
 
   /// 96x128 PNG previews of [kits] ({key: KIT}, where KIT is a kit spec, an

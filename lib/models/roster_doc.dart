@@ -108,6 +108,9 @@ class RosterTeam {
   set name(String v) => teamRaw['name'] = v;
   String get logoUrl => (teamRaw['logo_url'] ?? '') as String;
 
+  /// The team's abbreviation ('NJ'), '' if unset.
+  String get code => (teamRaw['code'] ?? '') as String;
+
   /// Primary team color as a hex string (e.g. "C60000"), '' if unset.
   String get color => (teamRaw['color'] ?? '') as String;
   set color(String v) => teamRaw['color'] = v;

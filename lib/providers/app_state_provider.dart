@@ -26,8 +26,12 @@ class AppStateNotifier extends StateNotifier<AppState> {
   final CatalogNotifier catalogNotifier;
 
   AppStateNotifier(this._ref, this.catalogService, this.catalogNotifier) : super(const AppState()) {
-    _initialize();
+    loaded = _initialize();
   }
+
+  /// Completes once the console list is in [state]. The provider is created
+  /// on first read, which may be a screen that needs the consoles at once.
+  late final Future<void> loaded;
 
   Future<void> _initialize() async {
     await PermissionService.ensurePermissions();

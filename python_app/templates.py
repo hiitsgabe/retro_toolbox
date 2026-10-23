@@ -17,25 +17,57 @@ FONT = os.path.join(_ASSETS, 'ChakraPetch-Bold.ttf')
 GREY = (128, 128, 128, 255)
 RED = (255, 0, 0, 255)
 
-NOTE = ('Keep your content inside the red boxes; the red lines are guides, do not '
-        'paint them. A PNG with transparency is fine.')
+NOTE = 'The red lines are guides, do not paint them. A PNG with transparency is fine.'
+
+
+def _wrap(draw, text, font, width):
+    """text broken into lines of at most width pixels (a longer word stays whole)."""
+    lines = []
+    for word in text.split():
+        if lines and draw.textlength(f'{lines[-1]} {word}', font=font) <= width:
+            lines[-1] += f' {word}'
+        else:
+            lines.append(word)
+    return '\n'.join(lines)
 
 
 def _boxes(img, guides):
-    """Draw a 2 px red box and label per guide (x, y, w, h, label) on img."""
+    """Draw a 2 px red box and label per guide (x, y, w, h, label) on img.
+    Labels go last, biggest box first, on a grey backing so a neighbour's line
+    never cuts through them. Each takes the first spot that stays on the
+    canvas and clear of the labels already drawn: inside its box at a corner
+    (beside it first when the label is wider than the box), on one line, then
+    smaller, then wrapped to the box (or beside a thin one). A label with no
+    such spot shows the box's number (from 1, in guide order) instead, which
+    a README names."""
     from PIL import ImageDraw, ImageFont
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype(FONT, 12)
     for x, y, w, h, label in guides:
         draw.rectangle((x, y, x + w - 1, y + h - 1), outline=RED, width=2)
-    # Labels last, on a grey backing, so a neighbour's line never cuts through
-    # them; one wider than its box goes to the bottom-left, clear of the
-    # neighbour's own top-left label.
-    for x, y, w, h, label in guides:
-        l, t, r, b = draw.textbbox((0, 0), label, font=font)
-        ly = y + 3 if r - l + 8 <= w else y + h - (b - t) - 4
-        draw.rectangle((x + 3, ly - 1, x + 5 + r - l, ly + b - t + 1), fill=GREY)
-        draw.text((x + 4, ly - t), label, font=font, fill=RED)
+    placed = []
+
+    def put(x, y, w, h, text, font):
+        l, t, r, b = draw.multiline_textbbox((0, 0), text, font=font)
+        tw, th = r - l, b - t
+        inside = [(x + 4, y + 3), (x + 4, y + h - th - 4), (x + w - tw - 4, y + 3)]
+        beside = [(x + w + 4, y + (h - th) // 2), (x - tw - 4, y + (h - th) // 2)]
+        spots = inside + beside if tw + 8 <= w else beside + inside
+        for lx, ly in spots:
+            q = (lx - 1, ly - 1, lx + tw + 1, ly + th + 1)
+            if q[0] >= 0 and q[1] >= 0 and q[2] <= img.width and q[3] <= img.height and \
+                    not any(q[0] < o[2] and o[0] < q[2] and q[1] < o[3] and o[1] < q[3] for o in placed):
+                placed.append(q)
+                draw.rectangle(q, fill=GREY)
+                draw.multiline_text((lx - l, ly - t), text, font=font, fill=RED, spacing=1)
+                return True
+        return False
+
+    big, small = ImageFont.truetype(FONT, 12), ImageFont.truetype(FONT, 10)
+    # The biggest boxes first: they have the room, and a small box's long
+    # label would otherwise crowd out its neighbours'.
+    for i, (x, y, w, h, label) in sorted(enumerate(guides, 1), key=lambda e: -e[1][2] * e[1][3]):
+        tries = [(label, big), (label, small), (_wrap(draw, label, small, w - 8 if w >= 48 else 110), small), (str(i), big)]
+        any(put(x, y, w, h, text, font) for text, font in tries)
 
 
 def _png(img):
@@ -77,8 +109,8 @@ def we2002_screens(slots):
     """[(file name, png, description)] for WE2002's slots ({name: Slot})."""
     return [(f'{name}.png', render(s.width, s.height, we2002_guides(s)),
              f'The {name} screen art canvas, {s.width}x{s.height} pixels. Each box is one '
-             'region the game draws somewhere on screen; a PNG of another size is stretched '
-             'to this canvas, so keep the size.')
+             'region the game draws somewhere on screen: keep your content inside the boxes. '
+             'A PNG of another size is stretched to this canvas, so keep the size.')
             for name, s in slots.items()]
 
 
@@ -110,13 +142,20 @@ def nhl07_screens():
             for s in SLOTS]
 
 
-def iss_screens():
-    """[(file name, png, description)] for ISS's screen slots, from the
-    library's `screens.SLOTS` and their guides."""
-    from retro_roster_patcher.games.iss_snes.screens import SLOTS
+def snes_screens(package):
+    """[(file name, png, description)] for an SNES game's screen slots (ISS,
+    NHL '94, KGJ), from the library's `<package>.screens.SLOTS` and their
+    guides, each named in full in the description (the picture may have had
+    no room for its label)."""
+    import importlib
+    SLOTS = importlib.import_module(f'retro_roster_patcher.games.{package}.screens').SLOTS
     return [(f'{s.name}.png', render(s.size[0], s.size[1], [(g.x, g.y, g.w, g.h, g.label) for g in s.guides]),
-             f'The {s.name} picture, {s.size[0]}x{s.size[1]} pixels: {s.description}. A box marked '
-             'as the game\'s is where the game draws over your picture, so keep it plain there. '
+             f'The {s.name} picture, {s.size[0]}x{s.size[1]} pixels: {s.description}. Its red boxes '
+             '(numbered, x,y and w x h; one without room for its label shows its number): '
+             + '; '.join(f'{i}. {g.label} ({g.x},{g.y} {g.w}x{g.h})' for i, g in enumerate(s.guides, 1)) + '. '
+             'A box marked as the game\'s, or naming what the game draws there, is where the game draws '
+             'over your picture: keep it plain there and put your own content elsewhere. The other boxes '
+             'are your picture\'s and say how the game shows it. '
              'The cartridge has few colours and tiles: a photo is reduced to fit, so bold, flat art '
              'looks best. A PNG of another size is stretched to this size.')
             for s in SLOTS]
@@ -133,6 +172,9 @@ def kit_photo_guide():
             'the shorts from the middle band and the socks from the bottom one.')
 
 
+_SNES_PACKAGES = {'iss-snes': 'iss_snes', 'nhl94-snes': 'nhl94_snes', 'kgj-mlb-snes': 'kgj_mlb_snes'}
+
+
 def files_for(game_id, supports_kits):
     """[(file name, png, description)] of game_id's screen templates, plus
     the kit photo guide when it takes kits (a team's own kit page comes from
@@ -144,8 +186,8 @@ def files_for(game_id, supports_kits):
         files = pes_screens()
     elif game_id == 'nhl07-psp':
         files = nhl07_screens()
-    elif game_id == 'iss-snes':
-        files = iss_screens()
+    elif game_id in _SNES_PACKAGES:
+        files = snes_screens(_SNES_PACKAGES[game_id])
     else:
         raise ValueError(f'No templates for {game_id}')
     if supports_kits:
@@ -326,5 +368,5 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
 
 if __name__ == '__main__':
     import sys
-    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'iss-snes'):
+    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'iss-snes', 'nhl94-snes', 'kgj-mlb-snes'):
         print(*build(game, sys.argv[1], supports_kits=True))

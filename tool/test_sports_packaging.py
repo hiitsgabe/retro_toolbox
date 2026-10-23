@@ -556,9 +556,14 @@ def test_default_images_dispatch_by_game():
     pes.render_default_images = lambda league, season, out: calls.append(('pes', league, season, out)) or {'title': 't'}
     we = types.ModuleType('default_art')
     we.render_default_images = lambda game, league, season, out: calls.append((game, league)) or {'boot': 'b'}
-    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art')}
-    sys.modules.update({'pes_art': pes, 'default_art': we})
+    nhl, kgj = types.ModuleType('nhl94_art'), types.ModuleType('kgj_art')
+    nhl.render_default_images = lambda league, season, out: {'menu': 'm'}
+    kgj.render_default_images = lambda league, season, out: {'title': 's'}
+    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art', 'nhl94_art', 'kgj_art')}
+    sys.modules.update({'pes_art': pes, 'default_art': we, 'nhl94_art': nhl, 'kgj_art': kgj})
     try:
+        assert main._render_default_images('nhl94-snes', 'NHL', 2026, '/o') == {'menu': 'm'}
+        assert main._render_default_images('kgj-mlb-snes', 'MLB', 2026, '/o') == {'title': 's'}
         assert main._render_default_images('pes2013-ps2', 'Liga', 2026, '/o') == {'title': 't'}
         assert main._render_default_images('we2002', 'Liga', 2026, '/o') == {'boot': 'b'}
         assert main._render_default_images('nhl94', 'Liga', 2026, '/o') == {'boot': 'b'}  # default_art decides
@@ -642,7 +647,7 @@ def test_templates_zip_from_stand_in_slots():
         assert name in readme
     assert '128x128' in readme and '96x128' in readme and 'red lines are guides' in readme
     try:
-        templates.files_for('nhl94-snes', False)
+        templates.files_for('nbalive95-genesis', False)
         assert False, 'a game without templates must say so'
     except ValueError:
         pass
@@ -749,6 +754,201 @@ def test_kit_template_zip_holds_the_current_pages_when_the_library_has_them():
     assert templates.outline(page, {}) is page
     boxed = Image.open(io.BytesIO(templates.outline(page, {'shirt': (4, 4, 20, 20)})))
     assert boxed.getpixel((4, 4)) == templates.RED and boxed.getpixel((1, 1)) == templates.GREY
+
+
+def _with_rrp(rrp, job):
+    """main.run_sports(job) against a stand-in library; (progress lines, output)."""
+    import json
+    d = tempfile.mkdtemp()
+    out, progress = os.path.join(d, 'out.json'), os.path.join(d, 'progress')
+    saved = sys.modules.get('retro_roster_patcher')
+    sys.modules['retro_roster_patcher'] = rrp
+    try:
+        main.run_sports({**job, 'output_file': out, 'progress_file': progress})
+    finally:
+        if saved is None:
+            sys.modules.pop('retro_roster_patcher', None)
+        else:
+            sys.modules['retro_roster_patcher'] = saved
+    lines = open(progress).read().splitlines()
+    return lines, json.load(open(out)) if os.path.exists(out) else None
+
+
+def test_analyze_says_where_each_code_lands():
+    import types
+
+    class P:
+        mapper = types.SimpleNamespace(get_team_slot={'BOS': 1, 'LA': 10}.get)
+
+        def __init__(self, **kw):
+            pass
+
+        def analyze_rom(self, rom):
+            return types.SimpleNamespace(to_dict=lambda: {'is_valid': True, 'extra': {'roster_counts': [[2, 9, 7]]}})
+
+    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError)
+    lines, out = _with_rrp(rrp, {'type': 'sports_analyze', 'game_id': 'nhl94-snes', 'rom_path': '/x/nhl.sfc',
+                                 'codes': ['BOS', 'SEA2', 'LA']})
+    assert lines[-1] == 'DONE', lines
+    assert out['team_slots'] == {'BOS': 1, 'LA': 10} and out['extra'] == {'roster_counts': [[2, 9, 7]]}
+    # Asked nothing, says nothing more.
+    _, plain = _with_rrp(rrp, {'type': 'sports_analyze', 'game_id': 'nhl94-snes', 'rom_path': '/x/nhl.sfc'})
+    assert 'team_slots' not in plain
+
+
+def test_patch_returns_what_mapping_said_and_shows_the_library_lines():
+    import json
+    import types
+
+    class Mapped:
+        def merge(self, other):
+            return self
+
+    class P:
+        def __init__(self, **kw):
+            self.on_status = None
+
+        def map_rosters(self, data, slot_mapping):
+            self.on_status('Edmonton Oilers skipped: 1 goalie(s) in the list')
+            return Mapped()
+
+        def patch(self, rom_path, output_path, rosters, on_progress, **options):
+            self.on_status('Drawing screen art...')
+            self.on_status('Slot 3: logo skipped: cannot identify image file')
+            open(output_path, 'wb').write(b'rom')
+            return types.SimpleNamespace(output_path=str(output_path),
+                                         to_dict=lambda: {'output_path': str(output_path), 'teams_patched': 27})
+
+    league = types.SimpleNamespace(season=2026)
+    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError,
+                                league_data_from_dict=lambda d: types.SimpleNamespace(league=league, teams=[]))
+    src, out = tempfile.mkdtemp(), tempfile.mkdtemp()
+    rom, rosters = os.path.join(src, 'NHL.sfc'), os.path.join(src, 'rosters.json')
+    open(rom, 'wb').write(b'rom')
+    json.dump({}, open(rosters, 'w'))
+    lines, sent = _with_rrp(rrp, {'type': 'sports_patch', 'game_id': 'nhl94-snes', 'rom_path': rom, 'output_dir': out,
+                                  'label': 'NHL 2026', 'rosters_file': rosters})
+    assert lines[-1] == 'DONE', lines
+    assert sent['notes'] == ['Edmonton Oilers skipped: 1 goalie(s) in the list',
+                             'Slot 3: logo skipped: cannot identify image file'] and sent['teams_patched'] == 27
+    # The patch's own lines show as it runs; only the skips stay as notes.
+    assert 'STATUS:Drawing screen art...' in lines and 'STATUS:Slot 3: logo skipped: cannot identify image file' in lines
+
+
+def _painted(mod, name, slot, marks=True):
+    """mod's painter for slot, as RGB; without marks, its logo and lettering
+    (`_logo`, `_text`, `_wordmark`, wherever the painter finds them) are not drawn."""
+    import iss_art
+    from PIL import Image
+    saved = [(m, n, getattr(m, n)) for m in (mod, iss_art) for n in ('_logo', '_text', '_wordmark') if hasattr(m, n)]
+    if not marks:
+        for m, n, _ in saved:
+            setattr(m, n, lambda *a, **k: None)
+    try:
+        img = Image.new('RGBA', slot.size, iss_art.DEEP)
+        mod._PAINTERS[name](img, 'X', 2026, slot)
+    finally:
+        for m, n, f in saved:
+            setattr(m, n, f)
+    return img.convert('RGB')
+
+
+def test_nhl94_and_kgj_art_fill_every_slot_clear_of_the_game():
+    """Each slot the library declares, at its size. Its logo and lettering
+    land only in the boxes the painter declares (`CONTENT`) or in the
+    picture's own guides (a full-width one at the top: the whole boot screen,
+    the title band shown first), never in a guide the game draws over; the
+    NHL '94 wallpaper is dark under the menu text, which has no box."""
+    import iss_art
+    import kgj_art
+    import nhl94_art
+    from PIL import Image, ImageChops
+
+    def overlaps(a, g):
+        x, y, w, h = a
+        return x < g.x + g.w and g.x < x + w and y < g.y + g.h and g.y < y + h
+
+    for mod in (nhl94_art, kgj_art):
+        slots = iss_art.slots(mod.PACKAGE)
+        out = mod.render_default_images('X', 2026, tempfile.mkdtemp())
+        assert sorted(out) == sorted(slots), (mod.__name__, sorted(out))
+        for name, slot in slots.items():
+            assert Image.open(out[name]).size == tuple(slot.size), name
+            own = [g for g in slot.guides if g.x == 0 and g.y == 0 and g.w == slot.size[0]]
+            game = [g for g in slot.guides if g not in own]
+            for box in mod.CONTENT[name]:
+                assert not [g.label for g in game if overlaps(box, g)], (mod.__name__, name, box)
+            if name == 'menu':  # the logo is the wallpaper's faint motif, under everything
+                continue
+            marks = ImageChops.difference(_painted(mod, name, slot), _painted(mod, name, slot, marks=False)).convert('L')
+            assert marks.getbbox(), (mod.__name__, name, 'no logo or lettering')
+            for g in game:
+                assert not marks.crop((g.x, g.y, g.x + g.w, g.y + g.h)).getbbox(), (mod.__name__, name, g.label)
+            for x, y, w, h in mod.CONTENT[name] + [(g.x, g.y, g.w, g.h) for g in own]:
+                marks.paste(0, (x, y, x + w, y + h))
+            assert not marks.getbbox(), (mod.__name__, name, 'drawn outside CONTENT', marks.getbbox())
+
+    menu = iss_art.slots('nhl94_snes')['menu']
+    lum = _painted(nhl94_art, 'menu', menu).convert('L')
+    plates = [g for g in menu.guides if g.w == g.h]  # the logo boxes: plain
+    for g in plates:
+        lo, hi = lum.crop((g.x, g.y, g.x + g.w, g.y + g.h)).getextrema()
+        assert lo == hi, g.label
+        lum.paste(0, (g.x, g.y, g.x + g.w, g.y + g.h))
+    for g in menu.guides:
+        if g not in plates:
+            assert lum.crop((g.x, g.y, g.x + g.w, g.y + g.h)).getextrema()[1] < 100, g.label
+
+    assert iss_art.season_mark('NHL', 2026) == '26-27' and iss_art.season_mark('MLB', 2026) == '2026'
+    assert iss_art.season_mark('MLB', '', 'BASEBALL') == 'BASEBALL'
+    # Whatever the rosters file calls its league: the sport's own season.
+    assert kgj_art._mark(2026) == '2026' and nhl94_art._mark(2026) == '26-27'
+    # NHL '94's title shows column 0 alone before the reveal: dark there, as
+    # part of boards down both sides rather than a seam on the ice.
+    title = _painted(nhl94_art, 'title', iss_art.slots('nhl94_snes')['title'])
+    col = next(g for g in iss_art.slots('nhl94_snes')['title'].guides if g.w == 1)
+    assert {title.getpixel((col.x, y)) for y in range(224)} == {iss_art.DEEP[:3]}
+    assert title.getpixel((1, 40)) == title.getpixel((254, 40)) == iss_art.DEEP[:3]
+
+
+def test_nhl94_and_kgj_templates_follow_the_library_slots():
+    import io
+    import templates
+    from PIL import Image
+    from retro_roster_patcher.games.kgj_mlb_snes.screens import SLOTS as KGJ
+    from retro_roster_patcher.games.nhl94_snes.screens import SLOTS as NHL
+
+    for game, slots in (('nhl94-snes', NHL), ('kgj-mlb-snes', KGJ)):
+        files = templates.files_for(game, False)
+        assert [n for n, _, _ in files] == [f'{s.name}.png' for s in slots], game
+        for (_, png, desc), s in zip(files, slots):
+            assert Image.open(io.BytesIO(png)).size == tuple(s.size) and s.description in desc
+            # Every box named in full, whether or not its label fitted the picture.
+            assert all(f'{i}. {g.label} ({g.x},{g.y} {g.w}x{g.h})' in desc for i, g in enumerate(s.guides, 1)), desc
+        path, _ = templates.write_zip(tempfile.mkdtemp(), game, files)
+        readme = zipfile.ZipFile(path).read('README.txt').decode()
+        assert 'inside the red boxes' not in readme and "keep it plain there" in readme  # the game's boxes stay plain
+
+
+def test_template_labels_never_overwrite_each_other():
+    """Two boxes in one place: the second label takes another spot; a label
+    with no room anywhere shows its box's number."""
+    import templates
+    from PIL import Image, ImageDraw
+    drawn = []
+    real = ImageDraw.ImageDraw.multiline_text
+
+    def spy(self, xy, text, **kw):
+        drawn.append((xy, text))
+        return real(self, xy, text, **kw)
+    ImageDraw.ImageDraw.multiline_text = spy
+    try:
+        img = Image.new('RGBA', (120, 60), templates.GREY)
+        templates._boxes(img, [(0, 0, 120, 60, 'one'), (0, 0, 120, 60, 'two'),
+                               (0, 0, 120, 60, 'a label far too long for this little canvas at all')])
+    finally:
+        ImageDraw.ImageDraw.multiline_text = real
+    assert [t for _, t in drawn] == ['one', 'two', '3'] and len({xy for xy, _ in drawn}) == 3, drawn
 
 
 def test_soccer_photos_are_filled_only_for_soccer_and_only_when_the_library_can():

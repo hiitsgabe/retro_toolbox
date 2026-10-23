@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Retro Toolbox | Download, Extract, Play</title>
-<meta name="description" content="Turn any HTTP file index into a browsable game library. Parallel downloads, automatic extraction, NSZ decompression, a sports roster patcher, box art and favorites.">
+<title>Retro Toolbox | Tools for retro consoles and handhelds</title>
+<meta name="description" content="A toolbox for retro console and handheld owners: update classic sports games with current rosters, share files over SMB, FTP and WebDAV, convert CHD, M3U, RAR, NSZ and 3DS files, on Android, desktop and Linux handhelds.">
 <meta name="theme-color" content="#0d0620">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="Retro Toolbox">
-<meta property="og:description" content="Download / Extract / Play. A retro game library manager for Android, macOS, Windows and Linux.">
+<meta property="og:description" content="Patch / Share / Convert / Play. A toolbox for retro consoles and handhelds, on Android, macOS, Windows, Linux and PortMaster handhelds.">
 <meta property="og:image" content="assets/banner.png">
 <meta name="twitter:card" content="summary_large_image">
 
@@ -133,7 +133,6 @@ section { padding: 64px 0; position: relative; }
 .ico, .ico svg { color: var(--purple-light); stroke-width: 1.75; }
 .card .ico, .card .ico svg { width: 26px; height: 26px; }
 .plat .ico, .plat .ico svg { width: 28px; height: 28px; }
-.disclaimer svg, .disclaimer .ico { width: 1em; height: 1em; vertical-align: -2px; }
 
 /* Hairline between stacked sections gives rhythm instead of equal floating gaps. */
 section::before {
@@ -306,18 +305,6 @@ nav.stuck { border-bottom-color: var(--border); background: rgba(13, 6, 32, 0.9)
 
 .hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 
-.disclaimer {
-  margin: 52px auto 0;
-  max-width: 640px;
-  padding: 14px 20px;
-  border-left: 3px solid var(--purple);
-  background: rgba(124, 63, 212, 0.08);
-  border-radius: 0 10px 10px 0;
-  color: var(--muted);
-  font-size: 15px;
-  text-align: left;
-}
-
 /* ---------- cards ---------- */
 
 .cards {
@@ -480,6 +467,79 @@ footer a:hover { text-decoration: underline; }
   margin-top: 100px;
   margin-bottom: 100px;
 }
+
+/* ---------- pills, game list, screenshots, note ---------- */
+
+.pills { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 40px; }
+.pills li {
+  font-size: 13.5px;
+  color: var(--muted);
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.cards-4 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+
+.games {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.games li {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  line-height: 1.4;
+}
+.games strong { display: block; font-size: 15.5px; }
+.games span { color: var(--muted); font-size: 13.5px; }
+
+.shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.shots img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 40px -24px rgba(165, 108, 232, 0.8);
+}
+
+.note {
+  border-left: 3px solid var(--purple);
+  background: rgba(124, 63, 212, 0.08);
+  border-radius: 0 12px 12px 0;
+  padding: 18px 22px;
+  color: var(--muted);
+  font-size: 15.5px;
+  display: grid;
+  gap: 12px;
+  max-width: 72ch;
+}
+.note a { color: var(--purple-light); }
+.note strong { color: var(--text); }
+.note .ico, .note svg { width: 1em; height: 1em; vertical-align: -2px; }
+
+@media (max-width: 520px) {
+  .wrap { padding: 0 16px; margin-top: 56px; margin-bottom: 56px; }
+  section { padding: 48px 0; }
+  .card { padding: 24px 20px; }
+  .btn { padding: 14px 20px; }
+  .nav-inner { padding: 12px 16px; gap: 12px; }
+  .brand span { font-size: 9px; }
+  .step { padding: 20px 18px; gap: 14px; }
+}
+
+.step > div { min-width: 0; }
+.step code { overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -496,10 +556,10 @@ footer a:hover { text-decoration: underline; }
       <span>RETRO TOOLBOX</span>
     </a>
     <div class="nav-links">
-      <a href="#features">Features</a>
-      <a href="#platforms">Platforms</a>
-      <a href="#setup">Setup</a>
-      <a href="#legal">Legal</a>
+      <a href="#sports">Sports</a>
+      <a href="#servers">Servers</a>
+      <a href="#tools">Tools</a>
+      <a href="#handhelds">Handhelds</a>
       <a class="nav-cta" href="https://github.com/hiitsgabe/retro_toolbox/releases/latest">Download</a>
     </div>
   </div>
@@ -508,181 +568,222 @@ footer a:hover { text-decoration: underline; }
 <header class="hero wrap" id="top">
   <img class="hero-logo" src="assets/logo.png" alt="Retro Toolbox logo">
   <h1><span class="grad">RETRO TOOLBOX</span></h1>
-  <p class="tagline">DOWNLOAD / EXTRACT / PLAY</p>
+  <p class="tagline">PATCH / SHARE / CONVERT / PLAY</p>
   <p class="sub">
-    Turn any HTTP file index into a browsable game library. Queue parallel downloads, extract
-    archives automatically, decompress Switch NSZ files, patch classic sports games with current
-    rosters, and browse it all with box art and favorites.
+    A toolbox for people who own retro consoles and handhelds. Update classic sports games with this
+    season's teams, move files between your devices over the network, convert and tidy your game files,
+    and run it all on the handheld itself, with a gamepad.
   </p>
   <div class="hero-actions">
     <a class="btn btn-primary" href="https://github.com/hiitsgabe/retro_toolbox/releases/latest">Get the latest release</a>
     <a class="btn btn-ghost" href="https://github.com/hiitsgabe/retro_toolbox">View on GitHub</a>
   </div>
-  <p class="disclaimer">
-    <strong><i data-lucide="triangle-alert"></i> Disclaimer:</strong> This application does not endorse piracy, and ships with no catalog and no content.
-    Only download files you legally own.
-  </p>
+  <ul class="pills" aria-label="Platforms">
+    <li>Android</li><li>macOS</li><li>Windows</li><li>Linux</li><li>Linux handhelds</li>
+  </ul>
 </header>
 
-<section id="features" class="wrap">
-  <p class="eyebrow reveal">What it does</p>
-  <h2 class="reveal">Everything you need to <span class="grad">manage a library</span></h2>
-  <p class="lead reveal">Point it at a server you have the right to use. It handles the rest.</p>
+<section id="sports" class="wrap">
+  <p class="eyebrow reveal">Sports roster patcher · alpha</p>
+  <h2 class="reveal">Old games, <span class="grad">this season's teams</span></h2>
+  <p class="lead reveal">
+    Classic sports games are stuck with the rosters of the year they shipped. Pick the game, the season and
+    the league, check the squads, and Retro Toolbox writes current teams and players into a ROM or disc image
+    you already own. No terminal, no Python install.
+  </p>
 
-  <div class="cards">
+  <ul class="games reveal" aria-label="Supported games">
+    <li><strong>ISS</strong><span>SNES · soccer</span></li>
+    <li><strong>Ken Griffey Jr. MLB</strong><span>SNES · baseball</span></li>
+    <li><strong>NHL 94</strong><span>SNES · hockey</span></li>
+    <li><strong>NHL 94</strong><span>Genesis · hockey</span></li>
+    <li><strong>NBA Live 95</strong><span>Genesis · basketball</span></li>
+    <li><strong>NHL 07</strong><span>PSP · hockey</span></li>
+    <li><strong>MVP Baseball</strong><span>PSP · baseball</span></li>
+    <li><strong>Winning Eleven 2002</strong><span>PS1 · soccer</span></li>
+    <li><strong>NHL 2005</strong><span>PS2 · hockey</span></li>
+    <li><strong>PES 2013</strong><span>PS2 · soccer</span></li>
+  </ul>
+
+  <div class="cards cards-4">
     <div class="card reveal">
-      <i data-lucide="trophy" class="ico"></i>
-      <h3>Sports roster patcher <span class="grad">(alpha)</span></h3>
-      <p>Update classic sports games with real, current teams and players. Edit squads, lineups, stats and kit colors, then patch your own ROM.</p>
+      <i data-lucide="users" class="ico"></i>
+      <h3>Real, current rosters</h3>
+      <p>Teams and players for the season you pick. Soccer games take the league you choose, PES 2013 several at once plus the national teams, and you can add any ESPN league yourself.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="zap" class="ico"></i>
-      <h3>Parallel downloads</h3>
-      <p>Queue as many titles as you want with configurable concurrency and live per-file progress.</p>
+      <i data-lucide="list-ordered" class="ico"></i>
+      <h3>Edit every squad</h3>
+      <p>Put teams in the game's slots, add or remove them, and set starters, bench, names, numbers, positions, stats and colours, with player photos and club crests.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="smartphone" class="ico"></i>
-      <h3>Keeps going in the background</h3>
-      <p>Downloads survive backgrounding through a real foreground service on Android.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="archive" class="ico"></i>
-      <h3>Auto-extraction</h3>
-      <p>ZIP archives unpack automatically once they land, optionally into a subfolder per game.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="package-open" class="ico"></i>
-      <h3>NSZ decompression</h3>
-      <p>Switch NSZ archives decompress on device with a bundled Python runtime. No external tools, no desktop round-trip.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="layout-grid" class="ico"></i>
-      <h3>Box art &amp; grid view</h3>
-      <p>Browse a cover grid or a compact list, with cached art and a full-screen viewer.</p>
+      <i data-lucide="shirt" class="ico"></i>
+      <h3>Logos, kits and screens</h3>
+      <p>On the games that support it, draw each club's logo and real home and away kit into the game, and replace the title and menu screens with branded art or your own PNG.</p>
     </div>
     <div class="card reveal">
       <i data-lucide="search" class="ico"></i>
-      <h3>Search &amp; filters</h3>
-      <p>Search by name, filter by region with per-system regex, and see which titles you already have.</p>
+      <h3>Finds your ROM</h3>
+      <p>The wizard looks for the game on your device first. Zipped ROMs and multi-track <code>.cue</code>/<code>.bin</code> discs come out the way they went in.</p>
+    </div>
+  </div>
+</section>
+
+<section id="servers" class="wrap">
+  <p class="eyebrow reveal">Servers</p>
+  <h2 class="reveal">Move files <span class="grad">without cables</span></h2>
+  <p class="lead reveal">Phone, PC, handheld, Switch or 3DS: if they're on the same network, they can trade files.</p>
+
+  <div class="cards">
+    <div class="card reveal">
+      <i data-lucide="folder-open" class="ico"></i>
+      <h3>SMB share</h3>
+      <p>Connect to a Samba or Windows share, browse it, download files or whole folders, and upload to it.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="star" class="ico"></i>
-      <h3>Favorites</h3>
-      <p>Star titles, filter down to them, and export or import the list between devices.</p>
+      <i data-lucide="arrow-left-right" class="ico"></i>
+      <h3>FTP client &amp; server</h3>
+      <p>Connect to any FTP server, or share a folder from this device so others can browse, download and upload.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="server" class="ico"></i>
-      <h3>Bring your own source</h3>
-      <p>HTML directory listings, JSON APIs, or the Internet Archive metadata API, with bearer, cookie and interactive auth.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="sliders-horizontal" class="ico"></i>
-      <h3>Per-console settings</h3>
-      <p>Override the download directory, extraction behavior and filters independently for every system.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="gamepad-2" class="ico"></i>
-      <h3>Steam shortcut creator</h3>
-      <p>Search the Steam store and drop ready-to-scan <code>.steam</code> shortcut files into any folder.</p>
-    </div>
-    <div class="card reveal">
-      <i data-lucide="cast" class="ico"></i>
-      <h3>Tinfoil server</h3>
-      <p>Serve your Switch catalog to Tinfoil over the LAN. It streams and installs straight from the source, with auth injected for you.</p>
+      <i data-lucide="hard-drive" class="ico"></i>
+      <h3>Retro Tools Server</h3>
+      <p>Share folders over HTTP. Open them in a browser, or add them to another device's library to browse with box art and download.</p>
     </div>
     <div class="card reveal">
       <i data-lucide="refresh-cw" class="ico"></i>
-      <h3>Save sync with JKSV</h3>
-      <p>An embedded WebDAV server syncs emulator save exports with JKSV on a Switch, both directions, backed up before every replace.</p>
+      <h3>Switch save sync</h3>
+      <p>A WebDAV server for JKSV: back up and restore saves both ways, straight from emulator save exports, with a backup before every replace.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="folder-open" class="ico"></i>
-      <h3>SMB &amp; FTP</h3>
-      <p>Connect to SMB/CIFS shares to browse and pull files, and use the FTP client or the built-in FTP server to move files over the LAN.</p>
+      <i data-lucide="download" class="ico"></i>
+      <h3>3DS installs</h3>
+      <p>Install <code>.cia</code> and <code>.3ds</code> files onto a 3DS running FBI over the network, converted to <code>.cia</code> when needed.</p>
     </div>
+  </div>
+</section>
+
+<section id="tools" class="wrap">
+  <p class="eyebrow reveal">Tools</p>
+  <h2 class="reveal">Convert and tidy <span class="grad">your game files</span></h2>
+  <p class="lead reveal">The file chores every emulation setup needs, on the device that holds the files.</p>
+
+  <div class="cards">
     <div class="card reveal">
-      <i data-lucide="file-archive" class="ico"></i>
-      <h3>Rar &amp; zip decompress</h3>
-      <p>Extract <code>.rar</code> and <code>.zip</code> archives to a folder. Pick an archive, pick a destination, done.</p>
+      <i data-lucide="folders" class="ico"></i>
+      <h3>File explorer</h3>
+      <p>Browse internal storage, SD cards and Downloads. Copy, move, zip, extract, rename and delete, with long jobs in the background.</p>
     </div>
     <div class="card reveal">
       <i data-lucide="sparkles" class="ico"></i>
       <h3>Collection clean</h3>
-      <p>Dedupe game files, strip region and version tags from names, and sweep out OS junk files — always previewed before it applies.</p>
+      <p>Remove duplicate ROMs, strip region and version tags from names, and sweep out OS junk files, always previewed before it applies.</p>
     </div>
     <div class="card reveal">
       <i data-lucide="list-music" class="ico"></i>
       <h3>M3U playlists</h3>
-      <p>Generate <code>.m3u</code> playlists for multi-disc games so emulators show one entry and swap discs in-game.</p>
+      <p>Find multi-disc games and write <code>.m3u</code> playlists so emulators show one entry and swap discs in-game.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="file-down" class="ico"></i>
+      <i data-lucide="disc" class="ico"></i>
       <h3>CHD converter</h3>
-      <p>Compress disc images to CHD to reclaim storage, or extract them back — powered by <code>chdman</code>.</p>
+      <p>Compress <code>.cue</code>, <code>.gdi</code> and <code>.iso</code> disc images to CHD to save space, or extract them back. <code>chdman</code> is bundled.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="list-plus" class="ico"></i>
-      <h3>New catalog source</h3>
-      <p>Add a single console to your catalog from a directory-listing URL or an Internet Archive item.</p>
+      <i data-lucide="file-archive" class="ico"></i>
+      <h3>RAR &amp; ZIP</h3>
+      <p>Extract <code>.rar</code> and <code>.zip</code> archives to any folder, on Android, macOS, Linux and handhelds.</p>
     </div>
     <div class="card reveal">
       <i data-lucide="replace" class="ico"></i>
-      <h3>3DS → CIA</h3>
-      <p>Convert <code>.3ds</code>/<code>.cci</code> dumps to installable <code>.cia</code> on device, with the bundled Python runtime.</p>
+      <h3>Switch &amp; 3DS formats</h3>
+      <p>Turn <code>.nsz</code> back into <code>.nsp</code>, and <code>.3ds</code>/<code>.cci</code> dumps into installable <code>.cia</code>, with your own keys.</p>
     </div>
     <div class="card reveal">
-      <i data-lucide="hard-drive" class="ico"></i>
-      <h3>Retro Tools &amp; FBI servers</h3>
-      <p>Serve local folders with box art over the LAN, or push <code>.cia</code>/<code>.3ds</code> straight to a 3DS running FBI.</p>
+      <i data-lucide="gamepad-2" class="ico"></i>
+      <h3>Steam shortcuts</h3>
+      <p>Search the Steam store and write <code>.steam</code> shortcut files for launchers that run Steam games through GameHub or similar.</p>
     </div>
   </div>
-
-  <p class="lead reveal" style="margin-top:32px;margin-bottom:0">
-    Servers and tools open from the home screen's grid menu, grouped and out of the way until you need them.
-  </p>
 </section>
 
-<section id="platforms" class="wrap">
-  <p class="eyebrow reveal">Where it runs</p>
-  <h2 class="reveal">Android first, <span class="grad">desktop too</span></h2>
-  <p class="lead reveal">Signed APKs, universal builds and an App Bundle ship on every release, alongside desktop packages.</p>
+<section id="handhelds" class="wrap">
+  <p class="eyebrow reveal">Handhelds</p>
+  <h2 class="reveal">Runs on the <span class="grad">handheld itself</span></h2>
+  <p class="lead reveal">
+    An ARM64 Linux build installs through PortMaster on Knulli, muOS, ROCKNIX and similar firmwares. Every
+    screen works with the d-pad and buttons, with an on-screen keyboard for text.
+  </p>
 
-  <div class="platforms">
-    <div class="plat reveal"><i data-lucide="smartphone" class="ico"></i><strong>ANDROID</strong><span>arm64 · arm32 · universal · AAB</span></div>
-    <div class="plat reveal"><i data-lucide="laptop" class="ico"></i><strong>MACOS</strong><span>Apple Silicon &amp; Intel DMG</span></div>
-    <div class="plat reveal"><i data-lucide="monitor" class="ico"></i><strong>WINDOWS</strong><span>x64 portable ZIP</span></div>
-    <div class="plat reveal"><i data-lucide="terminal" class="ico"></i><strong>LINUX</strong><span>build from source</span></div>
+  <div class="shots reveal">
+    <img src="assets/screens/sports.png" alt="The Sports menu on a handheld" loading="lazy" width="640" height="480">
+    <img src="assets/screens/tools.png" alt="The Tools menu on a handheld" loading="lazy" width="640" height="480">
+    <img src="assets/screens/ftp.png" alt="The FTP client on a handheld" loading="lazy" width="640" height="480">
+  </div>
+
+  <div class="cards">
+    <div class="card reveal">
+      <i data-lucide="cpu" class="ico"></i>
+      <h3>Console info</h3>
+      <p>Device and firmware, storage, memory, battery and temperature, the address to type into FTP or SMB, and a process list to end what's stuck.</p>
+    </div>
+    <div class="card reveal">
+      <i data-lucide="qr-code" class="ico"></i>
+      <h3>Download from a link</h3>
+      <p>Paste a link, or scan a QR code and send it from your phone. The file downloads in the background, resumes on retry, and archives extract in place.</p>
+    </div>
+    <div class="card reveal">
+      <i data-lucide="rocket" class="ico"></i>
+      <h3>Updates itself</h3>
+      <p>About checks for a newer release and installs it. Copies installed from PortMaster's catalog update through PortMaster.</p>
+    </div>
+  </div>
+</section>
+
+<section id="library" class="wrap">
+  <p class="eyebrow reveal">Optional</p>
+  <h2 class="reveal">Games <span class="grad">library</span></h2>
+  <div class="note reveal">
+    <p>
+      Off by default; turn it on in <strong>Settings → Games Library</strong>. It browses game files from an HTTP
+      or HTTPS file index you provide (directory listings, JSON APIs or Internet Archive items) and downloads them
+      in the background, with extraction, box art, search and favorites. The catalog format is in
+      <a href="https://github.com/hiitsgabe/retro_toolbox/blob/main/docs/adding-a-system.md">the docs</a>.
+    </p>
+    <p><i data-lucide="triangle-alert" class="ico"></i> The app hosts no games. Use only sources you have the right to use, and only download files you legally own.</p>
   </div>
 </section>
 
 <section id="setup" class="wrap">
   <p class="eyebrow reveal">Getting started</p>
-  <h2 class="reveal">Up and running in <span class="grad">four steps</span></h2>
-  <p class="lead reveal">No catalog ships with the app. You supply your own source.</p>
+  <h2 class="reveal">Install <span class="grad">in a minute</span></h2>
+  <p class="lead reveal">Every release ships a package for each platform.</p>
 
-  <div class="steps">
+  <div class="platforms">
+    <div class="plat reveal"><i data-lucide="smartphone" class="ico"></i><strong>ANDROID</strong><span>arm64 · arm32 · universal APK</span></div>
+    <div class="plat reveal"><i data-lucide="laptop" class="ico"></i><strong>MACOS</strong><span>Apple Silicon &amp; Intel DMG</span></div>
+    <div class="plat reveal"><i data-lucide="monitor" class="ico"></i><strong>WINDOWS</strong><span>x64 ZIP</span></div>
+    <div class="plat reveal"><i data-lucide="terminal" class="ico"></i><strong>LINUX</strong><span>x64 tarball</span></div>
+    <div class="plat reveal"><i data-lucide="gamepad-2" class="ico"></i><strong>HANDHELD</strong><span>ARM64 · PortMaster</span></div>
+  </div>
+
+  <div class="steps" style="margin-top:28px">
     <div class="step reveal">
       <div>
-        <h3>Install it</h3>
-        <p>Grab the APK or desktop package from the <a href="https://github.com/hiitsgabe/retro_toolbox/releases/latest" style="color:var(--purple-light)">latest release</a>. On Android you'll need to allow installs from your browser.</p>
+        <h3>Download</h3>
+        <p>Grab the file for your device from the <a href="https://github.com/hiitsgabe/retro_toolbox/releases/latest" style="color:var(--purple-light)">latest release</a>. On Android, allow installs from your browser.</p>
       </div>
     </div>
     <div class="step reveal">
       <div>
-        <h3>Point it at a catalog</h3>
-        <p>Open <strong>General Settings → Catalog Source</strong> and import a JSON file or load one from a URL. The schema is documented in <code>docs/adding-a-system.md</code>.</p>
+        <h3>On a handheld</h3>
+        <p>Unzip <code>retro_toolbox_handheld_arm64.zip</code> into your <code>ports/</code> folder and start <strong>Retro Toolbox</strong> from the Ports menu.</p>
       </div>
     </div>
     <div class="step reveal">
       <div>
-        <h3>Pick your folders</h3>
-        <p>Set a download directory globally or per console, and choose whether archives extract into their own subfolder.</p>
-      </div>
-    </div>
-    <div class="step reveal">
-      <div>
-        <h3>Browse and queue</h3>
-        <p>Search, filter by region, star favorites, and queue as many downloads as your connection can take.</p>
+        <h3>Open a tool</h3>
+        <p>The home screen groups everything into <strong>Sports</strong>, <strong>Servers</strong> and <strong>Tools</strong>. Nothing to configure first.</p>
       </div>
     </div>
   </div>
@@ -692,8 +793,9 @@ footer a:hover { text-decoration: underline; }
 cd retro_toolbox
 flutter pub get
 
-# package the embedded Python runtime (once, and after bumping serious_python)
-dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome
+# package the embedded Python runtime (once, and after changing python_app/)
+dart run serious_python:main package python_app/ -p Android \
+  -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.4.1"
 
 flutter build apk --release</code></pre>
 </section>
@@ -704,11 +806,11 @@ flutter build apk --release</code></pre>
 
   <div class="legal-box reveal">
     <ul>
-      <li><strong>No content hosted.</strong> This app does not host, store or distribute ROMs, ISOs or any copyrighted content. It is a download manager.</li>
-      <li><strong>No game copies.</strong> No games or copyrighted gaming content are included in the app or this repository.</li>
-      <li><strong>Example configs only.</strong> Any configuration files included are examples demonstrating the schema. They do not endorse any specific source.</li>
-      <li><strong>Your responsibility.</strong> You are solely responsible for having the legal right to download any content, and for complying with copyright law in your jurisdiction.</li>
-      <li><strong>No liability.</strong> The developers and contributors assume no responsibility for misuse of this software.</li>
+      <li><strong>No content hosted.</strong> This app does not host, store or distribute ROMs, ISOs or any copyrighted content, and no games are included.</li>
+      <li><strong>Your own keys.</strong> No key material is distributed: NSZ needs your own <code>prod.keys</code> and 3DS conversion your own <code>boot9.bin</code>.</li>
+      <li><strong>Your own games.</strong> Patch, convert and download only games and consoles you own.</li>
+      <li><strong>Example configs only.</strong> Any configuration files included are examples of the schema. They do not endorse any source.</li>
+      <li><strong>Your responsibility.</strong> You are responsible for following copyright law where you live. The developers and contributors accept no liability for misuse.</li>
     </ul>
   </div>
 </section>
@@ -719,6 +821,7 @@ flutter build apk --release</code></pre>
     <div class="footer-links">
       <a href="https://github.com/hiitsgabe/retro_toolbox">GitHub</a>
       <a href="https://github.com/hiitsgabe/retro_toolbox/releases">Releases</a>
+      <a href="https://github.com/hiitsgabe/retro_roster_patcher">Roster patcher</a>
       <a href="https://github.com/hiitsgabe/retro_toolbox/blob/main/docs/adding-a-system.md">Docs</a>
       <a href="https://github.com/hiitsgabe/retro_toolbox/issues">Issues</a>
     </div>
@@ -726,7 +829,7 @@ flutter build apk --release</code></pre>
   </div>
 </footer>
 
-<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 <script>
 (function () {
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
