@@ -751,6 +751,48 @@ def test_kit_template_zip_holds_the_current_pages_when_the_library_has_them():
     assert boxed.getpixel((4, 4)) == templates.RED and boxed.getpixel((1, 1)) == templates.GREY
 
 
+def test_soccer_photos_are_filled_only_for_soccer_and_only_when_the_library_can():
+    calls = []
+
+    class Sports:
+        class FotmobClient:
+            def __init__(self, cache_dir, on_status):
+                calls.append(('client', cache_dir))
+
+        @staticmethod
+        def fill_headshots(data, client, on_status):
+            calls.append(('fill', data))
+            on_status('FotMob')
+            return 3
+
+    class Rrp:
+        sports = Sports
+
+    class Soccer:
+        sport = 'soccer'
+
+    class Hockey:
+        sport = 'hockey'
+
+    seen = []
+    assert main._fill_soccer_photos(Soccer(), 'd', '/c', Rrp, lambda f, m: seen.append(m)) == 3
+    assert calls == [('client', '/c'), ('fill', 'd')] and seen == ['FotMob']
+    calls.clear()
+    assert main._fill_soccer_photos(Hockey(), 'd', '/c', Rrp) == 0 and calls == []
+    # A library older than the feature, or a FotMob outage, costs only the photos.
+    assert main._fill_soccer_photos(Soccer(), 'd', '/c', object()) == 0
+
+    class Broken(Sports):
+        @staticmethod
+        def fill_headshots(data, client, on_status):
+            raise OSError('down')
+
+    class RrpBroken:
+        sports = Broken
+
+    assert main._fill_soccer_photos(Soccer(), 'd', '/c', RrpBroken) == 0
+
+
 if __name__ == '__main__':
     for name, fn in list(globals().items()):
         if name.startswith('test_'):

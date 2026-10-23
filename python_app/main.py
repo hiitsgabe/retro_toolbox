@@ -633,6 +633,27 @@ def _register_league(league):
     _espn._CODE_TO_LEAGUE = {i['code']: i for i in _espn.ESPN_LEAGUES}
 
 
+def _fill_soccer_photos(patcher, data, cache_dir, rrp, on_progress=None):
+    """Soccer only: give each player ESPN has no head shot for the one FotMob
+    has (the library's `fill_headshots`, what the CLI's
+    `--fill-from-other-sources` runs), matched by birth date and name. Best
+    effort: a library without it, or FotMob being down, leaves the squads as
+    they were. Returns how many players got a photo."""
+    sports = getattr(rrp, 'sports', None)
+    fill = getattr(sports, 'fill_headshots', None)
+    if getattr(patcher, 'sport', '') != 'soccer' or fill is None:
+        return 0
+
+    def status(msg):
+        if on_progress:
+            on_progress(0.95, msg)
+
+    try:
+        return fill(data, sports.FotmobClient(cache_dir, status), status)
+    except Exception:
+        return 0
+
+
 def run_sports(job):
     """Drive the retro_roster_patcher library for one sports job.
 
@@ -716,6 +737,7 @@ def run_sports(job):
                 league_id=league_id,
                 on_progress=on_progress,
             )
+            _fill_soccer_photos(patcher, data, cache_dir, rrp, on_progress)
             # Reorder each squad into the game's fielding order (starters first)
             # so the editor shows a sensible lineup instead of the provider's
             # alphabetical dump. The patch writes the (possibly edited) list in
