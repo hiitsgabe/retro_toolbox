@@ -17,6 +17,7 @@ import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
+import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
 
 class SettingsContent extends ConsumerWidget {
   final Console? selectedConsole;
@@ -71,6 +72,31 @@ class SettingsContent extends ConsumerWidget {
               child: const LibrarySetting(),
             ),
             const SizedBox(height: 8),
+          ],
+          if (selectedConsole == null) ...[
+            const SizedBox(height: 8),
+            _section(
+              context,
+              icon: Icons.sports_soccer,
+              title: 'Sports',
+              subtitle: 'Saved formations and caches for the roster patcher.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  BooleanSetting(
+                    settingKey: AppSettings.autoApplyFormations,
+                    defaultValue: true,
+                    title: 'Auto-apply saved formations',
+                    subtitle: 'When fetching a roster, reuse the formation saved for the same club.',
+                    icon: Icons.auto_fix_high,
+                    console: null,
+                    settingsNotifier: settingsNotifier,
+                  ),
+                  const SizedBox(height: 8),
+                  const SportsCacheSettings(),
+                ],
+              ),
+            ),
           ],
           if (library)
             _section(

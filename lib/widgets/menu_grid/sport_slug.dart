@@ -217,7 +217,7 @@ const Map<String, List<String>> _searchTerms = {
   'nhl94-snes': ["NHL '94", "NHL Hockey '94", 'NHL 94'],
   'nhl05-ps2': ['NHL 2005', 'NHL 05'],
   'nhl07-psp': ['NHL 07', 'NHL 2007'],
-  'kgj-mlb-snes': ['Ken Griffey Jr. Presents Major League Baseball', "Ken Griffey Jr's Winning Run"],
+  'kgj-mlb-snes': ['Ken Griffey Jr. Presents Major League Baseball'],
   'mvp-psp': ['MVP Baseball'],
   'pes2013-ps2': ['pro evolution soccer 2013', 'pes 2013', 'world soccer winning eleven 2013'],
 };

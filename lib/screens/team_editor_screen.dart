@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/services/formation_cache_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
@@ -109,6 +110,14 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     super.initState();
     _regroup();
     if (_hasKits) _refreshKits();
+    _loadSavedFlag();
+  }
+
+  Future<void> _loadSavedFlag() async {
+    if (widget.team.id <= 0) return;
+    final saved = await FormationCacheService.load();
+    if (!mounted) return;
+    setState(() => _hasSavedFormation = saved.containsKey(widget.team.id));
   }
 
   /// Re-renders both kits in one job, mounted on the player when the ROM and
@@ -372,6 +381,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   /// Index of the player picked to swap; the next row tapped trades places
   /// with it. Null when not swapping.
   int? _swapFrom;
+  bool _hasSavedFormation = false;
 
   /// Focus follows the swap: the picked row loses its buttons, so it takes
   /// focus, and afterwards the row the pick landed on.
@@ -406,6 +416,59 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) node.requestFocus();
     });
+  }
+
+  Future<void> _saveFormation() async {
+    final ids = [for (final p in widget.team.players) p.id].where((i) => i > 0).toList();
+    await FormationCacheService.save(widget.team.id, ids);
+    if (!mounted) return;
+    setState(() => _hasSavedFormation = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Formation saved locally'), duration: Duration(seconds: 2)),
+    );
+  }
+
+  Future<void> _clearAndUpdateFormation() async {
+    await FormationCacheService.remove(widget.team.id);
+    if (!mounted) return;
+    setState(() => _hasSavedFormation = false);
+
+    final isSoccer = widget.sport.toLowerCase().contains('soccer') ||
+        widget.sport.toLowerCase().contains('football');
+    if (isSoccer && widget.team.id > 0) {
+      try {
+        final fresh = await SportsService.fetchTeam(
+          gameId: widget.gameId,
+          teamId: widget.team.id,
+          teamName: widget.team.name,
+        );
+        if (!mounted) return;
+        setState(() {
+          widget.team.players
+            ..clear()
+            ..addAll(fresh.players);
+          widget.team.statsRaw
+            ..clear()
+            ..addAll(fresh.statsRaw);
+          widget.team.extraRaw
+            ..clear()
+            ..addAll(fresh.extraRaw);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Roster updated from provider'), duration: Duration(seconds: 2)),
+        );
+        return;
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cache cleared; fetch failed: $e'), duration: const Duration(seconds: 3)),
+        );
+        return;
+      }
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Cached formation cleared'), duration: Duration(seconds: 2)),
+    );
   }
 
   void _focusOn(int i) {
@@ -682,6 +745,12 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         title: Text(team.name, overflow: TextOverflow.ellipsis),
         actions: [
           if (compact && !swapping) IconButton(icon: const Icon(Icons.person_add), tooltip: 'Add player', onPressed: () => _editPlayer(null)),
+          if (widget.team.id > 0)
+            IconButton(
+              icon: Icon(_hasSavedFormation ? Icons.bookmark : Icons.bookmark_add_outlined),
+              tooltip: _hasSavedFormation ? 'Update saved formation' : 'Save formation locally',
+              onPressed: _saveFormation,
+            ),
         ],
       ),
       floatingActionButton: compact || swapping
@@ -712,6 +781,24 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                         _focusOn(from);
                       },
                       child: const Text('Done'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (_hasSavedFormation && !swapping)
+            Material(
+              color: theme.colorScheme.secondaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bookmark, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('Using a cached formation.', overflow: TextOverflow.ellipsis)),
+                    TextButton(
+                      onPressed: _clearAndUpdateFormation,
+                      child: const Text('Clear and Update'),
                     ),
                   ],
                 ),

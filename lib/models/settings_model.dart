@@ -4,6 +4,7 @@ class AppSettings {
   static const String maxParallelDownloads = 'maxParallelDownloads';
   static const String maxParallelExtractions = 'maxParallelExtractions';
   static const String extractToFolder = 'extractToFolder';
+  static const String autoApplyFormations = 'autoApplyFormations';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
@@ -11,6 +12,7 @@ class AppSettings {
     maxParallelDownloads: int,
     maxParallelExtractions: int,
     extractToFolder: bool,
+    autoApplyFormations: bool,
   };
 
   final Map<String, BaseSettings> consoleSettings;
@@ -135,6 +137,7 @@ class BaseSettings {
   final int? maxParallelExtractions;
   final bool? extractToFolder;
   final String? authToken;
+  final bool? autoApplyFormations;
 
   const BaseSettings({
     this.downloadDir,
@@ -143,6 +146,7 @@ class BaseSettings {
     this.maxParallelExtractions,
     this.extractToFolder,
     this.authToken,
+    this.autoApplyFormations,
   });
 
   BaseSettings copyWith({
@@ -153,6 +157,7 @@ class BaseSettings {
     bool? extractToFolder,
     String? authToken,
     bool clearAuthToken = false,
+    bool? autoApplyFormations,
   }) {
     return BaseSettings(
       downloadDir: downloadDir == '' ? null : downloadDir ?? this.downloadDir,
@@ -161,6 +166,7 @@ class BaseSettings {
       maxParallelExtractions: maxParallelExtractions ?? this.maxParallelExtractions ?? 2,
       extractToFolder: extractToFolder ?? this.extractToFolder,
       authToken: clearAuthToken ? null : (authToken ?? this.authToken),
+      autoApplyFormations: autoApplyFormations ?? this.autoApplyFormations ?? true,
     );
   }
 
@@ -172,6 +178,7 @@ class BaseSettings {
       AppSettings.maxParallelExtractions: maxParallelExtractions,
       if (extractToFolder != null) AppSettings.extractToFolder: extractToFolder,
       if (authToken != null) 'authToken': authToken,
+      if (autoApplyFormations != null) AppSettings.autoApplyFormations: autoApplyFormations,
     };
   }
 
@@ -187,6 +194,8 @@ class BaseSettings {
         return maxParallelExtractions as T?;
       case AppSettings.extractToFolder:
         return extractToFolder as T?;
+      case AppSettings.autoApplyFormations:
+        return (autoApplyFormations ?? true) as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -204,6 +213,8 @@ class BaseSettings {
         return copyWith(maxParallelExtractions: value as int?);
       case AppSettings.extractToFolder:
         return copyWith(extractToFolder: value as bool?);
+      case AppSettings.autoApplyFormations:
+        return copyWith(autoApplyFormations: value as bool?);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -217,6 +228,7 @@ class BaseSettings {
       maxParallelExtractions: json[AppSettings.maxParallelExtractions] as int?,
       extractToFolder: json[AppSettings.extractToFolder] as bool?,
       authToken: json['authToken'] as String?,
+      autoApplyFormations: json[AppSettings.autoApplyFormations] as bool?,
     );
   }
 }

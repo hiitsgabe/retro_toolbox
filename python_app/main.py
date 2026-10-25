@@ -105,7 +105,7 @@ def run_3dsconv(job):
         _report(progress_file, 'ERROR:Conversion produced no CIA — check that boot9.bin is correct for this ROM')
 
 
-SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_analyze', 'sports_patch',
+SPORTS_TYPES = {'list_patchers', 'list_leagues', 'sports_fetch', 'sports_fetch_team', 'sports_analyze', 'sports_patch',
                 'sports_images', 'sports_default_images', 'sports_kit_previews', 'sports_templates'}
 
 
@@ -651,6 +651,8 @@ def _fill_soccer_photos(patcher, data, cache_dir, rrp, on_progress=None):
         return 0
 
     def status(msg):
+        if msg.startswith('Fetching FotMob'):
+            msg = 'Filling players missing information from other sources...'
         if on_progress:
             on_progress(0.95, msg)
 
@@ -763,6 +765,63 @@ def run_sports(job):
                 except Exception:
                     pass  # keep raw order if a game's ordering hiccups
             emit(rrp.league_data_to_dict(data))
+            _report(progress_file, 'DONE')
+            return
+
+        if jtype == 'sports_fetch_team':
+            # Single-team refresh (used by the editor's "Clear and Update"):
+            # fetch one club's squad (+ stats) directly from the provider.
+            team_id = job.get('team_id')
+            team_name = job.get('team_name') or ''
+            season = job.get('season')
+            from retro_roster_patcher.sports import espn as _espn
+            import datetime as _dt
+            client = _espn.EspnClient(cache_dir, None)
+            if season is None:
+                season = _dt.date.today().year
+            patcher = rrp.get_patcher(game_id)(cache_dir=cache_dir)
+            players = client.get_squad(team_id, season)
+            # Soccer: fill missing head shots from FotMob, as sports_fetch does.
+            if getattr(patcher, 'sport', '') == 'soccer' and team_name:
+                try:
+                    sports_mod = getattr(rrp, 'sports', None)
+                    if sports_mod is not None:
+                        fotmob = sports_mod.FotmobClient(cache_dir, lambda m: None)
+                        others = fotmob.search_teams(team_name)
+                        if others:
+                            from retro_roster_patcher.sports.models import Team as _T
+                            other = sports_mod.headshots._find_team(
+                                _T(id=team_id, name=team_name, code='', logo_url='', country='', color='', alternate_color=''),
+                                others,
+                            )
+                            if other is not None:
+                                found = sports_mod.headshots.match_squad(players, fotmob.get_squad(other.id))
+                                for player in players:
+                                    if not player.photo_url and player.id in found:
+                                        player.photo_url = found[player.id].photo_url
+                except Exception:
+                    pass
+            stats_list = []
+            try:
+                stats_list = client.get_player_stats(team_id, season)
+            except Exception:
+                stats_list = []
+            stats_map = {str(s.player_id): s for s in stats_list}
+            player_dicts = []
+            for p in players:
+                from dataclasses import asdict as _asdict
+                d = _asdict(p)
+                player_dicts.append(d)
+            stats_dicts = {}
+            for s in stats_list:
+                from dataclasses import asdict as _asdict
+                stats_dicts[str(s.player_id)] = _asdict(s)
+            emit({
+                'team': {'id': team_id, 'name': team_name},
+                'players': player_dicts,
+                'player_stats': stats_dicts,
+                'extra': {'stats': stats_dicts},
+            })
             _report(progress_file, 'DONE')
             return
 

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
@@ -25,6 +26,7 @@ import 'package:retro_toolbox/services/boxart_service.dart';
 import 'package:retro_toolbox/utils/rom_search.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/services/formation_cache_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
 /// One patch flow per game, in the app's own wizard idiom: step dots up top,
@@ -508,7 +510,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
           onProgress: (v) => setState(() => _progress = v),
           onStatus: (s) => setState(() => _status = '$prefix$s'),
         );
-        docs.add(await SportsService.loadRoster(file));
+        final doc = await SportsService.loadRoster(file);
+        await _applySavedFormations(doc);
+        docs.add(doc);
       }
       // Fetch is the step's forward action — on success go straight to the
       // editor instead of making the user press a separate Next.
@@ -523,6 +527,29 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       setState(() => _error = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _applySavedFormations(RosterDoc doc) async {
+    final auto = ref.read(settingsProvider).generalSettings.getSetting<bool>(AppSettings.autoApplyFormations) ?? true;
+    if (!auto) return;
+    final saved = await FormationCacheService.load();
+    if (saved.isEmpty) return;
+    for (final team in doc.teams) {
+      final ids = saved[team.id];
+      if (ids == null || ids.isEmpty) continue;
+      final byId = {for (final p in team.players) p.id: p};
+      final ordered = <RosterPlayer>[];
+      for (final id in ids) {
+        final p = byId[id];
+        if (p != null && !ordered.contains(p)) ordered.add(p);
+      }
+      for (final p in team.players) {
+        if (!ordered.contains(p)) ordered.add(p);
+      }
+      team.players
+        ..clear()
+        ..addAll(ordered);
     }
   }
 

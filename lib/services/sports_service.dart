@@ -150,6 +150,28 @@ class SportsService {
     return (LeagueData.fromJson(Map<String, dynamic>.from(data as Map)), out.path);
   }
 
+  static Future<RosterTeam> fetchTeam({
+    required String gameId,
+    required int teamId,
+    String? teamName,
+    int? season,
+  }) async {
+    final out = _tmp('team');
+    final data = await _runData(
+      tag: 'fetchteam_${gameId.hashCode.abs()}_${teamId}',
+      job: {
+        'type': 'sports_fetch_team',
+        'game_id': gameId,
+        'team_id': teamId,
+        if (teamName != null) 'team_name': teamName,
+        if (season != null) 'season': season,
+        'cache_dir': await _cacheDir(),
+      },
+      outputFile: out,
+    );
+    return RosterTeam.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
   /// Loads the full, editable roster document from a fetched rosters file.
   static Future<RosterDoc> loadRoster(String path) async {
     final data = jsonDecode(await File(path).readAsString());
