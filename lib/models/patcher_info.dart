@@ -19,6 +19,9 @@ class PatcherInfo {
   /// The patch can empty the team slots the league leaves unused.
   final bool supportsBlankUnused;
 
+  /// The patch can dress each player after his provider photo.
+  final bool supportsLooks;
+
   /// Screen art slots (`title`, `menu`, ...) whose image the patch can replace.
   final List<String> imageSlots;
 
@@ -50,6 +53,7 @@ class PatcherInfo {
     this.languages = const [],
     this.supportsLogos = false,
     this.supportsBlankUnused = false,
+    this.supportsLooks = false,
     this.imageSlots = const [],
     this.supportsKits = false,
     this.kitTemplates = false,
@@ -60,7 +64,7 @@ class PatcherInfo {
   });
 
   /// Whether the wizard has a visuals step to show for this game.
-  bool get hasVisuals => supportsLogos || supportsBlankUnused || imageSlots.isNotEmpty;
+  bool get hasVisuals => supportsLogos || supportsBlankUnused || supportsLooks || imageSlots.isNotEmpty;
 
   /// One league per slot group: the wizard fetches several leagues.
   bool get multiLeague => leagueCap > 1;
@@ -78,6 +82,7 @@ class PatcherInfo {
         languages: ((j['languages'] as List?) ?? const []).map((e) => '$e').toList(),
         supportsLogos: (j['supports_logos'] ?? false) as bool,
         supportsBlankUnused: (j['supports_blank_unused'] ?? false) as bool,
+        supportsLooks: (j['supports_looks'] ?? false) as bool,
         imageSlots: ((j['image_slots'] as List?) ?? const []).map((e) => '$e').toList(),
         supportsKits: (j['supports_kits'] ?? false) as bool,
         kitTemplates: (j['kit_templates'] ?? false) as bool,

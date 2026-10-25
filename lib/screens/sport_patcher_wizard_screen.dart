@@ -143,6 +143,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   // -- Look step state ----------------------------------------------------
   bool _useLogos = true;
   bool _blankUnused = false;
+  bool _matchLooks = true;
 
   /// The ROM's current art per slot, exported for [_romImagesFor].
   late Map<String, String> _romImages = widget.initialImages ?? const {};
@@ -742,6 +743,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         language: _language,
         logos: info.supportsLogos ? _useLogos : null,
         blankUnused: info.supportsBlankUnused && _blankUnused,
+        looks: info.supportsLooks ? _matchLooks : null,
         nationals: info.supportsNationals && _nationals,
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
@@ -1763,11 +1765,19 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     return ListView(
       children: [
         _sectionTitle(theme, Icons.palette_outlined, 'Look', 'Choose the team logos and screen art the patch draws into the game.'),
-        if (info.supportsLogos || info.supportsBlankUnused)
+        if (info.supportsLogos || info.supportsBlankUnused || info.supportsLooks)
           Card(
             margin: const EdgeInsets.only(bottom: 16),
             child: Column(
               children: [
+                if (info.supportsLooks)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.face_outlined),
+                    title: const Text('Try to match player visual'),
+                    subtitle: const Text('Each player\'s look follows his photo: complexion, hair and build where the game has them. Off gives everyone one plain look.'),
+                    value: _matchLooks,
+                    onChanged: (v) => setState(() => _matchLooks = v),
+                  ),
                 if (info.supportsLogos)
                   SwitchListTile(
                     secondary: const Icon(Icons.shield_outlined),
