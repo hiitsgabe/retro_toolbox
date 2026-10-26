@@ -146,7 +146,7 @@ class SportsRomLookup {
     }
   }
 
-  /// The catalog service [find] loads consoles' games with. A seam for tests.
+/// The catalog service [find] loads consoles' games with. A seam for tests.
   @visibleForTesting
   static CatalogService Function() catalogService = CatalogService.new;
 
@@ -198,5 +198,68 @@ class SportsRomLookup {
       if (best != null) return RomCatalogMatch(console, best);
     }
     return null;
+  }
+}
+
+/// Why [path] cannot be a [gameId] ROM, or null when it can. Format only:
+/// the extension must be one the patcher takes, and a zip must hold a file of
+/// the game's own type inside. Nothing here matches the file's *name* — any
+/// title is accepted as long as the format is right.
+Future<String?> romPickProblem(String path, String gameId) async {
+  final exts = gameRomExtensions(gameId);
+  final ext = p.extension(path).toLowerCase();
+  if (!exts.contains(ext)) {
+    return 'Not a ${gameDisplayName(gameId)} ROM file: it takes ${exts.join(' or ')}.';
+  }
+  final inner = exts.where((e) => e != '.zip').toSet();
+  if (ext == '.zip' && inner.isNotEmpty && !await zipHasEntryOf(path, inner)) {
+    return 'That zip holds no ${gameDisplayName(gameId)} ROM file (needs ${inner.join(' or ')} inside).';
+  }
+  return null;
+}
+
+/// Does the zip at [path] hold a file whose extension is one of [inner]?
+/// Reads only the central directory at the end of the file, so a 2 GB
+/// archive costs a few reads, not an extraction. False for anything that is
+/// not a readable zip.
+Future<bool> zipHasEntryOf(String path, Set<String> inner) async {
+  final f = File(path);
+  if (!await f.exists()) return false;
+  final len = await f.length();
+  final raf = await f.open();
+  try {
+    // The end-of-central-directory record, searched from the end: a comment
+    // of up to 64 KB may trail it.
+    final window = len > 65557 ? 65557 : len;
+    await raf.setPosition(len - window);
+    final tail = await raf.read(window);
+    int eocd = -1;
+    for (var i = tail.length - 22; i >= 0; i--) {
+      if (tail[i] == 0x50 && tail[i + 1] == 0x4b && tail[i + 2] == 0x05 && tail[i + 3] == 0x06) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) return false;
+    int word(int b) => tail[b] | tail[b + 1] << 8 | tail[b + 2] << 16 | tail[b + 3] << 24;
+    final size = word(eocd + 12);
+    final offset = word(eocd + 16);
+    if (size <= 0 || offset < 0 || offset + size > len) return false;
+    await raf.setPosition(offset);
+    final cd = await raf.read(size);
+    if (cd.length < size) return false;
+    var i = 0;
+    while (i + 46 <= cd.length) {
+      if (cd[i] != 0x50 || cd[i + 1] != 0x4b || cd[i + 2] != 0x01 || cd[i + 3] != 0x02) break;
+      final nameLen = cd[i + 28] | cd[i + 29] << 8;
+      final extraLen = cd[i + 30] | cd[i + 31] << 8;
+      final commentLen = cd[i + 32] | cd[i + 33] << 8;
+      final name = String.fromCharCodes(cd.sublist(i + 46, i + 46 + nameLen));
+      if (inner.contains(p.extension(name).toLowerCase())) return true;
+      i += 46 + nameLen + extraLen + commentLen;
+    }
+    return false;
+  } finally {
+    await raf.close();
   }
 }

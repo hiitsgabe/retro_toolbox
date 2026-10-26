@@ -555,15 +555,34 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _pickRom() async {
-    // pickFile browses real paths on Android/handhelds (the SAF picker copies
-    // the file alone into cache, so a .cue/.bin set would lose its tracks).
+    // Android's system picker (SAF) for the ROM: one file, so its cache copy
+    // is fine. Handhelds keep the in-app browser (no native dialog, d-pad).
     final path = await pickFile(
       context,
       title: 'Select the ROM to patch',
       initialDir: _romPath != null ? p.dirname(_romPath!) : null,
+      androidNative: true,
     );
     if (path == null || !mounted) return;
+    // Format only: the extension the game takes, and a zip must hold a file
+    // of that type inside. The file's name never matters.
+    final problem = await romPickProblem(path, info.gameId);
+    if (!mounted) return;
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    setState(() {
+      _error = null;
+      _romPath = path;
+    });
+  }
+
+  /// Select a lookup's ROM and move on at once: with the file in hand the ROM
+  /// step has nothing left to choose (its Next does the same).
+  void _useFoundRom(String path) {
     setState(() => _romPath = path);
+    _next();
   }
 
   /// Export the chosen ROM's screen art for the look step's previews, once
@@ -1117,7 +1136,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.flag_outlined),
               title: const Text('National teams'),
-              subtitle: const Text('Update the national sides too (international friendlies)'),
+              subtitle: Text(info.nationalSlotBase == 0
+                  // ISS 2000: clubs go in the national slots, so this fills the rest.
+                  ? "Update the national teams the clubs don't replace (international friendlies)"
+                  : 'Update the national sides too (international friendlies)'),
               value: _nationals,
               onChanged: (v) => setState(() => _nationals = v),
             ),
@@ -1565,25 +1587,41 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ],
           ),
         ),
-        Container(
-          key: const ValueKey('rom-file-row'),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.insert_drive_file_outlined, size: 20),
-              const SizedBox(width: 10),
-              Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
-              OutlinedButton(
+        // The library's card says how to get the game; the file picker would
+        // just repeat it, so it collapses into a small alternative.
+        if (catalog)
+          Padding(
+            key: const ValueKey('rom-pick-instead'),
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
                 onPressed: _pickRom,
-                child: Text(_romPath != null ? 'Change' : (catalog || local ? 'Pick a file instead' : 'Choose')),
+                icon: const Icon(Icons.folder_open, size: 18),
+                label: const Text('Pick a file instead'),
               ),
-            ],
+            ),
+          )
+        else
+          Container(
+            key: const ValueKey('rom-file-row'),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.insert_drive_file_outlined, size: 20),
+                const SizedBox(width: 10),
+                Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
+                OutlinedButton(
+                  onPressed: _pickRom,
+                  child: Text(_romPath != null ? 'Change' : (local ? 'Pick a file instead' : 'Choose')),
+                ),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1726,7 +1764,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   if (downloaded != null)
                     FilledButton.icon(
                       autofocus: true,
-                      onPressed: () => setState(() => _romPath = downloaded),
+                      onPressed: () => _useFoundRom(downloaded),
                       icon: const Icon(Icons.check, size: 18),
                       label: const Text('Use downloaded file'),
                     )

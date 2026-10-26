@@ -22,15 +22,19 @@ Future<String> _startDir() async {
 }
 
 /// [extensions]: lowercase, no leading dot; null allows any file.
+/// [androidNative]: on Android use the system picker (SAF) instead of the
+/// in-app browser (the ROM pick: one file, so SAF's cache copy is fine).
 /// [useBrowser] only overrides the platform check in tests.
 Future<String?> pickFile(
   BuildContext context, {
   required String title,
   List<String>? extensions,
   String? initialDir,
+  bool androidNative = false,
   @visibleForTesting bool? useBrowser,
 }) async {
-  if (useBrowser ?? _useBrowser) {
+  final browser = useBrowser ?? (Handheld.current || (Platform.isAndroid && !androidNative));
+  if (browser) {
     final dir = initialDir ?? await _startDir();
     if (!context.mounted) return null;
     return PathBrowser.show(context, title: title, initialDir: dir, allowedExtensions: extensions);

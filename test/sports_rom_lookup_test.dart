@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -248,6 +249,42 @@ void main() {
     expect(romFuzzyScore('Winning Eleven 2002', 'WinningEleven2002.bin'), greaterThanOrEqualTo(kRomMatchThreshold));
   });
 
+  group('romPickProblem', () {
+    File zip(String name, List<String> entries) {
+      final a = Archive();
+      for (final e in entries) {
+        a.addFile(ArchiveFile(e, 4, [1, 2, 3, 4]));
+      }
+      final f = File(p.join(root.path, name))..createSync(recursive: true);
+      f.writeAsBytesSync(ZipEncoder().encode(a));
+      return f;
+    }
+
+    test('takes any file name with a good extension', () async {
+      final rom = touch('Whatever name you like.bin');
+      expect(await romPickProblem(rom.path, 'we2002'), isNull);
+    });
+
+    test('refuses a wrong extension, naming the taken ones', () async {
+      final txt = touch('Winning Eleven 2002 (Japan).txt');
+      final problem = await romPickProblem(txt.path, 'we2002');
+      expect(problem, contains('Not a Winning Eleven 2002'));
+      expect(problem, contains('.cue'));
+    });
+
+    test('looks inside a zip for a file of the game type', () async {
+      expect(await romPickProblem(zip('we.zip', ['readme.txt', 'game.bin']).path, 'we2002'), isNull);
+      final problem = await romPickProblem(zip('no-rom.zip', ['readme.txt']).path, 'we2002');
+      expect(problem, contains('zip holds no'));
+      expect(problem, contains('.bin'));
+    });
+
+    test('a game whose zips hold nothing (NHL 07 takes .iso only) still passes a plain .iso', () async {
+      final iso = touch('NHL 07 (USA).iso');
+      expect(await romPickProblem(iso.path, 'nhl07-psp'), isNull);
+    });
+  });
+
   group('the wizard ROM step', () {
     const info = PatcherInfo(gameId: 'we2002', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn']);
     const skeleton = ValueKey('rom-lookup-skeleton');
@@ -376,6 +413,21 @@ void main() {
       final download = t.getTopLeft(ft.find.text('Download (500 MB)')).dy;
       expect(download, lessThan(t.getTopLeft(ft.find.text('Pick a file instead')).dy));
       expect(focused(t, 'Download (500 MB)'), isTrue);
+    });
+
+    testWidgets('using the downloaded file goes straight to the next step', (t) async {
+      touch('Winning Eleven 2002 (Japan).zip');
+      await pump(t, catalog: [
+        const Game(title: 'Winning Eleven 2002 (Japan)', url: 'https://x/Winning Eleven 2002 (Japan).zip', size: 500000000, consoleId: 'psx'),
+      ]);
+      await settleLookup(t);
+      expect(ft.find.byKey(const ValueKey('rom-catalog-card')), findsOneWidget);
+
+      await t.tap(ft.find.text('Use downloaded file'));
+      await t.pumpAndSettle();
+      // Off the ROM step at once: the rosters step is showing.
+      expect(ft.find.text('Use downloaded file'), findsNothing);
+      expect(ft.find.text('Pick your options, then Next downloads the league data.'), findsOneWidget);
     });
   });
 }

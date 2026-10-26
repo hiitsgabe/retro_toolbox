@@ -412,7 +412,7 @@ def _team_kits(sources):
     return kits
 
 
-def _fetch_nationals(patcher, rom, season, rrp, on_progress=None):
+def _fetch_nationals(patcher, rom, season, rrp, on_progress=None, taken=()):
     """(LeagueData, slot mapping) of the national squads: the teams of ESPN
     league 2021 (international friendlies) paired with the disc's national rows
     by the patcher's `national_slot_map`; squads and lineups are fetched for
@@ -420,8 +420,9 @@ def _fetch_nationals(patcher, rom, season, rrp, on_progress=None):
     api = patcher.api
     league = next(iter(api.get_leagues(id=2021, season=season)))
     teams = api.get_teams(2021, season)
-    mapping = patcher.national_slot_map(
+    mapping = [m for m in patcher.national_slot_map(
         Path(rom), rrp.LeagueData(league=league, teams=[rrp.TeamRoster(team=t) for t in teams]))
+        if m.slot_index not in taken]
     wanted = [t for t in teams if t.id in {m.team_id for m in mapping}]
     rosters = []
     for i, team in enumerate(wanted):
@@ -457,6 +458,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'iss-snes':
         import iss_art
         return iss_art.render_default_images(league, season, out_dir)
+    if game_id == 'iss2000-n64':
+        import iss_art
+        return iss_art.render_n64_images(league, season, out_dir)
     if game_id == 'nhl94-snes':
         import nhl94_art
         return nhl94_art.render_default_images(league, season, out_dir)
@@ -940,7 +944,10 @@ def run_sports(job):
                 # disc's rows needs the actual image.
                 merged = noted(_merge_rosters, patcher, sources, rom)
                 if nationals:
-                    data, mapping = _fetch_nationals(patcher, rom, season, rrp, on_progress)
+                    # A slot a club already took keeps the club (ISS 2000's
+                    # national slots are the same slots the clubs go in).
+                    taken = set(merged.teams)
+                    data, mapping = _fetch_nationals(patcher, rom, season, rrp, on_progress, taken)
                     merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
                 return merged
 

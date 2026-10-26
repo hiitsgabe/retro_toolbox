@@ -35,10 +35,14 @@ String? gameLogoAsset(PatcherInfo info) {
 
 /// Human-readable game name for a card/header. The library only exposes
 /// game_id/sport/platform, so the display names live here in the UI layer.
-String gameName(PatcherInfo info) => _gameNames[info.gameId] ?? info.gameId;
+String gameName(PatcherInfo info) => gameDisplayName(info.gameId);
+
+/// The display name of a game by its id (what messages and titles call it).
+String gameDisplayName(String gameId) => _gameNames[gameId] ?? gameId;
 
 const Map<String, String> _gameNames = {
   'iss-snes': 'International Superstar Soccer',
+  'iss2000-n64': 'International Superstar Soccer 2000',
   'we2002': 'Winning Eleven 2002',
   'nbalive95-genesis': 'NBA Live 95',
   'nhl94-genesis': 'NHL 94',
@@ -59,6 +63,7 @@ const Map<String, String> _platformLabels = {
   'ps2': 'PS2',
   'psp': 'PSP',
   'psx': 'PS1',
+  'n64': 'N64',
 };
 
 /// Per-game ROM roster structure, read from the retro_roster_patcher game code
@@ -82,6 +87,7 @@ int? masterLeagueSize(String gameId, int? slot) =>
 
 const Map<String, GameRoster> _gameRosters = {
   'iss-snes': GameRoster(15, 11), // 11 start, 4 subs; slot 0 is the keeper
+  'iss2000-n64': GameRoster(22, 11), // 11 start in formation order, 11 subs; slot 0 is the keeper
   'we2002': GameRoster(23, 11), // national squads hold 23; Master League keeps 14 or 15
   'nbalive95-genesis': GameRoster(12, 5),
   'kgj-mlb-snes': GameRoster(25, 9), // 25 roster, 9 batting lineup
@@ -112,7 +118,7 @@ List<String> lineupWarnings(String gameId, List<String> positions, int starters)
       "Only $batters position players: pitchers past the first $pitchersStored, then the game's old players, "
           'fill the other ${starters - batters} lineup places.',
     if (gameId == 'mvp-psp' && batters < starters) 'Only $batters position players: the batting order is ${starters - batters} short.',
-    if ((gameId == 'iss-snes' || gameId == 'we2002') && n > 0 && positions.first != 'Goalkeeper')
+    if ((gameId == 'iss-snes' || gameId == 'iss2000-n64' || gameId == 'we2002') && n > 0 && positions.first != 'Goalkeeper')
       'The game puts the first player in goal: move a goalkeeper to the top.',
     if (gameId == 'pes2013-ps2' && full && count('Goalkeeper') != 1)
       'The game plays exactly one goalkeeper: keep one, and only one, in the first $starters.',
@@ -211,6 +217,7 @@ List<String> gameSearchTerms(String gameId) => _searchTerms[gameId] ?? [_gameNam
 
 const Map<String, List<String>> _searchTerms = {
   'iss-snes': ['International Superstar Soccer'],
+  'iss2000-n64': ['International Superstar Soccer 2000', 'ISS 2000'],
   'we2002': ['World Soccer Winning Eleven 2002', 'Winning Eleven 2002'],
   'nbalive95-genesis': ['NBA Live 95'],
   'nhl94-genesis': ["NHL '94", "NHL Hockey '94", 'NHL 94'],
@@ -229,6 +236,7 @@ List<String> gameRomExtensions(String gameId) => _romExtensions[gameId] ?? const
 
 const Map<String, List<String>> _romExtensions = {
   'iss-snes': ['.sfc', '.smc', '.zip'],
+  'iss2000-n64': ['.z64', '.v64', '.n64', '.zip'],
   'nhl94-snes': ['.sfc', '.smc', '.zip'],
   'kgj-mlb-snes': ['.sfc', '.smc', '.zip'],
   'we2002': ['.cue', '.iso', '.bin', '.zip'],
@@ -255,6 +263,9 @@ const Map<String, String> _romExpectations = {
   'iss-snes':
       'International Superstar Soccer (SNES). A .sfc or .smc file (USA or Japan). '
       'A 512-byte copier header is handled automatically; no specific revision is required.',
+  'iss2000-n64':
+      'International Superstar Soccer 2000 (N64, USA). A .z64, .v64 or .n64 file. '
+      'The patched ROM grows to 20 MB, which emulators and flash carts load.',
   'we2002':
       'Winning Eleven 2002 (PS1). The disc image: a .bin (with its .cue) or a single .iso. '
       'Use your own dump of the original disc.',
