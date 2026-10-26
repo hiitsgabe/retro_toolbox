@@ -30,6 +30,7 @@ library inside the app; no terminal, no Python install.
 | Game | Console | Sport |
 | --- | --- | --- |
 | International Superstar Soccer | SNES | Soccer |
+| International Superstar Soccer 2000 | N64 | Soccer |
 | Ken Griffey Jr. Presents MLB | SNES | Baseball |
 | NHL 94 | SNES | Hockey |
 | NHL 94 | Genesis | Hockey |
@@ -47,16 +48,18 @@ How it works:
 - **ROM:** the wizard looks for the game on your device first, or you pick the file. Zipped ROMs and
   multi-track `.cue`/`.bin` discs go in and come out the same way.
 - **Season and league:** pick a season and, for soccer, a league. PES 2013 takes several leagues in
-  one patch and can update the national teams too. You can add any ESPN league yourself (see below).
+  one patch and can update the national teams too; ISS 2000 puts the clubs in its national-team
+  slots and can fill the slots they leave with today's national squads. You can add any ESPN league yourself (see below).
 - **Teams:** reorder teams into the game's slots, add or remove them, and edit each squad: starters,
   bench, names, numbers, positions, stats and team colours, with player photos and club crests.
-- **Look** (on the games that support it, such as Winning Eleven 2002, PES 2013, ISS and NHL 07):
+- **Look** (on the games that support it, such as Winning Eleven 2002, PES 2013, ISS, ISS 2000 and NHL 07):
   draw each team's logo into the game, blank the slots the league does not fill, and replace the
   title, menu and boot screens with branded art or your own PNG. Template ZIPs show exactly which
   part of each screen the game displays.
-- **Kits** (Winning Eleven 2002, PES 2013, ISS): every club starts in its real home and away kit.
-  Change the pattern and colours, reuse one of the game's own designs, or load your own PNG
-  (a kit template is one tap away).
+- **Kits** (Winning Eleven 2002, PES 2013, ISS, ISS 2000): every club starts in its real home and
+  away kit. Change the pattern and colours, reuse one of the game's own designs, or load your own
+  PNG (a kit template is one tap away). ISS 2000 takes colours only: shirt, secondary, shorts and
+  socks, with a preview, while the shirt keeps its slot's own design.
 - **Patch:** choose where to save and the menu language where the game offers one (Winning
   Eleven 2002 menus come out of Japanese), then write the patched file.
 
@@ -106,7 +109,7 @@ Servers advertise the local address you pick in Settings, and each port can be c
 ## On a handheld
 
 The Linux handheld build (ARM64, PortMaster) keeps everything that runs well on a small device:
-Sports (SNES, Genesis and PSP games), SMB, FTP, Retro Tools Server, File Explorer, Collection Clean,
+Sports (SNES, Genesis, N64 and PSP games), SMB, FTP, Retro Tools Server, File Explorer, Collection Clean,
 Rar Decompress and M3U Playlists. It adds two handheld-only tools:
 
 - **Console Info:** device and firmware, storage, memory, battery, temperature, the network address
@@ -177,7 +180,7 @@ flutter pub get
 # Package the embedded Python app. Run once, and again after changing python_app/ or bumping serious_python.
 # -p Android | Darwin | Windows | Linux
 dart run serious_python:main package python_app/ -p Android \
-  -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.4.1"
+  -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.7.0"
 
 # macOS only: export the SPM cache key before every build/run
 export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
