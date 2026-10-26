@@ -178,3 +178,18 @@ def render_slots(package, painters, league, season, out_dir):
             written[name] = os.path.join(out_dir, f'{name}.png')
             img.convert('RGB').save(written[name])
     return written
+
+
+def render_n64_images(league, season, out_dir):
+    """ISS 2000 (N64): the wallpaper behind every menu, 312x236. The menus draw
+    panels over most of it, so it is the scrolling motif's look at full size:
+    the season mark top left, where team select and the main menu leave the
+    wallpaper bare."""
+    from PIL import Image
+    os.makedirs(out_dir, exist_ok=True)
+    img = Image.new('RGBA', (312, 236), DEEP)
+    _menu(img, league, season)
+    _text(img, 70, 14, season_mark(league, season), 14)
+    path = os.path.join(out_dir, 'menu.png')
+    img.convert('RGB').save(path)
+    return {'menu': path}

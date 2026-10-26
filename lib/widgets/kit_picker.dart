@@ -10,6 +10,10 @@ import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 
+/// Games whose kits take colours only (the shirt keeps the slot's own
+/// design): the picker shows the colours and the preview, nothing else.
+const colourOnlyKitGames = {'iss2000-n64'};
+
 /// The shirt patterns the patch can draw, in the order the picker shows them.
 const kitPatterns = ['plain', 'stripes', 'hoops', 'halves', 'sash', 'pinstripes', 'chevron', 'sleeves'];
 
@@ -288,8 +292,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     return _isSpec(k) ? Map<String, dynamic>.from(k as Map) : _defaultSpec(home);
   }
 
-  Map<String, dynamic> _defaultSpec(bool home) =>
-      Map<String, dynamic>.from(_defaults?[home ? 'home' : 'away'] ?? defaultKitSpec(team, home: home));
+  Map<String, dynamic> _defaultSpec(bool home) => Map<String, dynamic>.from(_defaults?[home ? 'home' : 'away'] ?? defaultKitSpec(team, home: home));
 
   String get _side => _home ? 'home' : 'away';
   dynamic get _current => kitChoice(team, home: _home);
@@ -368,8 +371,14 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
     }
   }
 
+  bool get _colourOnly => colourOnlyKitGames.contains(widget.info.gameId);
+
   /// One job renders every pattern in both sides' colours.
   Future<void> _loadPatterns() async {
+    if (_colourOnly) {
+      setState(() => _loading = false);
+      return;
+    }
     final kits = {
       for (final h in [true, false])
         for (final p in kitPatterns) '${h ? 'home' : 'away'}_$p': {..._spec[h]!, 'pattern': p},
@@ -583,7 +592,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    Text(kitLabel(current), style: theme.textTheme.bodyMedium),
+                    Text(_colourOnly && _isSpec(current) ? 'Custom colours' : kitLabel(current), style: theme.textTheme.bodyMedium),
                   ],
                 ),
               ),
@@ -595,22 +604,26 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 16),
-          SegmentedButton<KitTab>(
-            showSelectedIcon: false,
-            segments: [
-              const ButtonSegment(value: KitTab.pattern, icon: Icon(Icons.texture), label: Text('Pattern')),
-              if (hasModels) const ButtonSegment(value: KitTab.model, icon: Icon(Icons.checkroom), label: Text('Model')),
-              const ButtonSegment(value: KitTab.custom, icon: Icon(Icons.upload_file), label: Text('Custom')),
-            ],
-            selected: {tab},
-            onSelectionChanged: (s) => setState(() => _tab[_home] = s.first),
-          ),
-          const SizedBox(height: 12),
-          ...switch (tab) {
-            KitTab.pattern => _patternTab(theme, pattern),
-            KitTab.model => _modelTab(theme, template, noRom),
-            KitTab.custom => _customTab(theme, image),
-          },
+          if (_colourOnly)
+            ..._colourCard(theme)
+          else ...[
+            SegmentedButton<KitTab>(
+              showSelectedIcon: false,
+              segments: [
+                const ButtonSegment(value: KitTab.pattern, icon: Icon(Icons.texture), label: Text('Pattern')),
+                if (hasModels) const ButtonSegment(value: KitTab.model, icon: Icon(Icons.checkroom), label: Text('Model')),
+                const ButtonSegment(value: KitTab.custom, icon: Icon(Icons.upload_file), label: Text('Custom')),
+              ],
+              selected: {tab},
+              onSelectionChanged: (s) => setState(() => _tab[_home] = s.first),
+            ),
+            const SizedBox(height: 12),
+            ...switch (tab) {
+              KitTab.pattern => _patternTab(theme, pattern),
+              KitTab.model => _modelTab(theme, template, noRom),
+              KitTab.custom => _customTab(theme, image),
+            },
+          ],
           const SizedBox(height: 16),
           Align(
             alignment: Alignment.centerLeft,
@@ -659,6 +672,17 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               'and the rest plain. The chest design is the team\'s: the away shirt wears the home kit\'s.',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+          ),
+        ..._colourCard(theme),
+      ];
+
+  /// The side's colours; each change redraws the preview above.
+  List<Widget> _colourCard(ThemeData theme) => [
+        if (_colourOnly)
+          Text(
+            'This game takes the colours: the shirt keeps its slot\'s own design, and a striped slot\'s stripes '
+            'take the secondary colour.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         _heading(theme, 'Colours'),
         Card(

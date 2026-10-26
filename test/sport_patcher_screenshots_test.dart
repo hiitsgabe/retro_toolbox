@@ -369,4 +369,113 @@ void main() {
     ),
     skip: !enabled,
   );
+
+  // ISS 2000 (N64): the wizard with a real Brasileirao roster
+  // (`SCREENSHOT_ISS/doc.json`), the team editor and the colour-only kit
+  // picker before and after a colour change (`changed.png`).
+  final issDir = Platform.environment['SCREENSHOT_ISS'] ?? '';
+  const issInfo = PatcherInfo(
+    gameId: 'iss2000-n64',
+    platform: 'n64',
+    sport: 'soccer',
+    requiresSlotMapping: true,
+    providers: ['espn'],
+    supportsLogos: true,
+    supportsLooks: true,
+    imageSlots: ['menu'],
+    supportsKits: true,
+    supportsNationals: true,
+    nationalSlotBase: 0,
+    slotGroups: [
+      SlotGroup('Europe', 0, 51),
+      SlotGroup('Africa', 51, 10),
+      SlotGroup('CONCACAF', 61, 8),
+      SlotGroup('South America', 69, 10),
+      SlotGroup('Asia', 79, 17),
+      SlotGroup('Oceania', 96, 4),
+    ],
+  );
+  RosterDoc issDoc() => RosterDoc.fromJson(jsonDecode(File('$issDir/doc.json').readAsStringSync()) as Map<String, dynamic>);
+  Future<KitPreviews> issKits(Map<String, dynamic> kits,
+      {bool templates = false,
+      Map<String, int>? slots,
+      Map<String, String>? which,
+      Map<String, List<String>>? colours,
+      Map<String, Map<String, Object?>>? teams,
+      Map<String, dynamic>? home}) async {
+    final out = <String, String>{};
+    for (final e in kits.entries) {
+      final changed = e.value is Map && e.value['shorts'] == '#ffffff';
+      final f = File(changed ? '$issDir/changed.png' : '$issDir/${e.key}.png');
+      out[e.key] = f.existsSync() ? f.path : '$issDir/kit.png';
+    }
+    // The worker's defaults: Atletico-MG's catalogue kits.
+    final defaults = File('$issDir/defaults.json').existsSync()
+        ? (jsonDecode(File('$issDir/defaults.json').readAsStringSync()) as Map)
+            .map((k, v) => MapEntry('$k', Map<String, dynamic>.from(v as Map)))
+        : <String, Map<String, dynamic>>{};
+    return (kits: out, defaults: defaults, templates: <KitTemplate>[]);
+  }
+
+  for (final (n, name) in stepNames.indexed) {
+    testWidgets(
+      'tour: ISS 2000 $name',
+      (t) => shoot(
+        t,
+        'tour_iss2000_${n}_$name',
+        (_) => SportPatcherWizardScreen(
+          info: issInfo,
+          initialDoc: n >= 2 ? issDoc() : null,
+          initialStep: n,
+          initialRomPath: '/roms/International Superstar Soccer 2000 (USA) (En,Es).z64',
+          initialLeagues: leagues,
+          initialImages: {'menu': '$issDir/menu.png'},
+        ),
+      ),
+      skip: !enabled || issDir.isEmpty,
+    );
+  }
+  testWidgets(
+    'tour: ISS 2000 team editor',
+    (t) => shoot(
+      t,
+      'tour_iss2000_5_team',
+      (_) => TeamEditorScreen(
+        team: issDoc().teams.first,
+        gameId: issInfo.gameId,
+        sport: issInfo.sport,
+        info: issInfo,
+        romPath: '/roms/iss2000.z64',
+        slot: 69,
+        kitLoader: issKits,
+      ),
+    ),
+    skip: !enabled || issDir.isEmpty,
+  );
+  testWidgets(
+    'tour: ISS 2000 kit picker',
+    (t) => shoot(
+      t,
+      'tour_iss2000_6_kits',
+      (_) => KitPickerSheet(team: issDoc().teams.first, info: issInfo, loader: issKits, romPath: '/roms/iss2000.z64', slot: 69),
+      size: const Size(1000, 900),
+    ),
+    skip: !enabled || issDir.isEmpty,
+  );
+  testWidgets(
+    'tour: ISS 2000 kit picker after a colour change',
+    (t) {
+      final team = issDoc().teams.first;
+      setKitChoice(team, home: true, kit: {
+        'shirt': '#040404', 'secondary': '#fcfcfc', 'pattern': 'stripes', 'shorts': '#ffffff', 'socks': '#000000', 'sleeves': null,
+      });
+      return shoot(
+        t,
+        'tour_iss2000_7_kits_changed',
+        (_) => KitPickerSheet(team: team, info: issInfo, loader: issKits, romPath: '/roms/iss2000.z64', slot: 69),
+        size: const Size(1000, 900),
+      );
+    },
+    skip: !enabled || issDir.isEmpty,
+  );
 }

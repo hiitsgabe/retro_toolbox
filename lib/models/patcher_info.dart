@@ -141,6 +141,9 @@ const _gameSlotNames = {
     'title': ('Title screen', 'Behind the ISS logo, PRESS START, the two players and the copyright lines.'),
     'menu': ('Menu wallpaper', 'A pattern the menus scroll: it repeats both ways, so match its edges.'),
   },
+  'iss2000-n64': {
+    'menu': ('Menu wallpaper', 'Behind every menu, team select and the lineups; the panels cover most of the middle.'),
+  },
   'nhl07-psp': {
     'boot': ('Boot screen', 'The splash before the autosave prompt; the game draws its loading bar over it.'),
     'title': ('Title screen', 'Behind PRESS START; the game writes its own lines in the bottom quarter.'),

@@ -131,6 +131,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   /// slot group k).
   final List<League> _selectedLeagues = [];
   bool _nationals = false;
+  // One node for the ROM step's pick control, whether the full row's Choose
+  // or the small link a found card collapses it to: a card arriving while
+  // the user sits on Choose keeps the focus on the link.
+  final _pickFocus = FocusNode(debugLabel: 'rom-pick');
   bool _loadingLeagues = false;
 
   /// One fetched league per selected league; a single one for most games.
@@ -188,6 +192,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   @override
   void dispose() {
+    _pickFocus.dispose();
     _teamFocus.dispose();
     _teamUpFocus.dispose();
     _teamDownFocus.dispose();
@@ -1587,15 +1592,16 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ],
           ),
         ),
-        // The library's card says how to get the game; the file picker would
-        // just repeat it, so it collapses into a small alternative.
-        if (catalog)
+        // A found card (on the device or in the library) is the way to go; the
+        // file picker would just repeat it, so it collapses into a small link.
+        if (catalog || local)
           Padding(
             key: const ValueKey('rom-pick-instead'),
             padding: const EdgeInsets.only(bottom: 16),
             child: Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
+                focusNode: _pickFocus,
                 onPressed: _pickRom,
                 icon: const Icon(Icons.folder_open, size: 18),
                 label: const Text('Pick a file instead'),
@@ -1616,8 +1622,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 const SizedBox(width: 10),
                 Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
                 OutlinedButton(
+                  focusNode: _pickFocus,
                   onPressed: _pickRom,
-                  child: Text(_romPath != null ? 'Change' : (local ? 'Pick a file instead' : 'Choose')),
+                  child: Text(_romPath != null ? 'Change' : 'Choose'),
                 ),
               ],
             ),
@@ -1709,7 +1716,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   // so a card arriving late never takes it from the user.
                   FilledButton.icon(
                     autofocus: true,
-                    onPressed: () => setState(() => _romPath = path),
+                    onPressed: () => _useFoundRom(path),
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('Use this file'),
                   ),

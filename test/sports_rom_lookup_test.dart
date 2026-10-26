@@ -343,10 +343,9 @@ void main() {
 
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
+      // Using the found file moves straight on: the ROM step is done.
+      expect(ft.find.text('Select ROM'), findsNothing);
       expect(ft.find.byKey(const ValueKey('rom-local-card')), findsNothing);
-      expect(ft.find.text('Winning Eleven 2002 (Japan).bin'), findsOneWidget);
-      expect(ft.find.text('Change'), findsOneWidget);
-      expect(t.widget<FilledButton>(ft.find.widgetWithText(FilledButton, 'Next')).onPressed, isNotNull);
     });
 
     testWidgets('first open after launch: the placeholder waits for settings and consoles, then the file shows', (t) async {

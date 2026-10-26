@@ -300,6 +300,23 @@ void main() {
     expect(find.text('PES uses the picture for its colours and pattern only.'), findsOneWidget);
   });
 
+  testWidgets('ISS 2000 takes colours only: no tabs, and a colour change redraws the preview', (t) async {
+    const iss = PatcherInfo(gameId: 'iss2000-n64', platform: 'n64', sport: 'soccer', requiresSlotMapping: true, providers: ['espn'], supportsKits: true);
+    final tm = team();
+    await pump(t, KitPickerSheet(team: tm, info: iss, loader: fakeLoader, initialHome: false));
+    expect(find.text('Pattern'), findsNothing);
+    expect(find.text('Custom'), findsNothing);
+    expect(find.text('Stripes'), findsNothing);
+    expect(patternJobs(), isEmpty);
+    await t.tap(find.text('Shorts'));
+    await t.pumpAndSettle();
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect((tm.extraRaw['kits'] as Map)['away']['shorts'], '#c2185b');
+    expect(find.byKey(const ValueKey('/p/current_away=Plain.png')), findsOneWidget);
+  });
+
   testWidgets('no Kits section without supportsKits', (t) async {
     await pump(t, editor(team(), game: null));
     expect(find.text('Home kit'), findsNothing);
