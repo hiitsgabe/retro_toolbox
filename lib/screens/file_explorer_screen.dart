@@ -122,13 +122,14 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
 
   // ---- Background tasks ----------------------------------------------------
 
-  /// Queues [type] with a task-manager row titled [title].
-  void _enqueue(TaskType type, String title, Map<String, dynamic> params) {
+  /// Queues [type] with a task-manager row titled [title]. [verb] and [label]
+  /// name it in the progress bar under the header ('Zipping', 'saves.zip').
+  void _enqueue(TaskType type, String title, String verb, String label, Map<String, dynamic> params) {
     // Unique per job: the task key comes from the URL's file name.
     final game = Game(title: title, url: 'https://manual/op-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
     ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
     _ourTasks.add(game.gameId);
-    ref.read(taskQueueProvider.notifier).enqueue(game.gameId, type, {'taskId': game.gameId, ...params});
+    ref.read(taskQueueProvider.notifier).enqueue(game.gameId, type, {'taskId': game.gameId, 'source': 'explorer', 'verb': verb, 'label': label, ...params});
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
   }
 
@@ -136,7 +137,7 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
     final clip = _clipboard, dir = _dir;
     if (clip == null || dir == null) return;
     final label = _labelFor(clip.paths);
-    _enqueue(TaskType.fileCopy, '${clip.move ? 'Move' : 'Copy'} $label', {
+    _enqueue(TaskType.fileCopy, '${clip.move ? 'Move' : 'Copy'} $label', clip.move ? 'Moving' : 'Copying', label, {
       'sources': clip.paths,
       'destDir': dir,
       'move': clip.move,
@@ -145,26 +146,45 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
     setState(() => _clipboard = null);
   }
 
-  void _zip() {
+  Future<void> _zip() async {
     final dir = _dir;
     final paths = _selectedPaths;
     if (dir == null || paths.isEmpty) return;
     final base = paths.length == 1 ? p.basenameWithoutExtension(paths.single) : p.basename(dir);
     final outZip = p.join(dir, FileOps.uniqueName(dir, '$base.zip'));
-    _enqueue(TaskType.fileZip, 'Zip ${p.basename(outZip)}', {'sources': paths, 'outZip': outZip, 'label': p.basename(outZip)});
+    if (!await _confirm('Compress?', 'Compress ${_labelFor(paths)} into\n$outZip', 'Compress') || !mounted) return;
+    final name = p.basename(outZip);
+    _enqueue(TaskType.fileZip, 'Zip $name', 'Zipping', name, {'sources': paths, 'outZip': outZip});
     setState(() => _selected = {});
   }
 
   /// Extracts into a new folder named after the archive, beside it.
-  void _extract() {
+  Future<void> _extract() async {
     final dir = _dir;
     final paths = _selectedPaths;
     if (dir == null || paths.length != 1) return;
-    final archive = paths.single;
+    final archive = paths.single, name = p.basename(archive);
     final out = p.join(dir, FileOps.uniqueName(dir, p.basenameWithoutExtension(archive)));
-    _enqueue(TaskType.archiveExtraction, 'Extract ${p.basename(archive)}', {'archivePath': archive, 'outputDir': out});
+    if (!await _confirm('Extract?', 'Extract $name into\n$out', 'Extract') || !mounted) return;
+    _enqueue(TaskType.archiveExtraction, 'Extract $name', 'Extracting', name, {'archivePath': archive, 'outputDir': out});
     setState(() => _selected = {});
   }
+
+  /// Asks before a background job. Focus starts on [action] for the d-pad;
+  /// Back (B / Escape) cancels.
+  Future<bool> _confirm(String title, String message, String action) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(autofocus: true, onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
+          ],
+        ),
+      ) ==
+      true;
 
   // ---- Instant operations --------------------------------------------------
 
@@ -308,6 +328,7 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
                 Expanded(
                   child: FileBrowserView(
                     locationLabel: _dir ?? 'Storage',
+                    queuedSource: 'explorer',
                     canGoUp: !atRoots,
                     busy: _busy,
                     error: _error,

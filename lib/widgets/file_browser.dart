@@ -38,26 +38,82 @@ class BrowserTransfer {
   double get fraction => total > 0 ? done / total : 0;
 }
 
-/// The bar for [source]'s ('smb' / 'ftp') next unfinished background download
-/// or zip: the running task, else the first waiting. Progress comes from the
-/// extraction provider because transfers share its file-task machinery.
-/// Watches only that task, so it alone rebuilds on progress.
-class _QueuedTransferBar extends ConsumerWidget {
+/// [source]'s ('smb' / 'ftp' / 'explorer') background tasks as bars, read
+/// from the task queue the task manager shows: every running task (else the
+/// first waiting one), plus tasks that failed while this browser was open,
+/// with their error until dismissed. Progress comes from the extraction
+/// provider because file tasks share its machinery.
+class _QueuedTaskBars extends ConsumerStatefulWidget {
   final String source;
-  const _QueuedTransferBar(this.source);
+  const _QueuedTaskBars(this.source);
+
+  @override
+  ConsumerState<_QueuedTaskBars> createState() => _QueuedTaskBarsState();
+}
+
+class _QueuedTaskBarsState extends ConsumerState<_QueuedTaskBars> {
+  final _opened = DateTime.now();
+  final _dismissed = <QueuedTask>{}; // by identity: a retry's failure is a new object
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = ref.watch(taskQueueProvider).tasks.where((t) => t.params['source'] == widget.source).toList();
+    final running = mine.where((t) => t.status == TaskQueueStatus.running);
+    final failed = mine.where((t) => t.status == TaskQueueStatus.failed && (t.completedAt?.isAfter(_opened) ?? false) && !_dismissed.contains(t));
+    final shown = [
+      ...running.isNotEmpty ? running : mine.where((t) => t.status == TaskQueueStatus.waiting).take(1),
+      ...failed,
+    ];
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        for (final t in shown)
+          t.status == TaskQueueStatus.failed ? _failedBar(context, t) : _TaskProgressBar(t, key: ValueKey(t.id)),
+      ],
+    );
+  }
+
+  Widget _failedBar(BuildContext context, QueuedTask t) {
+    final error = Theme.of(context).colorScheme.error;
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline, size: 16, color: error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('${_taskName(t)} failed: ${t.error ?? 'unknown error'}',
+                maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: error)),
+          ),
+          IconButton(icon: const Icon(Icons.close, size: 18), tooltip: 'Dismiss', onPressed: () => setState(() => _dismissed.add(t))),
+        ],
+      ),
+    );
+  }
+}
+
+String _taskName(QueuedTask t) => '${t.params['verb']} ${t.params['label']}';
+
+/// One running or waiting task. Watches only that task's progress, so it
+/// alone rebuilds as it moves.
+class _TaskProgressBar extends ConsumerWidget {
+  final QueuedTask task;
+  const _TaskProgressBar(this.task, {super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final task = ref.watch(taskQueueProvider.select((s) {
-      final open = s.tasks.where((t) => t.type == TaskType.remoteTransfer && t.params['source'] == source && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running));
-      return open.where((t) => t.status == TaskQueueStatus.running).firstOrNull ?? open.firstOrNull;
-    }));
-    if (task == null) return const SizedBox.shrink();
-    final progress = ref.watch(extractionProvider.select((s) => s.tasks[task.id]?.progress)) ?? 0;
+    final progress = task.status == TaskQueueStatus.running ? ref.watch(extractionProvider.select((s) => s.tasks[task.id]?.progress)) ?? 0 : 0.0;
+    final icon = switch (task.type) {
+      TaskType.fileZip => Icons.folder_zip_outlined,
+      TaskType.archiveExtraction => Icons.unarchive_outlined,
+      TaskType.fileCopy => Icons.copy,
+      _ => Icons.download,
+    };
     // ponytail: a fraction in fixed units; the bar only needs done/total.
     return FileBrowserView._transferBar(
       context,
-      BrowserTransfer(name: '${task.params['verb']} ${task.params['label']}', done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false),
+      BrowserTransfer(name: _taskName(task), done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false),
+      icon: icon,
     );
   }
 }
@@ -75,8 +131,9 @@ class FileBrowserView extends ConsumerWidget {
   final Set<String> selectedIds;
   final BrowserTransfer? transfer;
 
-  /// 'smb' / 'ftp': also shows that screen's queued background downloads as a
-  /// bar. Unlike [transfer] it never blocks selecting or starting more.
+  /// 'smb' / 'ftp' / 'explorer': shows that screen's background tasks (queued
+  /// with `params['source']` set to it) as bars under the header. Unlike
+  /// [transfer] they never block selecting or starting more.
   final String? queuedSource;
 
   /// When false, activating an item opens it (no selection, no checkboxes) — e.g. the SMB shares
@@ -153,6 +210,7 @@ class FileBrowserView extends ConsumerWidget {
   Widget _body(BuildContext context, WidgetRef ref, ThemeData theme, bool asList) {
     return Column(
       children: [
+        if (queuedSource != null) _QueuedTaskBars(queuedSource!),
         Material(
           color: theme.colorScheme.surfaceContainerHighest,
           child: Row(
@@ -170,7 +228,6 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
         if (transfer != null) _transferBar(context, transfer!),
-        if (queuedSource != null) _QueuedTransferBar(queuedSource!),
         if (error != null) Padding(padding: const EdgeInsets.all(12), child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
         if (busy) const LinearProgressIndicator(),
         Expanded(
@@ -412,7 +469,7 @@ class FileBrowserView extends ConsumerWidget {
     );
   }
 
-  static Widget _transferBar(BuildContext context, BrowserTransfer t) {
+  static Widget _transferBar(BuildContext context, BrowserTransfer t, {IconData? icon}) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -421,7 +478,7 @@ class FileBrowserView extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(t.upload ? Icons.upload : Icons.download, size: 16),
+              Icon(icon ?? (t.upload ? Icons.upload : Icons.download), size: 16),
               const SizedBox(width: 8),
               Expanded(child: Text(t.name, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall)),
               if (t.total > 0) Text('${(t.fraction * 100).toStringAsFixed(0)}%', style: theme.textTheme.bodySmall),

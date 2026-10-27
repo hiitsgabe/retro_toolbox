@@ -10,6 +10,7 @@ import 'package:retro_toolbox/screens/ftp_screen.dart';
 import 'package:retro_toolbox/providers/smb_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/smb_screen.dart';
+import 'package:retro_toolbox/widgets/file_browser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeSmb extends StateNotifier<SmbState> implements SmbNotifier {
@@ -105,5 +106,70 @@ void main() {
       screen: const FtpScreen(),
     );
     expect(t.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.6);
+  });
+
+  testWidgets('a file task shows under the header while it runs, hides when done and shows its error when it fails', (t) async {
+    final queue = _FakeQueue([]);
+    final progress = _FakeExtraction({});
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        taskQueueProvider.overrideWith((ref) => queue),
+        extractionProvider.overrideWith((ref) => progress),
+        browserLayoutProvider.overrideWith((ref) => BrowserLayoutNotifier()..state = BrowserLayout.list),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: FileBrowserView(
+            locationLabel: '/roms',
+            canGoUp: false,
+            busy: false,
+            items: const [],
+            selectedIds: const {},
+            queuedSource: 'explorer',
+            onRefresh: () {},
+            onOpen: (_) {},
+            onToggleSelect: (_) {},
+            onClearSelection: () {},
+          ),
+        ),
+      ),
+    ));
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    QueuedTask zip(TaskQueueStatus status, {String? error}) => QueuedTask(
+          id: 'z',
+          type: TaskType.fileZip,
+          status: status,
+          createdAt: DateTime.now(),
+          completedAt: status == TaskQueueStatus.running ? null : DateTime.now().add(const Duration(seconds: 1)),
+          error: error,
+          params: const {'taskId': 'z', 'source': 'explorer', 'verb': 'Zipping', 'label': 'saves.zip'},
+        );
+
+    queue.state = TaskQueueState(tasks: [zip(TaskQueueStatus.running)]);
+    progress.state = const ExtractionState(tasks: {'z': ExtractionTaskState(taskId: 'z', status: ExtractionStatus.extracting, progress: 0.4)});
+    await t.pump();
+    expect(find.text('Zipping saves.zip'), findsOneWidget);
+    expect(find.text('40%'), findsOneWidget);
+    // Above the location bar, so directly under the app bar.
+    expect(t.getTopLeft(find.byType(LinearProgressIndicator)).dy, lessThan(t.getTopLeft(find.text('/roms')).dy));
+
+    progress.state = const ExtractionState(tasks: {'z': ExtractionTaskState(taskId: 'z', status: ExtractionStatus.extracting, progress: 0.9)});
+    await t.pump();
+    expect(find.text('90%'), findsOneWidget);
+
+    queue.state = TaskQueueState(tasks: [zip(TaskQueueStatus.completed)]);
+    await t.pump();
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.textContaining('saves.zip'), findsNothing);
+
+    queue.state = TaskQueueState(tasks: [zip(TaskQueueStatus.failed, error: 'disk full')]);
+    await t.pump();
+    expect(find.text('Zipping saves.zip failed: disk full'), findsOneWidget);
+
+    await t.tap(find.byTooltip('Dismiss'));
+    await t.pump();
+    expect(find.textContaining('disk full'), findsNothing);
   });
 }

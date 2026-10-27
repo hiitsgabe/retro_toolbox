@@ -223,4 +223,85 @@ void main() {
     expect(find.text('New folder'), findsNothing);
     expect(find.text('Paste here'), findsNothing);
   });
+
+  Future<void> openDialog(WidgetTester tester, String file, String tooltip) async {
+    if (!tester.widget<ListTile>(find.widgetWithText(ListTile, file)).selected) {
+      await tester.tap(find.text(file));
+      await tester.pump();
+    }
+    await tester.tap(find.byTooltip(tooltip));
+    await tester.pumpAndSettle();
+  }
+
+  /// Lets the queued job really run until it completes or fails.
+  Future<void> settleTask(WidgetTester tester, ProviderContainer container) async {
+    // Real IO between fake-time pumps, which flush the job's own awaits.
+    for (var i = 0; i < 100 && container.read(taskQueueProvider).tasks.any((t) => t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300))); // the folder refresh after it
+    await tester.pump();
+  }
+
+  bool focusedOn(String label) =>
+      find.descendant(of: find.byWidget(FocusManager.instance.primaryFocus!.context!.widget), matching: find.text(label)).evaluate().isNotEmpty;
+
+  testWidgets('Zip asks first: Cancel and Back queue nothing, Compress queues the zip and shows its bar', (tester) async {
+    final container = await open(tester);
+
+    await openDialog(tester, 'notes.txt', 'Zip');
+    expect(find.text('Compress?'), findsOneWidget);
+    expect(find.textContaining(p.join(root.path, 'notes.zip')), findsOneWidget);
+    expect(focusedOn('Compress'), isTrue);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(taskQueueProvider).tasks, isEmpty);
+
+    await openDialog(tester, 'notes.txt', 'Zip');
+    await press(tester, LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Compress?'), findsNothing);
+    expect(container.read(taskQueueProvider).tasks, isEmpty);
+
+    await openDialog(tester, 'notes.txt', 'Zip');
+    await press(tester, LogicalKeyboardKey.enter); // A on the focused Compress
+    await tester.pump(const Duration(milliseconds: 500)); // dialog closed; the bar's animation never settles
+    final task = container.read(taskQueueProvider).tasks.single;
+    expect(task.type, TaskType.fileZip);
+    expect(task.params['outZip'], p.join(root.path, 'notes.zip'));
+    expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
+    expect(find.text('Zipping notes.zip'), findsOneWidget);
+
+    await settleTask(tester, container);
+    expect(container.read(taskQueueProvider).tasks.single.status, TaskQueueStatus.completed);
+    expect(find.text('Zipping notes.zip'), findsNothing);
+    expect(File(p.join(root.path, 'notes.zip')).existsSync(), isTrue);
+    container.dispose(); // stops the queue's timer, started in fake time by the queued zip
+  });
+
+  testWidgets('Extract here asks first: Cancel queues nothing, Extract queues the extraction', (tester) async {
+    final container = await open(tester);
+
+    await openDialog(tester, 'game.zip', 'Extract here');
+    expect(find.text('Extract?'), findsOneWidget);
+    expect(find.textContaining(p.join(root.path, 'game')), findsOneWidget);
+    expect(focusedOn('Extract'), isTrue);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(taskQueueProvider).tasks, isEmpty);
+
+    await openDialog(tester, 'game.zip', 'Extract here');
+    await tester.tap(find.widgetWithText(FilledButton, 'Extract'));
+    await tester.pump(const Duration(milliseconds: 500));
+    final task = container.read(taskQueueProvider).tasks.single;
+    expect(task.type, TaskType.archiveExtraction);
+    expect(task.params['archivePath'], p.join(root.path, 'game.zip'));
+    expect(task.params['outputDir'], p.join(root.path, 'game'));
+    expect(find.text('Extracting game.zip'), findsOneWidget);
+
+    await settleTask(tester, container);
+    expect(find.text('Extracting game.zip'), findsNothing);
+    container.dispose(); // stops the queue's timer, started in fake time by the queued extraction
+  });
 }
