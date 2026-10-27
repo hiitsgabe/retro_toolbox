@@ -250,12 +250,28 @@ class FtpNotifier extends StateNotifier<FtpState> {
       for (final f in files) {
         final local = await localPathFor(root, f.relPath);
         var last = 0;
-        // RETR takes a path relative to the working directory.
-        await c.download(f.relPath, local, (received, _) {
-          done += received - last;
-          last = received;
-          onProgress(done, total);
-        });
+        Object? stop; // onProgress threw: the task was cancelled
+        try {
+          // RETR takes a path relative to the working directory.
+          await c.download(f.relPath, local, (received, _) {
+            if (stop != null) return;
+            done += received - last;
+            last = received;
+            try {
+              onProgress(done, total);
+            } catch (e) {
+              // ponytail: the client has no abort, so a cancelled file still
+              // arrives in full before it's deleted; later files never start.
+              stop = e;
+            }
+          });
+          if (stop != null) throw stop!;
+        } catch (_) {
+          try {
+            await File(local).delete();
+          } catch (_) {}
+          rethrow;
+        }
         done += (f.entry.size ?? 0) - last;
       }
       onProgress(total, total);

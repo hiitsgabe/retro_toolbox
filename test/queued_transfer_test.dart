@@ -27,12 +27,18 @@ class _FakeFtp extends StateNotifier<FtpState> implements FtpNotifier {
 
 class _FakeQueue extends StateNotifier<TaskQueueState> implements TaskQueueNotifier {
   _FakeQueue(List<QueuedTask> tasks) : super(TaskQueueState(tasks: tasks));
+  final removed = <String>[];
+  @override
+  void cancelQueuedTask(String taskId) => removed.add(taskId);
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 class _FakeExtraction extends StateNotifier<ExtractionState> implements ExtractionNotifier {
   _FakeExtraction(Map<String, ExtractionTaskState> tasks) : super(ExtractionState(tasks: tasks));
+  final cancelled = <String>[];
+  @override
+  void cancel(String taskId) => cancelled.add(taskId);
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -108,7 +114,7 @@ void main() {
     expect(t.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.6);
   });
 
-  testWidgets('a file task shows under the header while it runs, hides when done and shows its error when it fails', (t) async {
+  testWidgets('a file task shows under the location bar while it runs, hides when done and shows its error when it fails', (t) async {
     final queue = _FakeQueue([]);
     final progress = _FakeExtraction({});
     SharedPreferences.setMockInitialValues({});
@@ -152,8 +158,8 @@ void main() {
     await t.pump();
     expect(find.text('Zipping saves.zip'), findsOneWidget);
     expect(find.text('40%'), findsOneWidget);
-    // Above the location bar, so directly under the app bar.
-    expect(t.getTopLeft(find.byType(LinearProgressIndicator)).dy, lessThan(t.getTopLeft(find.text('/roms')).dy));
+    // Right under the location bar.
+    expect(t.getTopLeft(find.byType(LinearProgressIndicator)).dy, greaterThan(t.getTopLeft(find.text('/roms')).dy));
 
     progress.state = const ExtractionState(tasks: {'z': ExtractionTaskState(taskId: 'z', status: ExtractionStatus.extracting, progress: 0.9)});
     await t.pump();
@@ -171,5 +177,29 @@ void main() {
     await t.tap(find.byTooltip('Dismiss'));
     await t.pump();
     expect(find.textContaining('disk full'), findsNothing);
+  });
+
+  testWidgets('Cancel on the bar stops a running task and drops a waiting one', (t) async {
+    final queue = _FakeQueue([_task('a', 'smb', TaskQueueStatus.running)]);
+    final progress = _FakeExtraction({});
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        smbProvider.overrideWith((ref) => _FakeSmb()),
+        taskQueueProvider.overrideWith((ref) => queue),
+        extractionProvider.overrideWith((ref) => progress),
+        browserLayoutProvider.overrideWith((ref) => BrowserLayoutNotifier()..state = BrowserLayout.list),
+      ],
+      child: const MaterialApp(home: SmbScreen()),
+    ));
+    await t.tap(find.byTooltip('Cancel'));
+    expect(progress.cancelled, ['a']);
+    expect(queue.removed, isEmpty);
+
+    queue.state = TaskQueueState(tasks: [_task('b', 'smb', TaskQueueStatus.waiting)]);
+    await t.pump();
+    await t.tap(find.byTooltip('Cancel'));
+    expect(queue.removed, ['b']);
+    expect(progress.cancelled, ['a']);
   });
 }

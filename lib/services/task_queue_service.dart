@@ -86,7 +86,6 @@ class TaskQueueService {
       'label': label,
       'run': run,
     });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
     return game.gameId;
   }
 
@@ -130,6 +129,16 @@ class TaskQueueService {
     final queueNotifier = ref.read(taskQueueProvider.notifier);
     queueNotifier.cancelQueuedTask(taskId);
     ref.read(extractionProvider.notifier).removeTask(taskId);
+  }
+
+  /// The file browsers' Cancel: a waiting task just leaves the queue; a
+  /// running copy, zip, extraction or SMB/FTP transfer is stopped.
+  static void cancelBackgroundTask(WidgetRef ref, QueuedTask task) {
+    if (task.status == TaskQueueStatus.running) {
+      ref.read(extractionProvider.notifier).cancel(task.id);
+    } else {
+      ref.read(taskQueueProvider.notifier).cancelQueuedTask(task.id);
+    }
   }
 
   static void pauseDownloadTask(WidgetRef ref, String taskId) {

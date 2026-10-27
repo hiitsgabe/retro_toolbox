@@ -4,6 +4,7 @@ import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/browser_layout_provider.dart';
 import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
+import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 /// One row in a [FileBrowserView]. [id] must be unique within the listing
@@ -114,6 +115,7 @@ class _TaskProgressBar extends ConsumerWidget {
       context,
       BrowserTransfer(name: _taskName(task), done: (progress * 1000).round(), total: progress > 0 ? 1000 : 0, upload: false),
       icon: icon,
+      onCancel: () => TaskQueueService.cancelBackgroundTask(ref, task),
     );
   }
 }
@@ -132,7 +134,7 @@ class FileBrowserView extends ConsumerWidget {
   final BrowserTransfer? transfer;
 
   /// 'smb' / 'ftp' / 'explorer': shows that screen's background tasks (queued
-  /// with `params['source']` set to it) as bars under the header. Unlike
+  /// with `params['source']` set to it) as bars under the location bar. Unlike
   /// [transfer] they never block selecting or starting more.
   final String? queuedSource;
 
@@ -210,7 +212,6 @@ class FileBrowserView extends ConsumerWidget {
   Widget _body(BuildContext context, WidgetRef ref, ThemeData theme, bool asList) {
     return Column(
       children: [
-        if (queuedSource != null) _QueuedTaskBars(queuedSource!),
         Material(
           color: theme.colorScheme.surfaceContainerHighest,
           child: Row(
@@ -228,6 +229,7 @@ class FileBrowserView extends ConsumerWidget {
           ),
         ),
         if (transfer != null) _transferBar(context, transfer!),
+        if (queuedSource != null) _QueuedTaskBars(queuedSource!),
         if (error != null) Padding(padding: const EdgeInsets.all(12), child: Text(error!, style: TextStyle(color: theme.colorScheme.error))),
         if (busy) const LinearProgressIndicator(),
         Expanded(
@@ -469,9 +471,9 @@ class FileBrowserView extends ConsumerWidget {
     );
   }
 
-  static Widget _transferBar(BuildContext context, BrowserTransfer t, {IconData? icon}) {
+  static Widget _transferBar(BuildContext context, BrowserTransfer t, {IconData? icon, VoidCallback? onCancel}) {
     final theme = Theme.of(context);
-    return Padding(
+    final bar = Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,6 +490,13 @@ class FileBrowserView extends ConsumerWidget {
           LinearProgressIndicator(value: t.total > 0 ? t.fraction : null),
         ],
       ),
+    );
+    if (onCancel == null) return bar;
+    return Row(
+      children: [
+        Expanded(child: bar),
+        IconButton(icon: const Icon(Icons.close), tooltip: 'Cancel', onPressed: onCancel),
+      ],
     );
   }
 }

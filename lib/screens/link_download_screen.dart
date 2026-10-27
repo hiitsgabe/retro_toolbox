@@ -172,6 +172,8 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
       run: downloadJob(url, dest),
     );
     _started.add(id);
+    // This screen has no progress bar of its own.
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name added to the task list')));
   }
 
   void _onGames(Map<String, GameState>? prev, Map<String, GameState> next) {

@@ -96,6 +96,7 @@ class ExtractionService {
     required Function(String taskId, double progress) onProgress,
     required Function(String taskId, String extractionDir) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
+    Future<void>? cancelled,
   }) async {
     // Foreground service is only supported on Android, so we use an isolate for extraction on other platforms.
     // Also Android is the only platform that supports native unzip, the other platforms must use virtual
@@ -108,8 +109,13 @@ class ExtractionService {
         onProgress: onProgress,
         onComplete: onComplete,
         onError: onError,
+        cancelled: cancelled,
       );
     }
+
+    // The service stops at its next entry and reports back as an error, after
+    // which the caller removes what it left.
+    cancelled?.then((_) => FlutterForegroundTask.sendDataToTask({'action': 'cancel', 'taskId': taskId}));
 
     _activeTasks.add(taskId);
     _onProgressCallbacks[taskId] = onProgress;
@@ -185,6 +191,7 @@ class ExtractionService {
     required Function(String taskId, double progress) onProgress,
     required Function(String taskId, String extractionDir) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
+    Future<void>? cancelled,
   }) async {
     final receivePort = ReceivePort();
 
@@ -200,12 +207,28 @@ class ExtractionService {
       }
     });
 
-    await Isolate.spawn(_extractInIsolate, {
-      'taskId': taskId,
-      'filePath': filePath,
-      'extractionDir': extractionDir,
-      'allowedExtensions': allowedExtensions,
-      'sendPort': receivePort.sendPort,
+    final exitPort = ReceivePort();
+    var stopped = false;
+    final isolate = await Isolate.spawn(
+      _extractInIsolate,
+      {
+        'taskId': taskId,
+        'filePath': filePath,
+        'extractionDir': extractionDir,
+        'allowedExtensions': allowedExtensions,
+        'sendPort': receivePort.sendPort,
+      },
+      onExit: exitPort.sendPort,
+    );
+    // A cancel kills it mid-write, then reports an error once it's gone, so
+    // the caller can remove what it left without racing it.
+    exitPort.first.then((_) {
+      if (stopped) onError(taskId, 'Cancelled', extractionDir);
+    });
+    cancelled?.then((_) {
+      stopped = true;
+      receivePort.close();
+      isolate.kill(priority: Isolate.immediate);
     });
   }
 
@@ -323,6 +346,8 @@ void extractionTaskCallback() {
 }
 
 class ExtractionTaskHandler extends TaskHandler {
+  final _cancelled = <String>{};
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     await FlutterForegroundTask.updateService(notificationText: 'Ready to extract...');
@@ -336,6 +361,7 @@ class ExtractionTaskHandler extends TaskHandler {
 
   @override
   void onReceiveData(Object data) {
+    if (data is Map && data['action'] == 'cancel') _cancelled.add(data['taskId'] as String);
     if (data is Map && data['action'] == 'extract') {
       final taskId = data['taskId'] as String;
       final filePath = data['filePath'] as String;
@@ -350,30 +376,32 @@ class ExtractionTaskHandler extends TaskHandler {
 
       final fileName = path.basename(filePath);
       int lastPct = -1;
-      _extractStaged(
-          extractionDir,
-          allowed,
-          (staging) => ZipFile.extractToDirectory(
-                zipFile: File(filePath),
-                destinationDir: Directory(staging),
-                onExtracting: (zipEntry, progress) {
-                  final pct = progress.round();
-                  if (pct != lastPct) {
-                    lastPct = pct;
-                    FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName... $pct%');
-                    FlutterForegroundTask.sendDataToMain({
-                      'type': ExtractionService.progressDataType,
-                      'taskId': taskId,
-                      'value': (progress / 100.0).clamp(0.0, 1.0),
-                    });
-                  }
-                  if (allowed.isNotEmpty && !zipEntry.isDirectory) {
-                    final ext = path.extension(zipEntry.name).toLowerCase();
-                    if (!allowed.contains(ext)) return ZipFileOperation.skipItem;
-                  }
-                  return ZipFileOperation.includeItem;
-                },
-              )).then((_) {
+      _extractStaged(extractionDir, allowed, (staging) async {
+        await ZipFile.extractToDirectory(
+          zipFile: File(filePath),
+          destinationDir: Directory(staging),
+          onExtracting: (zipEntry, progress) {
+            if (_cancelled.contains(taskId)) return ZipFileOperation.cancel;
+            final pct = progress.round();
+            if (pct != lastPct) {
+              lastPct = pct;
+              FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName... $pct%');
+              FlutterForegroundTask.sendDataToMain({
+                'type': ExtractionService.progressDataType,
+                'taskId': taskId,
+                'value': (progress / 100.0).clamp(0.0, 1.0),
+              });
+            }
+            if (allowed.isNotEmpty && !zipEntry.isDirectory) {
+              final ext = path.extension(zipEntry.name).toLowerCase();
+              if (!allowed.contains(ext)) return ZipFileOperation.skipItem;
+            }
+            return ZipFileOperation.includeItem;
+          },
+        );
+        // Throwing skips moving the partial result in; staging is removed.
+        if (_cancelled.remove(taskId)) throw StateError('Cancelled');
+      }).then((_) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
           'type': ExtractionService.completionDataType,

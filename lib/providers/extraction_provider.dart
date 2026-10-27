@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
@@ -26,6 +27,25 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
   final GameStateManager gameStateManager;
 
   ExtractionNotifier(this._ref, this.gameStateManager) : super(const ExtractionState());
+
+  /// Running file-browser jobs (fileTask, archiveExtract) by task id; completed
+  /// by [cancel].
+  final _cancels = <String, Completer<void>>{};
+
+  /// Stops a running file-browser job: it leaves the queue at once, and the
+  /// job stops (deleting its partial output) as soon as it can. Copies and
+  /// downloads stop at their next progress report, zips and desktop ZIP
+  /// extraction right away, Android ZIP extraction at its next entry.
+  void cancel(String taskId) {
+    final c = _cancels.remove(taskId);
+    if (c == null) return;
+    c.complete();
+    removeTask(taskId);
+    // The notification ends with the job itself (it may still be stopping).
+    final queue = _ref.read(taskQueueProvider.notifier);
+    queue.updateTaskStatus(taskId, TaskQueueStatus.cancelled); // frees the slot
+    queue.cancelQueuedTask(taskId);
+  }
 
   Future<void> extractFile(String taskId) async {
     final gameState = gameStateManager.state[taskId];
@@ -208,6 +228,34 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
     state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+    final cancel = _cancels[taskId] = Completer<void>();
+    // outputDir is a fresh folder made for this task, so a cancel removes it whole.
+    Future<void> discard() async {
+      try {
+        await Directory(outputDir).delete(recursive: true);
+      } catch (_) {}
+    }
+
+    // Every path ends with done/failed even after a cancel (a killed isolate
+    // and the Android service report an error, RAR runs to the end): then
+    // nothing is kept.
+    void done() {
+      if (cancel.isCompleted) {
+        discard();
+        return;
+      }
+      _cancels.remove(taskId);
+      _onConversionCompleted(taskId);
+    }
+
+    void failed(String error) {
+      if (cancel.isCompleted) {
+        discard();
+        return;
+      }
+      _cancels.remove(taskId);
+      _onNszError(taskId, error);
+    }
 
     final fileName = path.basename(archivePath);
     if (ArchiveExtractService.archiveKind(archivePath) == ArchiveKind.zip) {
@@ -217,23 +265,29 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         taskId: taskId,
         filePath: archivePath,
         extractionDir: outputDir,
-        onProgress: _updateProgress,
-        onComplete: (id, _) => _onConversionCompleted(id),
-        onError: (id, error, _) => _onNszError(id, error),
+        onProgress: (id, progress) {
+          if (!cancel.isCompleted) _updateProgress(id, progress);
+        },
+        onComplete: (_, __) => done(),
+        onError: (_, error, __) => failed(error),
+        cancelled: cancel.future,
       );
       return;
     }
 
     await ExtractionService.startNotification(taskId, 'Extracting', 'Extracting $fileName...');
     try {
+      // ponytail: the RAR plugin can't be stopped, so a cancelled RAR runs to
+      // the end in the background and its output is deleted then.
       await ArchiveExtractService().extract(archivePath, outputDir, onProgress: (progress) {
+        if (cancel.isCompleted) return;
         _updateProgress(taskId, progress);
         ExtractionService.updateNotification('Extracting $fileName... ${(progress * 100).round()}%');
       });
-      _onConversionCompleted(taskId);
+      done();
     } catch (e) {
       debugPrint('Archive extraction error: $e');
-      _onNszError(taskId, e.toString());
+      failed(e.toString());
     } finally {
       ExtractionService.endNotification(taskId);
     }
@@ -251,11 +305,14 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
     state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+    final cancel = _cancels[taskId] = Completer<void>();
 
     await ExtractionService.startNotification(taskId, verb, '$verb $label...');
     var lastPct = -1;
     try {
       await run((done, total) {
+        // Jobs stop (and clean up) when their progress callback throws.
+        if (cancel.isCompleted) throw const TaskCancelledException();
         final progress = total > 0 ? done / total : 0.0;
         final pct = (progress * 100).floor();
         if (pct == lastPct) return; // byte-level callbacks; repaint per percent
@@ -263,11 +320,14 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         _updateProgress(taskId, progress);
         ExtractionService.updateNotification('$verb $label... $pct%');
       });
+      if (cancel.isCompleted) return; // finished before it saw the cancel
       _onConversionCompleted(taskId);
     } catch (e) {
+      if (cancel.isCompleted) return;
       debugPrint('$verb failed: $e');
       _onNszError(taskId, e is StateError ? e.message : e.toString());
     } finally {
+      _cancels.remove(taskId);
       ExtractionService.endNotification(taskId);
     }
   }
@@ -462,4 +522,11 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
   bool _hasActiveExtractions(Map<String, ExtractionTaskState> tasks) {
     return tasks.values.any((task) => task.status == ExtractionStatus.extracting);
   }
+}
+
+/// Thrown from a cancelled job's progress callback to stop it.
+class TaskCancelledException implements Exception {
+  const TaskCancelledException();
+  @override
+  String toString() => 'Cancelled';
 }

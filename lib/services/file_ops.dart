@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
@@ -65,7 +66,15 @@ class FileOps {
         advance(await sizeOf([target]));
         continue;
       }
-      await _copy(s, target, advance);
+      try {
+        await _copy(s, target, advance);
+      } catch (_) {
+        // Cancelled (the progress callback threw) or failed: no partial copy.
+        try {
+          await _delete(target);
+        } catch (_) {}
+        rethrow;
+      }
       if (move) await _delete(s);
     }
     onProgress?.call(total, total);
@@ -116,18 +125,40 @@ class FileOps {
 
   /// Zips [sources] into [outZip], each at its name relative to its own
   /// parent (a folder keeps its tree). Runs in an isolate — compression would
-  /// otherwise freeze the UI — and reports bytes added.
+  /// otherwise freeze the UI — and reports bytes added. When [onProgress]
+  /// throws (the task was cancelled) or the zip fails, the isolate is stopped
+  /// and the partial [outZip] deleted.
   static Future<void> zip(List<String> sources, String outZip, {FileOpsProgress? onProgress}) async {
+    final total = await sizeOf(sources);
     final port = ReceivePort();
     final errors = ReceivePort();
-    await Isolate.spawn(_zipWorker, [port.sendPort, sources, outZip], onError: errors.sendPort);
+    final isolate = await Isolate.spawn(_zipWorker, [port.sendPort, sources, outZip], onError: errors.sendPort);
     final done = Completer<void>();
+    var reported = 0;
+    void report(int bytes) {
+      if (bytes <= reported || done.isCompleted) return;
+      reported = bytes;
+      try {
+        onProgress?.call(bytes, total);
+      } catch (e) {
+        done.completeError(e);
+      }
+    }
+
+    // ponytail: the encoder says nothing inside a file, so a big file's progress
+    // is the zip's size on disk; compressed bytes trail the input, so the bar
+    // jumps at the end. Count the bytes the encoder reads if that matters.
+    final poll = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      try {
+        report(min(File(outZip).lengthSync(), total - 1));
+      } catch (_) {} // not created yet
+    });
     final errSub = errors.listen((e) {
       if (!done.isCompleted) done.completeError(Exception((e as List).first));
     });
     final sub = port.listen((msg) {
       if (msg is List) {
-        onProgress?.call(msg[0] as int, msg[1] as int);
+        report(msg[0] as int);
       } else if (msg is String) {
         if (!done.isCompleted) done.completeError(Exception(msg));
       } else if (!done.isCompleted) {
@@ -136,7 +167,14 @@ class FileOps {
     });
     try {
       await done.future;
+    } catch (_) {
+      isolate.kill(priority: Isolate.immediate);
+      try {
+        await File(outZip).delete();
+      } catch (_) {}
+      rethrow;
     } finally {
+      poll.cancel();
       await sub.cancel();
       await errSub.cancel();
       port.close();

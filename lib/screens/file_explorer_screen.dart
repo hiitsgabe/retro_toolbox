@@ -123,14 +123,13 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
   // ---- Background tasks ----------------------------------------------------
 
   /// Queues [type] with a task-manager row titled [title]. [verb] and [label]
-  /// name it in the progress bar under the header ('Zipping', 'saves.zip').
+  /// name it in the progress bar under the location bar ('Zipping', 'saves.zip').
   void _enqueue(TaskType type, String title, String verb, String label, Map<String, dynamic> params) {
     // Unique per job: the task key comes from the URL's file name.
     final game = Game(title: title, url: 'https://manual/op-${DateTime.now().microsecondsSinceEpoch}.task', size: 0, consoleId: 'manual');
     ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
     _ourTasks.add(game.gameId);
     ref.read(taskQueueProvider.notifier).enqueue(game.gameId, type, {'taskId': game.gameId, 'source': 'explorer', 'verb': verb, 'label': label, ...params});
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$title added to the task list')));
   }
 
   void _paste() {

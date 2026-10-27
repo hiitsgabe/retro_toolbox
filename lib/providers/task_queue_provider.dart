@@ -168,7 +168,9 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
   }
 
   void cancelQueuedTask(String taskId) {
-    final remaining = state.tasks.where((t) => !(t.id == taskId && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.failed))).toList();
+    final remaining = state.tasks
+        .where((t) => !(t.id == taskId && (t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.failed || t.status == TaskQueueStatus.cancelled)))
+        .toList();
     final runningCounts = Map<TaskType, int>.from(state.runningCounts);
 
     state = state.copyWith(tasks: remaining, runningCounts: runningCounts);

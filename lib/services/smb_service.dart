@@ -48,6 +48,9 @@ class SmbService {
   /// round trips. Each extra connection pulls 4 MB chunks — whole small files
   /// or slices of a big one — from a shared queue, reading them in 64 KB
   /// requests, and writes each chunk at its offset locally.
+  ///
+  /// When a chunk fails or [onProgress] throws (the task was cancelled), the
+  /// local files are deleted: they're pre-sized, so a partial one looks whole.
   Future<void> downloadParallel(
     List<SmbDownloadJob> jobs,
     SmbProgress onProgress, {
@@ -110,7 +113,14 @@ class SmbService {
 
     final workers = chunks.isEmpty ? 0 : (connections < chunks.length ? connections : chunks.length);
     await Future.wait([for (var i = 0; i < workers; i++) worker()]);
-    if (failure != null) throw failure!;
+    if (failure != null) {
+      for (final j in jobs) {
+        try {
+          await File(j.localPath).delete();
+        } catch (_) {}
+      }
+      throw failure!;
+    }
     onProgress(total, total);
   }
 
