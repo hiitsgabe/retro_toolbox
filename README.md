@@ -180,7 +180,7 @@ flutter pub get
 # Package the embedded Python app. Run once, and again after changing python_app/ or bumping serious_python.
 # -p Android | Darwin | Windows | Linux
 dart run serious_python:main package python_app/ -p Android \
-  -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.7.0"
+  -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.7.1"
 
 # macOS only: export the SPM cache key before every build/run
 export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
