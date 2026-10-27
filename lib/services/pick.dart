@@ -20,7 +20,14 @@ Future<String> _startDir() async {
     final roots = handheldRoots();
     if (roots.isNotEmpty) return roots.keys.first;
   }
-  return DirectoryService().getDownloadDir();
+  final dir = await DirectoryService().getDownloadDir();
+  // No download folder chosen yet: the default is app-private
+  // (Android/data/<package>), useless to browse. Start at internal storage.
+  if (Platform.isAndroid) {
+    final primary = await _primaryRoot();
+    if (initialDocId(dir, primary) == 'primary:') return primary;
+  }
+  return dir;
 }
 
 /// [extensions]: lowercase, no leading dot; null allows any file.

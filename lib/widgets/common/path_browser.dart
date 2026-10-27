@@ -167,7 +167,9 @@ class _PathBrowserState extends State<PathBrowser> {
 
   Future<void> _loadVolumes() async {
     final volumes = await storageVolumes();
-    if (!mounted || volumes.length < 2) return;
+    // Android always shows them (at least "Internal storage", a way back out
+    // of any folder); handhelds only when there's more than one.
+    if (!mounted || volumes.isEmpty || (Handheld.current && volumes.length < 2)) return;
     setState(() => _volumes = volumes);
   }
 
