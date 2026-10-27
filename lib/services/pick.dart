@@ -8,10 +8,10 @@ import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
-/// Android (SAF copies the whole file into cache) and handhelds (no native
-/// dialog, not d-pad friendly) use the in-app [PathBrowser]; desktop and iOS
-/// use the native picker.
-bool get _useBrowser => Platform.isAndroid || Handheld.current;
+/// Handhelds (no native dialog, not d-pad friendly) use the in-app
+/// [PathBrowser] for folders; Android, desktop and iOS the system picker
+/// (on Android a folder pick copies nothing, unlike a file pick).
+bool get _useBrowser => Handheld.current;
 
 Future<String> _startDir() async {
   if (Handheld.current) {
@@ -76,8 +76,11 @@ Future<String?> pickSavePath(
   String? initialDir,
   @visibleForTesting bool? useBrowser,
 }) async {
-  if (useBrowser ?? _useBrowser) {
-    final dir = await pickDirectory(context, title: title, initialDir: initialDir, useBrowser: true);
+  final browser = useBrowser ?? _useBrowser;
+  // Android's save dialog needs the bytes up front and hands back no path:
+  // pick the folder with the system picker and join the name instead.
+  if (browser || (useBrowser == null && Platform.isAndroid)) {
+    final dir = await pickDirectory(context, title: title, initialDir: initialDir, useBrowser: browser);
     return dir == null ? null : p.join(dir, fileName);
   }
   return _native(() => FilePicker.platform.saveFile(dialogTitle: title, fileName: fileName, bytes: bytes, initialDirectory: initialDir));
