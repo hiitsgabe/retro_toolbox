@@ -139,4 +139,37 @@ void main() {
     fake.throws = true;
     expect(await pickDirectory(c, title: 'D', useBrowser: false), isNull);
   });
+
+  group('Android system picker paths', () {
+    const root = '/storage/emulated/0';
+
+    test('starts at the folder asked for, on internal storage or an SD card', () {
+      expect(initialDocId('$root/ROMs/ps2', root), 'primary:ROMs/ps2');
+      expect(initialDocId(root, root), 'primary:');
+      expect(initialDocId('/storage/1A2B-3C4D/ROMs', root), '1A2B-3C4D:ROMs');
+      expect(initialDocId('/storage/1A2B-3C4D', root), '1A2B-3C4D:');
+    });
+
+    test('no folder or one the picker cannot show starts at internal storage', () {
+      expect(initialDocId(null, root), 'primary:');
+      expect(initialDocId('$root/Android/data/pkg/files', root), 'primary:');
+      expect(initialDocId('/data/user/0/pkg/files', root), 'primary:');
+      expect(initialDocId('/storage/emulated/10/x', root), 'primary:');
+    });
+
+    test('picked documents map back to real paths', () {
+      const ext = 'com.android.externalstorage.documents';
+      expect(docPath(ext, 'primary:ROMs/a.iso', root), '$root/ROMs/a.iso');
+      expect(docPath(ext, 'primary:', root), root);
+      expect(docPath(ext, '1A2B-3C4D:out', root), '/storage/1A2B-3C4D/out');
+      expect(docPath(ext, 'home:x', root), '$root/Documents/x');
+      expect(docPath('com.android.providers.downloads.documents', 'raw:$root/Download/a.iso', root), '$root/Download/a.iso');
+    });
+
+    test('documents with no path on disk map to null', () {
+      expect(docPath('com.android.providers.downloads.documents', 'msf:12', root), isNull);
+      expect(docPath('com.google.android.apps.docs.storage', 'acc=1;doc=2', root), isNull);
+      expect(docPath('com.android.externalstorage.documents', null, root), isNull);
+    });
+  });
 }
