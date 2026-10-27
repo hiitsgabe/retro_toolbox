@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -16,7 +17,6 @@ import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
-import 'package:retro_toolbox/widgets/common/path_browser.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -140,7 +140,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
   }
 
   Future<void> _changeDir() async {
-    final dir = await PathBrowser.show(context, title: 'Save downloads to', initialDir: _dir ?? '/', selectDirectory: true);
+    final dir = await pickDirectory(context, title: 'Save downloads to', initialDir: _dir);
     if (dir == null || !mounted) return;
     setState(() => _dir = dir);
     (await SharedPreferences.getInstance()).setString(_dirKey, dir);
