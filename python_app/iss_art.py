@@ -234,3 +234,44 @@ def render_deluxe_images(league, season, out_dir):
         'menu': lambda img, lg, ss, slot: _menu(img, lg, ss),
     }
     return render_slots('iss_deluxe_snes', painters, league, season, out_dir)
+
+
+def nba_season(season):
+    """'26-27' for ESPN's NBA season 2027: an NBA season is named by the year
+    it ends, unlike the soccer seasons `season_mark` names by their start."""
+    try:
+        year = int(season)
+    except (TypeError, ValueError):
+        return 'NBA'
+    return f'{(year - 1) % 100:02d}-{year % 100:02d}'
+
+
+def _nba_title(img, league, season):
+    """NBA Live 95's title background (312x224): the game animates its NBA logo
+    (86,56 64x136) and NBA LIVE 95 letters (148,28 164x172) over the middle and
+    right and runs credits along the bottom 32 rows, so the app's logo and the
+    season sit in the column on the left, over a dark arena and a wood floor."""
+    from PIL import ImageDraw
+    _vertical(img, 0, 150, (12, 10, 40, 255), DEEP)
+    _vertical(img, 150, img.height, (150, 96, 50, 255), (96, 58, 28, 255))
+    draw = ImageDraw.Draw(img)
+    for x in range(0, img.width, 24):  # floor boards
+        draw.line((x, 150, x - 40, img.height), fill=(120, 76, 38, 255))
+    draw.line((0, 150, img.width, 150), fill=(240, 232, 220, 255), width=2)  # baseline
+    _logo(img, 42, 64, 60)
+    _text(img, 42, 112, nba_season(season), 16, max_w=80)
+    _text(img, 42, 132, 'ROSTER', 9, stroke=DEEP, max_w=80)
+    _text(img, 42, 143, 'UPDATE', 9, stroke=DEEP, max_w=80)
+
+
+def render_nba_images(league, season, out_dir):
+    """NBA Live 95 (Genesis): the title background, 312x224 (the library's
+    `nbalive95_genesis.screens.SIZE`)."""
+    from PIL import Image
+    from retro_roster_patcher.games.nbalive95_genesis import screens
+    os.makedirs(out_dir, exist_ok=True)
+    img = Image.new('RGBA', screens.SIZE, DEEP)
+    _nba_title(img, league, season)
+    path = os.path.join(out_dir, 'title.png')
+    img.convert('RGB').save(path)
+    return {'title': path}

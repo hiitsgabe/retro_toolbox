@@ -467,6 +467,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'iss-deluxe-snes':
         import iss_art
         return iss_art.render_deluxe_images(league, season, out_dir)
+    if game_id == 'nbalive95-genesis':
+        import iss_art
+        return iss_art.render_nba_images(league, season, out_dir)
     if game_id == 'nhl94-snes':
         import nhl94_art
         return nhl94_art.render_default_images(league, season, out_dir)

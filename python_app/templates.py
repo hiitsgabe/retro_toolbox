@@ -161,6 +161,21 @@ def snes_screens(package):
             for s in SLOTS]
 
 
+def nba_screens():
+    """[(file name, png, description)] for NBA Live 95's title background, its
+    guides from the library's `nbalive95_genesis.screens.GUIDES`."""
+    from retro_roster_patcher.games.nbalive95_genesis import screens
+    w, h = screens.SIZE
+    guides = [(x, y, gw, gh, label) for label, (x, y, gw, gh) in screens.GUIDES]
+    return [('title.png', render(w, h, guides),
+             f'The title background, {w}x{h} pixels: the arena behind the game\'s logo. Its red boxes '
+             '(numbered, x,y and w x h): '
+             + '; '.join(f'{i}. {g[4]} ({g[0]},{g[1]} {g[2]}x{g[3]})' for i, g in enumerate(guides, 1)) + '. '
+             'The game draws its NBA logo, the NBA LIVE 95 letters and the credits there: keep those parts '
+             'plain and dark and put your own content elsewhere (the left column is clear). The cartridge has '
+             '45 colours and about 700 tiles for it: a photo is reduced to fit, so bold, flat art looks best.')]
+
+
 def kit_photo_guide():
     """(file name, png, description) of the layout a picked kit picture should have."""
     w, h = 96, 128
@@ -191,6 +206,8 @@ def files_for(game_id, supports_kits):
         files = nhl07_screens()
     elif game_id in _SNES_PACKAGES:
         files = snes_screens(_SNES_PACKAGES[game_id])
+    elif game_id == 'nbalive95-genesis':
+        files = nba_screens()
     elif supports_kits:
         files = []  # kits but no screen art yet: the kit photo guide alone
     else:

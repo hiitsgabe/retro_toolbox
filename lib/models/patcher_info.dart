@@ -168,6 +168,9 @@ const _gameSlotNames = {
     'league_badge': ('League badge', 'Where the NHL shield shows on the legal and title screens.'),
     'players_badge': ('Players badge', 'Where the NHLPA logo shows on the legal and title screens.'),
   },
+  'nbalive95-genesis': {
+    'title': ('Title screen', 'Behind the NBA LIVE 95 logo, which animates in over the middle and right; the credits run along the bottom.'),
+  },
   'nhl94-snes': {
     'boot': ('Boot screen', 'The EA SPORTS screen at power-on, held still about 12 seconds.'),
     'title': ('Title screen', 'The whole title; the credits and the NHL and NHLPA shields sit over the bottom.'),
