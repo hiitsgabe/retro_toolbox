@@ -43,6 +43,7 @@ String gameDisplayName(String gameId) => _gameNames[gameId] ?? gameId;
 const Map<String, String> _gameNames = {
   'iss-snes': 'International Superstar Soccer',
   'iss2000-n64': 'International Superstar Soccer 2000',
+  'iss-deluxe-snes': 'International Superstar Soccer Deluxe',
   'we2002': 'Winning Eleven 2002',
   'nbalive95-genesis': 'NBA Live 95',
   'nhl94-genesis': 'NHL 94',
@@ -88,6 +89,7 @@ int? masterLeagueSize(String gameId, int? slot) =>
 const Map<String, GameRoster> _gameRosters = {
   'iss-snes': GameRoster(15, 11), // 11 start, 4 subs; slot 0 is the keeper
   'iss2000-n64': GameRoster(22, 11), // 11 start in formation order, 11 subs; slot 0 is the keeper
+  'iss-deluxe-snes': GameRoster(20, 11), // 11 start, placed in the slot's formation by position; 9 subs
   'we2002': GameRoster(23, 11), // national squads hold 23; Master League keeps 14 or 15
   'nbalive95-genesis': GameRoster(12, 5),
   'kgj-mlb-snes': GameRoster(25, 9), // 25 roster, 9 batting lineup
@@ -218,6 +220,7 @@ List<String> gameSearchTerms(String gameId) => _searchTerms[gameId] ?? [_gameNam
 const Map<String, List<String>> _searchTerms = {
   'iss-snes': ['International Superstar Soccer'],
   'iss2000-n64': ['International Superstar Soccer 2000', 'ISS 2000'],
+  'iss-deluxe-snes': ['International Superstar Soccer Deluxe', 'ISS Deluxe'],
   'we2002': ['World Soccer Winning Eleven 2002', 'Winning Eleven 2002'],
   'nbalive95-genesis': ['NBA Live 95'],
   'nhl94-genesis': ["NHL '94", "NHL Hockey '94", 'NHL 94'],
@@ -237,6 +240,7 @@ List<String> gameRomExtensions(String gameId) => _romExtensions[gameId] ?? const
 const Map<String, List<String>> _romExtensions = {
   'iss-snes': ['.sfc', '.smc', '.zip'],
   'iss2000-n64': ['.z64', '.v64', '.n64', '.zip'],
+  'iss-deluxe-snes': ['.sfc', '.smc', '.zip'],
   'nhl94-snes': ['.sfc', '.smc', '.zip'],
   'kgj-mlb-snes': ['.sfc', '.smc', '.zip'],
   'we2002': ['.cue', '.iso', '.bin', '.zip'],
@@ -266,6 +270,9 @@ const Map<String, String> _romExpectations = {
   'iss2000-n64':
       'International Superstar Soccer 2000 (N64, USA). A .z64, .v64 or .n64 file. '
       'The patched ROM grows to 20 MB, which emulators and flash carts load.',
+  'iss-deluxe-snes':
+      'International Superstar Soccer Deluxe (SNES, USA). A .sfc or .smc file. '
+      'A 512-byte copier header is handled automatically.',
   'we2002':
       'Winning Eleven 2002 (PS1). The disc image: a .bin (with its .cue) or a single .iso. '
       'Use your own dump of the original disc.',
@@ -291,7 +298,8 @@ const Map<String, String> _romExpectations = {
 
 /// Games whose ROM stores per-team colors (soccer kits, MVP uniforms), so the
 /// editor should let the user set them. Read from the game code's color usage.
-bool gameUsesTeamColor(String gameId) => const {'iss-snes', 'we2002', 'mvp-psp', 'pes2013-ps2'}.contains(gameId);
+bool gameUsesTeamColor(String gameId) =>
+    const {'iss-snes', 'iss-deluxe-snes', 'we2002', 'mvp-psp', 'pes2013-ps2'}.contains(gameId);
 
 /// Which providers expose a selectable season. ESPN only serves the current
 /// year, so only the NHL source lets the user pick a season.

@@ -39,6 +39,9 @@ class PatcherInfo {
   /// Team-slot groups the game splits its clubs into; empty when it has none.
   final List<SlotGroup> slotGroups;
 
+  /// The slots to fill, in order, when teams map in sequence; empty for 0, 1, 2…
+  final List<int> slotOrder;
+
   /// How many leagues one patch takes, the k-th filling slot group k. 1 when
   /// the groups only describe the slots (WE2002): a second league would
   /// overwrite the next group.
@@ -60,8 +63,12 @@ class PatcherInfo {
     this.supportsNationals = false,
     this.nationalSlotBase,
     this.slotGroups = const [],
+    this.slotOrder = const [],
     this.maxLeagues = 1,
   });
+
+  /// The slot the i-th team of a single league takes.
+  int slotFor(int i) => i < slotOrder.length ? slotOrder[i] : i;
 
   /// Whether the wizard has a visuals step to show for this game.
   bool get hasVisuals => supportsLogos || supportsBlankUnused || supportsLooks || imageSlots.isNotEmpty;
@@ -91,6 +98,7 @@ class PatcherInfo {
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
+        slotOrder: [for (final s in ((j['slot_order'] as List?) ?? const [])) (s as num).toInt()],
         maxLeagues: ((j['max_leagues'] ?? 1) as num).toInt(),
       );
 
@@ -143,6 +151,12 @@ const _gameSlotNames = {
   },
   'iss2000-n64': {
     'menu': ('Menu wallpaper', 'Behind every menu, team select and the lineups; the panels cover most of the middle.'),
+    'title': ('Title screen', 'The whole PRESS START screen, logo included; the game only blinks PRESS START over it.'),
+  },
+  'iss-deluxe-snes': {
+    'konami': ('Konami screen', 'The logo screen at boot; a line sweeps it in from the top.'),
+    'title': ('Title screen', 'The whole title; the ISS lettering, PRESS START and the copyright are drawn over it.'),
+    'menu': ('Menu wallpaper', 'A pattern the menus scroll: it repeats both ways. Only 128 tiles, so keep it simple; shown darker.'),
   },
   'nhl07-psp': {
     'boot': ('Boot screen', 'The splash before the autosave prompt; the game draws its loading bar over it.'),

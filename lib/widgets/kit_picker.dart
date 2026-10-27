@@ -664,7 +664,7 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
               ),
           ],
         ),
-        if (widget.info.gameId == 'iss-snes')
+        if (widget.info.gameId == 'iss-snes' || widget.info.gameId == 'iss-deluxe-snes')
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Text(
@@ -799,11 +799,11 @@ class _KitPickerSheetState extends State<KitPickerSheet> {
                     icon: const Icon(Icons.download_outlined, size: 18),
                     label: const Text('Download kit template'),
                   ),
-                  if (widget.info.gameId == 'pes2013-ps2' || widget.info.gameId == 'iss-snes')
+                  if (const {'pes2013-ps2', 'iss-snes', 'iss-deluxe-snes'}.contains(widget.info.gameId))
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        '${widget.info.gameId == 'iss-snes' ? 'ISS' : 'PES'} uses the picture for its colours and pattern only.',
+                        '${widget.info.gameId.startsWith('iss') ? 'ISS' : 'PES'} uses the picture for its colours and pattern only.',
                         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ),

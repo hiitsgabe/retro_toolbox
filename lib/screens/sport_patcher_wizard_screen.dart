@@ -749,7 +749,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         // Team order is the slot order for games that need an explicit mapping.
         if (info.requiresSlotMapping) {
           slotMapping = [
-            for (var i = 0; i < doc.teams.length; i++) SlotMapping(slotIndex: i, teamId: doc.teams[i].id, teamName: doc.teams[i].name),
+            for (var i = 0; i < doc.teams.length; i++)
+              SlotMapping(slotIndex: info.slotFor(i), teamId: doc.teams[i].id, teamName: doc.teams[i].name),
           ];
         }
       }

@@ -180,16 +180,57 @@ def render_slots(package, painters, league, season, out_dir):
     return written
 
 
+def _n64_title(img, league, season):
+    """ISS 2000's whole title (320x240): the app's logo and name, the update's
+    season below the blinking PRESS START box (91,163 138x14), which stays clear."""
+    _vertical(img, 0, img.height, DEEP, PURPLE)
+    _logo(img, img.width // 2, 78, 104)
+    _text(img, img.width // 2, 142, 'RETRO TOOLBOX', 28)
+    _text(img, img.width // 2, 200, f'{season_mark(league, season)}  ROSTER UPDATE', 14, stroke=DEEP)
+
+
 def render_n64_images(league, season, out_dir):
-    """ISS 2000 (N64): the wallpaper behind every menu, 312x236. The menus draw
-    panels over most of it, so it is the scrolling motif's look at full size:
-    the season mark top left, where team select and the main menu leave the
-    wallpaper bare."""
+    """ISS 2000 (N64): the wallpaper behind every menu, 312x236, and the title,
+    320x240. The menus draw panels over most of the wallpaper, so it is the
+    scrolling motif's look at full size: the season mark top left, where team
+    select and the main menu leave the wallpaper bare."""
     from PIL import Image
     os.makedirs(out_dir, exist_ok=True)
     img = Image.new('RGBA', (312, 236), DEEP)
     _menu(img, league, season)
     _text(img, 70, 14, season_mark(league, season), 14)
-    path = os.path.join(out_dir, 'menu.png')
-    img.convert('RGB').save(path)
-    return {'menu': path}
+    written = {'menu': os.path.join(out_dir, 'menu.png')}
+    img.convert('RGB').save(written['menu'])
+    title = Image.new('RGBA', (320, 240), DEEP)
+    _n64_title(title, league, season)
+    written['title'] = os.path.join(out_dir, 'title.png')
+    title.convert('RGB').save(written['title'])
+    return written
+
+
+def _deluxe_title(img, league, season, slot=None):
+    """ISS Deluxe's title (256x224): the game draws its lettering (16,41
+    168x57), PRESS START (79,122) and the copyright (bottom 18 rows) over it,
+    so the app's logo sits top right and the season on the pitch between."""
+    from PIL import ImageDraw
+    _vertical(img, 0, 112, LIGHT, (214, 206, 240, 255))
+    _vertical(img, 112, img.height, GRASS_TOP, GRASS_BOTTOM)
+    draw = ImageDraw.Draw(img)
+    for x in range(0, img.width, 32):  # mown stripes
+        draw.rectangle((x, 112, x + 15, img.height), fill=STRIPE)
+    draw.line((0, 114, img.width, 114), fill=LINE, width=2)  # touchline
+    _logo(img, 220, 62, 56)
+    _text(img, img.width // 2, 158, season_mark(league, season), 24)
+    _text(img, img.width // 2, 184, 'UNOFFICIAL ROSTER UPDATE', 10, stroke=DEEP)
+
+
+def render_deluxe_images(league, season, out_dir):
+    """ISS Deluxe (SNES): the Konami screen, the title and the menu wallpaper,
+    at the library's slot sizes (`iss_deluxe_snes.screens.SLOTS`). The
+    wallpaper is the 64x64 motif repeated: the slot holds 128 tiles."""
+    painters = {
+        'konami': lambda img, lg, ss, slot: _konami(img, lg, ss),
+        'title': _deluxe_title,
+        'menu': lambda img, lg, ss, slot: _menu(img, lg, ss),
+    }
+    return render_slots('iss_deluxe_snes', painters, league, season, out_dir)

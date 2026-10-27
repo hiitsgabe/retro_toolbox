@@ -172,7 +172,10 @@ def kit_photo_guide():
             'the shorts from the middle band and the socks from the bottom one.')
 
 
-_SNES_PACKAGES = {'iss-snes': 'iss_snes', 'nhl94-snes': 'nhl94_snes', 'kgj-mlb-snes': 'kgj_mlb_snes'}
+_SNES_PACKAGES = {
+    'iss-snes': 'iss_snes', 'iss-deluxe-snes': 'iss_deluxe_snes',
+    'nhl94-snes': 'nhl94_snes', 'kgj-mlb-snes': 'kgj_mlb_snes',
+}
 
 
 def files_for(game_id, supports_kits):
@@ -188,6 +191,8 @@ def files_for(game_id, supports_kits):
         files = nhl07_screens()
     elif game_id in _SNES_PACKAGES:
         files = snes_screens(_SNES_PACKAGES[game_id])
+    elif supports_kits:
+        files = []  # kits but no screen art yet: the kit photo guide alone
     else:
         raise ValueError(f'No templates for {game_id}')
     if supports_kits:
@@ -344,7 +349,7 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
         files = we2002_kit_files(patcher, rom, slot, whiches, template)
     elif game_id == 'pes2013-ps2':
         files = pes_kit_files(rom, slot, whiches)
-    elif game_id == 'iss-snes':
+    elif game_id in ('iss-snes', 'iss-deluxe-snes'):
         files = iss_kit_files(patcher, rom, slot, whiches)
         files.append(kit_photo_guide())
         intro = ('ISS kits are colours: the shirt, shorts and socks, plus a chest design. Upload a kit photo '
@@ -368,5 +373,5 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
 
 if __name__ == '__main__':
     import sys
-    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'iss-snes', 'nhl94-snes', 'kgj-mlb-snes'):
+    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'iss-snes', 'iss-deluxe-snes', 'nhl94-snes', 'kgj-mlb-snes'):
         print(*build(game, sys.argv[1], supports_kits=True))

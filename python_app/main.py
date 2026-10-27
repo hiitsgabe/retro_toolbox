@@ -341,6 +341,9 @@ def _capabilities(cls, base):
         'kit_templates': _overrides(cls, 'kit_templates', base),
         'supports_nationals': bool(getattr(cls, 'supports_nationals', False)),
         'national_slot_base': getattr(cls, 'national_slot_base', None),
+        # The order to fill slots in when the teams map in sequence (ISS
+        # Deluxe keeps the nations its stadiums are named after for last).
+        'slot_order': [int(s) for s in (getattr(cls, 'slot_order', None) or ())],
         'slot_groups': [{'name': n, 'first': f, 'count': c} for n, f, c in groups],
         'max_leagues': leagues,
         'multi_league': leagues > 1 and bool(groups),
@@ -461,6 +464,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'iss2000-n64':
         import iss_art
         return iss_art.render_n64_images(league, season, out_dir)
+    if game_id == 'iss-deluxe-snes':
+        import iss_art
+        return iss_art.render_deluxe_images(league, season, out_dir)
     if game_id == 'nhl94-snes':
         import nhl94_art
         return nhl94_art.render_default_images(league, season, out_dir)
