@@ -182,6 +182,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         supports_kits = True
         supports_nationals = True
         national_slot_base = 1000
+        slot_order = (3, 1, 2)
         slot_groups = (('english', 0, 20), ('other', 98, 36))
         max_leagues = 2
 
@@ -198,13 +199,14 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         'languages': ['en'], 'supports_logos': True, 'supports_blank_unused': True, 'supports_looks': True,
         'image_slots': ['title'],
         'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'national_slot_base': 1000,
+        'slot_order': [3, 1, 2],
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
         'max_leagues': 2, 'multi_league': True}
     assert main._capabilities(Old, Base) == {
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'supports_looks': False,
         'image_slots': [],
         'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'national_slot_base': None,
-        'slot_groups': [], 'max_leagues': 1, 'multi_league': False}
+        'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False}
     slots_only = main._capabilities(SlotsOnly, Base)
     assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
 
