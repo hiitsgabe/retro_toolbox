@@ -149,6 +149,7 @@ void main() {
     expect(imageSlotLabel('some_slot').$1, 'Some slot');
     expect(imageSlotLabel('logo', 'nhl07-psp').$1, 'Game logo');
     expect(imageSlotLabel('title', 'nhl07-psp').$2, contains('PRESS START'));
+    expect(imageSlotLabel('legal', 'nhl05-ps2').$1, 'Legal screen');
     expect(imageSlotLabel('title', 'we2002').$1, 'Title screen');
   });
 

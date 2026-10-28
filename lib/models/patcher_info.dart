@@ -168,6 +168,12 @@ const _gameSlotNames = {
     'league_badge': ('League badge', 'Where the NHL shield shows on the legal and title screens.'),
     'players_badge': ('Players badge', 'Where the NHLPA logo shows on the legal and title screens.'),
   },
+  'nhl05-ps2': {
+    'boot': ('Boot screen', 'The splash before the memory card check; the game draws its loading dots over the middle.'),
+    'title': ('Title screen', 'Behind PRESS START and the copyright line, which the game writes across the lower middle.'),
+    'legal': ('Legal screen', 'The backdrop of the trademark notice, written over most of it in white; keep it dark.'),
+    'menu': ('Menu backdrop', 'The arena behind the main menu: the NHL logo sits top left, the menu items below it, and the player photo covers the right side.'),
+  },
   'nbalive95-genesis': {
     'title': ('Title screen', 'Behind the NBA LIVE 95 logo, which animates in over the middle and right; the credits run along the bottom.'),
   },

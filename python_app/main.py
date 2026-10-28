@@ -458,6 +458,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'nhl07-psp':
         import nhl07_art
         return nhl07_art.render_default_images(league, season, out_dir)
+    if game_id == 'nhl05-ps2':
+        import nhl05_art
+        return nhl05_art.render_default_images(league, season, out_dir)
     if game_id == 'iss-snes':
         import iss_art
         return iss_art.render_default_images(league, season, out_dir)

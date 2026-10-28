@@ -131,15 +131,27 @@ def pes_screens():
     return out
 
 
-def nhl07_screens():
-    """[(file name, png, description)] for NHL 07's screen slots, from the
-    library's `screens.SLOTS` and their guides."""
-    from retro_roster_patcher.games.nhl07_psp.screens import SLOTS
+def ea_screens(package):
+    """[(file name, png, description)] for an EA hockey game's screen slots
+    (NHL 07, NHL 2005), from the library's `<package>.screens.SLOTS` and their
+    guides, each named in full in the description."""
+    import importlib
+    SLOTS = importlib.import_module(f'retro_roster_patcher.games.{package}.screens').SLOTS
     return [(f'{s.name}.png', render(s.size[0], s.size[1], [(g.x, g.y, g.w, g.h, g.label) for g in s.guides]),
-             f'The {s.name} picture, {s.size[0]}x{s.size[1]} pixels: {s.description}. A box marked '
-             '"game" is where the game draws over your picture, so keep it plain there. A PNG of '
-             'another size is stretched to this size.')
+             f'The {s.name} picture, {s.size[0]}x{s.size[1]} pixels: {s.description}. Its red boxes '
+             '(numbered, x,y and w x h; one without room for its label shows its number): '
+             + '; '.join(f'{i}. {g.label} ({g.x},{g.y} {g.w}x{g.h})' for i, g in enumerate(s.guides, 1)) + '. '
+             'A box marked "game", or naming what the game draws there, is where the game draws over '
+             'your picture, so keep it plain there. A PNG of another size is stretched to this size.')
             for s in SLOTS]
+
+
+def nhl07_screens():
+    return ea_screens('nhl07_psp')
+
+
+def nhl05_screens():
+    return ea_screens('nhl05_ps2')
 
 
 def snes_screens(package):
@@ -204,6 +216,8 @@ def files_for(game_id, supports_kits):
         files = pes_screens()
     elif game_id == 'nhl07-psp':
         files = nhl07_screens()
+    elif game_id == 'nhl05-ps2':
+        files = nhl05_screens()
     elif game_id in _SNES_PACKAGES:
         files = snes_screens(_SNES_PACKAGES[game_id])
     elif game_id == 'nbalive95-genesis':
@@ -390,5 +404,5 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
 
 if __name__ == '__main__':
     import sys
-    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'iss-snes', 'iss-deluxe-snes', 'nhl94-snes', 'kgj-mlb-snes'):
+    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'nhl05-ps2', 'iss-snes', 'iss-deluxe-snes', 'nhl94-snes', 'kgj-mlb-snes'):
         print(*build(game, sys.argv[1], supports_kits=True))

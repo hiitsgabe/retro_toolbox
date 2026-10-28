@@ -559,13 +559,15 @@ def test_default_images_dispatch_by_game():
     pes.render_default_images = lambda league, season, out: calls.append(('pes', league, season, out)) or {'title': 't'}
     we = types.ModuleType('default_art')
     we.render_default_images = lambda game, league, season, out: calls.append((game, league)) or {'boot': 'b'}
-    nhl, kgj = types.ModuleType('nhl94_art'), types.ModuleType('kgj_art')
+    nhl, kgj, ps2 = types.ModuleType('nhl94_art'), types.ModuleType('kgj_art'), types.ModuleType('nhl05_art')
     nhl.render_default_images = lambda league, season, out: {'menu': 'm'}
     kgj.render_default_images = lambda league, season, out: {'title': 's'}
-    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art', 'nhl94_art', 'kgj_art')}
-    sys.modules.update({'pes_art': pes, 'default_art': we, 'nhl94_art': nhl, 'kgj_art': kgj})
+    ps2.render_default_images = lambda league, season, out: {'legal': 'l'}
+    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art', 'nhl94_art', 'kgj_art', 'nhl05_art')}
+    sys.modules.update({'pes_art': pes, 'default_art': we, 'nhl94_art': nhl, 'kgj_art': kgj, 'nhl05_art': ps2})
     try:
         assert main._render_default_images('nhl94-snes', 'NHL', 2026, '/o') == {'menu': 'm'}
+        assert main._render_default_images('nhl05-ps2', 'NHL', 2026, '/o') == {'legal': 'l'}
         assert main._render_default_images('kgj-mlb-snes', 'MLB', 2026, '/o') == {'title': 's'}
         assert main._render_default_images('pes2013-ps2', 'Liga', 2026, '/o') == {'title': 't'}
         assert main._render_default_images('we2002', 'Liga', 2026, '/o') == {'boot': 'b'}
@@ -931,6 +933,47 @@ def test_nhl94_and_kgj_templates_follow_the_library_slots():
         path, _ = templates.write_zip(tempfile.mkdtemp(), game, files)
         readme = zipfile.ZipFile(path).read('README.txt').decode()
         assert 'inside the red boxes' not in readme and "keep it plain there" in readme  # the game's boxes stay plain
+
+
+def test_nhl_templates_follow_the_library_slots():
+    """NHL 07 and NHL 2005: a template per library slot, at its size, every
+    box named in full in the description (a PS2 label may not fit its box)."""
+    import io
+    import templates
+    from PIL import Image
+    from retro_roster_patcher.games.nhl05_ps2.screens import SLOTS as PS2
+    from retro_roster_patcher.games.nhl07_psp.screens import SLOTS as PSP
+
+    for game, slots in (('nhl07-psp', PSP), ('nhl05-ps2', PS2)):
+        files = templates.files_for(game, False)
+        assert [n for n, _, _ in files] == [f'{s.name}.png' for s in slots], game
+        for (_, png, desc), s in zip(files, slots):
+            im = Image.open(io.BytesIO(png))
+            assert im.size == tuple(s.size) and s.description in desc, (game, s.name)
+            assert all(f'{i}. {g.label} ({g.x},{g.y} {g.w}x{g.h})' in desc for i, g in enumerate(s.guides, 1)), desc
+            g = s.guides[-1]  # the last box's edges are red
+            assert im.getpixel((g.x, g.y)) == templates.RED and im.getpixel((g.x + g.w - 1, g.y + g.h - 1)) == templates.RED, (game, s.name)
+    assert [n for n, _, _ in templates.files_for('nhl05-ps2', False)] == ['boot.png', 'title.png', 'legal.png', 'menu.png']
+
+
+def test_nhl05_art_keeps_the_games_boxes_plain():
+    """Every NHL 2005 slot at the library's size, opaque; the logo and
+    lettering never land in a box the game draws over (the whole-screen box
+    is the picture's own)."""
+    import nhl05_art
+    from PIL import Image, ImageChops
+    from retro_roster_patcher.games.nhl05_ps2.screens import SLOTS
+
+    out = nhl05_art.render_default_images('NHL', 2026, tempfile.mkdtemp())
+    assert sorted(out) == sorted(s.name for s in SLOTS)
+    for s in SLOTS:
+        im = Image.open(out[s.name])
+        assert im.size == tuple(s.size) and im.getchannel('A').getextrema() == (255, 255), s.name
+        marks = ImageChops.difference(nhl05_art.paint(s.name, 2026), nhl05_art.paint(s.name, 2026, marks=False)).convert('L')
+        assert marks.getbbox(), (s.name, 'no logo or lettering')
+        for g in s.guides:
+            if (g.w, g.h) != tuple(s.size):
+                assert not marks.crop((g.x, g.y, g.x + g.w, g.y + g.h)).getbbox(), (s.name, g.label)
 
 
 def test_template_labels_never_overwrite_each_other():

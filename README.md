@@ -54,7 +54,7 @@ How it works:
   team select's first pages under the league's name. You can add any ESPN league yourself (see below).
 - **Teams:** reorder teams into the game's slots, add or remove them, and edit each squad: starters,
   bench, names, numbers, positions, stats and team colours, with player photos and club crests.
-- **Look** (on the games that support it, such as Winning Eleven 2002, PES 2013, ISS, ISS Deluxe, ISS 2000 and NHL 07):
+- **Look** (on the games that support it, such as Winning Eleven 2002, PES 2013, ISS, ISS Deluxe, ISS 2000, NHL 2005 and NHL 07):
   draw each team's logo into the game, blank the slots the league does not fill, and replace the
   title, menu and boot screens with branded art or your own PNG. Template ZIPs show exactly which
   part of each screen the game displays.
@@ -191,6 +191,7 @@ export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
 # bundle, no install-packages permission). flutter run needs --flavor direct too.
 flutter build apk --release --flavor direct        # Android
 flutter build appbundle --release --flavor play    # Android (Play Store)
+# Without --flavor, appbundle builds only "play" (what Expo Launch runs; docs/play-store.md).
 flutter build macos --release      # macOS
 flutter build windows --release    # Windows
 flutter build linux --release      # Linux
