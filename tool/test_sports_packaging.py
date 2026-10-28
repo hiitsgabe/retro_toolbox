@@ -651,8 +651,9 @@ def test_templates_zip_from_stand_in_slots():
     for name in listed[:-1]:
         assert name in readme
     assert '128x128' in readme and '96x128' in readme and 'red lines are guides' in readme
+    assert [n for n, _, _ in templates.files_for('nbalive95-genesis', False)] == ['title.png']
     try:
-        templates.files_for('nbalive95-genesis', False)
+        templates.files_for('nhl94-genesis', False)
         assert False, 'a game without templates must say so'
     except ValueError:
         pass
