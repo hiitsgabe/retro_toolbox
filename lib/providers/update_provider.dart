@@ -1,6 +1,7 @@
 import 'dart:ffi' show Abi;
 import 'dart:io';
 
+import 'package:flutter/services.dart' show appFlavor;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/services/update_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
@@ -30,9 +31,10 @@ final updateProvider = StateNotifierProvider<UpdateNotifier, UpdateState>(
 );
 
 class UpdateNotifier extends StateNotifier<UpdateState> {
-  UpdateNotifier(this._service, {bool? handheld, String? os, Abi? abi})
+  UpdateNotifier(this._service, {bool? handheld, String? os, Abi? abi, String? flavor})
       : handheld = handheld ?? Handheld.current,
         _os = os ?? Platform.operatingSystem,
+        _flavor = flavor ?? appFlavor,
         _assetName = updateAssetName(
           handheld: handheld ?? Handheld.current,
           os: os ?? Platform.operatingSystem,
@@ -52,6 +54,10 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
   final UpdateService _service;
   final bool handheld;
   final String _os;
+
+  /// Build flavor (`--flavor`): the "play" bundle has no permission to install
+  /// APKs, so it links out wherever it was installed from.
+  final String? _flavor;
   final String? _assetName;
   File? _apk;
 
@@ -153,6 +159,7 @@ class UpdateNotifier extends StateNotifier<UpdateState> {
 
   Future<bool> _fromPlay() async {
     if (handheld || _os != 'android') return false;
+    if (_flavor == 'play') return true;
     try {
       return await _service.installerPackage() == playStoreInstaller;
     } catch (_) {

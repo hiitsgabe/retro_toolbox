@@ -14,11 +14,14 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// NDK r28 links native code for 16 KB pages, which Play requires of apps
+// targeting Android 15+. Flutter 3.35's default is still r27 (4 KB).
+val ndk = "28.2.13676358"
+
 android {
     namespace = "name.rafaismy.retrotoolbox"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
-    // ndkVersion = flutter.ndkVersion
+    ndkVersion = ndk
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -46,6 +49,15 @@ android {
         versionName = flutter.versionName
     }
 
+    // "direct": the APK people install themselves; it updates itself from the
+    // release page. "play": the Play Store bundle, which may not install
+    // packages (src/play/AndroidManifest.xml drops that permission).
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("direct") { dimension = "distribution" }
+        create("play") { dimension = "distribution" }
+    }
+
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
@@ -66,6 +78,17 @@ android {
                 println("[Gradle] Using DEBUG signing config for build.")
                 signingConfigs.getByName("debug")
             }
+        }
+    }
+}
+
+// Plugins that compile native code without an ndkVersion of their own (rar's
+// libarchive build) would fall back to AGP's r27 default and ship 4 KB-aligned
+// libs. Give them the app's NDK.
+rootProject.subprojects {
+    if (name != "app") {
+        plugins.withId("com.android.library") {
+            extensions.configure<com.android.build.api.dsl.LibraryExtension> { ndkVersion = ndk }
         }
     }
 }

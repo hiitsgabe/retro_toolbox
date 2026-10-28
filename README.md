@@ -187,7 +187,10 @@ dart run serious_python:main package python_app/ -p Android \
 # macOS only: export the SPM cache key before every build/run
 export SP_NATIVE_SET="$(cat build/.serious_python_spm_key)"
 
-flutter build apk --release        # Android
+# Android has two flavors: "direct" (self-updating APK) and "play" (Play Store
+# bundle, no install-packages permission). flutter run needs --flavor direct too.
+flutter build apk --release --flavor direct        # Android
+flutter build appbundle --release --flavor play    # Android (Play Store)
 flutter build macos --release      # macOS
 flutter build windows --release    # Windows
 flutter build linux --release      # Linux

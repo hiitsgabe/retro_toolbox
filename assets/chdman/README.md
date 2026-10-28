@@ -8,7 +8,7 @@ tool (BSD-3-Clause, redistributable). How it's shipped per platform:
 | macOS    | Homebrew `rom-tools`, committed | `assets/chdman/macos/` |
 | Linux    | built in release CI (`mame-tools`) | `assets/chdman/linux/` |
 | Windows  | built in release CI (Chocolatey `mame`) | `assets/chdman/windows/` |
-| Android  | **drop-in** (see below) | `android/app/src/main/jniLibs/<abi>/libchdman.so` |
+| Android  | `tool/build_chdman_android.sh`, committed | `android/app/src/main/jniLibs/<abi>/libchdman.so` |
 
 ## Desktop layout (macOS / Linux / Windows)
 
@@ -25,9 +25,9 @@ Resolution order on desktop: user-set path → bundled folder → system `PATH`.
 
 Android forbids executing binaries from writable app dirs, so chdman is shipped
 as a **jniLib** named `libchdman.so` and run from the read-only
-`nativeLibraryDir`. See `android/app/src/main/jniLibs/README.md`. Drop a
-position-independent chdman built with the Android NDK for each ABI (the
-[CHDroid](https://github.com/Ottavio97/CHDroid) project has a working recipe).
+`nativeLibraryDir`. See `android/app/src/main/jniLibs/README.md`.
+`tool/build_chdman_android.sh` builds the arm64 binary (Android NDK r28,
+position-independent, 16 KB page alignment as Play requires).
 `ChdService` finds it via the `retrotoolbox/native` method channel.
 
 ## Verifying / updating a binary

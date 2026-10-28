@@ -52,6 +52,14 @@ void main() {
       expect(s.asset?.name, 'retro_toolbox_arm64.apk');
     });
 
+    test('the play flavor links out even when sideloaded', () async {
+      installer = 'com.google.android.packageinstaller';
+      final n = UpdateNotifier(_Fetching(release), handheld: false, os: 'android', abi: Abi.androidArm64, flavor: 'play');
+      await n.check('0.2.8');
+      expect(n.state.phase, UpdatePhase.available);
+      expect(n.state.asset, isNull);
+    });
+
     test('an asset without a checksum is refused', () async {
       installer = null;
       final s = await check(abi: Abi.androidArm);

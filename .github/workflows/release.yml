@@ -187,21 +187,23 @@ jobs:
         run: |
           for os in macos linux windows; do rm -f assets/chdman/$os/*; : > assets/chdman/$os/.gitkeep; done
 
+      # Flavors (android/app/build.gradle.kts): "direct" for the APKs people
+      # install themselves, "play" for the Play Store bundle.
       - name: Build Android APKs (split ABI)
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi --flavor direct
 
       - name: Build Android universal APK
-        run: flutter build apk --release
+        run: flutter build apk --release --flavor direct
 
       - name: Build Android App Bundle
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --flavor play
 
       - name: Rename artifacts
         run: |
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk retro_toolbox_arm64.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk retro_toolbox_arm32.apk
-          cp build/app/outputs/flutter-apk/app-release.apk retro_toolbox_universal.apk
-          cp build/app/outputs/bundle/release/app-release.aab retro_toolbox.aab
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-direct-release.apk retro_toolbox_arm64.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-direct-release.apk retro_toolbox_arm32.apk
+          cp build/app/outputs/flutter-apk/app-direct-release.apk retro_toolbox_universal.apk
+          cp build/app/outputs/bundle/playRelease/app-play-release.aab retro_toolbox.aab
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
