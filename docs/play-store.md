@@ -9,9 +9,11 @@ anyway).
 
 ## Before the first upload
 
-- **Play App Signing.** Upload the `.aab` and let Play re-sign it. The CI
-  keystore (`KEYSTORE64` secret) becomes the *upload* key: keep it, losing it
-  means a key-reset request through Play support.
+- **Play App Signing.** Upload the `.aab` and let Play re-sign it. Whatever
+  signed the first upload becomes the *upload* key: the Expo-generated keystore
+  on the Launch route, the CI keystore (`KEYSTORE64` secret) if the workflow's
+  bundle is uploaded. Keep it; losing it means a key-reset request through Play
+  support.
 - **Target API.** The app targets 36 (`flutter.targetSdkVersion`), which meets
   the current requirement.
 - **16 KB page size.** Required for apps targeting Android 15+. Every
@@ -72,3 +74,38 @@ asks for a purpose and a video per type.
   and whatever catalog sources the user adds; it sends no user data to the
   developer.
 - Store listing assets: icon (512 px), feature graphic, screenshots.
+
+## Building on Expo Launch
+
+Launch runs a bare `flutter build appbundle --release` on the repo: no
+`--flavor`, no staging step for the Python app, no files it could write into the
+checkout. `android/app/build.gradle.kts` covers that: a flavorless
+`bundleRelease` builds only the `play` flavor and mirrors the result into
+`bundle/release/` (where the Flutter tool looks when no flavor was given), and
+Gradle stages the Python app and site-packages itself when the directories named
+by the two `SERIOUS_PYTHON_*` variables are not there yet. The build takes its
+settings from the project's EAS environment variables (expo.dev → project →
+Environment variables, environment `production`):
+
+| Variable | Value | Why |
+|----------|-------|-----|
+| `EAS_DANGEROUS_OVERRIDE_ANDROID_APPLICATION_ID` | `name.rafaismy.retrotoolbox` | eas-cli cannot read the applicationId from a Kotlin DSL script with flavors |
+| `EAS_BUILD_DISABLE_MAVEN_CACHE` | `1` | EAS's Maven cache is injected through a Gradle init script that Flutter's Gradle plugin rejects (`FAIL_ON_PROJECT_REPOS`, flutter/flutter#174035) |
+| `SERIOUS_PYTHON_APP` | `/home/expo/workingdir/build/build/serious_python_app` | where Gradle stages the Python app; absolute, under the worker's checkout (`/home/expo/workingdir/build`) |
+| `SERIOUS_PYTHON_SITE_PACKAGES` | `/home/expo/workingdir/build/build/site-packages` | same, for the pip-installed packages |
+| `KEY_STORE_PATH` (file), `KEY_STORE_PASSWORD` and `KEY_PASSWORD` (secret), `KEY_ALIAS` | the keystore Expo generated for the project, downloadable from its credentials page as `keystore.jks` plus a `credentials.json` holding `keystorePassword`, `keyPassword` and `keyAlias` | release signing unless Launch injects its own; `KEY_STORE_PASSWORD` only because that keystore's store and key passwords differ. Unsigned, the bundle is debug-signed and Play refuses it |
+
+How Launch itself signs a Flutter project is not documented; the three signing
+variables make the build independent of it. The Gradle log says which config
+was used (`[Gradle] Using RELEASE signing config for build.`).
+
+Differences from the workflow's `retro_toolbox.aab`: no bundled example catalog
+(`EXAMPLE_DATA_URL` is only read by the workflow) and the desktop chdman assets
+(about 5 MB) are not trimmed. `versionCode` comes from the pubspec build number
+as it is in the repo: bump `version:` before each Launch build (the release
+workflow bumps and commits it on its own).
+
+The same build runs locally, for checking:
+
+    SERIOUS_PYTHON_APP=$PWD/build/launch/app SERIOUS_PYTHON_SITE_PACKAGES=$PWD/build/launch/site-packages \
+      flutter build appbundle --release
