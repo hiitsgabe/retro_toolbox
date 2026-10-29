@@ -56,16 +56,13 @@ next to the source file.
 
 ### Foreground services
 
-Declared types (`android/app/src/main/AndroidManifest.xml`): `dataSync` on the
-download and task services, plus `remoteMessaging` on the task service. Play
-asks for a purpose and a video per type.
+Declared type (`android/app/src/main/AndroidManifest.xml`): `dataSync`, on the
+download service and the task service (extractions, conversions, the local
+servers). Play asks for a purpose and a short video.
 
-- `dataSync`: downloads, extractions and conversions keep running with a
-  progress notification while the app is in the background.
-- `remoteMessaging` is meant for apps that relay text messages between
-  devices. If nothing in the app needs it, drop it from the service and the
-  `FOREGROUND_SERVICE_REMOTE_MESSAGING` permission before submitting; Play
-  reviews each type and this one is a likely rejection.
+- `dataSync`: downloads, extractions, conversions and file transfers through
+  the app's local servers keep running with a progress notification while the
+  app is in the background.
 
 ## Also required for the listing
 
