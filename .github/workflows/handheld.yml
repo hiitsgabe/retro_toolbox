@@ -76,7 +76,7 @@ jobs:
         run: flutter pub get
 
       - name: Package Python app
-        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.9.2"
+        run: dart run serious_python:main package python_app/ -p Linux -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.9.3"
 
       - name: Verify Python bundle
         run: |
