@@ -136,4 +136,7 @@ The job writes `package.json`, `app.json` and `eas.json` before the upload
 instead of committing them: eas-cli needs them to find the EAS project, and
 Launch expects a plain Flutter checkout. `eas.json` keeps the version code on
 EAS (`appVersionSource: remote`, `autoIncrement`), so Launch runs and these
-runs share one counter. The track is set there too.
+runs share one counter. The track is set there too, and so is the build image:
+`latest`, as Launch's runs use. Without it EAS picks the default for a project
+with no Expo SDK, an old image with Node 18 and Java 11, where `launching
+android:config` fails (`util.styleText` is newer than Node 18).

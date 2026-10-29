@@ -794,7 +794,7 @@ jobs:
           cat > eas.json <<'JSON'
           {
             "cli": { "appVersionSource": "remote" },
-            "build": { "production": { "autoIncrement": true } },
+            "build": { "production": { "autoIncrement": true, "android": { "image": "latest" } } },
             "submit": { "production": { "android": { "track": "alpha" } } }
           }
           JSON
