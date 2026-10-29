@@ -102,9 +102,12 @@ was used (`[Gradle] Using RELEASE signing config for build.`).
 
 Differences from the workflow's `retro_toolbox.aab`: no bundled example catalog
 (`EXAMPLE_DATA_URL` is only read by the workflow) and the desktop chdman assets
-(about 5 MB) are not trimmed. `versionCode` comes from the pubspec build number
-as it is in the repo: bump `version:` before each Launch build (the release
-workflow bumps and commits it on its own).
+(about 5 MB) are not trimmed. `versionCode` is EAS's remote build number
+(Launch's `eas/configure_android_version` step overrides it; it went 3, 4, …
+on its own), and `versionName` is the pubspec version, which Launch passes as
+`--build-name`. Launch also injects the keystore it generated (as
+`credentials.json` plus a Groovy script applied after this one), so on Launch
+the three signing variables above are only a fallback.
 
 The same build runs locally, for checking:
 
