@@ -51,9 +51,7 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
       for (final e in raw == null ? const [] : jsonDecode(raw) as List) {
         final id = e['id'] as String;
         if (!mounted || state.tasks.any((t) => t.id == id)) continue;
-        final params = Map<String, dynamic>.from(e['params'] as Map);
-        _ref.read(gameStateManagerProvider.notifier).registerTransientGame(Game.fromJson(Map<String, dynamic>.from(params['game'] as Map)));
-        enqueue(id, TaskType.download, params);
+        enqueue(id, TaskType.download, Map<String, dynamic>.from(e['params'] as Map));
       }
     } catch (e) {
       debugPrint('Could not restore queued downloads: $e');
@@ -75,6 +73,10 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
     state = state.copyWith(tasks: updatedTasks);
 
     final gameStateManager = _ref.read(gameStateManagerProvider.notifier);
+    // The task manager lists game states, and only the loaded catalog's games
+    // have one. A download of any other game (the sport patcher's library
+    // match, a queue restored after a restart) gets its row here.
+    if (type == TaskType.download) gameStateManager.registerTransientGame(Game.fromJson(Map<String, dynamic>.from(params['game'] as Map)));
     gameStateManager.updateQueueState(taskId, type);
 
     _startTimerIfNeeded();

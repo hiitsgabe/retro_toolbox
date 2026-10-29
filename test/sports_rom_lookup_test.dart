@@ -15,8 +15,10 @@ import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
@@ -427,6 +429,21 @@ void main() {
       // Off the ROM step at once: the rosters step is showing.
       expect(ft.find.text('Use downloaded file'), findsNothing);
       expect(ft.find.text('Pick your options, then Next downloads the league data.'), findsOneWidget);
+    });
+
+    testWidgets('a download queued before shows as in progress, with no second Download', (t) async {
+      // Queued from the wizard, then the wizard was left and reopened: the
+      // task list has the row, and the downloader has not started it yet
+      // (other downloads first), so the file and the progress are both absent.
+      const game = Game(title: 'Winning Eleven 2002 (Japan)', url: 'https://x/Winning Eleven 2002 (Japan).zip', size: 500000000, consoleId: 'psx');
+      await pump(t, catalog: [game]);
+      ProviderScope.containerOf(t.element(ft.find.byType(SportPatcherWizardScreen))).read(gameStateManagerProvider.notifier)
+        ..registerTransientGame(game)
+        ..updateQueueState(game.gameId, TaskType.download);
+      await settleLookup(t);
+      expect(ft.find.byKey(const ValueKey('rom-catalog-card')), findsOneWidget);
+      expect(ft.find.text('Starting download…'), findsOneWidget);
+      expect(ft.find.text('Download (500 MB)'), findsNothing);
     });
   });
 }

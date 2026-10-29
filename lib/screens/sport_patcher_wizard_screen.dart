@@ -12,6 +12,7 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
@@ -22,6 +23,7 @@ import 'package:retro_toolbox/widgets/game_trivia.dart';
 import 'package:retro_toolbox/widgets/kit_picker.dart' show saveTemplateZip;
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/services/boxart_service.dart';
 import 'package:retro_toolbox/utils/rom_search.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -1736,10 +1738,20 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final dl = ref.watch(downloadProvider);
     final status = dl.taskStatus[m.game.gameId];
     final prog = dl.taskProgress[m.game.gameId]?.progress;
+    // The task manager's row covers what the downloader does not see yet or
+    // any more: waiting behind other downloads, paused, or being auto-extracted
+    // (the archive is on disk, but not the file to patch).
+    final row = ref.watch(gameStateManagerProvider.select((s) => s[m.game.gameId]?.status));
+    final busy = const {GameStatus.downloadQueued, GameStatus.downloadPaused, GameStatus.extractionQueued, GameStatus.extracting}.contains(row);
     // Status wins over a file-exists check: the download writes into the target
     // path, so the file can be present-but-partial mid-download.
-    final downloading = status == TaskStatus.running || status == TaskStatus.enqueued || (prog != null && prog > 0 && prog < 1);
+    final downloading = busy || status == TaskStatus.running || status == TaskStatus.enqueued || (prog != null && prog > 0 && prog < 1);
     final downloaded = downloading ? null : _downloadedPath;
+    final note = switch (row) {
+      GameStatus.downloadPaused => 'Paused (resume it from the task list)',
+      GameStatus.extractionQueued || GameStatus.extracting => 'Extracting…',
+      _ => prog != null && prog > 0 ? 'Downloading ${(prog * 100).round()}%' : 'Starting download…',
+    };
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -1780,12 +1792,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        LinearProgressIndicator(value: (prog != null && prog > 0) ? prog : null),
+                        LinearProgressIndicator(value: (prog != null && prog > 0 && prog < 1) ? prog : null),
                         const SizedBox(height: 4),
-                        Text(
-                          prog != null && prog > 0 ? 'Downloading ${(prog * 100).round()}%' : 'Starting download…',
-                          style: theme.textTheme.bodySmall,
-                        ),
+                        Text(note, style: theme.textTheme.bodySmall),
                       ],
                     )
                   else
