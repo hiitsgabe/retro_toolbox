@@ -20,7 +20,12 @@ class WorkerLine {
 /// Parses one line of the worker's progress protocol (`PROGRESS:<int>` / `DONE`
 /// / `ERROR:<msg>`). Pure and self-contained so it can be unit-tested without
 /// the embedded interpreter.
-WorkerLine parseWorkerLine(String line) {
+///
+/// The worker appends in Python's text mode, which on Windows ends every line
+/// with CRLF: the `\r` left after splitting on `\n` made `DONE` unrecognisable
+/// there, so Sports spun forever. Trailing whitespace is never part of a signal.
+WorkerLine parseWorkerLine(String rawLine) {
+  final line = rawLine.trimRight();
   if (line.startsWith('PROGRESS:')) {
     return WorkerLine(WorkerSignal.progress, progress: (int.tryParse(line.substring(9)) ?? 0) / 100.0);
   }

@@ -18,6 +18,14 @@ void main() {
       expect(r.progress, 1.0);
     });
 
+    test('a CRLF line, as Python writes on Windows, still parses', () {
+      expect(parseWorkerLine('DONE\r').signal, WorkerSignal.done);
+      expect(parseWorkerLine('PROGRESS:42\r').progress, closeTo(0.42, 1e-9));
+      final r = parseWorkerLine('ERROR:boom\r');
+      expect(r.signal, WorkerSignal.error);
+      expect(r.message, 'boom');
+    });
+
     test('ERROR carries the message', () {
       final r = parseWorkerLine('ERROR:ApiError: upstream down');
       expect(r.signal, WorkerSignal.error);
