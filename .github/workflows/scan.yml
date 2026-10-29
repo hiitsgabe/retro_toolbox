@@ -1,0 +1,115 @@
+name: Malware scan
+
+# Scans what people actually download, the published release assets, with
+# ClamAV (and with VirusTotal when a VT_API_KEY secret is set). Runs after
+# every "Build and Release" on main, and by hand for any tag. The badge in the
+# README shows the latest run.
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to scan (empty = the latest release)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    # A failed build published nothing: there is nothing to scan, and the badge
+    # keeps the last result.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Scanning release $TAG"
+
+      - name: Download the release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download "${{ steps.rel.outputs.tag }}" --repo "$GITHUB_REPOSITORY" -D dist
+          ls -la dist
+
+      # Archives are opened so the executables inside (the Windows exe and
+      # DLLs, the Python runtime, the native plugins) are scanned as files.
+      - name: Unpack the archives
+        run: |
+          sudo apt-get install -y -qq p7zip-full >/dev/null
+          mkdir -p unpacked
+          for f in dist/*; do
+            name=$(basename "$f")
+            case "$name" in
+              *.apk|*.aab|*.zip) unzip -q -o "$f" -d "unpacked/$name" ;;
+              *.tar.gz) mkdir -p "unpacked/$name" && tar -xzf "$f" -C "unpacked/$name" ;;
+              *.dmg) 7z x -y -o"unpacked/$name" "$f" >/dev/null || echo "::warning::$name: could not open the DMG, its image is scanned as one file" ;;
+            esac
+          done
+          du -sh unpacked
+
+      - name: Install ClamAV and today's signatures
+        run: |
+          sudo apt-get install -y -qq clamav >/dev/null
+          sudo systemctl stop clamav-freshclam 2>/dev/null || true
+          sudo freshclam --quiet || sudo freshclam
+          clamscan --version
+
+      # clamscan exits 1 when something is found and 2 on an error; either
+      # fails this job, so the badge only says "passing" for a clean release.
+      - name: ClamAV
+        run: |
+          set +e
+          clamscan -r --infected --stdout --max-filesize=1000M --max-scansize=4000M --alert-exceeds-max=no dist unpacked | tee clamav.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "## ClamAV, release ${{ steps.rel.outputs.tag }}"
+            echo
+            echo '```'
+            grep -E "Engine version|Known viruses|Scanned files|Infected files|Data scanned|FOUND" clamav.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: VirusTotal key present?
+        id: vt
+        env:
+          VT_API_KEY: ${{ secrets.VT_API_KEY }}
+        run: echo "present=$([ -n "$VT_API_KEY" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: VirusTotal
+        if: steps.vt.outputs.present == 'true'
+        id: vtscan
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          request_rate: 4
+          files: |
+            dist/*.apk
+            dist/*.aab
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.dmg
+
+      - name: VirusTotal links
+        if: steps.vt.outputs.present == 'true'
+        run: |
+          {
+            echo "## VirusTotal"
+            echo
+            echo "${{ steps.vtscan.outputs.analysis }}" | tr ',' '\n' | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -3,6 +3,7 @@
 <div align="center">
   <img src="branding/banner.png" alt="Retro Toolbox" width="720"/>
   <p><a href="https://hiitsgabe.github.io/retro_toolbox/"><strong>Visit the website</strong></a> · <a href="https://github.com/hiitsgabe/retro_toolbox/releases/latest"><strong>Download</strong></a></p>
+  <p><a href="https://github.com/hiitsgabe/retro_toolbox/actions/workflows/scan.yml"><img src="https://github.com/hiitsgabe/retro_toolbox/actions/workflows/scan.yml/badge.svg" alt="Malware scan of the release downloads"/></a></p>
 </div>
 
 <br>
