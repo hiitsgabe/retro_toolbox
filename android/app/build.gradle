@@ -1,11 +1,12 @@
+// Groovy on purpose: Expo Launch's build steps append Groovy `apply from:` lines
+// to this file (credentials, version), which a Kotlin DSL script cannot parse.
 import java.util.Properties
-import java.io.FileInputStream
 
 plugins {
-    id("com.android.application")
-    id("kotlin-android")
+    id "com.android.application"
+    id "kotlin-android"
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
-    id("dev.flutter.flutter-gradle-plugin")
+    id "dev.flutter.flutter-gradle-plugin"
 }
 
 // Release signing: android/key.properties (the release workflow writes it from
@@ -15,20 +16,23 @@ plugins {
 // (Expo Launch: KEY_STORE_PATH as a file variable). KEY_STORE_PASSWORD is only
 // needed when the store and key passwords differ, as they do in the keystore
 // Expo generates. Neither source: debug signing.
-val keystoreProperties = Properties()
-rootProject.file("key.properties").takeIf { it.exists() }?.let { keystoreProperties.load(FileInputStream(it)) }
-val env = System.getenv()
-val releaseStoreFile = (keystoreProperties.getProperty("storeFile") ?: env["KEY_STORE_PATH"])?.let { rootProject.file(it) }
-val releaseStorePassword = keystoreProperties.getProperty("storePassword")
-    ?: keystoreProperties.getProperty("password") ?: env["KEY_STORE_PASSWORD"] ?: env["KEY_PASSWORD"]
-val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")
-    ?: keystoreProperties.getProperty("password") ?: env["KEY_PASSWORD"] ?: releaseStorePassword
-val releaseKeyAlias = keystoreProperties.getProperty("keyAlias") ?: env["KEY_ALIAS"]
-val releaseSigning = releaseStoreFile != null && releaseStorePassword != null && releaseKeyAlias != null
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def env = System.getenv()
+def releaseStoreFile = (keystoreProperties.getProperty("storeFile") ?: env["KEY_STORE_PATH"])?.with { rootProject.file(it) }
+def releaseStorePassword = (keystoreProperties.getProperty("storePassword") ?: keystoreProperties.getProperty("password")
+    ?: env["KEY_STORE_PASSWORD"] ?: env["KEY_PASSWORD"])
+def releaseKeyPassword = (keystoreProperties.getProperty("keyPassword") ?: keystoreProperties.getProperty("password")
+    ?: env["KEY_PASSWORD"] ?: releaseStorePassword)
+def releaseKeyAlias = keystoreProperties.getProperty("keyAlias") ?: env["KEY_ALIAS"]
+def releaseSigning = releaseStoreFile != null && releaseStorePassword != null && releaseKeyAlias != null
 
 // NDK r28 links native code for 16 KB pages, which Play requires of apps
 // targeting Android 15+. Flutter 3.35's default is still r27 (4 KB).
-val ndk = "28.2.13676358"
+def ndk = "28.2.13676358"
 
 android {
     namespace = "name.rafaismy.retrotoolbox"
@@ -64,14 +68,14 @@ android {
     // "direct": the APK people install themselves; it updates itself from the
     // release page. "play": the Play Store bundle, which may not install
     // packages (src/play/AndroidManifest.xml drops that permission).
-    flavorDimensions += "distribution"
+    flavorDimensions.add("distribution")
     productFlavors {
-        create("direct") { dimension = "distribution" }
-        create("play") { dimension = "distribution" }
+        direct { dimension = "distribution" }
+        play { dimension = "distribution" }
     }
 
     signingConfigs {
-        create("release") {
+        release {
             if (releaseSigning) {
                 storeFile = releaseStoreFile
                 storePassword = releaseStorePassword
@@ -83,12 +87,12 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (releaseSigning) {
+            if (releaseSigning) {
                 println("[Gradle] Using RELEASE signing config for build.")
-                signingConfigs.getByName("release")
+                signingConfig = signingConfigs.release
             } else {
                 println("[Gradle] Using DEBUG signing config for build.")
-                signingConfigs.getByName("debug")
+                signingConfig = signingConfigs.debug
             }
         }
     }
@@ -98,14 +102,16 @@ android {
 // flavorless `bundleRelease`. Treat that as "the Play bundle": leave the direct
 // flavor out, and mirror the result into bundle/release/, the only place the
 // Flutter tool looks for an .aab when it was given no --flavor.
-val bareBundle = gradle.startParameter.taskNames.any { it.substringAfterLast(':') == "bundleRelease" }
+def bareBundle = gradle.startParameter.taskNames.any { it.substring(it.lastIndexOf(':') + 1) == "bundleRelease" }
 androidComponents {
-    beforeVariants(selector().withFlavor("distribution", "direct")) { if (bareBundle) it.enable = false }
+    beforeVariants(selector().withFlavor("distribution", "direct")) { variantBuilder ->
+        if (bareBundle) variantBuilder.enable = false
+    }
 }
 tasks.named { it == "bundlePlayRelease" }.configureEach {
     doLast {
         copy {
-            from(layout.buildDirectory.dir("outputs/bundle/playRelease")) { include("*.aab") }
+            from(layout.buildDirectory.dir("outputs/bundle/playRelease")) { include "*.aab" }
             into(layout.buildDirectory.dir("outputs/bundle/release"))
             rename { "app-release.aab" }
         }
@@ -118,30 +124,28 @@ tasks.named { it == "bundlePlayRelease" }.configureEach {
 // Launch — sets SERIOUS_PYTHON_APP and SERIOUS_PYTHON_SITE_PACKAGES but stages
 // nothing, so do it from here, before serious_python_android packs those
 // directories into the app.
-val pythonAppDir = env["SERIOUS_PYTHON_APP"]
-val stagePython = tasks.register<Exec>("stagePython") {
-    onlyIf { pythonAppDir != null && !File(pythonAppDir, "main.py").exists() }
-    val flutterSdk = Properties().apply {
-        rootProject.file("local.properties").inputStream().use { load(it) }
-    }.getProperty("flutter.sdk")
+def pythonAppDir = env["SERIOUS_PYTHON_APP"]
+def stagePython = tasks.register("stagePython", Exec) {
+    onlyIf { pythonAppDir != null && !new File(pythonAppDir, "main.py").exists() }
+    def localProperties = new Properties()
+    rootProject.file("local.properties").withInputStream { localProperties.load(it) }
+    def flutterSdk = localProperties.getProperty("flutter.sdk")
     workingDir = rootProject.projectDir.parentFile
-    commandLine(
-        "$flutterSdk/bin/dart", "run", "serious_python:main", "package", "python_app/", "-p", "Android",
-        "-r", "zstandard", "-r", "pycryptodome", "-r", "retro-roster-patcher[images]>=0.8.0",
-    )
+    commandLine("$flutterSdk/bin/dart", "run", "serious_python:main", "package", "python_app/", "-p", "Android",
+        "-r", "zstandard", "-r", "pycryptodome", "-r", "retro-roster-patcher[images]>=0.8.0")
 }
 
-rootProject.subprojects {
-    if (name != "app") {
+rootProject.subprojects { sub ->
+    if (sub.name != "app") {
         // Plugins that compile native code without an ndkVersion of their own
         // (rar's libarchive build) would fall back to AGP's r27 default and ship
         // 4 KB-aligned libs. Give them the app's NDK.
-        plugins.withId("com.android.library") {
-            extensions.configure<com.android.build.api.dsl.LibraryExtension> { ndkVersion = ndk }
+        sub.plugins.withId("com.android.library") {
+            sub.extensions.getByName("android").ndkVersion = ndk
         }
     }
-    if (name == "serious_python_android") {
-        tasks.named { it == "packageApp" || it.startsWith("splitSitePackages_") || it.startsWith("copyOpt_") }
+    if (sub.name == "serious_python_android") {
+        sub.tasks.named { it == "packageApp" || it.startsWith("splitSitePackages_") || it.startsWith("copyOpt_") }
             .configureEach { dependsOn(stagePython) }
     }
 }

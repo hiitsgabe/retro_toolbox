@@ -19,7 +19,7 @@ anyway).
 - **16 KB page size.** Required for apps targeting Android 15+. Every
   `lib/<abi>/*.so` in the bundle must be linked with 16 KB page alignment.
   All of them are: Flutter, the Python runtime and the `rar` plugin are built
-  with NDK r28 (see `ndk` in `android/app/build.gradle.kts`), and the bundled
+  with NDK r28 (see `ndk` in `android/app/build.gradle`), and the bundled
   chdman (`android/app/src/main/jniLibs/arm64-v8a/libchdman.so`) is built by
   `tool/build_chdman_android.sh` with the same NDK (every PT_LOAD segment
   aligned to 0x4000). Check a built bundle with Android's
@@ -79,7 +79,8 @@ asks for a purpose and a video per type.
 
 Launch runs a bare `flutter build appbundle --release` on the repo: no
 `--flavor`, no staging step for the Python app, no files it could write into the
-checkout. `android/app/build.gradle.kts` covers that: a flavorless
+checkout. `android/app/build.gradle` (Groovy: Launch's steps append Groovy
+`apply from:` lines to it, which a Kotlin DSL script cannot parse) covers that: a flavorless
 `bundleRelease` builds only the `play` flavor and mirrors the result into
 `bundle/release/` (where the Flutter tool looks when no flavor was given), and
 Gradle stages the Python app and site-packages itself when the directories named
