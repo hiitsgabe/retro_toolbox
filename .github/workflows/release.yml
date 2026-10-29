@@ -751,3 +751,51 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Google Play: starts .eas/workflows/play-store.yml on EAS (the build Expo
+  # Launch runs, then EAS Submit) for the tagged version and returns without
+  # waiting; the run shows up under the project's Workflows on expo.dev.
+  # Skipped until the EXPO_TOKEN secret exists. package.json, app.json and
+  # eas.json are written here, not committed: eas-cli needs them to find the
+  # EAS project, and Launch expects a plain Flutter checkout.
+  play-store:
+    needs: [resolve-version, release]
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
+
+      - name: Start the EAS workflow
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Upload the checkout as it is, generated files included (the git
+          # mode uploads committed files only).
+          EAS_NO_VCS: '1'
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::notice::EXPO_TOKEN is not set; skipping the Google Play build."
+            exit 0
+          fi
+          echo '{ "name": "retro_toolbox", "private": true }' > package.json
+          cat > app.json <<'JSON'
+          {
+            "expo": {
+              "name": "Retro Toolbox",
+              "slug": "retro_toolbox",
+              "owner": "gabrielmoterani",
+              "android": { "package": "name.rafaismy.retrotoolbox" },
+              "extra": { "eas": { "projectId": "3680a4df-737f-40dc-8f78-68dbe59a7147" } }
+            }
+          }
+          JSON
+          cat > eas.json <<'JSON'
+          {
+            "cli": { "appVersionSource": "remote" },
+            "build": { "production": { "autoIncrement": true } },
+            "submit": { "production": { "android": { "track": "alpha" } } }
+          }
+          JSON
+          npx -y eas-cli@latest workflow:run .eas/workflows/play-store.yml --non-interactive

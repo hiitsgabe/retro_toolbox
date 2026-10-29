@@ -1,0 +1,51 @@
+# Google Play build, started by the play-store job in Build and Release
+# (`eas workflow:run`). The build job repeats what Expo Launch runs for this
+# project (expo.dev shows Launch's workflow file on each of its runs); only
+# the Flutter build name is read from pubspec.yaml instead of being fixed.
+# Launch's own submit step asks Launch's API for a Google token and only works
+# inside a Launch run, so the bundle goes to Play through EAS Submit, with the
+# Google service account key assigned to the app on expo.dev.
+name: Play Store
+
+jobs:
+  build:
+    type: build
+    params:
+      platform: android
+      profile: production
+    env:
+      EAS_NO_VCS: '1'
+      FVM_USE_GIT_CACHE: 'false'
+    steps:
+      - uses: eas/checkout
+      - name: Install Launch tools
+        run: bun add --global eas-cli @expo/launching@0.0.0-20261020-5bd8ae61
+      - name: Install Flutter SDK
+        run: |-
+          BUILD_NAME=$(sed -n 's/^version: *\([^+]*\).*/\1/p' pubspec.yaml)
+          set-env FLUTTER_BUILD_NAME "$BUILD_NAME"
+          launching flutter:version --dart ">=3.0.0 <4.0.0" --flutter ">=3.35.7" --init > /dev/null
+          set-env FVM_INSTALL_DIR "$HOME/.fvm" && export FVM_INSTALL_DIR="$HOME/.fvm"
+          set-env PATH "$FVM_INSTALL_DIR/bin:$PATH" && export PATH="$FVM_INSTALL_DIR/bin:$PATH"
+          curl -fsSL https://fvm.app/install.sh | bash -s -- 4.0.5
+          fvm flutter --disable-analytics || true
+          fvm dart --disable-analytics || true
+      - name: Configure Android project
+        run: launching android:config --app-name "Retro Toolbox" --bundle-id "name.rafaismy.retrotoolbox" --build-name "$FLUTTER_BUILD_NAME"
+      - uses: eas/resolve_build_config
+      - uses: eas/inject_android_credentials
+      - uses: eas/configure_android_version
+      - name: Build Android app
+        run: fvm flutter build appbundle --release --build-name "$FLUTTER_BUILD_NAME" --build-number "${ eas.metadata.appBuildVersion }"
+      # One file: the Gradle build also leaves a copy under bundle/playRelease/.
+      - uses: eas/upload_artifact
+        with:
+          type: application-archive
+          key: flutter-app
+          path: build/app/outputs/bundle/release/app-release.aab
+
+  submit:
+    type: submit
+    needs: [build]
+    params:
+      build_id: ${{ needs.build.outputs.build_id }}

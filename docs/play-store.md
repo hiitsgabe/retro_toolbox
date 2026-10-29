@@ -110,3 +110,30 @@ The same build runs locally, for checking:
 
     SERIOUS_PYTHON_APP=$PWD/build/launch/app SERIOUS_PYTHON_SITE_PACKAGES=$PWD/build/launch/site-packages \
       flutter build appbundle --release
+
+## Automatic builds from Build and Release
+
+After a release, the `play-store` job in `.github/workflows/release.yml` starts
+`.eas/workflows/play-store.yml` on EAS for the new tag and returns without
+waiting (the run is listed under the project's Workflows on expo.dev). That
+workflow builds the bundle the way Launch does (same steps, the same EAS
+environment variables and the keystore Expo generated) and hands it to EAS
+Submit, which uploads it to the closed testing track (`alpha`); Play sends it
+for review on its own.
+
+Launch's own submit step cannot be reused: it gets its Google token from
+Launch's API for the Launch run in progress. EAS Submit needs, once:
+
+- **`EXPO_TOKEN`**: a token from expo.dev → Account settings → Access tokens,
+  saved as a repository secret. Without it the job only logs a notice.
+- **A Google service account key** for EAS Submit: create one
+  (<https://expo.fyi/creating-google-service-account>), invite its e-mail in
+  Play Console → Users and permissions with release rights for this app, and
+  add the JSON in expo.dev → project → Credentials → Android →
+  `name.rafaismy.retrotoolbox` → Service credentials.
+
+The job writes `package.json`, `app.json` and `eas.json` before the upload
+instead of committing them: eas-cli needs them to find the EAS project, and
+Launch expects a plain Flutter checkout. `eas.json` keeps the version code on
+EAS (`appVersionSource: remote`, `autoIncrement`), so Launch runs and these
+runs share one counter. The track is set there too.
