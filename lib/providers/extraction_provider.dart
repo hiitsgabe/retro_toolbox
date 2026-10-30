@@ -62,7 +62,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         ? path.join(path.dirname(filePath), path.basenameWithoutExtension(filePath))
         : path.dirname(filePath);
 
-    if (!DirectoryService.isCompressedFile(filePath)) {
+    if (!DirectoryService.isCompressedFile(filePath) && ArchiveExtractService.archiveKind(filePath) != ArchiveKind.rar) {
       debugPrint('File is not compressed: $filePath');
       return;
     }
@@ -268,7 +268,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         onProgress: (id, progress) {
           if (!cancel.isCompleted) _updateProgress(id, progress);
         },
-        onComplete: (_, __) => done(),
+        onComplete: (_, __, ___) => done(),
         onError: (_, error, __) => failed(error),
         cancelled: cancel.future,
       );
@@ -418,7 +418,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, progress);
   }
 
-  void _updateCompleted(String taskId, String extractionDir) async {
+  void _updateCompleted(String taskId, String extractionDir, List<String> files) async {
     debugPrint('Marking task $taskId as completed');
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     final currentTask = tasks[taskId];

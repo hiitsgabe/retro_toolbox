@@ -11,12 +11,12 @@ void main() {
   setUp(() => dir = Directory.systemTemp.createTempSync('rt_extract'));
   tearDown(() => dir.deleteSync(recursive: true));
 
-  Future<void> extract(String zip, String into, List<String> allowed) {
-    final done = Completer<void>();
+  Future<List<String>> extract(String zip, String into, List<String> allowed) {
+    final done = Completer<List<String>>();
     ExtractionService.extractInIsolate('t', zip, into,
         allowedExtensions: allowed,
         onProgress: (_, __) {},
-        onComplete: (_, __) => done.complete(),
+        onComplete: (_, __, files) => done.complete(files),
         onError: (_, e, __) => done.completeError(e));
     return done.future;
   }
@@ -59,5 +59,17 @@ void main() {
     expect(File(p.join(dir.path, 'Disc', 'game.bin')).existsSync(), true);
     expect(File(p.join(dir.path, 'Disc', 'keep.cue')).readAsStringSync(), 'mine');
     expect(File(p.join(dir.path, 'game.m3u')).existsSync(), true);
+  });
+
+  test('complete reports only this archive\'s files', () async {
+    // Another game already extracted into the same console folder.
+    File(p.join(dir.path, 'other.cue')).writeAsStringSync('c');
+    File(p.join(dir.path, 'other.bin')).writeAsStringSync('b');
+    final zip = p.join(dir.path, 'game.zip');
+    writeZip(zip, {'game.cue': 'c', 'game.bin': 'b', 'readme.txt': 'x'});
+
+    final files = await extract(zip, dir.path, ['.cue', '.bin']);
+
+    expect(files.toSet(), {p.join(dir.path, 'game.cue'), p.join(dir.path, 'game.bin')});
   });
 }

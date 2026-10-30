@@ -7,6 +7,8 @@ import 'package:archive/archive_io.dart' as virtual_archive;
 import 'package:flutter_archive/flutter_archive.dart';
 import 'dart:async';
 
+import 'package:retro_toolbox/services/archive_extract_service.dart';
+
 class ExtractionService {
   static const String progressDataType = 'extraction_progress';
   static const String errorDataType = 'extraction_error';
@@ -14,7 +16,7 @@ class ExtractionService {
   static final Set<String> _activeTasks = {};
   static final Map<String, Function(String taskId, double progress)> _onProgressCallbacks = {};
   static final Map<String, Function(String taskId, String error, String extractionDir)> _onErrorCallbacks = {};
-  static final Map<String, Function(String taskId, String extractionDir)> _onCompleteCallbacks = {};
+  static final Map<String, Function(String taskId, String extractionDir, List<String> files)> _onCompleteCallbacks = {};
   static Timer? _serviceStopTimer;
 
   static Future<void> initialize() async {
@@ -81,7 +83,7 @@ class ExtractionService {
           }
           break;
         case ExtractionService.completionDataType:
-          _onCompleteCallbacks[taskId]?.call(taskId, extractionDir);
+          _onCompleteCallbacks[taskId]?.call(taskId, extractionDir, (data['files'] as List?)?.cast<String>() ?? const []);
           _cleanup(taskId);
           break;
       }
@@ -94,10 +96,23 @@ class ExtractionService {
     required String extractionDir,
     List<String> allowedExtensions = const [],
     required Function(String taskId, double progress) onProgress,
-    required Function(String taskId, String extractionDir) onComplete,
+    required Function(String taskId, String extractionDir, List<String> files) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
     Future<void>? cancelled,
   }) async {
+    // RAR goes through the rar plugin on the main isolate, on every platform.
+    if (ArchiveExtractService.archiveKind(filePath) == ArchiveKind.rar) {
+      try {
+        final files = await _extractStaged(extractionDir, allowedExtensions, (staging) {
+          return ArchiveExtractService().extract(filePath, staging, onProgress: (v) => onProgress(taskId, v));
+        });
+        onComplete(taskId, extractionDir, files);
+      } catch (e) {
+        onError(taskId, 'Failed to extract: $e', extractionDir);
+      }
+      return;
+    }
+
     // Foreground service is only supported on Android, so we use an isolate for extraction on other platforms.
     // Also Android is the only platform that supports native unzip, the other platforms must use virtual
     if (!Platform.isAndroid) {
@@ -189,7 +204,7 @@ class ExtractionService {
     String extractionDir, {
     List<String> allowedExtensions = const [],
     required Function(String taskId, double progress) onProgress,
-    required Function(String taskId, String extractionDir) onComplete,
+    required Function(String taskId, String extractionDir, List<String> files) onComplete,
     required Function(String taskId, String error, String extractionDir) onError,
     Future<void>? cancelled,
   }) async {
@@ -202,7 +217,7 @@ class ExtractionService {
         onError(taskId, message['message'], extractionDir);
         receivePort.close();
       } else if (message['type'] == 'complete') {
-        onComplete(taskId, extractionDir);
+        onComplete(taskId, extractionDir, (message['files'] as List?)?.cast<String>() ?? const []);
         receivePort.close();
       }
     });
@@ -238,13 +253,13 @@ class ExtractionService {
       sendPort.send({'type': 'progress', 'value': 0.1});
       var extractedFiles = 0;
       final allowed = (params['allowedExtensions'] as List?)?.cast<String>() ?? const <String>[];
-      await _extractStaged(params['extractionDir'], allowed, (staging) {
+      final files = await _extractStaged(params['extractionDir'], allowed, (staging) {
         return virtual_archive.extractFileToDisk(params['filePath'], staging, callback: (archiveFile) {
           final progress = (0.1 + (++extractedFiles / 4) * 0.85).clamp(0.1, 0.95);
           sendPort.send({'type': 'progress', 'value': progress});
         });
       });
-      sendPort.send({'type': 'complete'});
+      sendPort.send({'type': 'complete', 'files': files});
     } catch (e) {
       debugPrint('Extraction error: $e');
       sendPort.send({'type': 'error', 'message': 'Failed to extract: $e'});
@@ -257,7 +272,8 @@ class ExtractionService {
 /// pruning must never run on [extractionDir] itself: with "extract contents"
 /// that is the whole console folder (other archives, gamelist.xml, media).
 // ponytail: a crash mid-extraction leaves a hidden .rt-extract-* folder behind.
-Future<void> _extractStaged(String extractionDir, List<String> allowed, Future<void> Function(String staging) extract) async {
+/// Returns the paths of the files it moved in.
+Future<List<String>> _extractStaged(String extractionDir, List<String> allowed, Future<void> Function(String staging) extract) async {
   final staging = Directory(path.join(extractionDir, '.rt-extract-${DateTime.now().microsecondsSinceEpoch}'));
   await staging.create(recursive: true);
   try {
@@ -268,7 +284,7 @@ Future<void> _extractStaged(String extractionDir, List<String> allowed, Future<v
     if (!Platform.isWindows) {
       await Process.run('chmod', ['-R', 'u+rwX,go+rX', staging.path]);
     }
-    await _moveInto(staging, extractionDir);
+    return await _moveInto(staging, extractionDir);
   } finally {
     try {
       await staging.delete(recursive: true);
@@ -277,16 +293,26 @@ Future<void> _extractStaged(String extractionDir, List<String> allowed, Future<v
 }
 
 /// Moves [from]'s contents into [to], merging folders and replacing files.
-Future<void> _moveInto(Directory from, String to) async {
+/// Returns the destination path of every file moved.
+Future<List<String>> _moveInto(Directory from, String to) async {
+  final moved = <String>[];
   await for (final e in from.list(followLinks: false)) {
     final dest = path.join(to, path.basename(e.path));
     if (e is Directory && await Directory(dest).exists()) {
-      await _moveInto(e, dest);
+      moved.addAll(await _moveInto(e, dest));
     } else {
       if (await File(dest).exists()) await File(dest).delete();
       await e.rename(dest);
+      if (e is Directory) {
+        await for (final f in Directory(dest).list(recursive: true, followLinks: false)) {
+          if (f is File) moved.add(f.path);
+        }
+      } else {
+        moved.add(dest);
+      }
     }
   }
+  return moved;
 }
 
 /// If the extraction produced exactly one top-level directory (a common ZIP
@@ -401,12 +427,13 @@ class ExtractionTaskHandler extends TaskHandler {
         );
         // Throwing skips moving the partial result in; staging is removed.
         if (_cancelled.remove(taskId)) throw StateError('Cancelled');
-      }).then((_) {
+      }).then((files) {
         FlutterForegroundTask.updateService(notificationText: 'Extraction completed for $taskId');
         FlutterForegroundTask.sendDataToMain({
           'type': ExtractionService.completionDataType,
           'taskId': taskId,
           'extractionDir': extractionDir,
+          'files': files,
         });
       }).catchError((e) {
         debugPrint('Extraction error: $e');
