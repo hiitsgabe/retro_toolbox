@@ -233,6 +233,12 @@ void main() {
       expect(p.basename(found!), 'Pro Evolution Soccer 2013 (USA).iso');
     });
 
+    test('finds the CHD the conversion left next to the archive', () {
+      touch('Alpha Title.chd');
+      final found = SportsRomLookup.extractedFor(dir: root.path, archiveName: 'Alpha Title.zip', gameId: 'we2002');
+      expect(p.extension(found!), '.chd');
+    });
+
     test('picks the data track among bare track names', () {
       touch('Winning Eleven 2002 (Japan)/Track 02.bin');
       touch('Winning Eleven 2002 (Japan)/Track 01.bin');
@@ -279,6 +285,12 @@ void main() {
       final problem = await romPickProblem(zip('no-rom.zip', ['readme.txt']).path, 'we2002');
       expect(problem, contains('zip holds no'));
       expect(problem, contains('.bin'));
+    });
+
+    test('takes a CHD disc image for every disc game', () async {
+      for (final id in ['we2002', 'nhl05-ps2', 'pes2013-ps2', 'nhl07-psp', 'mvp-psp']) {
+        expect(await romPickProblem(touch('Game $id.chd').path, id), isNull, reason: id);
+      }
     });
 
     test('a game whose zips hold nothing (NHL 07 takes .iso only) still passes a plain .iso', () async {

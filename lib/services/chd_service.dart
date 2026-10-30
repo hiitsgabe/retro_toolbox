@@ -143,6 +143,7 @@ class ChdService {
     required String outputDir,
     String? chdmanPath,
     required void Function(double progress) onProgress,
+    bool splitBin = false,
   }) async {
     final plan = planFor(inputPath);
     if (plan == null) {
@@ -162,7 +163,10 @@ class ChdService {
     final outPath = p.join(outputDir, '$base${effective.outExt}');
     await Directory(outputDir).create(recursive: true);
 
-    final process = await Process.start(chdman, [effective.command, '-i', inputPath, '-o', outPath, '-f']);
+    final process = await Process.start(chdman, [
+      effective.command, '-i', inputPath, '-o', outPath, '-f',
+      if (splitBin && effective.command == 'extractcd') '-sb',
+    ]);
 
     void handle(String line) {
       final pct = parseProgress(line);
@@ -213,6 +217,64 @@ class ChdService {
       for (final t in tracks)
         if (p.isWithin(dir, t) && (within == null || within.contains(t)) && File(t).existsSync()) t,
     ];
+  }
+
+  static final _unpacking = <String, Future<String>>{};
+
+  /// [chd] unpacked under [cacheRoot] for tools that read plain images (the
+  /// sports patcher): a CD becomes a .cue with one .bin per track, as a dump
+  /// has; a DVD an .iso. Returns that .cue or .iso. The copy is reused while
+  /// the CHD is unchanged, and the same CHD asked twice at once unpacks once.
+  // ponytail: one game kept; unpacking another clears the rest of cacheRoot.
+  static Future<String> unpackForReading(String chd,
+      {required String cacheRoot, String? chdmanPath, void Function(double)? onProgress}) {
+    final stat = File(chd).statSync();
+    final key = '${p.basenameWithoutExtension(chd)}_${stat.size}_${stat.modified.millisecondsSinceEpoch}';
+    return _unpacking[key] ??= _unpack(chd, p.join(cacheRoot, key), chdmanPath, onProgress ?? (_) {})
+        .whenComplete(() {
+      _unpacking.remove(key); // a block: remove() returns this future, which an arrow would make it await
+    });
+  }
+
+  static Future<String> _unpack(String chd, String dir, String? chdmanPath, void Function(double) onProgress) async {
+    String? image(String d) => !Directory(d).existsSync()
+        ? null
+        : Directory(d).listSync().whereType<File>().map((f) => f.path)
+            .where((f) => const {'.cue', '.iso'}.contains(p.extension(f).toLowerCase())).firstOrNull;
+    final ready = image(dir);
+    if (ready != null) return ready;
+    final root = Directory(p.dirname(dir));
+    if (root.existsSync()) {
+      for (final e in root.listSync()) {
+        e.deleteSync(recursive: true);
+      }
+    }
+    // Unpacked under another name first, so a crash never leaves a half copy
+    // that looks ready.
+    final partial = '$dir.partial';
+    await ChdService().convert(inputPath: chd, outputDir: partial, chdmanPath: chdmanPath, onProgress: onProgress, splitBin: true);
+    await Directory(partial).rename(dir);
+    return image(dir)!;
+  }
+
+  /// Packs a patched disc back into a .chd beside it and deletes the plain
+  /// files. [patchedPath] is the image the patcher wrote: a set's data .bin
+  /// (its .cue sits next to it) or an .iso. Returns the .chd path.
+  static Future<String> repackPatched(String patchedPath, {String? chdmanPath, void Function(double)? onProgress}) async {
+    var input = patchedPath;
+    if (p.extension(patchedPath).toLowerCase() == '.bin') {
+      input = Directory(p.dirname(patchedPath)).listSync().whereType<File>().map((f) => f.path)
+              .where((f) => p.extension(f).toLowerCase() == '.cue')
+              .where((cue) => consumedFiles(cue).any((t) => p.equals(t, patchedPath)))
+              .firstOrNull ??
+          (throw StateError('No .cue lists ${p.basename(patchedPath)}'));
+    }
+    final chd = await ChdService()
+        .convert(inputPath: input, outputDir: p.dirname(input), chdmanPath: chdmanPath, onProgress: onProgress ?? (_) {});
+    for (final f in consumedFiles(input)) {
+      File(f).deleteSync();
+    }
+    return chd;
   }
 
   /// Whether a chdman is available right now (for gating the UI).

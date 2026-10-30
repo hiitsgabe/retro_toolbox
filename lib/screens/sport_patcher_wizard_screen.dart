@@ -313,6 +313,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   @override
   void initState() {
     super.initState();
+    SportsService.chdmanPath = ref.read(settingsProvider).chdmanPath;
     if (_isSoccer && widget.initialLeagues == null) _loadLeagues();
     _startRomLookups();
     WidgetsBinding.instance.addPostFrameCallback((_) {

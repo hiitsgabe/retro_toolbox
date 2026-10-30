@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/services/chd_service.dart';
 import 'package:retro_toolbox/services/python_worker.dart';
 
 /// One league's edited rosters and the run of team slots it fills.
@@ -29,6 +30,10 @@ class SportsService {
   static File _tmp(String name) =>
       File(p.join(Directory.systemTemp.path, '${name}_${DateTime.now().microsecondsSinceEpoch}.json'));
 
+  /// The user's chdman, for unpacking and repacking CHD images (null: the
+  /// bundled one or PATH). The wizard sets it from settings.
+  static String? chdmanPath;
+
   static Future<dynamic> _runData({
     required String tag,
     required Map<String, dynamic> job,
@@ -37,6 +42,16 @@ class SportsService {
     void Function(String)? onStatus,
     bool deleteAfter = true,
   }) async {
+    // The worker reads plain images: a CHD is unpacked for it first.
+    final rom = job['rom_path'];
+    if (rom is String && p.extension(rom).toLowerCase() == '.chd') {
+      onStatus?.call('Unpacking the CHD…');
+      job = {
+        ...job,
+        'rom_path': await ChdService.unpackForReading(rom,
+            cacheRoot: p.join(Directory.systemTemp.path, 'rrp_chd'), chdmanPath: chdmanPath, onProgress: onProgress),
+      };
+    }
     await PythonWorker.runJob(
       tag: tag,
       job: {...job, 'output_file': outputFile.path},
@@ -369,6 +384,21 @@ class SportsService {
       onProgress: onProgress,
       onStatus: onStatus,
     );
-    return PatchResult.fromJson(Map<String, dynamic>.from(data as Map));
+    final result = PatchResult.fromJson(Map<String, dynamic>.from(data as Map));
+    if (p.extension(romPath).toLowerCase() != '.chd') return result;
+    // A CHD in, a CHD out; if packing fails the patched game stays playable.
+    onStatus?.call('Packing the patched game into a CHD…');
+    try {
+      final chd = await ChdService.repackPatched(result.outputPath, chdmanPath: chdmanPath, onProgress: onProgress);
+      return PatchResult(
+          outputPath: chd, teamsPatched: result.teamsPatched, playersPatched: result.playersPatched, notes: result.notes);
+    } catch (e) {
+      return PatchResult(
+        outputPath: result.outputPath,
+        teamsPatched: result.teamsPatched,
+        playersPatched: result.playersPatched,
+        notes: [...result.notes, 'Kept as plain files, not CHD: $e'],
+      );
+    }
   }
 }

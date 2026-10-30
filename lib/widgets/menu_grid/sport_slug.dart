@@ -234,7 +234,8 @@ const Map<String, List<String>> _searchTerms = {
 
 /// File extensions the patcher takes for a game, best first: the order ranks
 /// several local files of the same game (a .cue over its .bin, an extracted
-/// image over the archive it came from). A .zip is unpacked by the worker.
+/// image over the archive it came from). A .zip is unpacked by the worker, a
+/// .chd by [SportsService] before the worker sees it.
 List<String> gameRomExtensions(String gameId) => _romExtensions[gameId] ?? const ['.iso', '.bin', '.zip'];
 
 const Map<String, List<String>> _romExtensions = {
@@ -243,14 +244,14 @@ const Map<String, List<String>> _romExtensions = {
   'iss-deluxe-snes': ['.sfc', '.smc', '.zip'],
   'nhl94-snes': ['.sfc', '.smc', '.zip'],
   'kgj-mlb-snes': ['.sfc', '.smc', '.zip'],
-  'we2002': ['.cue', '.iso', '.bin', '.zip'],
+  'we2002': ['.cue', '.chd', '.iso', '.bin', '.zip'],
   'nbalive95-genesis': ['.md', '.gen', '.bin', '.zip'],
   'nhl94-genesis': ['.md', '.gen', '.bin', '.zip'],
-  'nhl05-ps2': ['.iso', '.zip'],
-  'pes2013-ps2': ['.iso', '.zip'],
+  'nhl05-ps2': ['.iso', '.chd', '.zip'],
+  'pes2013-ps2': ['.iso', '.chd', '.zip'],
   // Not .cso: both PSP patchers refuse a compressed image by name.
-  'nhl07-psp': ['.iso', '.zip'],
-  'mvp-psp': ['.iso', '.zip'],
+  'nhl07-psp': ['.iso', '.chd', '.zip'],
+  'mvp-psp': ['.iso', '.chd', '.zip'],
 };
 
 /// Preferred ROM region per game, used to break ties between matches (e.g.
@@ -274,7 +275,7 @@ const Map<String, String> _romExpectations = {
       'International Superstar Soccer Deluxe (SNES, USA). A .sfc or .smc file. '
       'A 512-byte copier header is handled automatically.',
   'we2002':
-      'Winning Eleven 2002 (PS1). The disc image: a .bin (with its .cue) or a single .iso. '
+      'Winning Eleven 2002 (PS1). The disc image: a .bin (with its .cue), a single .iso or a .chd. '
       'Use your own dump of the original disc.',
   'nbalive95-genesis':
       'NBA Live 95 (Mega Drive / Genesis). A .bin, .md or .gen file. '
@@ -284,16 +285,16 @@ const Map<String, String> _romExpectations = {
   'nhl94-snes':
       'NHL 94 (SNES). A .sfc or .smc file. A 512-byte copier header is handled automatically.',
   'nhl05-ps2':
-      'NHL 2005 (PlayStation 2). A .iso disc image (a .zip of it also works). Use your own dump.',
+      'NHL 2005 (PlayStation 2). A .iso or .chd disc image (a .zip of the .iso also works). Use your own dump.',
   'nhl07-psp':
-      'NHL 07 (PSP). A .iso or .cso disc image. Use your own dump.',
+      'NHL 07 (PSP). A .iso or .chd disc image. Use your own dump.',
   'kgj-mlb-snes':
       'Ken Griffey Jr. Presents MLB (SNES). A .sfc or .smc file. '
       'A 512-byte copier header is handled automatically.',
   'mvp-psp':
-      'MVP Baseball (PSP). A .iso or .cso disc image (USA). Use your own dump.',
+      'MVP Baseball (PSP). A .iso or .chd disc image (USA). Use your own dump.',
   'pes2013-ps2':
-      'A PlayStation 2 disc image (.iso) of Pro Evolution Soccer 2013 (USA, SLUS-21955). Zips are fine.',
+      'A PlayStation 2 disc image (.iso) of Pro Evolution Soccer 2013 (USA, SLUS-21955), or its .chd. Zips are fine.',
 };
 
 /// Games whose ROM stores per-team colors (soccer kits, MVP uniforms), so the
