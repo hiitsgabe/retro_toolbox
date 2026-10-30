@@ -120,7 +120,9 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
         availableActions: _isArchive(current.outputPath) ? const {GameAction.extract} : const {},
       );
     } else if (status == ExtractionStatus.completed) {
-      resolveState(gameId, true);
+      // A completed step can still carry a warning (a conversion skipped or
+      // failed with the game's files kept); it shows on the resolved game.
+      resolveState(gameId, true, error);
     } else if (status == ExtractionStatus.failed) {
       updated = current.copyWith(
         status: current.isTransfer ? GameStatus.downloadFailed : GameStatus.extractionFailed,
@@ -151,7 +153,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     }
   }
 
-  void resolveState(String gameId, [bool hasJustCompleted = false]) async {
+  void resolveState(String gameId, [bool hasJustCompleted = false, String? note]) async {
     if (_resolving[gameId] == true) return;
 
     final gameState = state[gameId];
@@ -191,6 +193,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
                 isInteractable: status == GameStatus.ready,
                 availableActions: _getActions(status, game),
                 hasJustCompleted: hasJustCompleted,
+                errorMessage: note,
               ));
     } catch (_) {
       if (state[gameId]?.status != GameStatus.loading) return;

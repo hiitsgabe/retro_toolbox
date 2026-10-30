@@ -65,7 +65,7 @@ If your server has a simple directory listing with `<a>` tags, you don't need a 
 }
 ```
 
-Without a `regex` field, the app falls back to a pattern that matches Myrient-style HTML tables (`<tr><td class="link">...`). It then filters by `original_format`.
+Without a `regex` field, the app falls back to a pattern that matches directory-listing-style HTML tables (`<tr><td class="link">...`). It then filters by `original_format`.
 
 ### Custom regex
 
@@ -227,7 +227,7 @@ Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for
 
 | Field                      | Type    | Default       | Description |
 |----------------------------|---------|---------------|-------------|
-| `regex`                    | string  | Myrient-style | Custom regex for HTML parsing |
+| `regex`                    | string  | directory-listing-style | Custom regex for HTML parsing |
 | `boxarts`                  | string  | *(none)*      | Base URL for thumbnails |
 | `platform`                 | string  | *(guessed)*   | Batocera system id (`psx`, `switch`…); see below |
 | `decompress`               | string  | `"none"`      | `unzip`, `unrar` or `none` |

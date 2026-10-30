@@ -73,7 +73,7 @@ The regex matching the HTML structure above:
 
 ### Default Fallback
 
-If no custom `regex` is configured, the app falls back to a Myrient-style pattern that matches `<tr><td class="link">...` rows and filters by `original_format`. This works out of the box with most standard directory listing servers.
+If no custom `regex` is configured, the app falls back to a directory-listing-style pattern that matches `<tr><td class="link">...` rows and filters by `original_format`. This works out of the box with most standard directory listing servers.
 
 ### Key Requirements
 

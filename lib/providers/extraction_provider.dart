@@ -315,7 +315,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
     }
     _ref.read(taskQueueProvider.notifier).updateTaskStatus(taskId, error == null ? TaskQueueStatus.completed : TaskQueueStatus.failed, error: error);
-    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0, error: error);
   }
 
   /// The archive tool's extraction (.zip or .rar to any folder), run as a

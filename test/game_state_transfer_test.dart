@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
@@ -19,6 +21,13 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
   _FakeSettings() : super(const AppSettings());
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _DirSettings extends _FakeSettings {
+  _DirSettings(this.dir);
+  final String dir;
+  @override
+  String getDownloadDir(String? consoleId) => dir;
 }
 
 void main() {
@@ -53,5 +62,29 @@ void main() {
     expect(completedActions('/x/a.rar'), isEmpty);
     GameStateManager.rarSupported = () => true;
     expect(completedActions('/x/a.rar'), {GameAction.extract});
+  });
+
+  test('a handler warning stays on the game after it resolves', () async {
+    final dir = Directory.systemTemp.createTempSync('rt_note');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/game.cue').writeAsStringSync('c');
+    final c = ProviderContainer(overrides: [
+      catalogProvider.overrideWith((ref) => _FakeCatalog()),
+      settingsProvider.overrideWith((ref) => _DirSettings(dir.path)),
+    ]);
+    addTearDown(c.dispose);
+    const game = Game(title: 'game.zip', url: 'https://h/game.zip', size: 1, consoleId: 'c');
+    final games = c.read(gameStateManagerProvider.notifier);
+    games.registerTransientGame(game);
+
+    const note = 'Skipped Convert to CHD: chdman not found. Files kept.';
+    games.updateExtractionState(game.gameId, ExtractionStatus.completed, 1, error: note);
+    for (var i = 0; i < 100 && c.read(gameStateManagerProvider)[game.gameId]!.status == GameStatus.loading; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+
+    final s = c.read(gameStateManagerProvider)[game.gameId]!;
+    expect(s.status, isNot(GameStatus.loading));
+    expect(s.errorMessage, note);
   });
 }
