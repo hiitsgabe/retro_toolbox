@@ -212,6 +212,7 @@ class TaskQueueService {
                 taskId: task.params['taskId'] as String,
                 handler: handler,
                 inputs: (task.params['inputs'] as List).cast<String>(),
+                files: (task.params['files'] as List?)?.cast<String>(),
                 chdmanPath: task.params['chdmanPath'] as String?,
                 keysPath: task.params['keysPath'] as String?,
                 boot9Path: task.params['boot9Path'] as String?,

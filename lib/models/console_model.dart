@@ -129,7 +129,8 @@ class Console {
       gameFilesFormat: list('game_files_format') ?? (legacyZip ? legacyFormats?.toList() : null),
       additionalHandler: json.containsKey('additional_handler')
           ? GameHandler.fromId(json['additional_handler'] as String?)
-          : json['should_decompress_nsz'] == true
+          // Old configs: every .nsz download was decompressed (global switch).
+          : json['should_decompress_nsz'] == true || (legacyFormats?.any((f) => f.toLowerCase() == '.nsz') ?? false)
               ? GameHandler.nszDecompress
               : json['convert_3ds_to_cia'] == true
                   ? GameHandler.cia3ds

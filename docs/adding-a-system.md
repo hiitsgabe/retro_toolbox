@@ -287,7 +287,7 @@ Configs written for earlier versions still work. When a new key is missing, it i
 |-----|-----|
 | `file_format` + `should_unzip: true` (no `download_url`) | `original_format: [".zip"]`, `decompress: "unzip"`, `game_files_format: file_format` |
 | `file_format` otherwise | `original_format: file_format` |
-| `should_decompress_nsz: true` | `additional_handler: "nsz_decompress"` |
+| `should_decompress_nsz: true`, or `.nsz` in `file_format` | `additional_handler: "nsz_decompress"` |
 | `convert_3ds_to_cia: true` | `additional_handler: "3ds_convert"` |
 
 ---

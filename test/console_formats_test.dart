@@ -32,6 +32,12 @@ void main() {
       expect(c.additionalHandler, GameHandler.nszDecompress);
     });
 
+    test('legacy .nsz formats keep NSZ on without the flag', () {
+      // Before, every .nsz download was decompressed (global switch, default on).
+      expect(parse({'file_format': ['.nsz']}).additionalHandler, GameHandler.nszDecompress);
+      expect(parse({'original_format': ['.nsz']}).additionalHandler, isNull);
+    });
+
     test('3ds flag maps to the handler', () {
       expect(parse({'convert_3ds_to_cia': true}).additionalHandler, GameHandler.cia3ds);
     });

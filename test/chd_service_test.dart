@@ -66,6 +66,21 @@ void main() {
       expect(ChdService.consumedFiles(gdi).toSet(), {gdi, t1, t2});
     });
 
+    test('never reaches outside the cue folder', () {
+      final outside = File(p.join(dir.parent.path, 'rt_outside_${dir.hashCode}.bin'))..writeAsStringSync('x');
+      addTearDown(() => outside.deleteSync());
+      final cue = touch('game.cue', 'FILE "../${p.basename(outside.path)}" BINARY\nFILE "${outside.path}" BINARY\n');
+      expect(ChdService.consumedFiles(cue), [cue]);
+    });
+
+    test('within limits tracks to the given files', () {
+      final mine = touch('game.bin');
+      final other = touch('other.bin');
+      final cue = touch('game.cue', 'FILE "game.bin" BINARY\nFILE "other.bin" BINARY\n');
+      expect(ChdService.consumedFiles(cue, within: {cue, mine}).toSet(), {cue, mine});
+      expect(File(other).existsSync(), true);
+    });
+
     test('iso is itself', () {
       final iso = touch('game.iso');
       expect(ChdService.consumedFiles(iso), [iso]);

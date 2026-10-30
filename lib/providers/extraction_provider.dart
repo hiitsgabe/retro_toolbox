@@ -228,6 +228,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       'taskId': taskId,
       'handler': handler.id,
       'inputs': inputs,
+      'files': files,
       'chdmanPath': _ref.read(settingsProvider).chdmanPath,
       'keysPath': settings.getNszKeysPath(),
       'boot9Path': settings.getBoot9Path(),
@@ -241,6 +242,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     required String taskId,
     required GameHandler handler,
     required List<String> inputs,
+    List<String>? files,
     String? chdmanPath,
     String? keysPath,
     String? boot9Path,
@@ -268,7 +270,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
           ExtractionService.updateNotification('$verb $fileName... ${(v * 100).round()}%');
         }
 
-        final consumed = handler == GameHandler.chdCompress ? ChdService.consumedFiles(input) : [input];
+        final consumed = handler == GameHandler.chdCompress ? ChdService.consumedFiles(input, within: files?.toSet()) : [input];
         switch (handler) {
           case GameHandler.chdCompress:
             await ChdService().convert(inputPath: input, outputDir: outputDir, chdmanPath: chdmanPath, onProgress: onProgress);

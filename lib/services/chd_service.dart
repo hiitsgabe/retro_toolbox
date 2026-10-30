@@ -186,7 +186,9 @@ class ChdService {
 
   /// The files a compress of [inputPath] replaces: the input plus, for a .cue
   /// or .gdi, the track files it lists (those that exist), as absolute paths.
-  static List<String> consumedFiles(String inputPath) {
+  /// With [within], only those files count (the files a game's extraction
+  /// produced), so a .cue never claims another game's tracks.
+  static List<String> consumedFiles(String inputPath, {Set<String>? within}) {
     final ext = p.extension(inputPath).toLowerCase();
     if (ext != '.cue' && ext != '.gdi') return [inputPath];
     final dir = p.dirname(inputPath);
@@ -203,10 +205,13 @@ class ChdService {
         if (m != null) names.add(m.group(1) ?? m.group(2)!);
       }
     }
+    // Track names come from downloaded content: only files inside the input's
+    // folder (no absolute paths, no ..) are ever deleted.
+    final tracks = [for (final n in names) p.normalize(p.join(dir, n))];
     return [
       inputPath,
-      for (final n in names)
-        if (File(p.join(dir, n)).existsSync()) p.join(dir, n),
+      for (final t in tracks)
+        if (p.isWithin(dir, t) && (within == null || within.contains(t)) && File(t).existsSync()) t,
     ];
   }
 
