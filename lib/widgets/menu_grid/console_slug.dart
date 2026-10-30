@@ -9,7 +9,54 @@ import 'package:retro_toolbox/models/console_model.dart';
 /// (ps3, wiiu, xbox360, gba) must come before their prefixes (psx, wii, xbox,
 /// gb). A slug here is semantic — it drives the brand color even when we have
 /// no logo bundled for it (see [_bundledLogos] / [consoleLogoAsset]).
-String? consoleArtSlug(Console console) => consoleArtSlugForText('${console.id} ${console.name}');
+String? consoleArtSlug(Console console) {
+  final platform = console.resolvedPlatform;
+  return platform == null ? null : slugForPlatform(platform);
+}
+
+/// Art slugs whose Batocera system id differs; every other slug is its id.
+const Map<String, String> _batoceraBySlug = {
+  'genesis': 'megadrive',
+  'atarilynx': 'lynx',
+  'atarijaguar': 'jaguar',
+  'wonderswan': 'wswan',
+  'amiga': 'amiga500',
+  'arcade': 'mame',
+};
+
+/// Batocera system id for free text (a console's id and name), by keyword.
+String? batoceraPlatformForText(String text) {
+  final slug = consoleArtSlugForText(text);
+  return slug == null ? null : _batoceraBySlug[slug] ?? slug;
+}
+
+/// Art slug for a platform id (Batocera, or any text the keywords know).
+String? slugForPlatform(String platform) {
+  for (final e in _batoceraBySlug.entries) {
+    if (e.value == platform) return e.key;
+  }
+  if (_rules.any((r) => r.key == platform)) return platform;
+  return consoleArtSlugForText(platform);
+}
+
+const _switchFormats = {'.nsp', '.nsz', '.xci', '.xcz'};
+const _n3dsFormats = {'.3ds', '.cia', '.cci'};
+
+// ponytail: lives beside the keyword rules it falls back on, though services
+// import it too; move both to models/ if this grows.
+extension ConsolePlatform on Console {
+  /// The catalog's platform, else one guessed from the id and name, else from
+  /// the file formats (Switch and 3DS only), else null.
+  String? get resolvedPlatform {
+    if (platform != null && platform!.isNotEmpty) return platform;
+    final byName = batoceraPlatformForText('$id $name');
+    if (byName != null) return byName;
+    final formats = [...?originalFormat, ...?gameFilesFormat].map((e) => e.toLowerCase());
+    if (formats.any(_switchFormats.contains)) return 'switch';
+    if (formats.any(_n3dsFormats.contains)) return '3ds';
+    return null;
+  }
+}
 
 /// Same keyword match as [consoleArtSlug] but on any text (e.g. a game's
 /// platform string like "psx"), so the Sports menu can reuse console art.
@@ -25,14 +72,14 @@ String? consoleArtSlugForText(String text) {
 
 /// Bundled console logo for a platform string, or null when none is bundled.
 String? platformLogoAsset(String platform) {
-  final slug = consoleArtSlugForText(platform);
+  final slug = slugForPlatform(platform);
   if (slug == null || !_bundledLogos.contains(slug)) return null;
   return 'assets/console_art/${slug}_logo.svg';
 }
 
 /// Brand color for a platform string.
 Color? platformBrandColor(String platform) {
-  final slug = consoleArtSlugForText(platform);
+  final slug = slugForPlatform(platform);
   return slug == null ? null : _slugColors[slug];
 }
 
@@ -96,7 +143,7 @@ const List<MapEntry<String, List<String>>> _rules = [
   MapEntry('msx', ['msx']),
   MapEntry('c64', ['commodore 64', 'c64']),
   MapEntry('amiga', ['amiga']),
-  MapEntry('wonderswan', ['wonderswan', 'wonder swan']),
+  MapEntry('wonderswan', ['wonderswan', 'wonder swan', 'wswan']),
   MapEntry('arcade', ['arcade', 'mame', 'fbneo', 'fba']),
 ];
 

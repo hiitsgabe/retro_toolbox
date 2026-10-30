@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 
@@ -22,7 +23,7 @@ class TinfoilEntry {
 class TinfoilServerService {
   static const _switchFormats = {'.nsp', '.nsz', '.xci', '.xcz'};
 
-  static bool isSwitchConsole(Console c) => c.originalFormat?.any((f) => _switchFormats.contains(f.toLowerCase())) ?? false;
+  static bool isSwitchConsole(Console c) => c.resolvedPlatform == 'switch';
 
   // Switch title IDs are 16 hex digits starting with 01 (retail); catalog
   // titles omit them, but the download URL path usually carries one.

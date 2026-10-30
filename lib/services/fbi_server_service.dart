@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
@@ -16,10 +17,9 @@ typedef FbiGame = ({Game game, Console console});
 /// network" (TCP 5000) or shown as a QR for "Scan QR Code". Anything that isn't
 /// already a .cia (a .3ds/.cci, or a .zip of one) is converted before serving.
 class FbiServerService {
-  static const _formats = {'.cia', '.3ds', '.cci'};
   static const fbiPort = 5000; // the port FBI listens on, on the 3DS
 
-  static bool is3dsConsole(Console c) => c.originalFormat?.any((f) => _formats.contains(f.toLowerCase())) ?? false;
+  static bool is3dsConsole(Console c) => c.resolvedPlatform == '3ds';
 
   /// FBI's URL-receive wire format: a 4-byte big-endian length, then the
   /// newline-separated URL payload. (FBI replies with one ack byte on close.)
