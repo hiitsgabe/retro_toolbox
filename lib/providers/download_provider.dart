@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:background_downloader/background_downloader.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
@@ -212,47 +213,24 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
+    final console = CatalogService.consoleByIdSync(game.consoleId);
+    final decompress = console?.decompress ?? Decompress.none;
 
-    // NSZ files require Python decompression — not ZIP extraction.
-    if (game.filename.toLowerCase().endsWith('.nsz')) {
-      if (settingsNotifier.getNszDecompressEnabled()) {
-        final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
-        final keysPath = settingsNotifier.getNszKeysPath() ?? '';
-        final queueNotifier = _ref.read(taskQueueProvider.notifier);
-        debugPrint('Auto-decompressing NSZ for task: $taskId');
-        Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.nszDecompression, {
-          'taskId': taskId,
-          'nszFilePath': p.join(downloadDir, game.filename),
-          'outputDir': downloadDir,
-          'keysPath': keysPath,
-        }));
-      }
-      return; // Never ZIP-extract a .nsz file
-    }
-
-    // .3ds/.cci auto-convert to .cia when the console opts in (needs boot9).
-    final lower = game.filename.toLowerCase();
-    if (lower.endsWith('.3ds') || lower.endsWith('.cci')) {
-      final console = CatalogService.consoleByIdSync(game.consoleId);
-      if (console?.additionalHandler == GameHandler.cia3ds) {
-        final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
-        final queueNotifier = _ref.read(taskQueueProvider.notifier);
-        Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.cia3dsConversion, {
-              'taskId': taskId,
-              'inputPath': p.join(downloadDir, game.filename),
-              'outputDir': downloadDir,
-              'boot9Path': settingsNotifier.getBoot9Path(),
-            }));
-      }
+    // Decompress first when the catalog asks for it; the handler then runs on
+    // the extracted files (see ExtractionNotifier._updateCompleted).
+    if (settingsNotifier.getAutoExtract(game.consoleId) && decompress.matches(game.filename)) {
+      debugPrint('Auto-extracting for task: $taskId');
+      final queueNotifier = _ref.read(taskQueueProvider.notifier);
+      Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.extraction, {'taskId': taskId}));
       return;
     }
+    if (decompress != Decompress.none && !decompress.matches(game.filename)) {
+      debugPrint('Skipped ${decompress.name}: ${game.filename} is not that kind of archive');
+    }
 
-    final autoExtract = settingsNotifier.getAutoExtract(game.consoleId);
-    if (!autoExtract) return;
-
-    debugPrint('Auto-extracting for task: $taskId');
-    final queueNotifier = _ref.read(taskQueueProvider.notifier);
-    Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.extraction, {'taskId': taskId}));
+    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final extraction = _ref.read(extractionProvider.notifier);
+    Future.microtask(() => extraction.startGameHandler(taskId, game.consoleId, [p.join(downloadDir, game.filename)]));
   }
 
   bool isTaskDownloadable(String taskId) {

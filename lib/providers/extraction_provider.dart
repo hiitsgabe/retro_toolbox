@@ -217,6 +217,23 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
   }
 
+  /// Queues the console's active handler for the [files] it accepts, if any.
+  void startGameHandler(String taskId, String consoleId, List<String> files) {
+    final settings = _ref.read(settingsProvider.notifier);
+    final handler = settings.activeHandler(consoleId);
+    if (handler == null) return;
+    final inputs = files.where(handler.accepts).toList();
+    if (inputs.isEmpty) return;
+    _ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.gameHandler, {
+      'taskId': taskId,
+      'handler': handler.id,
+      'inputs': inputs,
+      'chdmanPath': _ref.read(settingsProvider).chdmanPath,
+      'keysPath': settings.getNszKeysPath(),
+      'boot9Path': settings.getBoot9Path(),
+    });
+  }
+
   /// Runs [handler] on each of [inputs] in turn (a game's files after its
   /// download or extraction). Each input's files are deleted only once its
   /// output exists; a failure or a missing tool keeps them and stops.
@@ -550,6 +567,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
 
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
+    if (game != null) startGameHandler(taskId, game.consoleId, files);
   }
 
   Future<void> _deleteOriginalFile(String taskId) async {
