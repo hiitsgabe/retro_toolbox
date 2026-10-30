@@ -42,7 +42,7 @@ void main() {
   });
 
   Future<void> startService() async {
-    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], originalFormat: const ['.nsz']);
     final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${upstream.port}/file.nsz', size: 100, consoleId: 'switch');
     await service.start(
       port: 0, // ephemeral for tests
@@ -101,7 +101,7 @@ void main() {
       await req.response.close();
     });
 
-    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], originalFormat: const ['.nsz']);
     final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${api.port}/dl', size: 100, consoleId: 'switch');
     await service.start(port: 0, loadGames: () async => {console: [game]}, authHeaders: (c) => {'Authorization': 'Bearer tok123'});
     final client = HttpClient();
@@ -120,7 +120,7 @@ void main() {
     addTearDown(() => dir.deleteSync(recursive: true));
     // The catalog's .nsz was downloaded and decompressed to .nsp here.
     File('${dir.path}/Game.nsp').writeAsBytesSync(List.generate(50, (i) => 200 - i));
-    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], originalFormat: const ['.nsz']);
     // API-style URL with no file name: the file is named after the title.
     final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'switch');
     await service.start(
@@ -152,7 +152,7 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('tinfoil_folders');
     addTearDown(() => dir.deleteSync(recursive: true));
     File('${dir.path}/Here.nsp').writeAsBytesSync([1, 2, 3]);
-    final console = Console(id: 'switch', name: 'Switch', urls: const [], fileFormat: const ['.nsz']);
+    final console = Console(id: 'switch', name: 'Switch', urls: const [], originalFormat: const ['.nsz']);
     final here = Game(title: 'Here.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'switch');
     final away = Game(title: 'Away.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000002000/base', size: 100, consoleId: 'switch');
     await service.start(port: 0, loadGames: () async => {console: [here, away]}, authHeaders: (c) => {}, downloadDir: (c) => dir.path);

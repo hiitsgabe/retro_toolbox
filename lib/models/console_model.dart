@@ -1,3 +1,5 @@
+import 'package:retro_toolbox/models/game_handler.dart';
+
 class Console {
   final String id;
   final String name;
@@ -9,13 +11,19 @@ class Console {
   /// clrmamepro-format DAT files whose release years/months date the games
   /// (config key release_dates: one URL or a list).
   final List<String> releaseDates;
-  final List<String>? fileFormat;
+  /// Batocera system id (`psx`, `switch`…); see ConsolePlatform for the
+  /// resolved value with fallbacks.
+  final String? platform;
+  /// What the server delivers (`.zip`, `.rar` or the game's own format).
+  final List<String>? originalFormat;
+  final Decompress decompress;
+  /// What stays after decompressing; the rest is pruned. Null keeps all.
+  final List<String>? gameFilesFormat;
+  final GameHandler? additionalHandler;
   final String? romsFolder;
-  final bool shouldUnzip;
   final bool extractContents;
   final bool shouldFilterUsa;
   final String? usaRegex;
-  final bool shouldDecompressNsz;
   final bool ignoreExtensionFiltering;
   final String? downloadUrl;
   final Map<String, dynamic>? auth;
@@ -24,7 +32,6 @@ class Console {
   final String listItemId;
   final bool listSystems;
   final bool added;
-  final bool convert3dsToCia;
 
   const Console({
     required this.id,
@@ -33,13 +40,15 @@ class Console {
     this.regex,
     this.boxarts,
     this.releaseDates = const [],
-    this.fileFormat,
+    this.platform,
+    this.originalFormat,
+    this.decompress = Decompress.none,
+    this.gameFilesFormat,
+    this.additionalHandler,
     this.romsFolder,
-    this.shouldUnzip = false,
     this.extractContents = true,
     this.shouldFilterUsa = true,
     this.usaRegex,
-    this.shouldDecompressNsz = false,
     this.ignoreExtensionFiltering = false,
     this.downloadUrl,
     this.auth,
@@ -48,8 +57,17 @@ class Console {
     this.listItemId = 'name',
     this.listSystems = false,
     this.added = false,
-    this.convert3dsToCia = false,
   });
+
+  /// Handlers that can run on this console's game files, plus the catalog's
+  /// own handler, in enum order.
+  List<GameHandler> get applicableHandlers {
+    final formats = (gameFilesFormat ?? originalFormat ?? const []).map((e) => e.toLowerCase()).toSet();
+    return [
+      for (final h in GameHandler.values)
+        if (h == additionalHandler || h.inputs.any(formats.contains)) h,
+    ];
+  }
 
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
@@ -90,6 +108,11 @@ class Console {
       urls = [];
     }
     final rawDates = json['release_dates'];
+    // Legacy keys (file_format/should_unzip/…) fill each new key that is
+    // missing. With a download_url template should_unzip never had an effect.
+    final legacyFormats = (json['file_format'] as List?)?.cast<String>();
+    final legacyZip = json['should_unzip'] == true && json['download_url'] == null;
+    List<String>? list(String key) => (json[key] as List?)?.cast<String>().toList();
 
     return Console(
       id: json['id'] as String,
@@ -98,13 +121,23 @@ class Console {
       regex: json['regex'] as String?,
       boxarts: json['boxarts'],
       releaseDates: rawDates is List ? List<String>.from(rawDates) : [if (rawDates is String && rawDates.isNotEmpty) rawDates],
-      fileFormat: json['file_format'] != null ? List<String>.from(json['file_format'] as List) : null,
+      platform: json['platform'] as String?,
+      originalFormat: list('original_format') ?? (legacyZip ? ['.zip'] : legacyFormats?.toList()),
+      decompress: json.containsKey('decompress')
+          ? Decompress.fromId(json['decompress'] as String?)
+          : (legacyZip ? Decompress.unzip : Decompress.none),
+      gameFilesFormat: list('game_files_format') ?? (legacyZip ? legacyFormats?.toList() : null),
+      additionalHandler: json.containsKey('additional_handler')
+          ? GameHandler.fromId(json['additional_handler'] as String?)
+          : json['should_decompress_nsz'] == true
+              ? GameHandler.nszDecompress
+              : json['convert_3ds_to_cia'] == true
+                  ? GameHandler.cia3ds
+                  : null,
       romsFolder: json['roms_folder'] as String?,
-      shouldUnzip: json['should_unzip'] as bool? ?? false,
       extractContents: json['extract_contents'] as bool? ?? true,
       shouldFilterUsa: json['should_filter_usa'] as bool? ?? true,
       usaRegex: json['usa_regex'] as String?,
-      shouldDecompressNsz: json['should_decompress_nsz'] as bool? ?? false,
       ignoreExtensionFiltering: json['ignore_extension_filtering'] as bool? ?? false,
       downloadUrl: json['download_url'] as String?,
       auth: json['auth'] as Map<String, dynamic>?,
@@ -113,7 +146,6 @@ class Console {
       listItemId: json['list_item_id'] as String? ?? 'name',
       listSystems: json['list_systems'] as bool? ?? false,
       added: json['added'] as bool? ?? false,
-      convert3dsToCia: json['convert_3ds_to_cia'] as bool? ?? false,
     );
   }
 
@@ -125,13 +157,15 @@ class Console {
       if (regex != null) 'regex': regex,
       if (boxarts != null) 'boxarts': boxarts,
       if (releaseDates.isNotEmpty) 'release_dates': releaseDates,
-      if (fileFormat != null) 'file_format': fileFormat,
+      if (platform != null) 'platform': platform,
+      if (originalFormat != null) 'original_format': originalFormat,
+      if (decompress != Decompress.none) 'decompress': decompress.name,
+      if (gameFilesFormat != null) 'game_files_format': gameFilesFormat,
+      if (additionalHandler != null) 'additional_handler': additionalHandler!.id,
       if (romsFolder != null) 'roms_folder': romsFolder,
-      'should_unzip': shouldUnzip,
       'extract_contents': extractContents,
       'should_filter_usa': shouldFilterUsa,
       if (usaRegex != null) 'usa_regex': usaRegex,
-      'should_decompress_nsz': shouldDecompressNsz,
       'ignore_extension_filtering': ignoreExtensionFiltering,
       if (downloadUrl != null) 'download_url': downloadUrl,
       if (auth != null) 'auth': auth,
@@ -140,7 +174,6 @@ class Console {
       'list_item_id': listItemId,
       if (listSystems) 'list_systems': listSystems,
       if (added) 'added': added,
-      if (convert3dsToCia) 'convert_3ds_to_cia': convert3dsToCia,
     };
   }
 

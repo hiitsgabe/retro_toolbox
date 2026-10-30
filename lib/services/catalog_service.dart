@@ -371,7 +371,7 @@ class CatalogService {
 
     final body = await response.transform(utf8.decoder).join();
     final parsed = await compute(_parseIAMetadataIsolate, [body, console.toJson(), itemId]);
-    debugPrint('IA $itemId: body=${body.length}b parsed=${parsed.length} shouldUnzip=${console.shouldUnzip} fmts=${console.fileFormat}');
+    debugPrint('IA $itemId: body=${body.length}b parsed=${parsed.length} decompress=${console.decompress.name} fmts=${console.originalFormat}');
     return parsed.map((entry) => Game.fromJson(entry)).toList();
   }
 
@@ -417,6 +417,10 @@ class CatalogService {
 
 // Top-level isolate functions — cannot be instance methods.
 
+/// The console map's original_format (it arrives as Console.toJson()), lower-cased.
+List<String> _originalFormats(Map<String, dynamic> console) =>
+    [for (final f in (console['original_format'] as List?) ?? const []) (f as String).toLowerCase()];
+
 List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
   final body = args[0] as String;
   final console = args[1] as Map<String, dynamic>;
@@ -425,12 +429,7 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
   final data = jsonDecode(body) as Map<String, dynamic>;
   final rawFiles = data['files'] as List<dynamic>? ?? [];
 
-  final fileFormats = console['file_format'] != null
-      ? List<String>.from(console['file_format'] as List).map((e) => e.toLowerCase()).toList()
-      : <String>[];
-  // Zipped sets (should_unzip) are stored as .zip on IA; the ROM formats
-  // in file_format only exist inside the archives.
-  final shouldUnzip = console['should_unzip'] as bool? ?? false;
+  final fileFormats = _originalFormats(console);
 
   final out = <Map<String, dynamic>>[];
 
@@ -442,13 +441,9 @@ List<Map<String, dynamic>> _parseIAMetadataIsolate(List<dynamic> args) {
     // Skip derivative files (thumbnails, metadata, etc.)
     if (file['source'] == 'derivative') continue;
 
-    // should_unzip sources list .zip archives; otherwise list only file_format.
+    // List only what the server delivers (original_format).
     final ext = name.contains('.') ? '.${name.split('.').last.toLowerCase()}' : '';
-    if (shouldUnzip) {
-      if (ext != '.zip') continue;
-    } else if (fileFormats.isNotEmpty && !fileFormats.contains(ext)) {
-      continue;
-    }
+    if (fileFormats.isNotEmpty && !fileFormats.contains(ext)) continue;
 
     final sizeRaw = file['size'];
     final size = int.tryParse(sizeRaw?.toString() ?? '') ?? 0;
@@ -486,8 +481,7 @@ List<Map<String, dynamic>> _parseJsonListing(String body, Console console, Strin
   }
 
   final nameKey = console.listItemId;
-  final fileFormats = console.fileFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
-  final shouldUnzip = console.shouldUnzip;
+  final fileFormats = console.originalFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
   final ignoreExtFilter = console.ignoreExtensionFiltering;
 
   final out = <Map<String, dynamic>>[];
@@ -496,13 +490,7 @@ List<Map<String, dynamic>> _parseJsonListing(String body, Console console, Strin
     final name = (item[nameKey] ?? item['name'])?.toString() ?? '';
     if (name.isEmpty) continue;
     final lower = name.toLowerCase();
-    if (!ignoreExtFilter) {
-      if (shouldUnzip) {
-        if (!lower.endsWith('.zip')) continue;
-      } else if (fileFormats.isNotEmpty && !fileFormats.any((ext) => lower.endsWith(ext))) {
-        continue;
-      }
-    }
+    if (!ignoreExtFilter && fileFormats.isNotEmpty && !fileFormats.any((ext) => lower.endsWith(ext))) continue;
     final title = name.split('/').last;
     out.add({
       'title': title,
@@ -529,10 +517,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
 
   final downloadUrlTemplate = console['download_url'] as String?;
   final ignoreExtFilter = console['ignore_extension_filtering'] as bool? ?? false;
-  final shouldUnzip = console['should_unzip'] as bool? ?? false;
-  final fileFormats = console['file_format'] != null
-      ? List<String>.from(console['file_format'] as List).map((e) => e.toLowerCase()).toList()
-      : <String>[];
+  final fileFormats = _originalFormats(console);
 
   final regExp = RegExp(
     // Configs use Python-flavor named groups ((?P<name>...)); Dart wants (?<name>...).
@@ -572,16 +557,9 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       }
     }
 
-    // File format filter (skip when ignore_extension_filtering is set).
-    // should_unzip sources list .zip archives; otherwise list only file_format.
-    if (!ignoreExtFilter) {
-      final lowerTitle = title.toLowerCase();
-      if (shouldUnzip) {
-        if (!lowerTitle.endsWith('.zip')) continue;
-      } else if (fileFormats.isNotEmpty && !fileFormats.any((ext) => lowerTitle.endsWith(ext))) {
-        continue;
-      }
-    }
+    // List only what the server delivers (skip when ignore_extension_filtering is set).
+    final lowerTitle = title.toLowerCase();
+    if (!ignoreExtFilter && fileFormats.isNotEmpty && !fileFormats.any((ext) => lowerTitle.endsWith(ext))) continue;
 
     final sizeStr = _tryNamedGroup(match, 'size');
     final size = sizeStr != null ? _parseSizeBytesIsolate(sizeStr) : 0;

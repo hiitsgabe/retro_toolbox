@@ -1,3 +1,4 @@
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,7 +197,7 @@ class SettingsContent extends ConsumerWidget {
             ],
           ],
           if (library) ...[
-            if (selectedConsole != null && selectedConsole!.shouldDecompressNsz) ...[
+            if (selectedConsole != null && selectedConsole!.additionalHandler == GameHandler.nszDecompress) ...[
               const SizedBox(height: 8),
               const Card(
                 child: Padding(

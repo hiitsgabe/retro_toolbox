@@ -19,7 +19,7 @@ class FbiServerService {
   static const _formats = {'.cia', '.3ds', '.cci'};
   static const fbiPort = 5000; // the port FBI listens on, on the 3DS
 
-  static bool is3dsConsole(Console c) => c.fileFormat?.any((f) => _formats.contains(f.toLowerCase())) ?? false;
+  static bool is3dsConsole(Console c) => c.originalFormat?.any((f) => _formats.contains(f.toLowerCase())) ?? false;
 
   /// FBI's URL-receive wire format: a 4-byte big-endian length, then the
   /// newline-separated URL payload. (FBI replies with one ack byte on close.)

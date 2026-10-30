@@ -3,7 +3,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
-Console makeConsole(String id, List<String>? formats) => Console(id: id, name: id, urls: const [], fileFormat: formats);
+Console makeConsole(String id, List<String>? formats) => Console(id: id, name: id, urls: const [], originalFormat: formats);
 
 void main() {
   test('isSwitchConsole matches nsp/nsz/xci formats only', () {

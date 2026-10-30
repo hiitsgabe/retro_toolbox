@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
@@ -66,9 +67,9 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
       id: CatalogService.consoleId(name),
       name: name,
       urls: [url],
-      fileFormat: formats.isEmpty ? null : formats,
+      originalFormat: formats.isEmpty ? null : formats,
       romsFolder: folder.isEmpty ? null : folder,
-      shouldUnzip: _shouldUnzip,
+      decompress: _shouldUnzip ? Decompress.unzip : Decompress.none,
       extractContents: _extractContents,
       added: true,
     );

@@ -90,9 +90,9 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     debugPrint('Starting extraction for: $filePath');
 
-    // should_unzip archives should yield only the console's file_format payload
-    // (e.g. .3ds/.cia); drop bundled junk during extraction.
-    final allowed = CatalogService.consoleByIdSync(game.consoleId)?.fileFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
+    // Keep only the console's game_files_format payload (e.g. .bin/.cue);
+    // drop bundled junk during extraction.
+    final allowed = CatalogService.consoleByIdSync(game.consoleId)?.gameFilesFormat?.map((e) => e.toLowerCase()).toList() ?? const [];
 
     try {
       ExtractionService.startExtraction(

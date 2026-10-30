@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:background_downloader/background_downloader.dart';
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
@@ -233,7 +234,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     final lower = game.filename.toLowerCase();
     if (lower.endsWith('.3ds') || lower.endsWith('.cci')) {
       final console = CatalogService.consoleByIdSync(game.consoleId);
-      if (console?.convert3dsToCia ?? false) {
+      if (console?.additionalHandler == GameHandler.cia3ds) {
         final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
         final queueNotifier = _ref.read(taskQueueProvider.notifier);
         Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.cia3dsConversion, {

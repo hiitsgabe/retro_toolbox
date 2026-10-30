@@ -225,7 +225,7 @@ class RtsServerScreen extends ConsumerWidget {
     final draft = RtsFolder(
       path: path,
       name: name,
-      formats: match?.fileFormat ?? const [],
+      formats: match?.gameFilesFormat ?? match?.originalFormat ?? const [],
       boxartsUrl: boxarts,
       romsSubfolder: name,
     );
