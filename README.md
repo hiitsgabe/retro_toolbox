@@ -224,7 +224,7 @@ docs/            # Catalog format guides
 | --- | --- |
 | Sports, NSZ or 3DS tools fail to start | Make sure `python_app/` was packaged with `dart run serious_python:main package` before building |
 | A server can't be reached | Check both devices are on the same network, and pick the right local address in the server's settings |
-| No games in the Games Library | Check the catalog `url` is reachable and `file_format` matches the actual files |
+| No games in the Games Library | Check the catalog `url` is reachable and `original_format` matches the actual files |
 | Downloads failing | Check free space and storage permissions |
 
 ## Legal

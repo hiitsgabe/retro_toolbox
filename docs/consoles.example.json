@@ -2,10 +2,13 @@
   {
     "name": "Example HTML Index Console",
     "url": "https://example.com/roms/example-console/",
-    "file_format": [".ext"],
+    "platform": "psx",
+    "original_format": [".zip"],
+    "decompress": "unzip",
+    "game_files_format": [".bin", ".cue"],
+    "additional_handler": "chd_compress",
     "roms_folder": "example",
     "boxarts": "https://example.com/boxarts/example-console/",
-    "should_unzip": true,
     "extract_contents": true
   },
   {
@@ -14,25 +17,23 @@
       "https://archive.org/download/example-item-part1/",
       "https://archive.org/download/example-item-part2/"
     ],
-    "file_format": [".iso"],
+    "original_format": [".iso"],
     "roms_folder": "example-ia",
     "boxarts": {
       "url": "https://example.com/maps/example.json",
       "name": "name",
       "id": "serial",
       "image": "https://example.com/covers/{serial}.png"
-    },
-    "should_unzip": false
+    }
   },
   {
     "name": "Example Authenticated Console",
     "url": "https://api.example.com/games/?limit=1000",
     "regex": "\"(?P<id>[A-Z0-9]+)\"\\s*:\\s*\\{.*?\"name\"\\s*:\\s*\"(?P<text>[^\"]+)\".*?\"icon_url\"\\s*:\\s*\"(?P<banner_url>[^\"]+)\"",
-    "file_format": [".ext"],
+    "original_format": [".ext"],
     "roms_folder": "example-auth",
     "download_url": "https://api.example.com/games/download/<id>",
     "ignore_extension_filtering": true,
-    "should_decompress_nsz": false,
     "auth": {
       "cookies": true,
       "cookie_name": "auth_token",

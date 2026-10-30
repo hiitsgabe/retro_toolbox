@@ -10,7 +10,7 @@ import 'package:retro_toolbox/widgets/tool_description.dart';
 /// Adds a single console/system to the catalog from a URL. Toggle picks the
 /// source: an Internet Archive item (id or archive.org URL) or a plain HTTP
 /// directory-listing URL. The rest mirrors the console_utilities add flow —
-/// name, ROM subfolder, file formats, and unzip/extract behaviour.
+/// name, ROM subfolder, formats, platform, and decompress/extract behaviour.
 class AddCatalogSourceScreen extends ConsumerStatefulWidget {
   const AddCatalogSourceScreen({super.key});
 
@@ -23,8 +23,10 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
   final _nameController = TextEditingController();
   final _folderController = TextEditingController();
   final _formatsController = TextEditingController(text: '.zip');
+  final _gameFormatsController = TextEditingController();
+  final _platformController = TextEditingController();
   bool _isIa = false;
-  bool _shouldUnzip = true;
+  Decompress _decompress = Decompress.unzip;
   bool _extractContents = true;
   bool _busy = false;
 
@@ -34,6 +36,8 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
     _nameController.dispose();
     _folderController.dispose();
     _formatsController.dispose();
+    _gameFormatsController.dispose();
+    _platformController.dispose();
     super.dispose();
   }
 
@@ -60,16 +64,21 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
       url = input;
     }
 
-    final formats = _formatsController.text.split(',').map((f) => f.trim()).where((f) => f.isNotEmpty).toList();
+    List<String> split(TextEditingController c) => c.text.split(',').map((f) => f.trim()).where((f) => f.isNotEmpty).toList();
+    final formats = split(_formatsController);
+    final gameFormats = split(_gameFormatsController);
+    final platform = _platformController.text.trim();
     final folder = _folderController.text.trim();
 
     final console = Console(
       id: CatalogService.consoleId(name),
       name: name,
       urls: [url],
+      platform: platform.isEmpty ? null : platform,
       originalFormat: formats.isEmpty ? null : formats,
+      gameFilesFormat: gameFormats.isEmpty ? null : gameFormats,
       romsFolder: folder.isEmpty ? null : folder,
-      decompress: _shouldUnzip ? Decompress.unzip : Decompress.none,
+      decompress: _decompress,
       extractContents: _extractContents,
       added: true,
     );
@@ -158,20 +167,50 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
               controller: _formatsController,
               enabled: !_busy,
               decoration: const InputDecoration(
-                labelText: 'File formats',
+                labelText: 'Original formats',
                 hintText: '.zip,.chd',
                 isDense: true,
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.filter_alt),
               ),
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Unzip after download'),
-              value: _shouldUnzip,
-              onChanged: _busy ? null : (v) => setState(() => _shouldUnzip = v),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<Decompress>(
+              initialValue: _decompress,
+              decoration: const InputDecoration(
+                labelText: 'Decompress',
+                isDense: true,
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.unarchive),
+              ),
+              items: [for (final d in Decompress.values) DropdownMenuItem(value: d, child: Text(d.name))],
+              onChanged: _busy ? null : (v) => setState(() => _decompress = v ?? Decompress.none),
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _gameFormatsController,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'Game files formats (optional)',
+                hintText: '.bin,.cue — kept after decompressing',
+                isDense: true,
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.description),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _platformController,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                labelText: 'Platform (optional)',
+                hintText: 'Batocera system id, e.g. psx',
+                isDense: true,
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.sports_esports),
+              ),
+            ),
+            const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Extract contents'),

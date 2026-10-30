@@ -54,4 +54,16 @@ void main() {
     await tester.pump();
     expect(find.text('Enter a name.'), findsOneWidget);
   });
+
+  testWidgets('format fields: original, game files, platform and a Decompress picker', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 2000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pump(tester);
+    expect(find.text('Original formats'), findsOneWidget);
+    expect(find.text('Game files formats (optional)'), findsOneWidget);
+    expect(find.text('Platform (optional)'), findsOneWidget);
+    expect(find.text('Decompress'), findsOneWidget);
+    expect(find.text('unzip'), findsOneWidget);
+    expect(find.text('Unzip after download'), findsNothing);
+  });
 }

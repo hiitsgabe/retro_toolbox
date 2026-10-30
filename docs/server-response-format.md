@@ -73,7 +73,7 @@ The regex matching the HTML structure above:
 
 ### Default Fallback
 
-If no custom `regex` is configured, the app falls back to a Myrient-style pattern that matches `<tr><td class="link">...` rows and filters by `file_format`. This works out of the box with most standard directory listing servers.
+If no custom `regex` is configured, the app falls back to a Myrient-style pattern that matches `<tr><td class="link">...` rows and filters by `original_format`. This works out of the box with most standard directory listing servers.
 
 ### Key Requirements
 
@@ -113,7 +113,7 @@ Use `list_url` instead of `url` to indicate a JSON API source:
   "list_url": "https://your-api.com/games/?limit=100000",
   "list_json_file_location": "files",
   "list_item_id": "name",
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "my_system"
 }
 ```
@@ -162,7 +162,7 @@ For items hosted on archive.org. The app detects `archive.org/download/` URLs au
 {
   "name": "My Collection",
   "url": "https://archive.org/download/my-item-id",
-  "file_format": [".zip", ".iso"],
+  "original_format": [".zip", ".iso"],
   "roms_folder": "my_system"
 }
 ```
@@ -177,7 +177,7 @@ For items hosted on archive.org. The app detects `archive.org/download/` URLs au
     "https://archive.org/download/my-collection-part2",
     "https://archive.org/download/my-collection-part3"
   ],
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "my_system"
 }
 ```
@@ -261,7 +261,7 @@ Sent as: `Authorization: LOW access-key:secret-key`
 
 The app applies these filters to the parsed file list before display:
 
-1. **Extension filtering** — Only files matching `file_format` extensions are shown (case-insensitive). Disable with `"ignore_extension_filtering": true`.
+1. **Extension filtering** — Only files matching `original_format` extensions are shown (case-insensitive). Disable with `"ignore_extension_filtering": true`.
 2. **USA/region filter** — When enabled in settings, hides files not matching a region regex (default: `(USA)`). Configurable per-system with `usa_regex`.
 3. **Non-ASCII filter** — Files starting with non-ASCII characters are skipped.
 4. **Sorting** — Results are sorted alphabetically by filename.

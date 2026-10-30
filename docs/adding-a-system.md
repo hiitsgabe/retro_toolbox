@@ -19,8 +19,8 @@ A minimal file looks like this:
 
 ```json
 [
-  { "name": "SNES", "url": "https://your-server.com/snes/", "file_format": [".zip", ".sfc"], "roms_folder": "snes" },
-  { "name": "Game Boy", "url": "https://your-server.com/gb/", "file_format": [".zip", ".gb"], "roms_folder": "gb" }
+  { "name": "SNES", "url": "https://your-server.com/snes/", "original_format": [".zip"], "decompress": "unzip", "roms_folder": "snes" },
+  { "name": "Game Boy", "url": "https://your-server.com/gb/", "original_format": [".zip"], "decompress": "unzip", "roms_folder": "gb" }
 ]
 ```
 
@@ -47,7 +47,7 @@ The most common setup. The app fetches an HTML page, scans it with a regex patte
 1. The app makes a GET request to `url`
 2. It runs a regex pattern across the HTML response
 3. Each match becomes a game entry — the pattern pulls out the filename, download link, and optionally the file size
-4. Results are filtered by `file_format` and sorted alphabetically
+4. Results are filtered by `original_format` and sorted alphabetically
 
 ### Basic example
 
@@ -57,13 +57,15 @@ If your server has a simple directory listing with `<a>` tags, you don't need a 
 {
   "name": "SNES",
   "url": "https://your-server.com/roms/snes/",
-  "file_format": [".sfc", ".smc", ".zip"],
-  "roms_folder": "snes",
-  "should_unzip": true
+  "platform": "snes",
+  "original_format": [".zip"],
+  "decompress": "unzip",
+  "game_files_format": [".sfc", ".smc"],
+  "roms_folder": "snes"
 }
 ```
 
-Without a `regex` field, the app falls back to a pattern that matches Myrient-style HTML tables (`<tr><td class="link">...`). It then filters by `file_format`.
+Without a `regex` field, the app falls back to a pattern that matches Myrient-style HTML tables (`<tr><td class="link">...`). It then filters by `original_format`.
 
 ### Custom regex
 
@@ -74,9 +76,11 @@ For servers with different HTML layouts, provide a regex with **named capture gr
   "name": "SNES",
   "url": "https://your-server.com/files/SNES/",
   "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
-  "file_format": [".sfc", ".smc", ".zip"],
-  "roms_folder": "snes",
-  "should_unzip": true
+  "platform": "snes",
+  "original_format": [".zip"],
+  "decompress": "unzip",
+  "game_files_format": [".sfc", ".smc"],
+  "roms_folder": "snes"
 }
 ```
 
@@ -103,7 +107,7 @@ When the listing page and the actual download endpoint differ, use `download_url
   "url": "https://api.example.com/catalog",
   "regex": "\"(?P<id>[A-F0-9]+)\".*?\"name\":\"(?P<text>[^\"]+)\"",
   "download_url": "https://api.example.com/download/<id>/file",
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "custom",
   "ignore_extension_filtering": true
 }
@@ -121,9 +125,10 @@ For files hosted on `archive.org`, the app uses the Internet Archive metadata AP
 {
   "name": "My Collection",
   "url": "https://archive.org/download/my-collection-id",
-  "file_format": [".zip", ".bin"],
-  "roms_folder": "my_collection",
-  "should_unzip": true
+  "original_format": [".zip"],
+  "decompress": "unzip",
+  "game_files_format": [".bin", ".cue"],
+  "roms_folder": "my_collection"
 }
 ```
 
@@ -135,7 +140,7 @@ For items that require authentication, add IA S3 credentials:
 {
   "name": "My Private Collection",
   "url": "https://archive.org/download/my-private-item",
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "my_collection",
   "auth": {
     "type": "ia_s3",
@@ -159,9 +164,9 @@ For servers that return a structured JSON response instead of HTML.
   "list_url": "https://api.example.com/games/?limit=100000",
   "list_json_file_location": "files",
   "list_item_id": "name",
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "my_library",
-  "should_unzip": true
+  "decompress": "unzip"
 }
 ```
 
@@ -198,9 +203,9 @@ Some collections are split across multiple URLs. Use an array in the `url` field
     "https://archive.org/download/my-collection-part2/",
     "https://archive.org/download/my-collection-part3/"
   ],
-  "file_format": [".zip"],
+  "original_format": [".zip"],
   "roms_folder": "my_system",
-  "should_unzip": true
+  "decompress": "unzip"
 }
 ```
 
@@ -214,7 +219,7 @@ Some collections are split across multiple URLs. Use an array in the `url` field
 |---------------|------------------|-------------|
 | `name`        | string           | Display name shown in the console selector |
 | `roms_folder` | string           | Target directory for downloads (folder name or absolute path) |
-| `file_format` | array of strings | Accepted file extensions, e.g. `[".zip", ".sfc"]` |
+| `original_format` | array of strings | What the server delivers, e.g. `[".zip"]` or `[".iso"]`. Filters the listing. |
 
 Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for JSON API).
 
@@ -224,14 +229,66 @@ Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for
 |----------------------------|---------|---------------|-------------|
 | `regex`                    | string  | Myrient-style | Custom regex for HTML parsing |
 | `boxarts`                  | string  | *(none)*      | Base URL for thumbnails |
-| `should_unzip`             | boolean | `false`       | Auto-extract ZIP files after download |
+| `platform`                 | string  | *(guessed)*   | Batocera system id (`psx`, `switch`…); see below |
+| `decompress`               | string  | `"none"`      | `unzip`, `unrar` or `none` |
+| `game_files_format`        | array   | *(keep all)*  | What stays after decompressing; the rest is deleted |
+| `additional_handler`       | string  | *(none)*      | `chd_compress`, `3ds_convert` or `nsz_decompress` |
 | `extract_contents`         | boolean | `true`        | Extract only contents, not the wrapper folder |
 | `should_filter_usa`        | boolean | `true`        | Whether the USA-only filter applies to this system |
 | `usa_regex`                | string  | `"(USA)"`     | Custom regex for region filtering |
-| `should_decompress_nsz`    | boolean | `false`       | Auto-decompress NSZ files after download |
-| `ignore_extension_filtering` | boolean | `false`     | Show all regex matches regardless of `file_format` |
+| `ignore_extension_filtering` | boolean | `false`     | Show all regex matches regardless of `original_format` |
 | `download_url`             | string  | *(none)*      | Download URL template with `<id>` placeholder |
 | `auth`                     | object  | *(none)*      | Authentication config (see below) |
+
+---
+
+## Formats, Decompression and Conversion
+
+Each system describes the path a game takes from the server to the ROM folder:
+
+| Field | Meaning |
+|-------|---------|
+| `platform` | Batocera system id (`psx`, `ps2`, `switch`, `3ds`, `megadrive`, `gamecube`…). Drives the logo, colors and which local servers list the system. Without it, the app guesses from the name, then from the formats. |
+| `original_format` | What the server delivers: an archive (`.zip`, `.rar`) or the game's own format. Only these files are listed. |
+| `decompress` | `unzip`, `unrar` or `none` (the default). A file that doesn't match the method is kept as downloaded. |
+| `game_files_format` | Optional. What stays after decompressing; everything else in the archive is deleted. |
+| `additional_handler` | Optional. A conversion that runs last, on the files it accepts. |
+
+Handlers:
+
+| Handler | Takes | Makes | Needs |
+|---------|-------|-------|-------|
+| `chd_compress` | `.cue`, `.gdi`, `.iso` | `.chd` | chdman |
+| `3ds_convert` | `.3ds`, `.cci` | `.cia` | boot9.bin for encrypted dumps |
+| `nsz_decompress` | `.nsz` | `.nsp` | prod.keys |
+
+The input files are deleted only after their conversion succeeds. If the tool is missing or the conversion fails, the game stays in its `game_files_format`. Users can turn each handler on or off per system in Settings → Conversion.
+
+A disc system delivered as zips and stored as CHD:
+
+```json
+{
+  "name": "My Disc System",
+  "url": "https://your-server.com/discs/",
+  "platform": "psx",
+  "original_format": [".zip"],
+  "decompress": "unzip",
+  "game_files_format": [".bin", ".cue"],
+  "additional_handler": "chd_compress",
+  "roms_folder": "psx"
+}
+```
+
+### Older keys
+
+Configs written for earlier versions still work. When a new key is missing, it is filled from the old ones:
+
+| Old | New |
+|-----|-----|
+| `file_format` + `should_unzip: true` (no `download_url`) | `original_format: [".zip"]`, `decompress: "unzip"`, `game_files_format: file_format` |
+| `file_format` otherwise | `original_format: file_format` |
+| `should_decompress_nsz: true` | `additional_handler: "nsz_decompress"` |
+| `convert_3ds_to_cia: true` | `additional_handler: "3ds_convert"` |
 
 ---
 
@@ -291,8 +348,8 @@ If you're hosting a server and want users to browse and add systems from within 
   "list_systems": true,
   "url": "https://your-server.com/files/systems/",
   "regex": "<tr><td class=\"link\"><a href=\"(?P<href>[^\"]+)\" title=\"(?P<title>[^\"]+)\">(?P<text>[^<]+)</a></td><td class=\"size\">(?P<size>[^<]+)</td><td class=\"date\">[^<]*</td></tr>",
-  "file_format": [".zip"],
-  "should_unzip": true,
+  "original_format": [".zip"],
+  "decompress": "unzip",
   "boxarts": "https://thumbnails.example.com/"
 }
 ```
@@ -306,7 +363,7 @@ Entries with `list_systems: true` are never shown in the main console list — t
 **System shows no games:**
 - Open the `url` in a browser to verify it's accessible
 - If using a custom `regex`, test it against the page HTML
-- Check that `file_format` extensions match actual files on the server
+- Check that `original_format` extensions match actual files on the server
 
 **Games download to wrong folder:**
 - Double-check `roms_folder` matches what your emulator expects
