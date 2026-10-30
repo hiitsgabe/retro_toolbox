@@ -183,15 +183,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
-  bool getNszDecompressEnabled() => state.nszDecompressEnabled;
-
   String? getNszKeysPath() => state.nszKeysPath;
-
-  Future<void> setNszDecompressEnabled(bool enabled) async {
-    final newState = state.copyWith(nszDecompressEnabled: enabled);
-    state = newState;
-    await _settingsService.saveSettings(newState);
-  }
 
   Future<void> setUseOnScreenKeyboard(bool enabled) async {
     final newState = state.copyWith(useOnScreenKeyboard: enabled);

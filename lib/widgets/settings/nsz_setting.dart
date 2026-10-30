@@ -29,7 +29,6 @@ class NszSetting extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final enabled = settings.nszDecompressEnabled;
     final keysPath = settings.nszKeysPath;
     final hasKeys = keysPath != null && keysPath.isNotEmpty;
 
@@ -50,15 +49,11 @@ class NszSetting extends ConsumerWidget {
                 ],
               ),
             ),
-            Switch(
-              value: enabled,
-              onChanged: (v) => ref.read(settingsProvider.notifier).setNszDecompressEnabled(v),
-            ),
           ],
         ),
-        // Keys are only needed when decompression is on. Indent under the
-        // header to read as a nested sub-item.
-        if (enabled) ...[
+        // Shown only while Decompress NSZ is on (see SettingsContent). Indent
+        // under the header to read as a nested sub-item.
+        ...[
           const SizedBox(height: 12),
           Padding(
             padding: const EdgeInsets.only(left: 36),

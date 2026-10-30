@@ -14,6 +14,7 @@ import 'package:retro_toolbox/widgets/settings/tools_setting.dart';
 import 'package:retro_toolbox/widgets/settings/favorites_settings.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
+import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
@@ -197,7 +198,16 @@ class SettingsContent extends ConsumerWidget {
             ],
           ],
           if (library) ...[
-            if (selectedConsole != null && selectedConsole!.additionalHandler == GameHandler.nszDecompress) ...[
+            if (selectedConsole != null && selectedConsole!.applicableHandlers.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.transform,
+                title: 'Conversion',
+                child: HandlerSetting(console: selectedConsole!),
+              ),
+            ],
+            if (selectedConsole != null && ref.read(settingsProvider.notifier).activeHandler(selectedConsole!.id) == GameHandler.nszDecompress) ...[
               const SizedBox(height: 8),
               const Card(
                 child: Padding(
