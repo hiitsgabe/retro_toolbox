@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/settings_service.dart';
@@ -111,6 +112,17 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     if (base.isEmpty || romsFolder == null || romsFolder.isEmpty) return base;
     return p.join(base, romsFolder);
   }
+
+  /// The handler that runs after a download for [consoleId], if any.
+  GameHandler? activeHandler(String consoleId) => resolveActiveHandler(
+        saved: getConsoleSetting<String>(consoleId, AppSettings.additionalHandler),
+        jsonDefault: CatalogService.consoleByIdSync(consoleId)?.additionalHandler,
+        nszEnabled: state.nszDecompressEnabled,
+      );
+
+  /// Saves [handler] (null = none) as [consoleId]'s choice over the catalog's.
+  Future<void> setActiveHandler(String consoleId, GameHandler? handler) =>
+      setConsoleSetting<String>(consoleId, AppSettings.additionalHandler, handler?.id ?? 'none');
 
   bool getAutoExtract(String? consoleId) {
     return getSetting(AppSettings.autoExtract, consoleId) ?? true;

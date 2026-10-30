@@ -5,6 +5,7 @@ class AppSettings {
   static const String maxParallelExtractions = 'maxParallelExtractions';
   static const String extractToFolder = 'extractToFolder';
   static const String autoApplyFormations = 'autoApplyFormations';
+  static const String additionalHandler = 'additionalHandler';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
@@ -13,6 +14,7 @@ class AppSettings {
     maxParallelExtractions: int,
     extractToFolder: bool,
     autoApplyFormations: bool,
+    additionalHandler: String,
   };
 
   final Map<String, BaseSettings> consoleSettings;
@@ -138,6 +140,8 @@ class BaseSettings {
   final bool? extractToFolder;
   final String? authToken;
   final bool? autoApplyFormations;
+  /// Per-console handler choice: a GameHandler id, or 'none'. Null = catalog's.
+  final String? additionalHandler;
 
   const BaseSettings({
     this.downloadDir,
@@ -147,6 +151,7 @@ class BaseSettings {
     this.extractToFolder,
     this.authToken,
     this.autoApplyFormations,
+    this.additionalHandler,
   });
 
   BaseSettings copyWith({
@@ -158,6 +163,8 @@ class BaseSettings {
     String? authToken,
     bool clearAuthToken = false,
     bool? autoApplyFormations,
+    String? additionalHandler,
+    bool clearAdditionalHandler = false,
   }) {
     return BaseSettings(
       downloadDir: downloadDir == '' ? null : downloadDir ?? this.downloadDir,
@@ -167,6 +174,7 @@ class BaseSettings {
       extractToFolder: extractToFolder ?? this.extractToFolder,
       authToken: clearAuthToken ? null : (authToken ?? this.authToken),
       autoApplyFormations: autoApplyFormations ?? this.autoApplyFormations ?? true,
+      additionalHandler: clearAdditionalHandler ? null : (additionalHandler ?? this.additionalHandler),
     );
   }
 
@@ -179,6 +187,7 @@ class BaseSettings {
       if (extractToFolder != null) AppSettings.extractToFolder: extractToFolder,
       if (authToken != null) 'authToken': authToken,
       if (autoApplyFormations != null) AppSettings.autoApplyFormations: autoApplyFormations,
+      if (additionalHandler != null) AppSettings.additionalHandler: additionalHandler,
     };
   }
 
@@ -196,6 +205,8 @@ class BaseSettings {
         return extractToFolder as T?;
       case AppSettings.autoApplyFormations:
         return (autoApplyFormations ?? true) as T?;
+      case AppSettings.additionalHandler:
+        return additionalHandler as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -215,6 +226,8 @@ class BaseSettings {
         return copyWith(extractToFolder: value as bool?);
       case AppSettings.autoApplyFormations:
         return copyWith(autoApplyFormations: value as bool?);
+      case AppSettings.additionalHandler:
+        return copyWith(additionalHandler: value as String?, clearAdditionalHandler: value == null);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -229,6 +242,7 @@ class BaseSettings {
       extractToFolder: json[AppSettings.extractToFolder] as bool?,
       authToken: json['authToken'] as String?,
       autoApplyFormations: json[AppSettings.autoApplyFormations] as bool?,
+      additionalHandler: json[AppSettings.additionalHandler] as String?,
     );
   }
 }

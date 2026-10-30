@@ -54,3 +54,13 @@ enum GameHandler {
 
   bool accepts(String path) => inputs.contains(p.extension(path).toLowerCase());
 }
+
+/// The handler that runs for a console: the user's saved choice ([saved] is a
+/// handler id or 'none'), else the catalog's, where the old global NSZ switch
+/// ([nszEnabled]) still turns the catalog's NSZ default off.
+GameHandler? resolveActiveHandler({String? saved, GameHandler? jsonDefault, required bool nszEnabled}) {
+  if (saved == 'none') return null;
+  if (saved != null) return GameHandler.fromId(saved);
+  if (jsonDefault == GameHandler.nszDecompress && !nszEnabled) return null;
+  return jsonDefault;
+}
