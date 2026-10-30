@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/chd_service.dart';
 
 void main() {
@@ -32,5 +35,40 @@ void main() {
     expect(ChdService.parseProgress('Compressing, 42.3% complete...'), closeTo(0.423, 1e-9));
     expect(ChdService.parseProgress('Extracting, 100.0% complete'), 1.0);
     expect(ChdService.parseProgress('Output CHD:   game.chd'), isNull);
+  });
+
+  group('consumedFiles', () {
+    late Directory dir;
+    setUp(() => dir = Directory.systemTemp.createTempSync('rt_chd'));
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    String touch(String name, [String body = 'x']) {
+      final f = File(p.join(dir.path, name))..writeAsStringSync(body);
+      return f.path;
+    }
+
+    test('reads quoted cue tracks', () {
+      final t1 = touch('game (Track 1).bin');
+      final t2 = touch('game (Track 2).bin');
+      final cue = touch('game.cue', 'FILE "game (Track 1).bin" BINARY\n  TRACK 01 MODE2/2352\nFILE "game (Track 2).bin" BINARY\n');
+      expect(ChdService.consumedFiles(cue).toSet(), {cue, t1, t2});
+    });
+
+    test('skips missing tracks', () {
+      final cue = touch('game.cue', 'FILE "gone.bin" BINARY\n');
+      expect(ChdService.consumedFiles(cue), [cue]);
+    });
+
+    test('reads gdi tracks', () {
+      final t1 = touch('track01.bin');
+      final t2 = touch('track 02.raw');
+      final gdi = touch('disc.gdi', '2\n1 0 4 2352 track01.bin 0\n2 600 0 2352 "track 02.raw" 0\n');
+      expect(ChdService.consumedFiles(gdi).toSet(), {gdi, t1, t2});
+    });
+
+    test('iso is itself', () {
+      final iso = touch('game.iso');
+      expect(ChdService.consumedFiles(iso), [iso]);
+    });
   });
 }

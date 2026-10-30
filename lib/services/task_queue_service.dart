@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
@@ -201,6 +202,19 @@ class TaskQueueService {
                 verb: task.params['verb'] as String,
                 label: task.params['label'] as String,
                 run: task.params['run'] as TransferJob,
+              );
+          break;
+        case TaskType.gameHandler:
+          // Fire and forget — runGameHandler manages its own queue-status updates.
+          final handler = GameHandler.fromId(task.params['handler'] as String?);
+          if (handler == null) break;
+          ref.read(extractionProvider.notifier).runGameHandler(
+                taskId: task.params['taskId'] as String,
+                handler: handler,
+                inputs: (task.params['inputs'] as List).cast<String>(),
+                chdmanPath: task.params['chdmanPath'] as String?,
+                keysPath: task.params['keysPath'] as String?,
+                boot9Path: task.params['boot9Path'] as String?,
               );
           break;
         case TaskType.archiveExtraction:

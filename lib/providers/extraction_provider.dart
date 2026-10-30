@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -214,6 +215,88 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     } finally {
       ExtractionService.endNotification(taskId);
     }
+  }
+
+  /// Runs [handler] on each of [inputs] in turn (a game's files after its
+  /// download or extraction). Each input's files are deleted only once its
+  /// output exists; a failure or a missing tool keeps them and stops.
+  Future<void> runGameHandler({
+    required String taskId,
+    required GameHandler handler,
+    required List<String> inputs,
+    String? chdmanPath,
+    String? keysPath,
+    String? boot9Path,
+  }) async {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
+    state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
+
+    if (handler == GameHandler.chdCompress && !await ChdService.isAvailable(chdmanPath)) {
+      return _onHandlerEnded(taskId, error: 'Skipped ${handler.label}: chdman not found. Files kept.');
+    }
+
+    final game = gameStateManager.state[taskId]?.game;
+    final downloadDir = game == null ? '' : _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+    final verb = handler.label;
+    await ExtractionService.startNotification(taskId, verb, '$verb...');
+    try {
+      for (var i = 0; i < inputs.length; i++) {
+        final input = inputs[i];
+        final outputDir = path.dirname(input);
+        final fileName = path.basename(input);
+        void onProgress(double v) {
+          _updateProgress(taskId, (i + v) / inputs.length);
+          ExtractionService.updateNotification('$verb $fileName... ${(v * 100).round()}%');
+        }
+
+        final consumed = handler == GameHandler.chdCompress ? ChdService.consumedFiles(input) : [input];
+        switch (handler) {
+          case GameHandler.chdCompress:
+            await ChdService().convert(inputPath: input, outputDir: outputDir, chdmanPath: chdmanPath, onProgress: onProgress);
+          case GameHandler.cia3ds:
+            await NszService.convert3dsToCia(inputFile: input, outputDir: outputDir, boot9Path: boot9Path, onProgress: onProgress);
+          case GameHandler.nszDecompress:
+            await NszService.decompressNsz(nszFilePath: input, outputDir: outputDir, keysPath: keysPath, onProgress: onProgress);
+        }
+
+        for (final f in consumed) {
+          try {
+            await File(f).delete();
+          } catch (e) {
+            debugPrint('Could not delete $f: $e');
+          }
+        }
+        if (downloadDir.isNotEmpty && path.equals(outputDir, downloadDir)) {
+          final snap = _ref.read(librarySnapshotProvider(downloadDir).notifier);
+          for (final f in consumed) {
+            snap.markFileRemoved(path.basename(f));
+          }
+          snap.markFileAdded('${path.basenameWithoutExtension(input)}${handler.output}');
+        }
+      }
+      _onHandlerEnded(taskId);
+    } catch (e) {
+      debugPrint('${handler.id} failed: $e');
+      _onHandlerEnded(taskId, error: e.toString());
+    } finally {
+      ExtractionService.endNotification(taskId);
+    }
+  }
+
+  /// Ends a handler task: the queue row shows the error, if any, but the game
+  /// stays "extracted" — its files are usable, and a failed extraction would
+  /// offer to re-extract an archive that is already gone.
+  void _onHandlerEnded(String taskId, {String? error}) {
+    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
+    final currentTask = tasks[taskId];
+    if (currentTask != null) {
+      tasks[taskId] = currentTask.copyWith(status: ExtractionStatus.completed, progress: 1.0, error: error);
+      state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
+    }
+    _ref.read(taskQueueProvider.notifier).updateTaskStatus(taskId, error == null ? TaskQueueStatus.completed : TaskQueueStatus.failed, error: error);
+    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
   }
 
   /// The archive tool's extraction (.zip or .rar to any folder), run as a

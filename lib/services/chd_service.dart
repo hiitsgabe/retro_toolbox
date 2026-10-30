@@ -184,6 +184,32 @@ class ChdService {
     return outPath;
   }
 
+  /// The files a compress of [inputPath] replaces: the input plus, for a .cue
+  /// or .gdi, the track files it lists (those that exist), as absolute paths.
+  static List<String> consumedFiles(String inputPath) {
+    final ext = p.extension(inputPath).toLowerCase();
+    if (ext != '.cue' && ext != '.gdi') return [inputPath];
+    final dir = p.dirname(inputPath);
+    final names = <String>[];
+    for (final line in File(inputPath).readAsLinesSync()) {
+      final t = line.trim();
+      if (ext == '.cue') {
+        // FILE "name with spaces.bin" BINARY  |  FILE name.bin BINARY
+        final m = RegExp(r'^FILE\s+(?:"([^"]+)"|(\S+))', caseSensitive: false).firstMatch(t);
+        if (m != null) names.add(m.group(1) ?? m.group(2)!);
+      } else {
+        // track start type sector "name with spaces.raw" offset  |  ... name.bin offset
+        final m = RegExp(r'^\d+\s+\d+\s+\d+\s+\d+\s+(?:"([^"]+)"|(\S+))').firstMatch(t);
+        if (m != null) names.add(m.group(1) ?? m.group(2)!);
+      }
+    }
+    return [
+      inputPath,
+      for (final n in names)
+        if (File(p.join(dir, n)).existsSync()) p.join(dir, n),
+    ];
+  }
+
   /// Whether a chdman is available right now (for gating the UI).
   static Future<bool> isAvailable(String? configuredPath) async =>
       (await resolveChdman(configuredPath)) != null;

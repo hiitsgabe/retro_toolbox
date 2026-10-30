@@ -93,4 +93,9 @@ void main() {
     expect(Decompress.unrar.matches('a.rar'), true);
     expect(Decompress.none.matches('a.zip'), false);
   });
+
+  test('multi-disc inputs are each cue', () {
+    final files = ['d1.cue', 'd1.bin', 'd2.cue', 'd2.bin'];
+    expect(files.where(GameHandler.chdCompress.accepts), ['d1.cue', 'd2.cue']);
+  });
 }
