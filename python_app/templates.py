@@ -154,11 +154,11 @@ def nhl05_screens():
     return ea_screens('nhl05_ps2')
 
 
-def snes_screens(package):
-    """[(file name, png, description)] for an SNES game's screen slots (ISS,
-    NHL '94, KGJ), from the library's `<package>.screens.SLOTS` and their
-    guides, each named in full in the description (the picture may have had
-    no room for its label)."""
+def slot_screens(package):
+    """[(file name, png, description)] for a cartridge game's screen slots
+    (ISS, NHL '94 on SNES and Genesis, KGJ), from the library's
+    `<package>.screens.SLOTS` and their guides, each named in full in the
+    description (the picture may have had no room for its label)."""
     import importlib
     SLOTS = importlib.import_module(f'retro_roster_patcher.games.{package}.screens').SLOTS
     return [(f'{s.name}.png', render(s.size[0], s.size[1], [(g.x, g.y, g.w, g.h, g.label) for g in s.guides]),
@@ -199,9 +199,9 @@ def kit_photo_guide():
             'the shorts from the middle band and the socks from the bottom one.')
 
 
-_SNES_PACKAGES = {
+_SLOT_PACKAGES = {
     'iss-snes': 'iss_snes', 'iss-deluxe-snes': 'iss_deluxe_snes',
-    'nhl94-snes': 'nhl94_snes', 'kgj-mlb-snes': 'kgj_mlb_snes',
+    'nhl94-snes': 'nhl94_snes', 'nhl94-genesis': 'nhl94_genesis', 'kgj-mlb-snes': 'kgj_mlb_snes',
 }
 
 
@@ -218,8 +218,8 @@ def files_for(game_id, supports_kits):
         files = nhl07_screens()
     elif game_id == 'nhl05-ps2':
         files = nhl05_screens()
-    elif game_id in _SNES_PACKAGES:
-        files = snes_screens(_SNES_PACKAGES[game_id])
+    elif game_id in _SLOT_PACKAGES:
+        files = slot_screens(_SLOT_PACKAGES[game_id])
     elif game_id == 'nbalive95-genesis':
         files = nba_screens()
     elif supports_kits:
@@ -404,5 +404,6 @@ def build_kits(game_id, out_dir, patcher, rom, slot, which=None, template=None):
 
 if __name__ == '__main__':
     import sys
-    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'nhl05-ps2', 'iss-snes', 'iss-deluxe-snes', 'nhl94-snes', 'kgj-mlb-snes'):
+    for game in ('we2002', 'pes2013-ps2', 'nhl07-psp', 'nhl05-ps2', 'iss-snes', 'iss-deluxe-snes', 'nhl94-snes', 'nhl94-genesis',
+                 'kgj-mlb-snes'):
         print(*build(game, sys.argv[1], supports_kits=True))

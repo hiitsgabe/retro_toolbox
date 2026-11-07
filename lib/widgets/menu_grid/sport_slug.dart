@@ -128,8 +128,7 @@ List<String> lineupWarnings(String gameId, List<String> positions, int starters)
         full &&
         !(count('G') == 1 && count('C') == 1 && count('LW') == 1 && count('RW') == 1 && count('D') == 2))
       'The game starts the first G, C, LW, RW and two D in the list: make the first $starters exactly those.',
-    // Genesis is left out until a Genesis cartridge confirms its line table.
-    if (gameId == 'nhl94-snes' &&
+    if ((gameId == 'nhl94-snes' || gameId == 'nhl94-genesis') &&
         full &&
         // NHL 94 plays anyone but a G or D as a forward.
         !(count('G') == 1 && count('D') == 2 && top.where((p) => p != 'G' && p != 'D').length == 3))
@@ -142,7 +141,6 @@ List<String> lineupWarnings(String gameId, List<String> positions, int starters)
 
 /// Things true of the game's lineup that the order alone does not show.
 List<String> lineupNotes(String gameId) => [
-      if (gameId == 'nhl94-genesis') 'Not yet checked on a Genesis cartridge: the game may not start the first six as listed.',
       if (gameId == 'mvp-psp') 'At NL parks the DH sits, the hitters behind him move up, and the first starting pitcher bats ninth.',
       if (gameId == 'kgj-mlb-snes') 'The lineup bats in this order. NL clubs bat eight, and their pitcher bats ninth.',
     ];

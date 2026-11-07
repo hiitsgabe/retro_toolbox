@@ -93,6 +93,8 @@ void main() {
   test("NHL '94 and KGJ screen slots have their own names", () {
     expect(imageSlotLabel('boot', 'nhl94-snes').$2, contains('EA SPORTS'));
     expect(imageSlotLabel('menu', 'nhl94-snes').$1, 'Menu wallpaper');
+    expect(imageSlotLabel('menu', 'nhl94-genesis').$1, 'Game Setup');
+    expect(imageSlotLabel('title', 'nhl94-genesis').$2, contains('NHL HOCKEY 94'));
     expect(imageSlotLabel('title', 'kgj-mlb-snes').$1, 'Stadium');
     expect(imageSlotLabel('boot', 'kgj-mlb-snes').$2, contains('licence screen'));
     expect(logosNote('nhl94-snes'), contains('center ice'));

@@ -488,6 +488,9 @@ def _render_default_images(game_id, league, season, out_dir):
     if game_id == 'nhl94-snes':
         import nhl94_art
         return nhl94_art.render_default_images(league, season, out_dir)
+    if game_id == 'nhl94-genesis':
+        import nhl94_genesis_art
+        return nhl94_genesis_art.render_default_images(league, season, out_dir)
     if game_id == 'kgj-mlb-snes':
         import kgj_art
         return kgj_art.render_default_images(league, season, out_dir)

@@ -194,6 +194,10 @@ const _gameSlotNames = {
     'title': ('Title screen', 'The whole title; the credits and the NHL and NHLPA shields sit over the bottom.'),
     'menu': ('Menu wallpaper', 'Behind every menu and pause screen; keep the logo boxes plain and the lower part dark.'),
   },
+  'nhl94-genesis': {
+    'title': ('Title screen', 'The whole title; the NHL and NHLPA shields, the NHL HOCKEY 94 letters and the credits are drawn over it.'),
+    'menu': ('Game Setup', 'The rink behind Game Setup, the main menu; it shows through the options box. Only 240 tiles, so keep it simple.'),
+  },
   'kgj-mlb-snes': {
     'boot': ('Boot screen', 'The licence screen at power-on, faded in and out.'),
     'title': ('Stadium', 'Behind the title and the menus; the logo, Griffey, PUSH START and the menu box sit over most of it.'),

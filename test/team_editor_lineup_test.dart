@@ -66,8 +66,10 @@ void main() {
     });
 
     test('NHL 94 starts a G, three forwards and two D', () {
-      expect(lineupWarnings('nhl94-snes', ['G', 'C', 'C', 'LW', 'D', 'D', 'G'], 6), isEmpty);
-      expect(lineupWarnings('nhl94-snes', ['G', 'G', 'C', 'LW', 'D', 'D'], 6).single, contains('three forwards'));
+      for (final g in ['nhl94-snes', 'nhl94-genesis']) {
+        expect(lineupWarnings(g, ['G', 'C', 'C', 'LW', 'D', 'D', 'G'], 6), isEmpty, reason: g);
+        expect(lineupWarnings(g, ['G', 'G', 'C', 'LW', 'D', 'D'], 6).single, contains('three forwards'), reason: g);
+      }
     });
 
     test('NHL 94 needs two goalies: Genesis stops, SNES keeps the cartridge team', () {
@@ -274,11 +276,12 @@ void main() {
     expect(find.text('STARTING LINEUP'), findsOneWidget);
   });
 
-  test('NHL 94 Genesis drops the six-starters claim until a cartridge confirms it', () {
+  test('NHL 94 Genesis makes the six-starters claim, a cartridge having confirmed it', () {
+    // On the cartridge, Matchups and the line editor start the first G, three
+    // forwards and two D of a patched list (the library writes 1-based lines).
     final wrong = ['G', 'G', 'C', 'LW', 'RW', 'D', 'D'];
-    expect(lineupWarnings('nhl94-snes', wrong, 6), hasLength(1));
-    expect(lineupWarnings('nhl94-genesis', wrong, 6), isEmpty);
-    expect(lineupNotes('nhl94-genesis').single, contains('Genesis cartridge'));
+    expect(lineupWarnings('nhl94-genesis', wrong, 6), hasLength(1));
+    expect(lineupNotes('nhl94-genesis'), isEmpty);
     expect(lineupWarnings('nhl94-genesis', ['G', 'C', 'C', 'C', 'D', 'D'], 6).single, contains('two goalies'));
   });
 }

@@ -562,13 +562,17 @@ def test_default_images_dispatch_by_game():
     we = types.ModuleType('default_art')
     we.render_default_images = lambda game, league, season, out: calls.append((game, league)) or {'boot': 'b'}
     nhl, kgj, ps2 = types.ModuleType('nhl94_art'), types.ModuleType('kgj_art'), types.ModuleType('nhl05_art')
+    gen = types.ModuleType('nhl94_genesis_art')
     nhl.render_default_images = lambda league, season, out: {'menu': 'm'}
+    gen.render_default_images = lambda league, season, out: {'title': 'g'}
     kgj.render_default_images = lambda league, season, out: {'title': 's'}
     ps2.render_default_images = lambda league, season, out: {'legal': 'l'}
-    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art', 'nhl94_art', 'kgj_art', 'nhl05_art')}
-    sys.modules.update({'pes_art': pes, 'default_art': we, 'nhl94_art': nhl, 'kgj_art': kgj, 'nhl05_art': ps2})
+    saved = {k: sys.modules.get(k) for k in ('pes_art', 'default_art', 'nhl94_art', 'nhl94_genesis_art', 'kgj_art', 'nhl05_art')}
+    sys.modules.update({'pes_art': pes, 'default_art': we, 'nhl94_art': nhl, 'nhl94_genesis_art': gen,
+                        'kgj_art': kgj, 'nhl05_art': ps2})
     try:
         assert main._render_default_images('nhl94-snes', 'NHL', 2026, '/o') == {'menu': 'm'}
+        assert main._render_default_images('nhl94-genesis', 'NHL', 2026, '/o') == {'title': 'g'}
         assert main._render_default_images('nhl05-ps2', 'NHL', 2026, '/o') == {'legal': 'l'}
         assert main._render_default_images('kgj-mlb-snes', 'MLB', 2026, '/o') == {'title': 's'}
         assert main._render_default_images('pes2013-ps2', 'Liga', 2026, '/o') == {'title': 't'}
@@ -655,7 +659,7 @@ def test_templates_zip_from_stand_in_slots():
     assert '128x128' in readme and '96x128' in readme and 'red lines are guides' in readme
     assert [n for n, _, _ in templates.files_for('nbalive95-genesis', False)] == ['title.png']
     try:
-        templates.files_for('nhl94-genesis', False)
+        templates.files_for('mvp-psp', False)
         assert False, 'a game without templates must say so'
     except ValueError:
         pass
@@ -870,13 +874,14 @@ def test_nhl94_and_kgj_art_fill_every_slot_clear_of_the_game():
     import iss_art
     import kgj_art
     import nhl94_art
+    import nhl94_genesis_art
     from PIL import Image, ImageChops
 
     def overlaps(a, g):
         x, y, w, h = a
         return x < g.x + g.w and g.x < x + w and y < g.y + g.h and g.y < y + h
 
-    for mod in (nhl94_art, kgj_art):
+    for mod in (nhl94_art, nhl94_genesis_art, kgj_art):
         slots = iss_art.slots(mod.PACKAGE)
         out = mod.render_default_images('X', 2026, tempfile.mkdtemp())
         assert sorted(out) == sorted(slots), (mod.__name__, sorted(out))
@@ -917,6 +922,14 @@ def test_nhl94_and_kgj_art_fill_every_slot_clear_of_the_game():
     col = next(g for g in iss_art.slots('nhl94_snes')['title'].guides if g.w == 1)
     assert {title.getpixel((col.x, y)) for y in range(224)} == {iss_art.DEEP[:3]}
     assert title.getpixel((1, 40)) == title.getpixel((254, 40)) == iss_art.DEEP[:3]
+    # The Genesis title's credits are black: ice under them; dark purple under
+    # the shields and the NHL HOCKEY 94 letters, which are red and white.
+    gen = iss_art.slots('nhl94_genesis')['title']
+    lum = _painted(nhl94_genesis_art, 'title', gen).convert('L')
+    credits = next(g for g in gen.guides if g.w == gen.size[0])
+    letters = next(g for g in gen.guides if 'letters' in g.label)
+    assert lum.crop((credits.x, credits.y, credits.x + credits.w, credits.y + credits.h)).getextrema()[0] > 150
+    assert lum.crop((letters.x, letters.y, letters.x + letters.w, letters.y + letters.h)).getextrema()[1] < 100
 
 
 def test_nhl94_and_kgj_templates_follow_the_library_slots():
@@ -924,9 +937,10 @@ def test_nhl94_and_kgj_templates_follow_the_library_slots():
     import templates
     from PIL import Image
     from retro_roster_patcher.games.kgj_mlb_snes.screens import SLOTS as KGJ
+    from retro_roster_patcher.games.nhl94_genesis.screens import SLOTS as GEN
     from retro_roster_patcher.games.nhl94_snes.screens import SLOTS as NHL
 
-    for game, slots in (('nhl94-snes', NHL), ('kgj-mlb-snes', KGJ)):
+    for game, slots in (('nhl94-snes', NHL), ('nhl94-genesis', GEN), ('kgj-mlb-snes', KGJ)):
         files = templates.files_for(game, False)
         assert [n for n, _, _ in files] == [f'{s.name}.png' for s in slots], game
         for (_, png, desc), s in zip(files, slots):
