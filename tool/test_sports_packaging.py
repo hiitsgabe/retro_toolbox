@@ -185,6 +185,8 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         slot_order = (3, 1, 2)
         slot_groups = (('english', 0, 20), ('other', 98, 36))
         max_leagues = 2
+        writes_formation = True
+        formations = ('4-4-2', '4-3-3')
 
         def kit_templates(self, rom_path):
             return ['t']
@@ -201,12 +203,13 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'national_slot_base': 1000,
         'slot_order': [3, 1, 2],
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
-        'max_leagues': 2, 'multi_league': True}
+        'max_leagues': 2, 'multi_league': True, 'writes_formation': True, 'formations': ['4-4-2', '4-3-3']}
     assert main._capabilities(Old, Base) == {
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'supports_looks': False,
         'image_slots': [],
         'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'national_slot_base': None,
-        'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False}
+        'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
+        'writes_formation': False, 'formations': []}
     slots_only = main._capabilities(SlotsOnly, Base)
     assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
 
@@ -316,6 +319,9 @@ def test_fetch_nationals_orders_each_squad():
         def __init__(self, **kw):
             self.__dict__.update(kw)
 
+    # Players, not names: with the library's apply_lineup each one gets a role.
+    sub, starter = Obj(id=10, position='Midfielder', role=None), Obj(id=11, position='Midfielder', role=None)
+
     class Api:
         def get_leagues(self, id, season):
             return iter([Obj(id=id, season=season)])
@@ -326,9 +332,9 @@ def test_fetch_nationals_orders_each_squad():
         def get_squad(self, team_id, season):
             if team_id == 3:
                 raise FakeRrp.ApiError('down')
-            return ['sub', 'starter']
+            return [sub, starter]
 
-        def get_lineup(self, team_id, league_id):
+        def get_lineup(self, team_id, league_id, **kw):  # kw: the squad, team and season a newer library takes
             return {'xi': ['starter']}
 
     class P:
@@ -344,7 +350,7 @@ def test_fetch_nationals_orders_each_squad():
     data, mapping = main._fetch_nationals(P(), '/x.bin', 2026, FakeRrp)
     # Only the mapped teams are fetched, each in fielding order (starters first).
     assert [t.team.id for t in data.teams] == [1, 3] and [m.slot_index for m in mapping] == [1000, 1001]
-    assert data.teams[0].players == ['starter', 'sub'] and data.teams[0].extra == {'lineup': {'xi': ['starter']}}
+    assert data.teams[0].players == [starter, sub] and data.teams[0].extra == {'lineup': {'xi': ['starter']}}
     assert data.teams[1].error == 'down' and data.teams[1].players == []
 
 
