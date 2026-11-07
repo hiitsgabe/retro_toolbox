@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/models/soccer_formation.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
@@ -477,5 +478,93 @@ void main() {
       );
     },
     skip: !enabled || issDir.isEmpty,
+  );
+
+  // The soccer editor's formation and its lines in colour, on a made-up club.
+  const formationInfo = PatcherInfo(
+    gameId: 'iss2000-n64',
+    platform: 'n64',
+    sport: 'soccer',
+    requiresSlotMapping: true,
+    providers: ['espn'],
+    writesFormation: true,
+    formations: ['4-4-2', '4-5-1', '4-3-3', '3-5-2', '3-6-1', '3-4-3', '5-3-2'],
+  );
+  RosterTeam formationClub() {
+    var id = 0;
+    // Negative ids: no headshot lookups.
+    RosterPlayer p(String name, String role, int number) =>
+        RosterPlayer(raw: {'id': -(++id), 'name': name, 'role': role, 'position': roleGroup(role), 'number': number});
+    return RosterTeam(
+      teamRaw: {'id': 1, 'name': 'Example FC', 'code': 'EXF', 'color': '1B5E20', 'alternate_color': 'FFFFFF'},
+      players: [
+        p('R. Alvim', 'GK', 1),
+        p('T. Brisa', 'RB', 2),
+        p('C. Duarte', 'CB', 4),
+        p('M. Esteves', 'CB', 3),
+        p('L. Faria', 'LB', 6),
+        p('G. Lemos', 'RM', 7),
+        p('H. Matos', 'CM', 5),
+        p('J. Neves', 'CM', 8),
+        p('K. Ornelas', 'LM', 11),
+        p('P. Quintal', 'ST', 9),
+        p('S. Rangel', 'ST', 10),
+        p('V. Sabino', 'GK', 12),
+        p('A. Toledo', 'CB', 13),
+        p('B. Uchoa', 'CDM', 15),
+        p('D. Valente', 'CAM', 20),
+        p('E. Xavier', 'RW', 17),
+        p('F. Zanin', 'LW', 19),
+        p('I. Prado', 'ST', 21),
+      ],
+      statsRaw: {},
+      extraRaw: {'formation': '4-4-2'},
+    );
+  }
+
+  Widget formationEditor(RosterTeam team) => TeamEditorScreen(team: team, gameId: formationInfo.gameId, sport: formationInfo.sport, info: formationInfo);
+  // Tall enough for the eleven and the bench.
+  const formationSize = Size(1000, 1800);
+  Future<void> pickIn(WidgetTester t, Finder field, String value) async {
+    await t.tap(field);
+    await t.pump(const Duration(milliseconds: 400));
+    await t.tap(find.text(value).last);
+    await t.pump(const Duration(milliseconds: 400));
+  }
+
+  testWidgets(
+    'formation: the lines in 4-4-2',
+    (t) => shoot(t, 'formation_1_lines', (_) => formationEditor(formationClub()), size: formationSize),
+    skip: !enabled,
+  );
+  testWidgets(
+    'formation: changed to 4-3-3',
+    (t) => shoot(
+      t,
+      'formation_2_433',
+      (_) => formationEditor(formationClub()),
+      size: formationSize,
+      act: (t) => pickIn(t, find.byType(DropdownButton<String>), '4-3-3'),
+    ),
+    skip: !enabled,
+  );
+  testWidgets(
+    'formation: a role change',
+    (t) => shoot(
+      t,
+      'formation_3_role',
+      (_) => formationEditor(formationClub()),
+      size: formationSize,
+      act: (t) async {
+        await pickIn(t, find.byType(DropdownButton<String>), '4-3-3');
+        // The left midfielder now plays up front: make him a left winger.
+        await t.tap(find.text('K. Ornelas'));
+        await t.pump(const Duration(milliseconds: 400));
+        await pickIn(t, find.byType(DropdownButtonFormField<String>), 'LW');
+        await t.tap(find.text('Save'));
+        await t.pump(const Duration(milliseconds: 400));
+      },
+    ),
+    skip: !enabled,
   );
 }

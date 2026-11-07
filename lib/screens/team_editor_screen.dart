@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/models/soccer_formation.dart';
 import 'package:retro_toolbox/services/formation_cache_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
@@ -75,11 +76,58 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   bool get _usesColor => gameUsesTeamColor(widget.gameId);
   bool get _hasKits => widget.info?.supportsKits == true;
 
-  /// Baseball: regroups the list the way the game writes it, so the labels
-  /// show who is stored where. Call after every change to the order.
+  /// Regroups the list the way the game writes it, so the labels show who is
+  /// stored where: baseball's pitchers after the batters, soccer's first
+  /// goalkeeper on top and one keeper in the eleven. Call after every change
+  /// to the order.
   void _regroup() {
     if (_splitsPitchers) team.players.setAll(0, splitPitchers(team.players));
+    if (_isSoccer) team.players.setAll(0, teamSheet(team.players));
   }
+
+  // -- Formation (soccer) ---------------------------------------------------
+
+  bool get _isSoccer {
+    final sport = widget.sport.toLowerCase();
+    return sport.contains('soccer') || sport.contains('football');
+  }
+
+  /// The formations the game writes, else the common ones (an older library).
+  List<String> get _formations {
+    final listed = widget.info?.formations ?? const [];
+    return listed.isNotEmpty ? listed : commonFormations;
+  }
+
+  String get _formation => shownFormation(team.extraRaw, _formations);
+
+  /// Stores the formation the selector shows, the 4-4-2 default included, so
+  /// the patch writes the one the colours follow.
+  void _syncFormation() {
+    if (_isSoccer) team.extraRaw['formation'] = _formation;
+  }
+
+  /// The formation selector, and a note when the game keeps its own.
+  Widget _formationRow(ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(top: 4, left: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Formation', style: theme.textTheme.labelLarge),
+                const SizedBox(width: 12),
+                DropdownButton<String>(
+                  value: _formation,
+                  items: [for (final f in _formations) DropdownMenuItem(value: f, child: Text(f))],
+                  // The order stays: the lines are cut from it by index.
+                  onChanged: (v) => setState(() => team.extraRaw['formation'] = v!),
+                ),
+              ],
+            ),
+            if (widget.info?.writesFormation != true) _note(theme, 'This game keeps its own formation; the order and roles still apply.'),
+          ],
+        ),
+      );
 
   // -- Kits ---------------------------------------------------------------
 
@@ -109,6 +157,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   void initState() {
     super.initState();
     _regroup();
+    _syncFormation();
     if (_hasKits) _refreshKits();
     _loadSavedFlag();
   }
@@ -404,10 +453,17 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   /// picked: the d-pad's way to reorder without a drag.
   void _moveBy(int delta) {
     final players = team.players;
-    final p = players[_swapFrom!];
+    final from = _swapFrom!, p = players[from], before = [...players];
     setState(() {
-      players.insert(_swapFrom! + delta, players.removeAt(_swapFrom!));
-      _regroup();
+      // A step the game's order undoes (the eleventh past the bench keeper)
+      // goes on to the next place; none that sticks leaves the list as it was.
+      for (var to = from + delta; to >= 0 && to < players.length; to += delta) {
+        players.setAll(0, before);
+        players.insert(to, players.removeAt(from));
+        _regroup();
+        if (players.indexOf(p) != from) break;
+      }
+      if (players.indexOf(p) == from) players.setAll(0, before);
       _swapFrom = players.indexOf(p);
     });
     final at = _focusRow = _swapFrom!;
@@ -419,8 +475,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
   }
 
   Future<void> _saveFormation() async {
-    final ids = [for (final p in widget.team.players) p.id].where((i) => i > 0).toList();
-    await FormationCacheService.save(widget.team.id, ids);
+    await FormationCacheService.save(widget.team.id, SavedFormation.of(widget.team));
     if (!mounted) return;
     setState(() => _hasSavedFormation = true);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -433,9 +488,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     if (!mounted) return;
     setState(() => _hasSavedFormation = false);
 
-    final isSoccer = widget.sport.toLowerCase().contains('soccer') ||
-        widget.sport.toLowerCase().contains('football');
-    if (isSoccer && widget.team.id > 0) {
+    if (_isSoccer && widget.team.id > 0) {
       try {
         final fresh = await SportsService.fetchTeam(
           gameId: widget.gameId,
@@ -453,6 +506,8 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
           widget.team.extraRaw
             ..clear()
             ..addAll(fresh.extraRaw);
+          _regroup();
+          _syncFormation();
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Roster updated from provider'), duration: Duration(seconds: 2)),
@@ -527,6 +582,8 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     final nameCtrl = TextEditingController(text: player?.name ?? '');
     final posCtrl = TextEditingController(text: player?.position ?? '');
     final numCtrl = TextEditingController(text: player?.number?.toString() ?? '');
+    // Soccer picks a role from the list instead; null keeps the one he has.
+    String? pickedRole;
 
     // Stats are game-agnostic here: whatever numeric fields the fetched
     // player_stats holds become editable, so this works across every sport.
@@ -547,7 +604,17 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 TextField(controller: nameCtrl, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
-                TextField(controller: posCtrl, decoration: const InputDecoration(labelText: 'Position')),
+                if (_isSoccer)
+                  DropdownButtonFormField<String>(
+                    initialValue: soccerRoles.contains(player?.role) ? player!.role : null,
+                    // A role outside the list (an older file), or none: shown, and kept until a pick.
+                    hint: player == null ? null : Text(player.role.isNotEmpty ? player.role : player.position),
+                    decoration: const InputDecoration(labelText: 'Position'),
+                    items: [for (final r in soccerRoles) DropdownMenuItem(value: r, child: Text(r))],
+                    onChanged: (v) => pickedRole = v,
+                  )
+                else
+                  TextField(controller: posCtrl, decoration: const InputDecoration(labelText: 'Position')),
                 TextField(controller: numCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Number')),
                 if (statCtrls.isNotEmpty)
                   ExpansionTile(
@@ -581,7 +648,11 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     setState(() {
       final pl = player ?? team.addPlayer(name);
       pl.name = name;
-      pl.position = posCtrl.text.trim();
+      if (!_isSoccer) {
+        pl.position = posCtrl.text.trim();
+      } else if (pickedRole != null) {
+        setRole(pl, pickedRole!);
+      }
       pl.number = int.tryParse(numCtrl.text.trim());
       if (statCtrls.isNotEmpty) {
         for (final e in statCtrls.entries) {
@@ -667,8 +738,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     );
   }
 
-  Widget _avatar(RosterPlayer p, bool starter) {
-    final ring = starter ? Colors.green : Colors.grey;
+  Widget _avatar(RosterPlayer p, Color ring) {
     final url = p.photoUrl.isNotEmpty ? p.photoUrl : espnHeadshot(p.id, widget.sport);
     final fallback = CircleAvatar(radius: 20, child: Text(p.number?.toString() ?? p.name.characters.firstOrNull ?? '?'));
     Widget inner = url == null
@@ -727,11 +797,14 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
     // marked on its own, since stored rows may follow it. Everyone else
     // stores the first rows, so one heading marks where the rest start.
     final stored = gameStoresByPosition(widget.gameId) ? nhl94StoredRows([for (final p in players) p.position], widget.rosterCounts) : null;
+    // Soccer: the line each slot plays under the formation, by order.
+    final lines = _isSoccer ? slotLines(_formation, players.length) : null;
     // The team, its colours and kits, and the notes, above the squad.
     Widget top(Widget last) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _teamHeader(theme, countLine),
+            if (_isSoccer) _formationRow(theme),
             if (_usesColor) _colorRow(theme),
             if (_hasKits) _kitsSection(theme),
             for (final w in warnings) _warning(theme, w),
@@ -821,7 +894,8 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                     // Colors live in the header so they scroll away instead of
                     // pinning two tall tiles above the squad.
                     // While swapping, only the players: no colors, no labels.
-                    header: swapping ? null : top(_sectionLabel(theme, startersLabel(widget.gameId), Colors.green)),
+                    // Soccer labels each line instead.
+                    header: swapping ? null : top(_isSoccer ? const SizedBox.shrink() : _sectionLabel(theme, startersLabel(widget.gameId), Colors.green)),
                     buildDefaultDragHandles: !swapping && !Handheld.current,
                     itemBuilder: (context, i) {
                       final p = players[i];
@@ -834,8 +908,13 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                       final showExtraLabel = stored == null && i == _rosterSize;
                       final showNationalLabel = i == mlSize;
                       final picked = _swapFrom == i;
+                      // A soccer starter shows his line: a band of its colour, as on ISS's team select.
+                      final line = lines?[i];
+                      final band = line == null || line == SoccerLine.bench ? null : line;
+                      final showLineLabel = band != null && (i == 0 || lines![i - 1] != band);
+                      final role = _isSoccer && p.role.isNotEmpty ? p.role : p.position;
                       final subtitle = [
-                        if (p.position.isNotEmpty) p.position,
+                        if (role.isNotEmpty) role,
                         if (p.nationality.isNotEmpty) p.nationality,
                         if (stored != null && extra) 'not stored',
                       ].join(' · ');
@@ -843,6 +922,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                         key: ValueKey('player_${p.id}_$i'),
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (showLineLabel && !swapping) _sectionLabel(theme, band.label, band.color),
                           if (showBenchLabel && !swapping) _sectionLabel(theme, 'Bench', Colors.grey),
                           if (showRotationLabel && !swapping) _sectionLabel(theme, 'Rotation', Colors.blue),
                           if (showBullpenLabel && !swapping) _sectionLabel(theme, 'Bullpen', Colors.blueGrey),
@@ -859,7 +939,11 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                       side: BorderSide(color: theme.colorScheme.primary, width: 2),
                                     )
                                   : null,
-                              color: starter ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5) : null,
+                              color: band != null
+                                  ? band.color.withValues(alpha: 0.16)
+                                  : starter
+                                      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5)
+                                      : null,
                               // The buttons sit beside the tile, not in it: the
                               // d-pad only moves to what lies past the tile's edge.
                               child: Row(
@@ -869,8 +953,12 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                       focusNode: _focusRow == i ? _rowFocus : null,
                                       dense: compact,
                                       visualDensity: compact ? VisualDensity.compact : null,
-                                      leading: _avatar(p, starter),
-                                      title: Text(p.name, overflow: TextOverflow.ellipsis),
+                                      leading: _avatar(p, line?.color ?? (starter ? Colors.green : Colors.grey)),
+                                      title: Text(
+                                        p.name,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: band == null ? null : TextStyle(color: band.color, fontWeight: FontWeight.w600),
+                                      ),
                                       subtitle: subtitle.isEmpty ? null : Text(subtitle, overflow: TextOverflow.ellipsis),
                                       onTap: () => _onRowTap(i, p),
                                     ),

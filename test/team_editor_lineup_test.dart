@@ -207,17 +207,15 @@ void main() {
     labelAbove(t, 'ROTATION', 'B16', 'P1');
   });
 
-  testWidgets('ISS warns while the keeper is not first', (t) async {
+  testWidgets('ISS warns only for a squad without a keeper', (t) async {
+    // The game plays the first goalkeeper listed: the list opens with him on top.
     final team = _team([_p('Def', 'Defender'), _p('Keeper', 'Goalkeeper'), for (var i = 0; i < 9; i++) _p('M$i', 'Midfielder')]);
     await pump(t, team, 'iss-snes', 'soccer');
-    expect(find.textContaining('in goal'), findsOneWidget);
-
-    await t.tap(find.byIcon(Icons.swap_vert).at(1));
-    await t.pump();
-    await t.tap(find.text('Def'));
-    await t.pump();
     expect(_names(team).first, 'Keeper');
     expect(find.textContaining('in goal'), findsNothing);
+
+    await pump(t, _team([_p('Def', 'Defender'), for (var i = 0; i < 10; i++) _p('M$i', 'Midfielder')]), 'iss-snes', 'soccer');
+    expect(find.textContaining('in goal'), findsOneWidget);
   });
 
   testWidgets('a WE2002 Master League slot marks the rows only its national team keeps', (t) async {

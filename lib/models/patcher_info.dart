@@ -47,6 +47,14 @@ class PatcherInfo {
   /// overwrite the next group.
   final int maxLeagues;
 
+  /// Soccer: the patch writes each team's formation, the nearest of
+  /// [formations]. False from a library older than formations.
+  final bool writesFormation;
+
+  /// Soccer: the formations the patch can write ("4-4-2"), in the game's
+  /// order; empty when the library does not say.
+  final List<String> formations;
+
   const PatcherInfo({
     required this.gameId,
     required this.platform,
@@ -65,6 +73,8 @@ class PatcherInfo {
     this.slotGroups = const [],
     this.slotOrder = const [],
     this.maxLeagues = 1,
+    this.writesFormation = false,
+    this.formations = const [],
   });
 
   /// The slot the i-th team of a single league takes.
@@ -100,6 +110,8 @@ class PatcherInfo {
         ],
         slotOrder: [for (final s in ((j['slot_order'] as List?) ?? const [])) (s as num).toInt()],
         maxLeagues: ((j['max_leagues'] ?? 1) as num).toInt(),
+        writesFormation: (j['writes_formation'] ?? false) as bool,
+        formations: ((j['formations'] as List?) ?? const []).map((e) => '$e').toList(),
       );
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';

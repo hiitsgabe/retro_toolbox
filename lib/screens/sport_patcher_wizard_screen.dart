@@ -545,20 +545,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     final saved = await FormationCacheService.load();
     if (saved.isEmpty) return;
     for (final team in doc.teams) {
-      final ids = saved[team.id];
-      if (ids == null || ids.isEmpty) continue;
-      final byId = {for (final p in team.players) p.id: p};
-      final ordered = <RosterPlayer>[];
-      for (final id in ids) {
-        final p = byId[id];
-        if (p != null && !ordered.contains(p)) ordered.add(p);
-      }
-      for (final p in team.players) {
-        if (!ordered.contains(p)) ordered.add(p);
-      }
-      team.players
-        ..clear()
-        ..addAll(ordered);
+      saved[team.id]?.applyTo(team);
     }
   }
 

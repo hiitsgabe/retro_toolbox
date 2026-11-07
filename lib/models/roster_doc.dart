@@ -155,6 +155,10 @@ class RosterPlayer {
   set name(String v) => raw['name'] = v;
   String get position => (raw['position'] ?? '') as String;
   set position(String v) => raw['position'] = v;
+
+  /// Soccer: the detailed role (`GK`, `RB`, `CDM`…), '' if unset.
+  String get role => (raw['role'] ?? '') as String;
+  set role(String v) => raw['role'] = v;
   int? get number => (raw['number'] as num?)?.toInt();
   set number(int? v) => raw['number'] = v;
   String get nationality => (raw['nationality'] ?? '') as String;

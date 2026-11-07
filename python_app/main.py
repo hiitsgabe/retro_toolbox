@@ -347,6 +347,10 @@ def _capabilities(cls, base):
         'slot_groups': [{'name': n, 'first': f, 'count': c} for n, f, c in groups],
         'max_leagues': leagues,
         'multi_league': leagues > 1 and bool(groups),
+        # Soccer: whether patch writes each team's formation, and the shapes it
+        # can write (the editor's formation choices).
+        'writes_formation': bool(getattr(cls, 'writes_formation', False)),
+        'formations': list(getattr(cls, 'formations', None) or ()),
     }
 
 
@@ -419,7 +423,12 @@ def _fetch_nationals(patcher, rom, season, rrp, on_progress=None, taken=()):
     """(LeagueData, slot mapping) of the national squads: the teams of ESPN
     league 2021 (international friendlies) paired with the disc's national rows
     by the patcher's `national_slot_map`; squads and lineups are fetched for
-    the mapped teams only, the lineup landing in roster.extra["lineup"]."""
+    the mapped teams only. The lineup gives each player his role and the team
+    its formation (`apply_lineup`), as a league fetch does."""
+    try:
+        from retro_roster_patcher.sports.lineup import apply_lineup
+    except ImportError:  # a library older than roles and formations
+        apply_lineup = None
     api = patcher.api
     league = next(iter(api.get_leagues(id=2021, season=season)))
     teams = api.get_teams(2021, season)
@@ -434,9 +443,12 @@ def _fetch_nationals(patcher, rom, season, rrp, on_progress=None, taken=()):
         r = rrp.TeamRoster(team=team)
         try:
             r.players = api.get_squad(team.id, season)
-            lineup = api.get_lineup(team.id, 2021)
-            if lineup:
-                r.extra['lineup'] = lineup
+            if apply_lineup:
+                apply_lineup(r, api.get_lineup(team.id, 2021, squad=r.players, team=team, season=season))
+            else:
+                lineup = api.get_lineup(team.id, 2021)
+                if lineup:
+                    r.extra['lineup'] = lineup
         except rrp.ApiError as exc:
             r.error = str(exc)
         # Fielding order (starters first), as sports_fetch does: the patch
