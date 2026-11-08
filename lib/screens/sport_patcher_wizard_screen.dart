@@ -739,7 +739,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         // Team order is the slot order for games that need an explicit mapping.
         if (info.requiresSlotMapping) {
           slotMapping = [
-            for (var i = 0; i < doc.teams.length; i++)
+            for (var i = 0; i < info.keptTeams(doc.teams.length); i++)
               SlotMapping(slotIndex: info.slotFor(i), teamId: doc.teams[i].id, teamName: doc.teams[i].name),
           ];
         }
@@ -1211,10 +1211,23 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             _addButton(doc, iconOnly: _compact),
           ],
         ),
-        Expanded(child: _teamList(theme, 0)),
+        if (_leftOut(doc) > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              'This game holds ${info.teamSlots} teams: the greyed ones are left out. Drag a team up to include it.',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
+        Expanded(child: _teamList(theme, 0, slots: _singleCap)),
       ],
     );
   }
+
+  /// A single league's cap: only games that map teams to slots by position have one.
+  int? get _singleCap => info.requiresSlotMapping && !gameStoresByPosition(info.gameId) ? info.teamSlots : null;
+
+  int _leftOut(RosterDoc doc) => _singleCap == null ? 0 : doc.teams.length - info.keptTeams(doc.teams.length);
 
   String get _reorderHint => gameStoresByPosition(info.gameId)
       // The library slots these by team code, whatever the order.

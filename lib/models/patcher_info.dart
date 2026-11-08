@@ -42,6 +42,10 @@ class PatcherInfo {
   /// The slots to fill, in order, when teams map in sequence; empty for 0, 1, 2…
   final List<int> slotOrder;
 
+  /// How many teams one league can fill (the rest cannot be patched); null when
+  /// the library states no limit.
+  final int? teamSlots;
+
   /// How many leagues one patch takes, the k-th filling slot group k. 1 when
   /// the groups only describe the slots (WE2002): a second league would
   /// overwrite the next group.
@@ -72,12 +76,16 @@ class PatcherInfo {
     this.nationalSlotBase,
     this.slotGroups = const [],
     this.slotOrder = const [],
+    this.teamSlots,
     this.maxLeagues = 1,
     this.writesFormation = false,
     this.formations = const [],
   });
 
   /// The slot the i-th team of a single league takes.
+  /// How many of [n] teams of a single league the patch takes.
+  int keptTeams(int n) => teamSlots == null || n < teamSlots! ? n : teamSlots!;
+
   int slotFor(int i) => i < slotOrder.length ? slotOrder[i] : i;
 
   /// Whether the wizard has a visuals step to show for this game.
@@ -108,6 +116,7 @@ class PatcherInfo {
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
+        teamSlots: (j['team_slots'] as num?)?.toInt(),
         slotOrder: [for (final s in ((j['slot_order'] as List?) ?? const [])) (s as num).toInt()],
         maxLeagues: ((j['max_leagues'] ?? 1) as num).toInt(),
         writesFormation: (j['writes_formation'] ?? false) as bool,

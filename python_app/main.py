@@ -343,6 +343,7 @@ def _capabilities(cls, base):
         'national_slot_base': getattr(cls, 'national_slot_base', None),
         # The order to fill slots in when the teams map in sequence (ISS
         # Deluxe keeps the nations its stadiums are named after for last).
+        'team_slots': getattr(cls, 'team_slots', None),
         'slot_order': [int(s) for s in (getattr(cls, 'slot_order', None) or ())],
         'slot_groups': [{'name': n, 'first': f, 'count': c} for n, f, c in groups],
         'max_leagues': leagues,
