@@ -20,6 +20,10 @@ void main() {
     expect(gameRoster('we2002').rosterSize, 23);
   });
 
+  test('NHL 05 stores whole squads, up to the 40 roster rows a club can have', () {
+    expect(gameRoster('nhl05-ps2').rosterSize, 40);
+  });
+
   group('lineupWarnings', () {
     final xi = ['Goalkeeper', for (var i = 0; i < 10; i++) 'Defender'];
 

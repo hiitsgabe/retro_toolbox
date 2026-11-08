@@ -97,7 +97,7 @@ const Map<String, GameRoster> _gameRosters = {
   // Hockey starts six: a goalie, a forward line and a defence pair.
   'nhl94-genesis': GameRoster(23, 6),
   'nhl94-snes': GameRoster(23, 6),
-  'nhl05-ps2': GameRoster(25, 6),
+  'nhl05-ps2': GameRoster(40, 6), // whole squads: as many as a club's 30-40 roster rows hold
   'nhl07-psp': GameRoster(25, 6),
   'pes2013-ps2': GameRoster(32, 11),
 };
