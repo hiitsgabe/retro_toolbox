@@ -82,10 +82,10 @@ class PatcherInfo {
     this.formations = const [],
   });
 
-  /// The slot the i-th team of a single league takes.
   /// How many of [n] teams of a single league the patch takes.
   int keptTeams(int n) => teamSlots == null || n < teamSlots! ? n : teamSlots!;
 
+  /// The slot the i-th team of a single league takes.
   int slotFor(int i) => i < slotOrder.length ? slotOrder[i] : i;
 
   /// Whether the wizard has a visuals step to show for this game.
