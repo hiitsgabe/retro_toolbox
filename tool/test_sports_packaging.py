@@ -913,8 +913,8 @@ def _fill_job(down=False):
             return types.SimpleNamespace(output_path=str(output_path),
                                          to_dict=lambda: {'output_path': str(output_path)})
 
-    def fetch(patcher, rom, season, taken, on_progress=None):
-        calls.append((rom.name, season, taken))
+    def fetch(patcher, rom, season, taken, on_progress=None, *, exclude_ids=()):
+        calls.append((rom.name, season, taken, set(exclude_ids)))
         if down:
             raise FakeRrp.ApiError('ESPN down')
         patcher.status('Skipped Italy: ESPN has no squad for it')
@@ -923,7 +923,8 @@ def _fill_job(down=False):
     league = types.SimpleNamespace(season=2026)
     rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError, ApiError=FakeRrp.ApiError,
                                 league_data_from_dict=lambda d: types.SimpleNamespace(
-                                    tag='league', league=league, teams=[]))
+                                    tag='league', league=league,
+                                    teams=[types.SimpleNamespace(team=types.SimpleNamespace(id='164'))]))
     P.status = lambda self, m: self.on_status(m)
     src, out = tempfile.mkdtemp(), tempfile.mkdtemp()
     rom, rosters = os.path.join(src, 'ISS.sfc'), os.path.join(src, 'rosters.json')
@@ -944,7 +945,8 @@ def _fill_job(down=False):
 def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
     lines, sent, calls, mapped, patched = _fill_job()
     assert lines[-1] == 'DONE', lines
-    assert calls == [('ISS.sfc', 2026, {3, 5})] and mapped == ['league', 'nations']
+    # The league's own teams are left out of the fill (a World Cup league).
+    assert calls == [('ISS.sfc', 2026, {3, 5}, {'164'})] and mapped == ['league', 'nations']
     # The nations land beside the clubs, and the fill wins over clearing the slots.
     assert patched['slots'] == [0, 3, 5] and 'blank_unused' not in patched
     assert 'STATUS:Skipped Italy: ESPN has no squad for it' in lines

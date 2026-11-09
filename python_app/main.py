@@ -4,6 +4,7 @@ import sys
 import time
 import json
 import glob
+import inspect
 from pathlib import Path
 
 
@@ -993,9 +994,15 @@ def run_sports(job):
                     # Fill is the default, so an ESPN outage keeps the original
                     # teams instead of failing the patch. Progress stays at 0, as
                     # the nationals fetch does, so the bar does not jump back.
+                    # A nation the league already holds (a World Cup or
+                    # friendlies league) is not placed a second time.
+                    league_ids = {m.team_id for _d, mp in sources for m in mp} if slot_mapping else {
+                        t.team.id for d, _mp in sources for t in d.teams}
+                    extra = ({'exclude_ids': league_ids}
+                             if 'exclude_ids' in inspect.signature(fill).parameters else {})
                     try:
                         data, mapping = fill(patcher, Path(rom), season, set(merged.teams),
-                                             on_progress and (lambda _f, m: on_progress(0, m)))
+                                             on_progress and (lambda _f, m: on_progress(0, m)), **extra)
                     except rrp.ApiError as exc:
                         notes.append(f'National teams skipped, the original teams stay: {exc}')
                     else:
