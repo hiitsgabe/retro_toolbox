@@ -36,6 +36,10 @@ class PatcherInfo {
   final bool supportsNationals;
   final int? nationalSlotBase;
 
+  /// Soccer: the patch can fill the slots a league leaves with today's top
+  /// national teams. False from a library older than the fill.
+  final bool supportsNationFill;
+
   /// Team-slot groups the game splits its clubs into; empty when it has none.
   final List<SlotGroup> slotGroups;
 
@@ -74,6 +78,7 @@ class PatcherInfo {
     this.kitTemplates = false,
     this.supportsNationals = false,
     this.nationalSlotBase,
+    this.supportsNationFill = false,
     this.slotGroups = const [],
     this.slotOrder = const [],
     this.teamSlots,
@@ -89,7 +94,21 @@ class PatcherInfo {
   int slotFor(int i) => i < slotOrder.length ? slotOrder[i] : i;
 
   /// Whether the wizard has a visuals step to show for this game.
-  bool get hasVisuals => supportsLogos || supportsBlankUnused || supportsLooks || imageSlots.isNotEmpty;
+  /// (Where the fill is offered, clearing the slots is a Rosters step choice.)
+  bool get hasVisuals => supportsLogos || (supportsBlankUnused && !supportsNationFill) || supportsLooks || imageSlots.isNotEmpty;
+
+  /// The sports_patch job keys for the slots a league leaves: [left] where the
+  /// fill is offered, else the Look step's [blankUnused] and the [nationals]
+  /// switches. The fill never travels with blank_unused or nationals.
+  Map<String, bool> leftSlotsJob(LeftSlots left, {bool blankUnused = false, bool nationals = false}) => supportsNationFill
+      ? {
+          if (left == LeftSlots.fill) 'fill_nations': true,
+          if (left == LeftSlots.clear && supportsBlankUnused) 'blank_unused': true,
+        }
+      : {
+          if (supportsBlankUnused && blankUnused) 'blank_unused': true,
+          if (supportsNationals && nationals) 'nationals': true,
+        };
 
   /// One league per slot group: the wizard fetches several leagues.
   bool get multiLeague => leagueCap > 1;
@@ -113,6 +132,7 @@ class PatcherInfo {
         kitTemplates: (j['kit_templates'] ?? false) as bool,
         supportsNationals: (j['supports_nationals'] ?? false) as bool,
         nationalSlotBase: (j['national_slot_base'] as num?)?.toInt(),
+        supportsNationFill: (j['supports_nation_fill'] ?? false) as bool,
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
@@ -125,6 +145,9 @@ class PatcherInfo {
 
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';
 }
+
+/// What the patch does with the slots a league leaves.
+enum LeftSlots { keep, clear, fill }
 
 /// A run of team slots one league fills: [count] slots from [first].
 class SlotGroup {

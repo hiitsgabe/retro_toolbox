@@ -133,6 +133,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   /// slot group k).
   final List<League> _selectedLeagues = [];
   bool _nationals = false;
+
+  /// Where the fill is offered: what the slots the league leaves get.
+  LeftSlots _leftSlots = LeftSlots.fill;
   // One node for the ROM step's pick control, whether the full row's Choose
   // or the small link a found card collapses it to: a card arriving while
   // the user sits on Choose keeps the focus on the link.
@@ -757,9 +760,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         slotMapping: slotMapping,
         language: _language,
         logos: info.supportsLogos ? _useLogos : null,
-        blankUnused: info.supportsBlankUnused && _blankUnused,
         looks: info.supportsLooks ? _matchLooks : null,
-        nationals: info.supportsNationals && _nationals,
+        leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals),
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
         onProgress: (v) => setState(() => _progress = v),
@@ -990,6 +992,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         _sectionTitle(theme, Icons.tune, 'Rosters', 'Pick your options, then Next downloads the league data.'),
         _sourceAndSeason(theme),
         if (_isSoccer) info.multiLeague ? _leagueChecklist(theme) : _leaguePicker(theme),
+        if (_isSoccer && info.supportsNationFill) _leftSlotsChoice(theme),
       ],
     );
   }
@@ -1127,7 +1130,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                   }),
                 );
               }),
-          if (info.supportsNationals)
+          // Where the fill is offered, _leftSlotsChoice stands in for this.
+          if (info.supportsNationals && !info.supportsNationFill)
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.flag_outlined),
@@ -1144,6 +1148,44 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       ),
     );
   }
+
+  /// Keep, clear or fill the slots the league leaves (fixes the league's
+  /// clubs sitting beside the game's old national teams).
+  Widget _leftSlotsChoice(ThemeData theme) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Slots the league leaves', style: theme.textTheme.labelLarge),
+            RadioGroup<LeftSlots>(
+              groupValue: _leftSlots,
+              onChanged: (v) => setState(() => _leftSlots = v ?? _leftSlots),
+              child: Column(
+                children: [
+                  const RadioListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: LeftSlots.keep,
+                    title: Text('Keep the original teams'),
+                  ),
+                  if (info.supportsBlankUnused)
+                    const RadioListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: LeftSlots.clear,
+                      title: Text('Clear them'),
+                      subtitle: Text('An empty name and flag instead of the game\'s originals.'),
+                    ),
+                  const RadioListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: LeftSlots.fill,
+                    title: Text('Fill with today\'s top national teams'),
+                    subtitle: Text('The best of the FIFA ranking, with their current squads.'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _customLeaguesHelp(ThemeData theme) => ExpansionTile(
         tilePadding: EdgeInsets.zero,
@@ -1821,7 +1863,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     return ListView(
       children: [
         _sectionTitle(theme, Icons.palette_outlined, 'Look', 'Choose the team logos and screen art the patch draws into the game.'),
-        if (info.supportsLogos || info.supportsBlankUnused || info.supportsLooks)
+        if (info.supportsLogos || (info.supportsBlankUnused && !info.supportsNationFill) || info.supportsLooks)
           Card(
             margin: const EdgeInsets.only(bottom: 16),
             child: Column(
@@ -1842,7 +1884,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                     value: _useLogos,
                     onChanged: (v) => setState(() => _useLogos = v),
                   ),
-                if (info.supportsBlankUnused)
+                // Where the fill is offered, clearing is a Rosters step choice.
+                if (info.supportsBlankUnused && !info.supportsNationFill)
                   SwitchListTile(
                     secondary: const Icon(Icons.layers_clear_outlined),
                     title: const Text('Blank unused slots'),

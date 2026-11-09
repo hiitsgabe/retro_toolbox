@@ -132,4 +132,56 @@ void main() {
     expect(find.text('no slot'), findsNothing);
     expect(find.text('Add team'), findsOneWidget);
   });
+
+  testWidgets('a single-league game with the fill offers keep / clear / fill, fill by default', (t) async {
+    const iss = PatcherInfo(
+      gameId: 'iss-snes',
+      platform: 'snes',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsBlankUnused: true,
+      supportsNationals: true,
+      supportsNationFill: true,
+    );
+    await pump(t, game: iss);
+    expect(find.text('Slots the league leaves'), findsOneWidget);
+    expect(find.byType(RadioListTile<LeftSlots>), findsNWidgets(3));
+    expect(find.text('Keep the original teams'), findsOneWidget);
+    expect(find.text('Clear them'), findsOneWidget);
+    expect(find.text("Fill with today's top national teams"), findsOneWidget);
+    expect(t.widget<RadioGroup<LeftSlots>>(find.byType(RadioGroup<LeftSlots>)).groupValue, LeftSlots.fill);
+    await t.tap(find.text('Clear them'));
+    await t.pumpAndSettle();
+    expect(t.widget<RadioGroup<LeftSlots>>(find.byType(RadioGroup<LeftSlots>)).groupValue, LeftSlots.clear);
+    // The choice stands in for the old switch.
+    expect(find.text('National teams'), findsNothing);
+  });
+
+  testWidgets('without the fill: no choice, and the multi-league game keeps its nationals switch', (t) async {
+    await pump(t, game: we2002);
+    expect(find.text('Slots the league leaves'), findsNothing);
+    await pump(t);
+    expect(find.text('Slots the league leaves'), findsNothing);
+    expect(find.text('National teams'), findsOneWidget);
+  });
+
+  testWidgets('a multi-league game with the fill shows the choice instead of the nationals switch', (t) async {
+    const pes = PatcherInfo(
+      gameId: 'pes2013-ps2',
+      platform: 'ps2',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsNationals: true,
+      supportsNationFill: true,
+      slotGroups: [SlotGroup('England', 0, 20), SlotGroup('France', 20, 2)],
+      maxLeagues: 2,
+    );
+    await pump(t, game: pes);
+    expect(find.text('National teams'), findsNothing);
+    expect(find.text('Slots the league leaves'), findsOneWidget);
+    // No blank_unused on this game: keep or fill only.
+    expect(find.byType(RadioListTile<LeftSlots>), findsNWidgets(2));
+  });
 }

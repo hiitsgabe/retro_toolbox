@@ -340,6 +340,9 @@ def _capabilities(cls, base):
         'supports_kits': bool(getattr(cls, 'supports_kits', False)),
         'kit_templates': _overrides(cls, 'kit_templates', base),
         'supports_nationals': bool(getattr(cls, 'supports_nationals', False)),
+        # Fill the slots a league leaves with today's top national teams:
+        # needs the patcher's own flag and a library that has the fetch.
+        'supports_nation_fill': bool(getattr(cls, 'supports_nation_fill', False)) and _top_nations() is not None,
         'national_slot_base': getattr(cls, 'national_slot_base', None),
         # The order to fill slots in when the teams map in sequence (ISS
         # Deluxe keeps the nations its stadiums are named after for last).
@@ -353,6 +356,15 @@ def _capabilities(cls, base):
         'writes_formation': bool(getattr(cls, 'writes_formation', False)),
         'formations': list(getattr(cls, 'formations', None) or ()),
     }
+
+
+def _top_nations():
+    """The library's fetch_top_nations, or None on a library older than it."""
+    try:
+        from retro_roster_patcher.sports.nationals import fetch_top_nations
+    except ImportError:
+        return None
+    return fetch_top_nations
 
 
 def _overrides(cls, name, base):
@@ -946,7 +958,12 @@ def run_sports(job):
                             if raw_map else None)
             sources = _load_rosters(job, slot_mapping, rrp)
             options = _patch_options(job, patcher, _team_kits(sources))
-            nationals = bool(job.get('nationals')) and getattr(patcher, 'supports_nationals', False)
+            # The top national teams fill the slots the league leaves; that
+            # wins over the old nationals switch and over clearing them.
+            fill = _top_nations() if job.get('fill_nations') and getattr(patcher, 'supports_nation_fill', False) else None
+            if fill:
+                options.pop('blank_unused', None)
+            nationals = not fill and bool(job.get('nationals')) and getattr(patcher, 'supports_nationals', False)
             season = job.get('season') or sources[0][0].league.season
             # The library's own lines show as the patch runs; what mapping
             # says (a team it leaves out, and why), and any later line about
@@ -971,7 +988,11 @@ def run_sports(job):
                 # The national squads are fetched here: pairing them with the
                 # disc's rows needs the actual image.
                 merged = noted(_merge_rosters, patcher, sources, rom)
-                if nationals:
+                if fill:
+                    # Its "Skipped <nation>" lines reach the progress file and the notes via live.
+                    data, mapping = fill(patcher, Path(rom), season, set(merged.teams), on_progress)
+                    merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
+                elif nationals:
                     # A slot a club already took keeps the club (ISS 2000's
                     # national slots are the same slots the clubs go in).
                     taken = set(merged.teams)

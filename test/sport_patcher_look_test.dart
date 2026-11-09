@@ -78,6 +78,22 @@ void main() {
     expect(find.byIcon(Icons.restart_alt), findsNothing);
   });
 
+  testWidgets('where the fill is offered, clearing the slots is a Rosters choice, not a Look switch', (t) async {
+    const fill = PatcherInfo(
+      gameId: 'g',
+      platform: 'p',
+      sport: 'soccer',
+      requiresSlotMapping: false,
+      providers: ['x'],
+      supportsLogos: true,
+      supportsBlankUnused: true,
+      supportsNationFill: true,
+    );
+    await pump(t, fill);
+    expect(find.text('Team logos'), findsOneWidget);
+    expect(find.text('Blank unused slots'), findsNothing);
+  });
+
   testWidgets('the switches toggle and Start moves on to Patch', (t) async {
     await pump(t, visual);
     final blank = find.byType(SwitchListTile).last;

@@ -332,6 +332,8 @@ class SportsService {
   /// [rostersFiles] (one league per slot group) replaces [rostersFile];
   /// [slotMapping] indices are then absolute. Kit choices normally travel in
   /// each team's `extra.kits`; [kits] ({slot: {home, away}}) overrides them.
+  /// [leftSlots]: what the slots the league leaves get, from
+  /// [PatcherInfo.leftSlotsJob].
   static Future<PatchResult> patchRom({
     required String gameId,
     required String provider,
@@ -343,9 +345,8 @@ class SportsService {
     List<SlotMapping>? slotMapping,
     String? language,
     bool? logos,
-    bool blankUnused = false,
     bool? looks,
-    bool nationals = false,
+    Map<String, bool> leftSlots = const {},
     Map<String, String> images = const {},
     Map<int, String> teamLogos = const {},
     Map<String, dynamic>? kits,
@@ -365,9 +366,9 @@ class SportsService {
         'label': label,
         if (language != null) 'language': language,
         if (logos != null) 'logos': logos,
-        if (blankUnused) 'blank_unused': true,
         if (looks != null) 'looks': looks,
-        if (nationals) 'nationals': true,
+        // fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
+        ...leftSlots,
         if (images.isNotEmpty) 'images': images,
         if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},
         if (kits != null && kits.isNotEmpty) 'kits': kits,

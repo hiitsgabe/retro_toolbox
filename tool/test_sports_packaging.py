@@ -181,6 +181,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         image_slots = ('title',)
         supports_kits = True
         supports_nationals = True
+        supports_nation_fill = True
         national_slot_base = 1000
         slot_order = (3, 1, 2)
         team_slots = 36
@@ -198,18 +199,25 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
     class SlotsOnly(Base):  # groups that describe the slots (WE2002): one league
         slot_groups = (('Master League', 0, 32), ('National only', 32, 31))
 
-    assert main._capabilities(Full, Base) == {
+    saved = main._top_nations
+    main._top_nations = lambda: print
+    try:
+        full = main._capabilities(Full, Base)
+    finally:
+        main._top_nations = saved
+    assert full == {
         'languages': ['en'], 'supports_logos': True, 'supports_blank_unused': True, 'supports_looks': True,
         'image_slots': ['title'],
-        'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'national_slot_base': 1000,
+        'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'supports_nation_fill': True,
+        'national_slot_base': 1000,
         'team_slots': 36, 'slot_order': [3, 1, 2],
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
         'max_leagues': 2, 'multi_league': True, 'writes_formation': True, 'formations': ['4-4-2', '4-3-3']}
     assert main._capabilities(Old, Base) == {
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'supports_looks': False,
         'image_slots': [],
-        'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'national_slot_base': None,
-        'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
+        'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'supports_nation_fill': False,
+        'national_slot_base': None, 'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
         'writes_formation': False, 'formations': []}
     slots_only = main._capabilities(SlotsOnly, Base)
     assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
@@ -852,6 +860,85 @@ def test_patch_returns_what_mapping_said_and_shows_the_library_lines():
                              'Slot 3: logo skipped: cannot identify image file'] and sent['teams_patched'] == 27
     # The patch's own lines show as it runs; only the skips stay as notes.
     assert 'STATUS:Drawing screen art...' in lines and 'STATUS:Slot 3: logo skipped: cannot identify image file' in lines
+
+
+def test_a_library_without_the_fetch_offers_no_nation_fill():
+    import types
+
+    class Fill:
+        supports_nation_fill = True
+
+    name = 'retro_roster_patcher.sports.nationals'
+    saved = sys.modules.get(name)
+    sys.modules[name] = types.ModuleType(name)  # an older nationals module: no fetch_top_nations
+    try:
+        assert main._top_nations() is None
+        assert main._capabilities(Fill, object)['supports_nation_fill'] is False
+    finally:
+        if saved is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = saved
+
+
+def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
+    import json
+    import types
+
+    calls, mapped, patched = [], [], {}
+
+    class Mapped:
+        def __init__(self, teams):
+            self.teams = teams
+
+        def merge(self, other):
+            return Mapped({**self.teams, **other.teams})
+
+    class P:
+        supports_nation_fill = supports_nationals = supports_blank_unused = True
+
+        def __init__(self, **kw):
+            self.on_status = None
+
+        def map_rosters(self, data, slot_mapping):
+            mapped.append(data.tag)
+            return Mapped({3: 'club', 5: 'club'} if data.tag == 'league' else {0: 'nation'})
+
+        def patch(self, rom_path, output_path, rosters, on_progress, **options):
+            patched.update(options, slots=sorted(rosters.teams))
+            open(output_path, 'wb').write(b'rom')
+            return types.SimpleNamespace(output_path=str(output_path),
+                                         to_dict=lambda: {'output_path': str(output_path)})
+
+    def fetch(patcher, rom, season, taken, on_progress=None):
+        calls.append((rom.name, season, taken))
+        patcher.status('Skipped Italy: ESPN has no squad for it')
+        return types.SimpleNamespace(tag='nations'), []
+
+    league = types.SimpleNamespace(season=2026)
+    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError,
+                                league_data_from_dict=lambda d: types.SimpleNamespace(
+                                    tag='league', league=league, teams=[]))
+    P.status = lambda self, m: self.on_status(m)
+    src, out = tempfile.mkdtemp(), tempfile.mkdtemp()
+    rom, rosters = os.path.join(src, 'ISS.sfc'), os.path.join(src, 'rosters.json')
+    open(rom, 'wb').write(b'rom')
+    json.dump({}, open(rosters, 'w'))
+    saved_fill, saved_nat = main._top_nations, main._fetch_nationals
+    main._top_nations = lambda: fetch
+    main._fetch_nationals = lambda *a, **k: (_ for _ in ()).throw(AssertionError('both fetches ran'))
+    try:
+        lines, sent = _with_rrp(rrp, {'type': 'sports_patch', 'game_id': 'iss-snes', 'rom_path': rom,
+                                      'output_dir': out, 'label': 'Liga', 'rosters_file': rosters, 'season': 2026,
+                                      'fill_nations': True, 'nationals': True, 'blank_unused': True})
+    finally:
+        main._top_nations, main._fetch_nationals = saved_fill, saved_nat
+    assert lines[-1] == 'DONE', lines
+    assert calls == [('ISS.sfc', 2026, {3, 5})] and mapped == ['league', 'nations']
+    # The nations land beside the clubs, and the fill wins over clearing the slots.
+    assert patched['slots'] == [0, 3, 5] and 'blank_unused' not in patched
+    assert 'STATUS:Skipped Italy: ESPN has no squad for it' in lines
+    assert sent['notes'] == ['Skipped Italy: ESPN has no squad for it']
 
 
 def _painted(mod, name, slot, marks=True):

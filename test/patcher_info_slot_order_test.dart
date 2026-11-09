@@ -31,4 +31,24 @@ void main() {
     expect(old.writesFormation, isFalse);
     expect(old.formations, isEmpty);
   });
+
+  test('nation fill: read when sent, false from an older library', () {
+    expect(PatcherInfo.fromJson({'game_id': 'g', 'supports_nation_fill': true}).supportsNationFill, isTrue);
+    expect(PatcherInfo.fromJson({'game_id': 'g', 'supports_nation_fill': false}).supportsNationFill, isFalse);
+    expect(PatcherInfo.fromJson({'game_id': 'g'}).supportsNationFill, isFalse);
+  });
+
+  test('the job carries fill_nations or blank_unused per choice, never with nationals', () {
+    final fill = PatcherInfo.fromJson(
+        {'game_id': 'iss-snes', 'supports_nation_fill': true, 'supports_blank_unused': true, 'supports_nationals': true});
+    expect(fill.leftSlotsJob(LeftSlots.fill, blankUnused: true, nationals: true), {'fill_nations': true});
+    expect(fill.leftSlotsJob(LeftSlots.clear, nationals: true), {'blank_unused': true});
+    expect(fill.leftSlotsJob(LeftSlots.keep, blankUnused: true, nationals: true), isEmpty);
+    // Clear is no choice where the game cannot blank a slot.
+    expect(PatcherInfo.fromJson({'game_id': 'g', 'supports_nation_fill': true}).leftSlotsJob(LeftSlots.clear), isEmpty);
+    // Without the fill, the Look step's switch and the nationals switch as before.
+    final old = PatcherInfo.fromJson({'game_id': 'g', 'supports_blank_unused': true, 'supports_nationals': true});
+    expect(old.leftSlotsJob(LeftSlots.fill), isEmpty);
+    expect(old.leftSlotsJob(LeftSlots.fill, blankUnused: true, nationals: true), {'blank_unused': true, 'nationals': true});
+  });
 }
