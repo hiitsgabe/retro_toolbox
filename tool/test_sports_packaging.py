@@ -881,7 +881,10 @@ def test_a_library_without_the_fetch_offers_no_nation_fill():
             sys.modules[name] = saved
 
 
-def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
+def _fill_job(down=False):
+    """(progress lines, emitted result, fetch calls, mapped tags, patch options) of an
+    ISS patch with fill_nations, nationals and blank_unused all set; with down, the
+    fill raises ApiError as an ESPN outage would."""
     import json
     import types
 
@@ -912,11 +915,13 @@ def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
 
     def fetch(patcher, rom, season, taken, on_progress=None):
         calls.append((rom.name, season, taken))
+        if down:
+            raise FakeRrp.ApiError('ESPN down')
         patcher.status('Skipped Italy: ESPN has no squad for it')
         return types.SimpleNamespace(tag='nations'), []
 
     league = types.SimpleNamespace(season=2026)
-    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError,
+    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError, ApiError=FakeRrp.ApiError,
                                 league_data_from_dict=lambda d: types.SimpleNamespace(
                                     tag='league', league=league, teams=[]))
     P.status = lambda self, m: self.on_status(m)
@@ -933,12 +938,24 @@ def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
                                       'fill_nations': True, 'nationals': True, 'blank_unused': True})
     finally:
         main._top_nations, main._fetch_nationals = saved_fill, saved_nat
+    return lines, sent, calls, mapped, patched
+
+
+def test_fill_nations_fetches_the_top_nations_for_the_slots_the_league_leaves():
+    lines, sent, calls, mapped, patched = _fill_job()
     assert lines[-1] == 'DONE', lines
     assert calls == [('ISS.sfc', 2026, {3, 5})] and mapped == ['league', 'nations']
     # The nations land beside the clubs, and the fill wins over clearing the slots.
     assert patched['slots'] == [0, 3, 5] and 'blank_unused' not in patched
     assert 'STATUS:Skipped Italy: ESPN has no squad for it' in lines
     assert sent['notes'] == ['Skipped Italy: ESPN has no squad for it']
+
+
+def test_an_espn_outage_during_the_fill_keeps_the_original_teams():
+    lines, sent, calls, mapped, patched = _fill_job(down=True)
+    assert lines[-1] == 'DONE', lines
+    assert mapped == ['league'] and patched['slots'] == [3, 5]
+    assert sent['notes'] == ['National teams skipped, the original teams stay: ESPN down']
 
 
 def _painted(mod, name, slot, marks=True):

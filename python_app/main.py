@@ -990,8 +990,16 @@ def run_sports(job):
                 merged = noted(_merge_rosters, patcher, sources, rom)
                 if fill:
                     # Its "Skipped <nation>" lines reach the progress file and the notes via live.
-                    data, mapping = fill(patcher, Path(rom), season, set(merged.teams), on_progress)
-                    merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
+                    # Fill is the default, so an ESPN outage keeps the original
+                    # teams instead of failing the patch. Progress stays at 0, as
+                    # the nationals fetch does, so the bar does not jump back.
+                    try:
+                        data, mapping = fill(patcher, Path(rom), season, set(merged.teams),
+                                             on_progress and (lambda _f, m: on_progress(0, m)))
+                    except rrp.ApiError as exc:
+                        notes.append(f'National teams skipped, the original teams stay: {exc}')
+                    else:
+                        merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
                 elif nationals:
                     # A slot a club already took keeps the club (ISS 2000's
                     # national slots are the same slots the clubs go in).
