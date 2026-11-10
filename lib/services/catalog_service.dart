@@ -561,7 +561,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     final lowerTitle = title.toLowerCase();
     if (!ignoreExtFilter && fileFormats.isNotEmpty && !fileFormats.any((ext) => lowerTitle.endsWith(ext))) continue;
 
-    final sizeStr = _tryNamedGroup(match, 'size');
+    final sizeStr = _tryNamedGroup(match, 'size') ?? _tryNamedGroup(match, 'basesize');
     final size = sizeStr != null ? _parseSizeBytesIsolate(sizeStr) : 0;
 
     final metadata = TitleMetadataParser.parseRomTitle(title).toJson();

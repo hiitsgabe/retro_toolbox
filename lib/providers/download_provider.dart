@@ -158,7 +158,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     _updateDownloadingState();
   }
 
-  void _handleProgressUpdate(TaskProgressUpdate update) {
+  Future<void> _handleProgressUpdate(TaskProgressUpdate update) async {
     final taskProgress = Map<String, TaskProgressUpdate>.from(state.taskProgress);
     final taskStatus = state.taskStatus[update.task.taskId];
 
@@ -167,11 +167,30 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       debugPrint('Registered background task ${update.task.taskId} from progress update');
     }
 
-    if (taskStatus == TaskStatus.paused || update.progress <= 0.0) {
+    // Only hold the last progress while paused (no progress ticks arrive).
+    if (taskStatus == TaskStatus.paused) {
       final lastProgress = state.taskProgress[update.task.taskId];
       if (lastProgress != null && lastProgress.progress > 0.0) {
-        update = TaskProgressUpdate(lastProgress.task, lastProgress.progress);
+        update = TaskProgressUpdate(lastProgress.task, lastProgress.progress, lastProgress.expectedFileSize, lastProgress.networkSpeed, lastProgress.timeRemaining);
       }
+    }
+
+    // When writing to slow storage, the reported progress (based on bytes
+    // received) can outrun the actual bytes written to disk — the UI would
+    // then show 99% while the file is still being written. Prefer the file
+    // size on disk when it lags behind the reported progress.
+    if (taskStatus != TaskStatus.paused && update.hasExpectedFileSize) {
+      try {
+        final path = await update.task.filePath();
+        final file = File(path);
+        if (file.existsSync()) {
+          final fileSize = file.lengthSync();
+          final diskProgress = fileSize / update.expectedFileSize;
+          if (diskProgress < update.progress && diskProgress >= 0.0) {
+            update = TaskProgressUpdate(update.task, diskProgress, update.expectedFileSize, update.networkSpeed, update.timeRemaining);
+          }
+        }
+      } catch (_) {}
     }
 
     taskProgress[update.task.taskId] = update;
