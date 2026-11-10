@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:background_downloader/background_downloader.dart';
 import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/widgets/download/buzzheavier_verify_screen.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
@@ -443,15 +444,37 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
         'Authorization': 'LOW ${settings.iaAccessKey}:${settings.iaSecretKey}',
     };
 
+    // Buzzheavier links are HTML landing pages, not files; resolve the direct
+    // download URL first — the browser opens once when Cloudflare insists.
+    final isBuzzheavierUrl = game.url.contains('buzzheavier.com/');
     // Authenticated downloads: enqueue against the final URL — the downloader
     // drops auth headers on cross-host redirects (archive.org data nodes).
     var url = game.url;
-    if (headers.isNotEmpty) {
+    if (isBuzzheavierUrl) {
+      try {
+        url = await _resolveBuzzheavier(game, taskId, headers);
+        debugPrint('Resolved buzzheavier direct URL for $taskId: $url');
+      } catch (e) {
+        debugPrint('Buzzheavier resolution failed for $taskId: $e');
+        return _handleStatusUpdate(
+          TaskStatusUpdate(DownloadTask(taskId: taskId, url: game.url), TaskStatus.failed),
+          'Buzzheavier resolution failed: $e',
+        );
+      }
+      // The direct-link host serves plain clients; headers (a cookie bound to
+      // buzzheavier.com) would only leak onto it.
+      headers.clear();
+    } else if (headers.isNotEmpty) {
       try {
         url = await resolveRedirects(game.url, headers);
       } catch (e) {
         debugPrint('Redirect resolution failed for $taskId, using original URL: $e');
       }
+    }
+    if (isBuzzheavierUrl) {
+      // The direct-link host serves plain clients; console headers (a cookie
+      // bound to buzzheavier.com) would only leak onto it.
+      headers.clear();
     }
 
     final downloadTask = downloadService.createDownloadTask(
@@ -474,6 +497,28 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
   }
 
   bool _iaLoginDialogOpen = false;
+
+  /// Resolves a buzzheavier link to its direct URL. Cloudflare fingerprints
+  /// the TLS stack, so plain HTTP never passes the challenge — when it blocks,
+  /// the in-app browser runs the htmx call in page context and pops with the
+  /// direct (tokened ts.) URL.
+  Future<String> _resolveBuzzheavier(Game game, String taskId, Map<String, String> consoleHeaders) async {
+    try {
+      return await resolveBuzzheavierDirectUrl(game.url, cookieHeader: consoleHeaders['Cookie']);
+    } catch (e) {
+      if (!e.toString().contains('Cloudflare challenge')) rethrow;
+    }
+
+    debugPrint('Cloudflare challenge on buzzheavier, opening verification browser for $taskId');
+    if (navigatorKey.currentContext == null) {
+      throw Exception('No in-app browser available, try running the app first');
+    }
+    final direct = await BuzzheavierVerifyScreen.push(navigatorKey.currentContext!, game.url);
+    if (direct == null || direct.isEmpty) {
+      throw Exception('Cloudflare verification was canceled');
+    }
+    return direct;
+  }
 
   /// Shown when an archive.org download fails with 401/403 — the item is
   /// restricted and needs the user to sign in to Internet Archive in Settings.

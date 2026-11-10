@@ -31,6 +31,82 @@ Future<String> resolveRedirects(String url, Map<String, String> headers, {int ma
   }
 }
 
+/// Resolves a buzzheavier.com file link to its direct download URL. Verified
+/// flow (htmx site, behind Cloudflare):
+///   1. GET the file page — HTML with a hx-get button to the download
+///      endpoint, carrying a per-page token: `/ID/download?t=PAGE_TOKEN`
+///   2. GET that endpoint, hx-request:1  — answers 204 + Hx-Redirect header
+///                                         with the direct link (no cookies,
+///                                         anonymous). The link host (e.g.
+///                                         ts.buzzheavier.com) serves the
+///                                         file to plain HTTP clients.
+/// Throws with a descriptive message when step 1 hits a Cloudflare challenge
+/// (the app then falls back to the in-app verification browser) or nothing
+/// parses. [cookieHeader] rides along when console auth configures one.
+Future<String> resolveBuzzheavierDirectUrl(
+  String url, {
+  String? cookieHeader,
+  int maxHops = 5,
+}) async {
+  final pageUrl = url.split('#').first;
+  final page = pageUrl.endsWith('/') ? pageUrl.substring(0, pageUrl.length - 1) : pageUrl;
+  final client = HttpClient();
+  client.connectionTimeout = const Duration(seconds: 30);
+  Map<String, String> headers(String target) => buildDownloadHeaders(target, {
+        'hx-request': 'true',
+        'hx-current-url': page,
+        'Referer': page,
+        if (cookieHeader != null && cookieHeader.isNotEmpty) 'Cookie': cookieHeader,
+      });
+  try {
+    // 1. File page: grab the tokened hx-get download endpoint out of the HTML.
+    final pageRequest = await client.getUrl(Uri.parse(page));
+    headers(page).forEach(pageRequest.headers.set);
+    final pageResponse = await pageRequest.close();
+    if (pageResponse.statusCode == 403 && pageResponse.headers.value('cf-mitigated') == 'challenge') {
+      throw Exception('Cloudflare challenge on buzzheavier.com — open the link in a browser, or retry later');
+    }
+    final html = await pageResponse.transform(utf8.decoder).join();
+    if (pageResponse.statusCode != 200) {
+      throw Exception('HTTP ${pageResponse.statusCode} from $page');
+    }
+    final tokenedEndpoints = RegExp(r'hx-get\s*=\s*"([^"]*)"', caseSensitive: false)
+        .allMatches(html)
+        .map((m) => m.group(1)!)
+        .where((endpoint) => endpoint.contains('/download'))
+        .toList();
+    if (tokenedEndpoints.isEmpty) {
+      throw Exception('No download endpoint found on $page');
+    }
+    final endpoint = Uri.parse(page).resolve(tokenedEndpoints.first).toString();
+
+    // 2. htmx call: the Hx-Redirect header carries the direct link.
+    var current = endpoint;
+    for (var i = 0; i < maxHops; i++) {
+      final request = await client.getUrl(Uri.parse(current));
+      request.followRedirects = false;
+      headers(current).forEach(request.headers.set);
+      final response = await request.close();
+      await response.drain<void>();
+      // Header lookups are case-insensitive in Dart.
+      final hxRedirect = response.headers.value('hx-redirect');
+      if (hxRedirect != null && hxRedirect.isNotEmpty) {
+        // htmx swaps via JS; this header value IS the direct link.
+        return Uri.parse(current).resolve(hxRedirect).toString();
+      }
+      final location = response.headers.value(HttpHeaders.locationHeader);
+      if (response.isRedirect && location != null) {
+        current = Uri.parse(current).resolve(location).toString();
+        continue;
+      }
+      throw Exception('HTTP ${response.statusCode} from $current (no Hx-Redirect)');
+    }
+    throw Exception('Too many redirects resolving $page');
+  } finally {
+    client.close();
+  }
+}
+
 /// Builds request headers for a console's token auth config (`auth`).
 /// Cookie-based when `cookies: true`, otherwise a Bearer header.
 /// IA S3 auth is handled separately.

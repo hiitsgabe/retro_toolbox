@@ -149,9 +149,16 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
         final availableSlots = maxCount - runningCount;
 
         if (availableSlots > 0) {
-          final waitingTasks = state.tasks.where((task) => task.type == type && task.status == TaskQueueStatus.waiting).take(availableSlots);
-
-          for (final task in waitingTasks) {
+          var waitingTasks = state.tasks.where((task) => task.type == type && task.status == TaskQueueStatus.waiting).toList();
+          // Buzzheavier resolves each link through the site (and sometimes a
+          // Cloudflare check): one at a time, regardless of the parallel cap.
+          if (type == TaskType.download) {
+            final runningBuzz = state.tasks.where((task) => task.type == TaskType.download && task.status == TaskQueueStatus.running && _isBuzzheavierTask(task)).length;
+            if (runningBuzz > 0) {
+              waitingTasks = waitingTasks.where((task) => !_isBuzzheavierTask(task)).toList();
+            }
+          }
+          for (final task in waitingTasks.take(availableSlots)) {
             updateTaskStatus(task.id, TaskQueueStatus.running);
 
             TaskQueueService.executeTask(_ref, this, task).catchError((e) {
@@ -167,6 +174,14 @@ class TaskQueueNotifier extends StateNotifier<TaskQueueState> {
     } finally {
       state = state.copyWith(isProcessing: false);
     }
+  }
+
+  /// Buzzheavier links are HTML pages that need host resolution (and possibly
+  /// user verification) before the real download; they run strictly one at a
+  /// time while every other download keeps its parallel slot.
+  bool _isBuzzheavierTask(QueuedTask task) {
+    final gameUrl = task.params['game']?['url'];
+    return gameUrl is String && gameUrl.contains('buzzheavier.com/');
   }
 
   void cancelQueuedTask(String taskId) {

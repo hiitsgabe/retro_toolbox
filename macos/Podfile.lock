@@ -2,7 +2,11 @@ PODS:
   - flutter_archive (0.0.1):
     - FlutterMacOS
     - ZIPFoundation (= 0.9.19)
+  - flutter_inappwebview_macos (0.0.1):
+    - FlutterMacOS
+    - OrderedSet (~> 6.0.3)
   - FlutterMacOS (1.0.0)
+  - OrderedSet (6.0.3)
   - rar (0.2.1):
     - FlutterMacOS
     - UnrarKit (~> 2.9)
@@ -13,17 +17,21 @@ PODS:
 
 DEPENDENCIES:
   - flutter_archive (from `Flutter/ephemeral/.symlinks/plugins/flutter_archive/macos`)
+  - flutter_inappwebview_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_inappwebview_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - rar (from `Flutter/ephemeral/.symlinks/plugins/rar/macos`)
 
 SPEC REPOS:
   trunk:
+    - OrderedSet
     - UnrarKit
     - ZIPFoundation
 
 EXTERNAL SOURCES:
   flutter_archive:
     :path: Flutter/ephemeral/.symlinks/plugins/flutter_archive/macos
+  flutter_inappwebview_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/flutter_inappwebview_macos/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   rar:
@@ -31,7 +39,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   flutter_archive: 07888d9aeb79da005e0ad8b9d347d17cdea07f68
+  flutter_inappwebview_macos: c2d68649f9f8f1831bfcd98d73fd6256366d9d1d
   FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
+  OrderedSet: e539b66b644ff081c73a262d24ad552a69be3a94
   rar: bea203a640a83e62c47f6e110dd6af83a7e56ac3
   UnrarKit: 62f535c7a34ec52d2514b9b148f33dcfa9a9dc39
   ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
