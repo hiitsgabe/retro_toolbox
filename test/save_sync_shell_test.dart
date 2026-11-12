@@ -27,17 +27,22 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       if (call.method == 'status') return {'running': true, 'granted': true, 'uid': 2000};
-      return {'code': 0, 'out': 'hello\n', 'err': ''};
+      return {'code': 3, 'out': 'hello\n', 'err': 'warn\n'};
     });
     addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
 
     final status = await ShizukuShell.status();
     expect(status.granted, isTrue);
+    expect(status.running, isTrue);
     expect(status.uid, 2000);
     final shell = ShizukuShell(uid: status.uid);
     expect(shell.privilege, Privilege.shell);
     final r = await shell.run(['echo', 'hello']);
     expect(r.out, 'hello\n');
+    expect(r.code, 3);
+    expect(r.ok, isFalse);
+    expect(r.err, 'warn\n');
+    expect(calls.last.method, 'exec');
     expect(calls.last.arguments, {
       'argv': ['echo', 'hello'],
     });
