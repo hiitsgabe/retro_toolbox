@@ -23,6 +23,22 @@ class FakeShell implements PrivilegedShell {
   }
 }
 
+class _Flaky implements PrivilegedShell {
+  _Flaky(this.inner, this.failNextChmod);
+
+  final PrivilegedShell inner;
+  final bool Function() failNextChmod;
+
+  @override
+  Privilege get privilege => inner.privilege;
+
+  @override
+  Future<ShellResult> run(List<String> argv) async {
+    if (argv.first == 'chmod' && failNextChmod()) return const ShellResult(ShellResult.unreachable, '', 'no reply from Shizuku');
+    return inner.run(argv);
+  }
+}
+
 void main() {
   late Directory tmp;
   late String game;
@@ -96,6 +112,23 @@ void main() {
     expect(Directory(dir).statSync().mode & 0x1FF, 0x1FF); // 0777
   });
 
+  test('makeGameDir leaves no folder under the final name when chmod fails once', () async {
+    final dir = p.join(game, 'Farm_2');
+    var failed = false;
+    final real = ProcessShell();
+    final shell = _Flaky(real, () {
+      if (failed) return false;
+      failed = true;
+      return true;
+    });
+    final f = ShellGameFs(shell, PathGuard([p.join(tmp.path, 'Android/data/com.example.game')]));
+    await expectLater(f.makeGameDir(dir), throwsA(isA<GameFsError>()));
+    expect(Directory(dir).existsSync(), isFalse);
+    expect(Directory(game).listSync().where((e) => p.basename(e.path).startsWith('.rtsync-')), isEmpty);
+    await f.makeGameDir(dir);
+    expect(Directory(dir).statSync().mode & 0x1FF, 0x1FF);
+  });
+
   test('paths outside the guard never reach the shell', () async {
     expect(() => fs.listFiles('/etc'), throwsA(isA<PathRefused>()));
     expect(() => fs.copyOut(p.join(game, 'Farm_1/Farm_1'), '/tmp/x'), throwsA(isA<PathRefused>()));
@@ -106,7 +139,7 @@ void main() {
           'pidof' => argv[1] == 'com.example.game' ? const ShellResult(0, '1234\n', '') : const ShellResult(1, '', ''),
           'dumpsys' => const ShellResult(0, '  Packages:\n    versionCode=24334 minSdk=21\n    versionName=1.6.15.2\n', ''),
           'pm' => argv[2] == 'com.example.game' ? const ShellResult(0, 'package:/data/app/x/base.apk\n', '') : const ShellResult(1, '', ''),
-          'mkdir' || 'chmod' => const ShellResult(0, '', ''),
+          'mkdir' || 'chmod' || 'mv' => const ShellResult(0, '', ''),
           _ => const ShellResult(1, '', 'unexpected'),
         });
     final f = ShellGameFs(shell, PathGuard(['/x']));
@@ -119,7 +152,10 @@ void main() {
     expect(() => f.running('bad name; rm -rf /'), throwsA(isA<ArgumentError>()));
     await f.makeGameDir('/x/Farm_2');
     // GNU chmod keeps a dir's setgid on `chmod 777`, toybox clears it: pin the argv.
-    expect(shell.calls.last, ['chmod', 'a+rwx', '/x/Farm_2']);
+    final chmod = shell.calls.lastWhere((c) => c.first == 'chmod');
+    expect(chmod.sublist(0, 2), ['chmod', 'a+rwx']);
+    expect(chmod[2], startsWith('/x/.rtsync-'));
+    expect(shell.calls.last, ['mv', chmod[2], '/x/Farm_2']);
     // A probe that failed is an error, never a plain "no": exit 1 with a
     // message here, and a bridge that never answered below.
     await expectLater(f.exists('/x/a'), throwsA(isA<GameFsError>()));

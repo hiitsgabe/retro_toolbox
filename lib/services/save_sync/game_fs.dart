@@ -154,9 +154,17 @@ class ShellGameFs implements GameFs {
   @override
   Future<void> makeGameDir(String dir) async {
     final d = guard.check(dir);
-    await _must(['mkdir', d]);
-    if (shell.privilege == Privilege.root) await _chownLikeParent(d);
-    await _must(['chmod', 'a+rwx', d]); // never octal: toybox octal chmod clears the inherited setgid
+    // Build under a hidden name and rename last, so the unit's name only exists once the folder is writable.
+    final tmp = guard.check(p.posix.join(p.posix.dirname(d), '.rtsync-${_random.nextInt(1 << 32).toRadixString(16)}'));
+    try {
+      await _must(['mkdir', tmp]);
+      if (shell.privilege == Privilege.root) await _chownLikeParent(tmp);
+      await _must(['chmod', 'a+rwx', tmp]); // never octal: toybox octal chmod clears the inherited setgid
+      await _must(['mv', tmp, d]);
+    } catch (_) {
+      await shell.run(['rmdir', tmp]);
+      rethrow;
+    }
   }
 
   Future<void> _chownLikeParent(String path) async {
