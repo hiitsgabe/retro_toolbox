@@ -160,12 +160,27 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       });
 
   Future<void>? _refreshing;
+  bool _again = false;
 
   /// One refresh at a time: two would build two engines, and one could recover a pull the other is running.
+  /// A refresh asked for while one runs (a sign out during the report upload) runs once more after it,
+  /// so the caller never gets back a state built from the hub it just left.
   Future<void> refresh() {
     // A new engine has its own queue: a refresh during an action would scan the unit mid-pull.
     if (state.busyRecipe != null) return Future.value();
-    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+    final running = _refreshing;
+    if (running != null) {
+      _again = true;
+      return running;
+    }
+    return _refreshing = _refreshAgainWhileAsked().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _refreshAgainWhileAsked() async {
+    do {
+      _again = false;
+      await _doRefresh();
+    } while (_again && state.busyRecipe == null);
   }
 
   Future<void> _doRefresh() async {
@@ -204,18 +219,23 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         }
         problems = {...load.rejected, for (final f in load.tooNew) f: 'needs a newer Retro Toolbox'};
       }
+      // Recipes another hub published, and their problems, do not belong to this one.
+      void leaveHub(String? id) {
+        if (id == _hubId) return;
+        _recipes.removeWhere((_, r) => r.$2 == 'hub');
+        problems = {for (final e in problems.entries) if (!e.key.startsWith('hub: ')) e.key: e.value};
+        _hubId = id;
+      }
+
       if (shell == null || choice == null) {
+        if (choice == null) leaveHub(null);
         state = state.copyWith(loading: false, games: const [], recipeProblems: problems);
         return;
       }
       final model = await _deviceModel();
       final deviceId = await sync.deviceId(model);
       final hub = Hub(_backend(choice));
-      if (hub.backend.id != _hubId) {
-        // Recipes another hub published do not belong to this one.
-        _recipes.removeWhere((_, r) => r.$2 == 'hub');
-        _hubId = hub.backend.id;
-      }
+      leaveHub(hub.backend.id);
       await hub.open(deviceId: deviceId);
       for (final e in (await hub.recipes()).entries) {
         final known = _recipes[e.key];

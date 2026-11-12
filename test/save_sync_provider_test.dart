@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/services/save_sync/drive_api.dart';
 import 'package:retro_toolbox/services/save_sync/drive_backend.dart';
+import 'package:retro_toolbox/services/save_sync/drive_transport.dart';
 import 'package:retro_toolbox/services/save_sync/google_auth.dart';
 import 'package:retro_toolbox/services/save_sync/hub.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
@@ -16,6 +18,25 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:shared_preferences_platform_interface/types.dart';
 
 import 'save_sync_fake_drive.dart';
+
+/// Holds every request [holds] matches until [open] completes; [reached] tells the test one arrived.
+class GatedTransport implements DriveTransport {
+  GatedTransport(this.inner, this.holds);
+
+  final DriveTransport inner;
+  final bool Function(DriveRequest r) holds;
+  final reached = Completer<void>();
+  final open = Completer<void>();
+
+  @override
+  Future<DriveResponse> send(DriveRequest r) async {
+    if (holds(r)) {
+      if (!reached.isCompleted) reached.complete();
+      await open.future;
+    }
+    return inner.send(r);
+  }
+}
 
 /// A notifier caught in the middle of an action on [recipe].
 class BusyNotifier extends SaveSyncNotifier {
@@ -152,7 +173,7 @@ void main() {
     late FakeDrive drive;
     late InMemorySharedPreferencesAsync prefs;
 
-    ProviderContainer container(Map<String, Object> stored, {bool googleAvailable = true, bool shizuku = true, DevicePaths paths = const DevicePaths()}) {
+    ProviderContainer container(Map<String, Object> stored, {bool googleAvailable = true, bool shizuku = true, DevicePaths paths = const DevicePaths(), DriveTransport Function(FakeDrive drive)? transport}) {
       prefs = InMemorySharedPreferencesAsync.withData(stored);
       SharedPreferencesAsyncPlatform.instance = prefs;
       mockShizuku(shizuku ? {'running': true, 'granted': true, 'uid': 2000} : {'running': false, 'granted': false, 'uid': -1});
@@ -160,7 +181,7 @@ void main() {
       google = FakeGoogleAuth(available: googleAvailable);
       drive = FakeDrive();
       final c = ProviderContainer(overrides: [
-        saveSyncProvider.overrideWith((ref) => SaveSyncNotifier(paths: paths, google: google, driveTransport: drive)),
+        saveSyncProvider.overrideWith((ref) => SaveSyncNotifier(paths: paths, google: google, driveTransport: transport == null ? drive : transport(drive))),
       ]);
       addTearDown(c.dispose);
       return c;
@@ -272,6 +293,43 @@ void main() {
       expect(s.hubKind, HubKind.folder);
       expect(s.hubFolder, '${tmp.path}/Retro Toolbox Saves');
       expect(s.games.map((g) => g.recipe.id), isNot(contains('hub-only-game')));
+    });
+
+    test('a broken recipe on the Drive hub is no problem of the folder hub', () async {
+      final tmp = await Directory.systemTemp.createTemp('rt-provider-');
+      addTearDown(() => tmp.delete(recursive: true));
+      final c = container({}, paths: DevicePaths(sdcard: tmp.path));
+      final odin = Hub(DriveBackend('1234567890', DriveApi(drive, FakeTokens(['token-1']))));
+      await odin.open(deviceId: 'odin-02c4');
+      final raw = jsonDecode(File('save_recipes/stardew-valley.json').readAsStringSync()) as Map<String, dynamic>;
+      await odin.publishRecipe({...raw, 'id': 'broken-game', 'extra': 1}, source: 'user', deviceId: 'odin-02c4', now: DateTime.utc(2026, 11, 12));
+
+      await c.read(saveSyncProvider.notifier).signInWithGoogle();
+      expect(c.read(saveSyncProvider).recipeProblems.keys, contains('hub: broken-game'));
+      await c.read(saveSyncProvider.notifier).setHubFolder();
+      expect(c.read(saveSyncProvider).recipeProblems.keys.where((k) => k.startsWith('hub: ')), isEmpty);
+    });
+
+    test('sign out while a refresh is still writing to Drive leaves no Drive hub behind', () async {
+      late GatedTransport gated;
+      final c = container({
+        'save_sync_hub_kind': 'drive',
+        'save_sync_google_account': '{"id":"1234567890","email":"player@gmail.com"}',
+      }, transport: (drive) => gated = GatedTransport(drive, (r) => r.method != 'GET' && utf8.decode(r.body, allowMalformed: true).contains('README.txt')));
+      final notifier = c.read(saveSyncProvider.notifier);
+      final running = notifier.refresh();
+      // The games are on screen and the buttons work; the report is still uploading.
+      await gated.reached.future;
+      expect(c.read(saveSyncProvider).loading, isFalse);
+      final out = notifier.signOut();
+      gated.open.complete();
+      await out;
+      await running;
+      final s = c.read(saveSyncProvider);
+      expect(s.hubKind, HubKind.none);
+      expect(s.googleEmail, '');
+      final lines = await notifier.check('stardew-valley');
+      expect(lines.single.detail, 'Choose where saves go first');
     });
   });
 }
