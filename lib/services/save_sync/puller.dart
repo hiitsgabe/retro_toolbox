@@ -103,13 +103,16 @@ class Puller {
         for (final rel in gen.files.keys.toList()..sort()) {
           final target = p.posix.join(locationDir, rel);
           final had = before[rel];
-          await fs.replace(p.join(stage.path, rel), target, gen.files[rel]!.sha256);
+          // Registered first: a reply lost after the command ran must still be undone.
           undo.add(had != null ? () => fs.replace(p.join(entry, rel), target, had) : () => fs.remove(target));
+          await fs.replace(p.join(stage.path, rel), target, gen.files[rel]!.sha256);
         }
         for (final rel in before.keys.where((r) => !gen.files.containsKey(r))) {
           final target = p.posix.join(locationDir, rel), kept = p.join(entry, rel);
+          undo.add(() async {
+            if (await fs.exists(kept)) await fs.moveTo(kept, target);
+          });
           await fs.moveTo(target, kept); // over its identical snapshot copy
-          undo.add(() => fs.moveTo(kept, target));
         }
         // A game opened mid-pull may hold the old files in memory and write them back over the new ones.
         if (await fs.running(binding.package)) throw SyncBlocked('${recipe.name} started during the pull');
@@ -343,8 +346,10 @@ class Puller {
     // Journaled before the move, so a kill between the two is still recovered.
     (journal.data['aside'] as List<String>).add(rel);
     await journal.save();
+    undo.add(() async {
+      if (await fs.exists(dst)) await fs.moveTo(dst, src);
+    });
     await fs.moveTo(src, dst);
-    undo.add(() => fs.moveTo(dst, src));
   }
 
   /// A recipe path with the unit key put in literally.

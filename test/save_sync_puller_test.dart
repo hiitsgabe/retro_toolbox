@@ -132,6 +132,16 @@ void main() {
     expect(odin.has('EMERGENCY_SAVE'), isTrue);
   });
 
+  test('a replace whose reply is lost after it landed is still rolled back', () async {
+    final gen = await pushFromThor('Farm_1', 'day 5'); // SaveGameInfo says 1.6.15
+    odin.writeFarm('Farm_1', 'day 3', version: '1.6.14');
+    final info = File(p.join(odin.saves, 'Farm_1', 'SaveGameInfo')).readAsStringSync();
+    odin.shell.loseReplyOnMvTo = 'Farm_1/SaveGameInfo';
+    await expectLater(pullInto(odin, 'Farm_1', gen), throwsA(isA<PullRolledBack>().having((e) => e.rollbackError, 'rollbackError', isNull)));
+    expect(odin.farm('Farm_1'), contains('day 3'));
+    expect(File(p.join(odin.saves, 'Farm_1', 'SaveGameInfo')).readAsStringSync(), info);
+  });
+
   String? journalOf(TestDevice d) {
     final root = Directory(p.join(d.paths.saveSync, 'history'));
     if (!root.existsSync()) return null;
@@ -233,10 +243,12 @@ void main() {
       files: {
         for (final f in planted) f.name: GenFile(sha256.convert(f.content).toString(), f.content.length),
       },
+      gameVersion: '1.6.15',
       payloadSha256: sha,
     );
     await hub.put(evil, zip);
-    await expectLater(pullInto(odin, 'Farm_1', evil), throwsA(isA<PullRefused>()));
+    await expectLater(
+        pullInto(odin, 'Farm_1', evil), throwsA(isA<PullRefused>().having((e) => e.reason, 'reason', contains('not part of Farm_1'))));
     expect(odin.farm('Farm_1'), contains('day 3'));
   });
 

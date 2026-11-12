@@ -30,6 +30,8 @@ class TestShell implements PrivilegedShell {
   int failReplaceFrom = -1;
   int startGameAfterReplaces = -1;
   int _replaces = 0;
+  /// Runs the real `mv` onto a path ending in this, then reports it unreachable once (the reply is lost).
+  String? loseReplyOnMvTo;
   void Function(List<String> argv)? afterRun;
 
   /// Atomic replaces tried so far.
@@ -51,6 +53,10 @@ class TestShell implements PrivilegedShell {
     }
     final r = await _real.run(argv);
     if (r.ok) afterRun?.call(argv);
+    if (r.ok && argv.first == 'mv' && loseReplyOnMvTo != null && argv.last.endsWith(loseReplyOnMvTo!)) {
+      loseReplyOnMvTo = null; // once
+      return const ShellResult(ShellResult.unreachable, '', 'reply lost');
+    }
     return r;
   }
 }
