@@ -18,6 +18,7 @@ class FakeNotifier extends SaveSyncNotifier {
   }
 
   final calls = <String>[];
+  bool checkThrows = false;
 
   @override
   Future<void> refresh() async => calls.add('refresh');
@@ -35,10 +36,13 @@ class FakeNotifier extends SaveSyncNotifier {
   Future<void> confirmBinding(Binding b) async => calls.add('confirm ${b.recipe}');
 
   @override
-  Future<List<CheckLine>> check(String recipeId) async => const [
+  Future<List<CheckLine>> check(String recipeId) async {
+    if (checkThrows) throw StateError('bridge died');
+    return const [
         CheckLine(CheckLevel.ok, 'Recipe', 'Stardew Valley: verified recipe from bundled'),
         CheckLine(CheckLevel.fail, 'Hub Farm_1', 'damaged'),
-      ];
+    ];
+  }
 }
 
 void main() {
@@ -122,6 +126,18 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Hub Farm_1'), findsOneWidget);
     expect(find.text('damaged'), findsOneWidget);
+  });
+
+  testWidgets('a failing Check shows the error instead of spinning', (t) async {
+    final fake = await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, games: [GameStatus(stardew, 'bundled', const Bound(binding))]),
+    );
+    fake.checkThrows = true;
+    await t.tap(find.widgetWithText(TextButton, 'Check'));
+    await t.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('bridge died'), findsOneWidget);
   });
 
   testWidgets('a draft location asks for confirmation', (t) async {

@@ -45,7 +45,9 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
   }
 
   Future<void> _showCheck(GameStatus g) async {
-    final lines = ref.read(saveSyncProvider.notifier).check(g.recipe.id);
+    final lines = ref.read(saveSyncProvider.notifier).check(g.recipe.id).catchError(
+          (Object e) => [CheckLine(CheckLevel.fail, 'Check', '$e')],
+        );
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
