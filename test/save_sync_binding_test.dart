@@ -85,6 +85,27 @@ void main() {
     expect(res.files, ['SOS_SaveSlot0.sos']);
   });
 
+  test('two locations: saves only in the second place bind that place, not the first', () async {
+    final r = bundled('sea-of-stars');
+    Directory(p.join(paths.area(Area.androidData, 'com.playdigious.seaofstars'), 'files')).createSync(recursive: true);
+    File(p.join(paths.area(Area.internal, 'com.playdigious.seaofstars'), 'files', 'SOS_SaveSlot0.sos'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('x');
+    final res = await binder(r, {'com.playdigious.seaofstars'}, privilege: Privilege.root).bind(r);
+    expect(res, isA<NeedsConfirm>());
+    expect((res as NeedsConfirm).binding.area, Area.internal);
+  });
+
+  test('two locations, saves in both: discovery', () async {
+    final r = bundled('sea-of-stars');
+    for (final a in [Area.androidData, Area.internal]) {
+      File(p.join(paths.area(a, 'com.playdigious.seaofstars'), 'files', 'SOS_SaveSlot0.sos'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync('x');
+    }
+    expect(await binder(r, {'com.playdigious.seaofstars'}, privilege: Privilege.root).bind(r), isA<NeedsDiscovery>());
+  });
+
   test('two locations, no saves anywhere: discovery', () async {
     final r = bundled('sea-of-stars');
     expect(await binder(r, {'com.playdigious.seaofstars'}).bind(r), isA<NeedsDiscovery>());
