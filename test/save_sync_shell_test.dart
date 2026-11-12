@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
@@ -19,10 +21,23 @@ void main() {
   test('ProcessShell reports a missing command as a failed result', () async {
     final r = await ProcessShell().run(['definitely-not-a-command-xyz']);
     expect(r.ok, isFalse);
-    // A command killed by a signal did run: 128+signal, never the sentinel.
-    final k = await ProcessShell().run(['sh', '-c', r'kill -HUP $$']);
+  });
+
+  test('ProcessShell maps a death by signal to 128+signal', () async {
+    // KILL cannot be ignored, unlike HUP under nohup.
+    final k = await ProcessShell().run(['sh', '-c', r'kill -KILL $$']);
     expect(k.ran, isTrue);
-    expect(k.code, 129);
+    expect(k.code, 137);
+  });
+
+  test('ProcessShell kills a timed out command so its effect never lands', () async {
+    final dir = Directory.systemTemp.createTempSync('rtsync_shell');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final marker = '${dir.path}/marker';
+    final r = await ProcessShell(timeout: const Duration(milliseconds: 500)).run(['sh', '-c', 'sleep 2; echo late > $marker']);
+    expect(r.ran, isFalse);
+    await Future<void>.delayed(const Duration(seconds: 3));
+    expect(File(marker).existsSync(), isFalse);
   });
 
   test('ShizukuShell passes argv and maps the reply', () async {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/services.dart';
 
@@ -54,17 +55,31 @@ class ProcessShell implements PrivilegedShell {
   @override
   Future<ShellResult> run(List<String> argv) async {
     try {
-      final r = viaSu
-          ? await Process.run('su', ['--mount-master', '-c', argv.map(shellQuote).join(' ')], environment: _env).timeout(timeout)
-          : await Process.run(argv.first, argv.sublist(1), environment: _env).timeout(timeout);
+      // Process.start, not Process.run().timeout(): a timeout that only stops
+      // waiting leaves the command running, and its effect can land after
+      // run() has reported failure. On su the client dies without reliably
+      // taking the root child along, so the inner command carries its own
+      // KILL, a few seconds ahead of ours.
+      final inner = max(1, timeout.inSeconds - 5);
+      final p = viaSu
+          ? await Process.start('su', ['--mount-master', '-c', ['timeout', '-s', 'KILL', '$inner', ...argv].map(shellQuote).join(' ')], environment: _env)
+          : await Process.start(argv.first, argv.sublist(1), environment: _env);
+      var timedOut = false;
+      final timer = Timer(timeout, () {
+        timedOut = true;
+        p.kill(ProcessSignal.sigkill);
+      });
+      final out = systemEncoding.decodeStream(p.stdout);
+      final err = systemEncoding.decodeStream(p.stderr);
+      final exit = await p.exitCode;
+      timer.cancel();
+      if (timedOut) return ShellResult(ShellResult.unreachable, '', 'timed out: ${argv.first}');
       // Dart reports a death by signal as -signal. A shell, and Shizuku's
       // side, say 128+signal, which keeps negative codes for [unreachable].
-      final code = r.exitCode < 0 ? 128 - r.exitCode : r.exitCode;
-      return ShellResult(code, '${r.stdout}', '${r.stderr}');
+      final code = exit < 0 ? 128 - exit : exit;
+      return ShellResult(code, await out, await err);
     } on ProcessException catch (e) {
       return ShellResult(127, '', e.message);
-    } on TimeoutException {
-      return ShellResult(ShellResult.unreachable, '', 'timed out: ${argv.first}');
     }
   }
 
