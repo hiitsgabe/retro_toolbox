@@ -44,6 +44,20 @@ void main() {
     expect(ShizukuShell(uid: 0).privilege, Privilege.root);
   });
 
+  test('ShizukuShell marks a bridge failure as not run, not as exit 1', () async {
+    const channel = MethodChannel('retro_toolbox/shizuku');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      throw PlatformException(code: 'SHIZUKU', message: 'exec failed');
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+
+    final r = await ShizukuShell(uid: 2000).run(['test', '-e', '/x']);
+    expect(r.ok, isFalse);
+    expect(r.ran, isFalse);
+    expect(r.code, ShellResult.unreachable);
+    expect(const ShellResult(1, '', '').ran, isTrue);
+  });
+
   test('ShizukuShell.status is "not running" when the channel is missing', () async {
     final status = await ShizukuShell.status();
     expect(status.running, isFalse);

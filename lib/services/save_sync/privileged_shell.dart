@@ -12,7 +12,14 @@ class ShellResult {
   final String out;
   final String err;
 
+  /// The code for "the command never ran or no answer came back". No process
+  /// exits with it, so a probe can tell it apart from a plain exit 1.
+  static const unreachable = -1;
+
   bool get ok => code == 0;
+
+  /// False when the transport failed (no reply, bridge error, timeout).
+  bool get ran => code >= 0;
 
   @override
   String toString() => 'exit $code: ${err.trim().isEmpty ? out.trim() : err.trim()}';
@@ -53,7 +60,7 @@ class ProcessShell implements PrivilegedShell {
     } on ProcessException catch (e) {
       return ShellResult(127, '', e.message);
     } on TimeoutException {
-      return ShellResult(124, '', 'timed out: ${argv.first}');
+      return ShellResult(ShellResult.unreachable, '', 'timed out: ${argv.first}');
     }
   }
 
@@ -95,12 +102,12 @@ class ShizukuShell implements PrivilegedShell {
   Future<ShellResult> run(List<String> argv) async {
     try {
       final m = await channel.invokeMapMethod<String, dynamic>('exec', {'argv': argv}).timeout(timeout);
-      if (m == null) return const ShellResult(1, '', 'no reply from Shizuku');
+      if (m == null) return const ShellResult(ShellResult.unreachable, '', 'no reply from Shizuku');
       return ShellResult(m['code'] as int, m['out'] as String, m['err'] as String);
     } on PlatformException catch (e) {
-      return ShellResult(1, '', e.message ?? e.code);
+      return ShellResult(ShellResult.unreachable, '', e.message ?? e.code);
     } on TimeoutException {
-      return ShellResult(124, '', 'timed out: ${argv.first}');
+      return ShellResult(ShellResult.unreachable, '', 'timed out: ${argv.first}');
     }
   }
 
