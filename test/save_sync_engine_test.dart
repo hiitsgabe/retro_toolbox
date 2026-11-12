@@ -181,6 +181,26 @@ void main() {
     expect(a.state.base(a.hub.key, 'stardew-valley', 'Farm_1')?.gen, pushed);
   });
 
+  test('a borrowed base may be an older gen: the other device pulled it and pushed on top', () async {
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    thor.writeFarm('Farm_1', 'day 1');
+    expect(await a.push(stardew), ['Farm_1: pushed']);
+    final odinCopy = Directory(p.join(tmp.path, 'odin-copy'));
+    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4');
+    File(p.join(odinCopy.path, 'hub.json')).copySync(p.join(hubDir, 'hub.json'));
+    final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);
+    expect(await b.pull(stardew), ['Farm_1: pulled']);
+    odin.writeFarm('Farm_1', 'odin day 2');
+    expect(await b.push(stardew), ['Farm_1: pushed']);
+    await a.hub.open(deviceId: 'thor-7f3a');
+
+    // Thor's base is listed but is no longer a head: unchanged here, so the child is a plain pull.
+    final s = await a.status(stardew);
+    expect(s.units['Farm_1']!.plan, isA<PullPlan>());
+    expect(await a.pull(stardew), ['Farm_1: pulled']);
+    expect(thor.farm('Farm_1'), contains('odin day 2'));
+  });
+
   test('a hub recreated in the same place borrows no base, so the old local save diverges', () async {
     final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
     thor.writeFarm('Farm_1', 'day 1');
