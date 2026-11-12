@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup on Android 11 (API 30) and lower. Only excludes, so everything
+     else is still backed up as before. Save sync state (device id, hub folder,
+     bindings, bases) is per install: restored onto another handheld it would
+     make that one push as the old device. See PrefsStore in
+     lib/services/save_sync/sync_state.dart. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="retro_toolbox_save_sync.xml" />
+</full-backup-content>

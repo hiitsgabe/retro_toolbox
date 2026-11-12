@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,7 +6,9 @@ import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_android/shared_preferences_android.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 void main() {
   test('device id is made once and kept', () async {
@@ -63,11 +66,52 @@ void main() {
     expect(SyncState(store).binding('x'), isNull);
   });
 
-  test('PrefsStore reads and writes shared preferences', () async {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    final s = SyncState(PrefsStore(prefs));
-    await s.setHubFolder('/x');
-    expect(prefs.getString('save_sync_hub_folder'), '/x');
+  group('PrefsStore', () {
+    const binding = Binding(recipe: 'stardew-valley', package: 'com.chucklefish.stardewvalley', area: Area.androidData, root: 'files/Saves');
+
+    test('a value written comes back from the cache, and a second store on the same backend reads it', () async {
+      SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty();
+      final first = SyncState(await PrefsStore.open());
+      await first.setHubFolder('/x');
+      await first.setBinding(binding);
+      final id = await first.deviceId('AYN Thor', random: Random(3));
+      expect(first.hubFolder, '/x');
+      expect(first.binding('stardew-valley')!.root, 'files/Saves');
+
+      final second = SyncState(await PrefsStore.open());
+      expect(second.hubFolder, '/x');
+      expect(second.binding('stardew-valley')!.root, 'files/Saves');
+      expect(await second.deviceId('Something Else', random: Random(4)), id);
+    });
+
+    test('on Android it is its own SharedPreferences file, the one the backup rules exclude', () async {
+      final options = PrefsStore.options(android: true);
+      expect(options, isA<SharedPreferencesAsyncAndroidOptions>());
+      final android = options as SharedPreferencesAsyncAndroidOptions;
+      // DataStore would ignore the file name and keep the state in a file the rules do not name.
+      expect(android.backend, SharedPreferencesAndroidBackendLibrary.SharedPreferences);
+      final file = android.originalSharedPreferencesOptions?.fileName;
+      expect(file, isNotNull);
+      expect(file, isNot('FlutterSharedPreferences'));
+
+      final exclude = '<exclude domain="sharedpref" path="$file.xml" />';
+      const res = 'android/app/src/main/res/xml';
+      final full = File('$res/backup_rules.xml').readAsStringSync();
+      final extraction = File('$res/data_extraction_rules.xml').readAsStringSync();
+      expect(RegExp('<exclude ').allMatches(full).length, 1);
+      expect(full, contains(exclude));
+      expect(RegExp('<include ').hasMatch(full), isFalse, reason: 'an include would stop everything else being backed up');
+      for (final section in ['cloud-backup', 'device-transfer']) {
+        final body = RegExp('<$section>(.*?)</$section>', dotAll: true).firstMatch(extraction)?.group(1);
+        expect(body, isNotNull, reason: section);
+        expect(RegExp('<exclude ').allMatches(body!).length, 1, reason: section);
+        expect(body, contains(exclude), reason: section);
+      }
+      expect(RegExp('<include ').hasMatch(extraction), isFalse, reason: 'an include would stop everything else being backed up');
+
+      final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      expect(manifest, contains('android:fullBackupContent="@xml/backup_rules"'));
+      expect(manifest, contains('android:dataExtractionRules="@xml/data_extraction_rules"'));
+    });
   });
 }

@@ -1,20 +1,43 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_android/shared_preferences_android.dart';
 
 abstract class SyncStore {
   String? get(String key);
   Future<void> set(String key, String value);
 }
 
+/// Save sync state in its own preferences file, kept out of Android backup and
+/// device transfer: a handheld restored from another must not come up with
+/// that one's device id and bases, or its next push would claim the other's
+/// history and every device would pull it over its own progress.
 class PrefsStore implements SyncStore {
   PrefsStore(this.prefs);
 
-  final SharedPreferences prefs;
+  final SharedPreferencesWithCache prefs;
+
+  /// The excludes in android/app/src/main/res/xml name this file plus `.xml`.
+  static const fileName = 'retro_toolbox_save_sync';
+
+  /// The app's other settings stay in the default file, which is still backed up.
+  static SharedPreferencesOptions options({required bool android}) => android
+      ? const SharedPreferencesAsyncAndroidOptions(
+          backend: SharedPreferencesAndroidBackendLibrary.SharedPreferences,
+          originalSharedPreferencesOptions: AndroidSharedPreferencesStoreOptions(fileName: fileName),
+        )
+      : const SharedPreferencesOptions();
+
+  /// Reads the whole file once; gets come from that cache, sets write through.
+  static Future<PrefsStore> open() async => PrefsStore(await SharedPreferencesWithCache.create(
+        sharedPreferencesOptions: options(android: Platform.isAndroid),
+        cacheOptions: const SharedPreferencesWithCacheOptions(),
+      ));
 
   @override
   String? get(String key) => prefs.getString(key);

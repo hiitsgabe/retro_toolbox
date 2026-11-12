@@ -12,7 +12,6 @@ import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 enum SyncAccess { none, shizuku, root }
 
@@ -100,7 +99,14 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   static const _native = MethodChannel('retrotoolbox/native');
 
-  Future<SyncState> _sync() async => SyncState(PrefsStore(await SharedPreferences.getInstance()));
+  Future<SyncState>? _syncState;
+
+  /// One store for the notifier's life: each store caches what it read, so a second one would write a binding
+  /// or base over the first one's newer copy. A failed open is tried again on the next call.
+  Future<SyncState> _sync() => _syncState ??= PrefsStore.open().then(SyncState.new, onError: (Object e, StackTrace st) {
+        _syncState = null;
+        Error.throwWithStackTrace(e, st);
+      });
 
   Future<void>? _refreshing;
 
