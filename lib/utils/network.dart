@@ -107,6 +107,38 @@ Future<String> resolveBuzzheavierDirectUrl(
   }
 }
 
+/// Auth headers for an Internet Archive download. Restricted ("loggedin")
+/// items only accept session cookies; S3 keys are the fallback for older
+/// flows. Empty map when no IA credentials are configured.
+/// Cookie values are sanitized: only the actual cookie pairs survive, any
+/// stray `expires=`, `path=`, `domain=`, `HttpOnly`... attributes that leak
+/// into the stored blob are dropped (they make nginx reject the request).
+Map<String, String> iaAuthHeaders({String? cookies, String? accessKey, String? secretKey}) {
+  if (cookies?.isNotEmpty ?? false) {
+    final cleaned = _cleanIaCookies(cookies!);
+    if (cleaned.isNotEmpty) return {'Cookie': cleaned};
+  }
+  if ((accessKey?.isNotEmpty ?? false) && (secretKey?.isNotEmpty ?? false)) {
+    return {'Authorization': 'LOW $accessKey:$secretKey'};
+  }
+  return {};
+}
+
+String _cleanIaCookies(String raw) {
+  const attrs = {'expires', 'max-age', 'path', 'domain', 'secure', 'httponly', 'samesite'};
+  final parts = <String>[];
+  for (final chunk in raw.split(';')) {
+    final t = chunk.trim();
+    if (t.isEmpty) continue;
+    final eq = t.indexOf('=');
+    final name = (eq < 0 ? t : t.substring(0, eq)).trim().toLowerCase();
+    if (attrs.contains(name)) continue;
+    if (eq < 0) continue;
+    parts.add(t);
+  }
+  return parts.join('; ');
+}
+
 /// Builds request headers for a console's token auth config (`auth`).
 /// Cookie-based when `cookies: true`, otherwise a Bearer header.
 /// IA S3 auth is handled separately.

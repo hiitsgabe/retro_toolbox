@@ -46,8 +46,8 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
   final _catalogService = CatalogService();
 
   TinfoilServerNotifier(this._ref) : super(const TinfoilServerState()) {
-    _service.activeTransfers.addListener(() {
-      if (mounted) state = state.copyWith(activeTransfers: _service.activeTransfers.value);
+    TinfoilServerService.activeTransfers.addListener(() {
+      if (mounted) state = state.copyWith(activeTransfers: TinfoilServerService.activeTransfers.value);
     });
     SharedPreferences.getInstance().then((prefs) {
       final port = prefs.getInt(_portKey);
@@ -76,14 +76,16 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
 
   Map<String, String> _authHeaders(Console console) {
     final settings = _ref.read(settingsProvider);
-    final headers = buildDownloadHeaders(
+    // Same auth as the app's own downloads: IA restricted items want session
+    // cookies first, S3 keys as fallback.
+    return buildDownloadHeaders(
       console.url,
-      buildConsoleAuthHeaders(console.auth, tokenOverride: settings.consoleSettings[console.id]?.authToken),
+      {
+        ...buildConsoleAuthHeaders(console.auth, tokenOverride: settings.consoleSettings[console.id]?.authToken),
+        if (console.usesInternetArchive)
+          ...iaAuthHeaders(cookies: settings.iaCookies, accessKey: settings.iaAccessKey, secretKey: settings.iaSecretKey),
+      },
     );
-    if (console.auth?['type'] == 'ia_s3' && (settings.iaAccessKey?.isNotEmpty ?? false)) {
-      headers['Authorization'] = 'LOW ${settings.iaAccessKey}:${settings.iaSecretKey}';
-    }
-    return headers;
   }
 
   Future<void> enable() async {

@@ -121,7 +121,7 @@ class TinfoilServerService {
   Future<Map<Console, List<Game>>> Function()? _loadGames;
   Map<String, String> Function(Console)? _authHeaders;
   String? Function(Console)? _downloadDir;
-  final ValueNotifier<int> activeTransfers = ValueNotifier(0);
+  static final ValueNotifier<int> activeTransfers = ValueNotifier(0);
 
   bool get running => _server != null;
   int get port => _server?.port ?? 0;
@@ -172,7 +172,7 @@ class TinfoilServerService {
   Map<String, String> _localFiles(Console c) => localSwitchFiles(_downloadDir?.call(c));
 
   /// Streams [file], honouring a single `bytes=a-b` / `bytes=a-` Range.
-  Future<void> _serveFile(HttpRequest req, File file) async {
+  static Future<void> serveFile(HttpRequest req, File file) async {
     final length = await file.length();
     var start = 0, end = length - 1;
     final m = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(req.headers.value(HttpHeaders.rangeHeader) ?? '');
@@ -238,11 +238,18 @@ class TinfoilServerService {
     }
     final local = entry.localPath;
     if (local != null && File(local).existsSync()) {
-      await _serveFile(req, File(local));
+      await serveFile(req, File(local));
       return;
     }
 
     final headers = _authHeaders!(entry.console);
+    await proxyUpstream(req, url: entry.game.url, headers: headers);
+  }
+
+  /// Streams [url] to [req] through the storage host's redirects, injecting
+  /// [headers] (auth) on every hop and forwarding Range. Never hands a
+  /// client an auth/error page as if it were the game file.
+  static Future<void> proxyUpstream(HttpRequest req, {required String url, required Map<String, String> headers}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     // A proxy must forward bytes verbatim: auto-decompressing while forwarding
@@ -255,10 +262,10 @@ class TinfoilServerService {
       // never a separate probe: some storage hosts hand out links that break
       // after one use, or close a probe's connection before its body.
       final range = req.headers.value(HttpHeaders.rangeHeader);
-      var url = Uri.parse(entry.game.url);
+      var target = Uri.parse(url);
       HttpClientResponse upstreamRes;
       for (var hop = 0;; hop++) {
-        final upstreamReq = await client.getUrl(url);
+        final upstreamReq = await client.getUrl(target);
         upstreamReq.followRedirects = false;
         headers.forEach(upstreamReq.headers.set);
         if (range != null) upstreamReq.headers.set(HttpHeaders.rangeHeader, range);
@@ -266,10 +273,11 @@ class TinfoilServerService {
         final location = upstreamRes.headers.value(HttpHeaders.locationHeader);
         if (!upstreamRes.isRedirect || location == null || hop >= 5) break;
         await upstreamRes.drain<void>().catchError((_) {});
-        url = url.resolve(location);
+        target = target.resolve(location);
       }
       // Never hand Tinfoil an auth/error page as if it were the game file.
       if (upstreamRes.statusCode >= 400) {
+        debugPrint('proxy upstream $target -> ${upstreamRes.statusCode}');
         await upstreamRes.drain<void>();
         req.response.statusCode = HttpStatus.badGateway;
         await req.response.close();

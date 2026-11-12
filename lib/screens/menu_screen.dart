@@ -31,6 +31,7 @@ import 'package:retro_toolbox/screens/m3u_screen.dart';
 import 'package:retro_toolbox/screens/chd_convert_screen.dart';
 import 'package:retro_toolbox/screens/rts_server_screen.dart';
 import 'package:retro_toolbox/screens/fbi_server_screen.dart';
+import 'package:retro_toolbox/screens/fpkgi_server_screen.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
@@ -77,6 +78,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final activeTasks = ref.watch(gameStateManagerProvider.select((m) => m.values.where((g) => g.isActive).length));
     // Opt-in (Settings): everything that browses a catalog or downloads games.
     final library = ref.watch(settingsProvider.select((s) => s.isLibraryEnabled));
+    // Extra console servers, each with its own opt-in switch.
+    final tinfoil = ref.watch(settingsProvider.select((s) => s.isTinfoilEnabled));
+    final fbi = ref.watch(settingsProvider.select((s) => s.isFbiEnabled));
+    final fpkgi = ref.watch(settingsProvider.select((s) => s.isFpkgiEnabled));
 
     final tiles = [
       if (library)
@@ -91,16 +96,19 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         icon: Icons.dns,
         accentColor: const Color(0xFF167C80),
         onTap: () => _push(MenuGridScreen(title: 'Servers', tiles: [
-          // The handheld keeps the pure-Dart servers that make sense there.
-          if (library && !Handheld.current)
+          // Tinfoil, FBI and FPKGi are opt-in (Settings → Extra servers); the
+          // handheld keeps the pure-Dart servers that make sense there.
+          if (tinfoil && !Handheld.current)
             MenuTile(label: 'Tinfoil Server', icon: Icons.cloud_upload, accentColor: const Color(0xFF167C80), onTap: () => _push(TinfoilServerScreen())),
           if (!Handheld.current)
             MenuTile(label: 'JDKV Server', icon: Icons.folder_shared, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const JdkvServerScreen())),
           MenuTile(label: 'SMB Share', icon: Icons.folder_open, accentColor: const Color(0xFF7A5CA8), onTap: () => _push(const SmbScreen())),
           MenuTile(label: 'FTP', icon: Icons.cloud_sync, accentColor: const Color(0xFFB4632E), onTap: () => _push(const FtpScreen())),
           MenuTile(label: 'Retro Tools Server', icon: Icons.dns_rounded, accentColor: const Color(0xFF167C80), onTap: () => _push(const RtsServerScreen())),
-          if (!Handheld.current)
+          if (fbi && !Handheld.current)
             MenuTile(label: 'FBI Server', icon: Icons.install_mobile, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const FbiServerScreen())),
+          if (fpkgi && !Handheld.current)
+            MenuTile(label: 'FPKGi Server', icon: Icons.install_desktop, accentColor: const Color(0xFF0A5BB0), onTap: () => _push(const FpkgiServerScreen())),
         ])),
       ),
       MenuTile(

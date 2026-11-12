@@ -10,6 +10,18 @@ void main() {
     expect(AppSettings.fromJson(on.toJson()).useOnScreenKeyboard, isTrue);
   });
 
+  test('extra servers default off and survive a JSON round trip', () {
+    const s = AppSettings();
+    expect(s.isTinfoilEnabled, isFalse);
+    expect(s.isFbiEnabled, isFalse);
+    expect(s.isFpkgiEnabled, isFalse);
+    final on = s.copyWith(tinfoilEnabled: true, fpkgiEnabled: true);
+    final back = AppSettings.fromJson(on.toJson());
+    expect(back.isTinfoilEnabled, isTrue);
+    expect(back.isFbiEnabled, isFalse);
+    expect(back.isFpkgiEnabled, isTrue);
+  });
+
   test('resolveActiveHandler: saved choice, then catalog default', () {
     expect(resolveActiveHandler(saved: null, jsonDefault: GameHandler.chdCompress, nszEnabled: true), GameHandler.chdCompress);
     expect(resolveActiveHandler(saved: 'none', jsonDefault: GameHandler.chdCompress, nszEnabled: true), isNull);

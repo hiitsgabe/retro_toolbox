@@ -10,5 +10,6 @@ Art credits / licenses (non-commercial use):
 - switch/wiiu/3ds/ps3/xbox/xbox360 logos: "Art Book Next" theme by
   Anthony Caccese, licensed CC-BY-NC-SA
   (https://creativecommons.org/licenses/by-nc-sa/2.0/).
+- ps4/switch2 logos: official marks vectorized on Wikimedia Commons.
 These are third-party trademarked marks bundled for personal use; review before
 any commercial distribution.
