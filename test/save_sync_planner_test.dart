@@ -50,10 +50,34 @@ void main() {
     expect(d.localDiffers, isTrue);
   });
 
-  test('base unknown to the hub behaves the same', () {
-    const base = Base('pruned', {'f': 'old'});
-    expect(plan(local: {'f': 'old'}, base: base, gens: [g2]), isA<PullPlan>());
-    expect(plan(local: {'f': 'edited'}, base: base, gens: [g2]), isA<Diverged>());
+  test('base unknown to the hub pulls only when prune could have removed it', () {
+    Base at(DateTime t) => Base(makeGenId(t, 'd-0000', 'e' * 64), const {'f': 'old'});
+    final older = at(DateTime.utc(2025, 12, 31, 23, 59));
+    // A chain of pruneKeep gens, newest c19 at 00:19; the keep-th newest is c0 at 00:00.
+    final kept = [for (var i = 0; i < pruneKeep; i++) g('c$i', [if (i > 0) 'c${i - 1}'], {'f': 'c$i'}, minute: i)];
+
+    // Fewer gens than prune keeps: the hub lost the base (a folder put back
+    // from an older copy), so the older head must not replace the local save.
+    for (final gens in [
+      [g2],
+      kept.skip(1).toList(),
+    ]) {
+      final d = plan(local: {'f': 'old'}, base: older, gens: gens) as Diverged;
+      expect(d.heads.single.gen, gens.last.gen);
+      expect(d.localDiffers, isTrue);
+    }
+    // Enough gens, but the base is newer than the keep-th newest.
+    expect(plan(local: {'f': 'old'}, base: at(DateTime.utc(2026, 1, 1, 0, 0, 1)), gens: kept), isA<Diverged>());
+    // An id with no time cannot show it was pruned.
+    expect(plan(local: {'f': 'old'}, base: const Base('pruned', {'f': 'old'}), gens: kept), isA<Diverged>());
+
+    // As old as the keep-th newest or older: pruned, so pull as before.
+    expect((plan(local: {'f': 'old'}, base: older, gens: kept) as PullPlan).gen.gen, 'c19');
+    expect((plan(local: {'f': 'old'}, base: at(DateTime.utc(2026, 1, 1)), gens: kept) as PullPlan).gen.gen, 'c19');
+    expect(plan(local: {'f': 'edited'}, base: older, gens: kept), isA<Diverged>());
+
+    // Local equal to the head is still adopted, lost base or not.
+    expect((plan(local: {'f': 'h2'}, base: older, gens: [g2]) as UpToDate).adopt!.gen, 'g2');
   });
 
   test('no local files pulls the head, flagged as missing locally', () {

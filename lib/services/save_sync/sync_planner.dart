@@ -77,5 +77,19 @@ UnitPlan planUnit({required String unit, required Map<String, String> local, req
   if (base == null) return Diverged(unit, heads, localDiffers: true);
   final unchanged = sameFiles(local, base.files);
   if (base.gen == head.gen) return unchanged ? UpToDate(unit) : PushPlan(unit, [head.gen]);
-  return unchanged ? PullPlan(unit, head, missingLocally: false) : Diverged(unit, heads, localDiffers: true);
+  if (!unchanged || _lostByHub(base.gen, gens)) return Diverged(unit, heads, localDiffers: true);
+  return PullPlan(unit, head, missingLocally: false);
+}
+
+/// True for a base the hub no longer lists that prune cannot have removed.
+/// Prune keeps the newest [pruneKeep] gens by `createdAt`, so a pruned base
+/// leaves at least that many as new as it behind (its id's time is never
+/// later than its `createdAt`). Otherwise the hub lost it, say a folder put
+/// back from an older copy, and the head may be older than the local save.
+bool _lostByHub(String base, List<GenMeta> gens) {
+  if (gens.any((x) => x.gen == base)) return false;
+  final newest = [for (final x in gens) x.createdAt]..sort((a, b) => b.compareTo(a));
+  if (newest.length < pruneKeep) return true;
+  final t = genTime(base);
+  return t == null || t.isAfter(newest[pruneKeep - 1]);
 }

@@ -125,7 +125,7 @@ class Hub {
   /// zip), and zips [deviceId] wrote that were left without metadata for
   /// over a day. Another device's zip may only be waiting for its metadata
   /// to sync. Returns how many gens and orphan zips were removed.
-  Future<int> prune(String recipe, String unit, {required String deviceId, int keep = 20, DateTime? now}) async {
+  Future<int> prune(String recipe, String unit, {required String deviceId, int keep = pruneKeep, DateTime? now}) async {
     final dir = 'units/$recipe/$unit';
     var removed = 0;
     for (final g in pruneCandidates(await gens(recipe, unit), keep: keep)) {

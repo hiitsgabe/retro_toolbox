@@ -139,6 +139,28 @@ void main() {
     expect(odin.farm('Farm_1'), contains('odin day 2'));
   });
 
+  test('a hub folder put back from an older copy diverges instead of pulling the older save', () async {
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    thor.writeFarm('Farm_1', 'day 1');
+    expect(await a.push(stardew), ['Farm_1: pushed']);
+    final copy = p.join(tmp.path, 'hub-copy');
+    for (final f in Directory(hubDir).listSync(recursive: true).whereType<File>()) {
+      final dst = File(p.join(copy, p.relative(f.path, from: hubDir)));
+      dst.parent.createSync(recursive: true);
+      f.copySync(dst.path);
+    }
+    thor.writeFarm('Farm_1', 'day 2');
+    expect(await a.push(stardew), ['Farm_1: pushed']);
+    Directory(hubDir).deleteSync(recursive: true);
+    Directory(copy).renameSync(hubDir); // day 2, this device's base, is gone from the hub
+
+    final s = await a.status(stardew);
+    expect((s.units['Farm_1']!.plan as Diverged).localDiffers, isTrue);
+    expect(s.canPull, isFalse);
+    expect(await a.pull(stardew), ['Nothing to pull']);
+    expect(thor.farm('Farm_1'), contains('day 2'));
+  });
+
   test('a stored internal binding without root needs root, and neither pushes nor pulls', () async {
     final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
     final (_, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);
