@@ -13,6 +13,7 @@ import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
+import 'package:retro_toolbox/services/save_sync/google_auth.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 
@@ -109,6 +110,7 @@ void main() {
 
   final ready = SaveSyncState(
     access: SyncAccess.shizuku,
+    hubKind: HubKind.folder,
     hubFolder: hubFolder,
     games: [
       GameStatus(stardew, 'bundled', const Bound(binding), installedVersion: '1.6.15.2', units: {
@@ -141,6 +143,7 @@ void main() {
       'save_sync_attention',
       SaveSyncState(
         access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
         hubFolder: hubFolder,
         games: [
           GameStatus(
@@ -163,7 +166,44 @@ void main() {
 
   testWidgets(
     'no access yet',
-    (t) => shoot(t, 'save_sync_no_access', const SaveSyncState(shizukuRunning: true, hubFolder: hubFolder)),
+    (t) => shoot(t, 'save_sync_no_access', const SaveSyncState(shizukuRunning: true, hubKind: HubKind.folder, hubFolder: hubFolder)),
+    skip: !enabled,
+  );
+
+  testWidgets(
+    'first run',
+    (t) => shoot(t, 'save_sync_first_run', const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, shizukuRunning: true)),
+    skip: !enabled,
+  );
+
+  testWidgets(
+    'signed in to Google',
+    (t) => shoot(
+      t,
+      'save_sync_google',
+      ready.copyWith(hubKind: HubKind.drive, hubFolder: '', googleEmail: 'player@gmail.com', googleAvailable: true),
+    ),
+    skip: !enabled,
+  );
+
+  testWidgets(
+    'sign-in error',
+    (t) => shoot(
+      t,
+      'save_sync_sign_in_error',
+      SaveSyncState(
+        hubKind: HubKind.none,
+        googleAvailable: true,
+        access: SyncAccess.shizuku,
+        signInError: const GoogleAuthError(GoogleAuthProblem.notRegistered).toString(),
+      ),
+    ),
+    skip: !enabled,
+  );
+
+  testWidgets(
+    'Google not configured',
+    (t) => shoot(t, 'save_sync_no_google', const SaveSyncState(hubKind: HubKind.none, access: SyncAccess.shizuku)),
     skip: !enabled,
   );
 }
