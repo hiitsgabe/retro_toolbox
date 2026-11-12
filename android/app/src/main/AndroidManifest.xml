@@ -58,6 +58,14 @@
         <meta-data
             android:name="ic_notification"
             android:resource="@drawable/ic_notification" />
+        <!-- Shizuku hands its binder to the app through this provider. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
     <queries>
         <intent>
@@ -69,6 +77,7 @@
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
         </intent>
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>

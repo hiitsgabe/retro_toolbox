@@ -48,6 +48,10 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     // Extract native libs to disk at install so the bundled chdman (shipped as
     // jniLibs/<abi>/libchdman.so) lands in the read-only nativeLibraryDir and
     // can be exec'd — Android blocks running binaries from writable app dirs.
@@ -152,4 +156,9 @@ rootProject.subprojects { sub ->
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation "dev.rikka.shizuku:api:13.1.5"
+    implementation "dev.rikka.shizuku:provider:13.1.5"
 }

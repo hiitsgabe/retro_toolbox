@@ -15,6 +15,7 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private var pickResult: MethodChannel.Result? = null
     private var pickingDir = false
+    private var shizuku: ShizukuBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -74,6 +75,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "nativeLibDir" -> result.success(applicationInfo.nativeLibraryDir)
+                    "deviceModel" -> result.success("${Build.MANUFACTURER} ${Build.MODEL}".trim())
                     else -> result.notImplemented()
                 }
             }
@@ -131,6 +133,13 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        shizuku = ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
+    }
+
+    override fun onDestroy() {
+        shizuku?.dispose()
+        shizuku = null
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
