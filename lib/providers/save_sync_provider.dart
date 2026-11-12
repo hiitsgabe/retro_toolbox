@@ -88,9 +88,16 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   Future<SyncState> _sync() async => SyncState(PrefsStore(await SharedPreferences.getInstance()));
 
-  Future<void> refresh() async {
+  Future<void>? _refreshing;
+
+  /// One refresh at a time: two would build two engines, and one could recover a pull the other is running.
+  Future<void> refresh() {
     // A new engine has its own queue: a refresh during an action would scan the unit mid-pull.
-    if (state.busyRecipe != null) return;
+    if (state.busyRecipe != null) return Future.value();
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _doRefresh() async {
     state = state.copyWith(loading: true, clearError: true);
     try {
       final sync = await _sync();
@@ -161,10 +168,16 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   }
 
   Future<void> _act(String recipeId, Future<List<String>> Function(SaveSyncEngine engine, Recipe recipe, String source) action) async {
+    if (state.busyRecipe != null) return;
+    state = state.copyWith(busyRecipe: recipeId, messages: const []);
+    // Busy is set first so no new refresh starts; wait out the one in flight, then take its engine.
+    await _refreshing;
     final engine = _engine;
     final entry = _recipes[recipeId];
-    if (engine == null || entry == null || state.busyRecipe != null) return;
-    state = state.copyWith(busyRecipe: recipeId, messages: const []);
+    if (engine == null || entry == null) {
+      state = state.copyWith(clearBusy: true);
+      return;
+    }
     List<String> messages;
     try {
       messages = await action(engine, entry.$1, entry.$2);
