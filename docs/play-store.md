@@ -69,7 +69,8 @@ servers). Play asks for a purpose and a short video.
 - A privacy policy URL (every app). A page on the project website is enough.
 - The Data safety form: the app contacts the release page for update checks
   and whatever catalog sources the user adds; it sends no user data to the
-  developer.
+  developer. Save Sync can copy game saves to the user's own Google Drive when
+  they sign in; docs/google-cloud.md has what to declare for it.
 - Store listing assets: icon (512 px), feature graphic, screenshots.
 
 ## Building on Expo Launch
@@ -91,6 +92,7 @@ Environment variables, environment `production`):
 | `EAS_BUILD_DISABLE_MAVEN_CACHE` | `1` | EAS's Maven cache is injected through a Gradle init script that Flutter's Gradle plugin rejects (`FAIL_ON_PROJECT_REPOS`, flutter/flutter#174035) |
 | `SERIOUS_PYTHON_APP` | `/home/expo/workingdir/build/build/serious_python_app` | where Gradle stages the Python app; absolute, under the worker's checkout (`/home/expo/workingdir/build`) |
 | `SERIOUS_PYTHON_SITE_PACKAGES` | `/home/expo/workingdir/build/build/site-packages` | same, for the pip-installed packages |
+| `GDRIVE_SERVER_CLIENT_ID` (secret) | the Web OAuth client id (docs/google-cloud.md) | the Play workflow passes it with `--dart-define`; without it Save Sync offers only the folder hub. A bare Launch build cannot pass it |
 | `KEY_STORE_PATH` (file), `KEY_STORE_PASSWORD` and `KEY_PASSWORD` (secret), `KEY_ALIAS` | the keystore Expo generated for the project, downloadable from its credentials page as `keystore.jks` plus a `credentials.json` holding `keystorePassword`, `keyPassword` and `keyAlias` | release signing unless Launch injects its own; `KEY_STORE_PASSWORD` only because that keystore's store and key passwords differ. Unsigned, the bundle is debug-signed and Play refuses it |
 
 How Launch itself signs a Flutter project is not documented; the three signing

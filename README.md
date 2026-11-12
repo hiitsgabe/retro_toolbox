@@ -198,6 +198,11 @@ flutter build windows --release    # Windows
 flutter build linux --release      # Linux
 ```
 
+Save Sync's Google Drive hub needs the Web OAuth client id from [`docs/google-cloud.md`](docs/google-cloud.md).
+Copy `dart_defines.example.json` to `dart_defines.json` (git ignores it), fill in the id, and add
+`--dart-define-from-file=dart_defines.json` to `flutter run` and `flutter build`. Without it the app hides
+Google Drive and offers only a folder hub.
+
 GitHub Actions ([`release.yml`](.github/workflows/release.yml)) builds every platform above and
 publishes the release; the handheld package is built by [`handheld.yml`](.github/workflows/handheld.yml)
 with flutter-pi.
