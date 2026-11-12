@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -64,13 +65,18 @@ class ProcessShell implements PrivilegedShell {
       final p = viaSu
           ? await Process.start('su', ['--mount-master', '-c', ['timeout', '-s', 'KILL', '$inner', ...argv].map(shellQuote).join(' ')], environment: _env)
           : await Process.start(argv.first, argv.sublist(1), environment: _env);
+      // Nothing reads our stdin; closing it, as Process.run does, keeps a
+      // command that waits on input from hanging until the timeout.
+      unawaited(p.stdin.close());
       var timedOut = false;
       final timer = Timer(timeout, () {
         timedOut = true;
         p.kill(ProcessSignal.sigkill);
       });
-      final out = systemEncoding.decodeStream(p.stdout);
-      final err = systemEncoding.decodeStream(p.stderr);
+      // Malformed bytes become U+FFFD instead of an error nobody may be
+      // listening for when the timeout branch returns early.
+      final out = p.stdout.transform(const Utf8Decoder(allowMalformed: true)).join();
+      final err = p.stderr.transform(const Utf8Decoder(allowMalformed: true)).join();
       final exit = await p.exitCode;
       timer.cancel();
       if (timedOut) return ShellResult(ShellResult.unreachable, '', 'timed out: ${argv.first}');
@@ -87,7 +93,7 @@ class ProcessShell implements PrivilegedShell {
   /// without `--mount-master` fails this, and the app falls back to Shizuku.
   static Future<bool> rootAvailable() async {
     try {
-      final r = await Process.run('su', ['--mount-master', '-c', 'id -u']).timeout(const Duration(seconds: 15));
+      final r = await Process.run('su', ['--mount-master', '-c', 'timeout -s KILL 5 id -u']).timeout(const Duration(seconds: 15));
       return r.exitCode == 0 && '${r.stdout}'.trim() == '0';
     } catch (_) {
       return false;

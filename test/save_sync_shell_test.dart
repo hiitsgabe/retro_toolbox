@@ -16,6 +16,10 @@ void main() {
     final r = await ProcessShell().run(['echo', r'$HOME', 'a b']);
     expect(r.ok, isTrue);
     expect(r.out.trim(), r'$HOME a b');
+    // stdin is closed, so a command that reads it ends at once.
+    expect((await ProcessShell(timeout: const Duration(seconds: 5)).run(['cat'])).code, 0);
+    // Bytes that are not UTF-8 still come back as a result.
+    expect((await ProcessShell().run(['printf', r'\377'])).out, '\uFFFD');
   });
 
   test('ProcessShell reports a missing command as a failed result', () async {
