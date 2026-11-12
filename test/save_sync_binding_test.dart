@@ -58,13 +58,28 @@ void main() {
     expect(b.binding.mode, 'sync');
   });
 
+  test('one location, not verified: binds only when empty, else asks to confirm', () async {
+    Recipe variant(String id, Map<String, dynamic> changes) => Recipe.parse({...bundled(id).raw, ...changes});
+    final r = variant('stardew-valley', {'status': 'draft'});
+    final saves = Directory(p.join(paths.area(Area.androidData, 'com.chucklefish.stardewvalley'), 'files/Saves'))..createSync(recursive: true);
+    final b = binder(r, {'com.chucklefish.stardewvalley'});
+    expect(await b.bind(r), isA<Bound>());
+    File(p.join(saves.path, 'Farm_1/Farm_1'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('x');
+    final res = await b.bind(r);
+    expect(res, isA<NeedsConfirm>());
+    expect((res as NeedsConfirm).files, ['Farm_1/Farm_1']);
+  });
+
   test('two locations: the one with saves wins; a draft asks to confirm', () async {
     final r = bundled('sea-of-stars');
     final ext = p.join(paths.area(Area.androidData, 'com.playdigious.seaofstars'), 'files');
     File(p.join(ext, 'SOS_SaveSlot0.sos'))
       ..createSync(recursive: true)
       ..writeAsStringSync('x');
-    final res = (await binder(r, {'com.playdigious.seaofstars'}).bind(r)) as NeedsConfirm;
+    Directory(p.join(paths.area(Area.internal, 'com.playdigious.seaofstars'), 'files')).createSync(recursive: true);
+    final res = (await binder(r, {'com.playdigious.seaofstars'}, privilege: Privilege.root).bind(r)) as NeedsConfirm;
     expect(res.binding.area, Area.androidData);
     expect(res.binding.mode, 'backup');
     expect(res.files, ['SOS_SaveSlot0.sos']);
