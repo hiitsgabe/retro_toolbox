@@ -115,10 +115,20 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     state = state.copyWith(loading: true, clearError: true);
     _engine = null;
     try {
+      // Access and the hub folder reach state as soon as they are known, so a hub that fails to open
+      // (a removed SD card) does not also show "no access" and "not set".
       final sync = await _sync();
       final hubFolder = sync.hubFolder ?? '${_paths.sdcard}/Retro Toolbox Saves';
+      state = state.copyWith(hubFolder: hubFolder);
       final shizuku = await ShizukuShell.status();
+      state = state.copyWith(shizukuRunning: shizuku.running);
       final shell = await _shell(shizuku);
+      final access = switch (shell?.privilege) {
+        null => SyncAccess.none,
+        Privilege.root => SyncAccess.root,
+        _ => SyncAccess.shizuku,
+      };
+      state = state.copyWith(access: access);
       var problems = state.recipeProblems;
       if (_recipes.isEmpty) {
         final load = await _store.loadBundled();
@@ -128,8 +138,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         problems = {...load.rejected, for (final f in load.tooNew) f: 'needs a newer Retro Toolbox'};
       }
       if (shell == null) {
-        _engine = null;
-        state = state.copyWith(loading: false, access: SyncAccess.none, shizukuRunning: shizuku.running, hubFolder: hubFolder, games: const [], recipeProblems: problems);
+        state = state.copyWith(loading: false, games: const [], recipeProblems: problems);
         return;
       }
       final model = await _deviceModel();
@@ -145,7 +154,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
           problems = {...problems, 'hub: ${e.key}': '$err'};
         }
       }
-      final engine = _engine = SaveSyncEngine(
+      final engine = SaveSyncEngine(
         shell: shell,
         hub: hub,
         state: sync,
@@ -156,8 +165,9 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         appVersion: (await PackageInfo.fromPlatform()).version,
       );
       final games = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
-      final access = shell.privilege == Privilege.root ? SyncAccess.root : SyncAccess.shizuku;
-      state = state.copyWith(loading: false, access: access, shizukuRunning: shizuku.running, hubFolder: hubFolder, games: games, recipeProblems: problems);
+      // The engine is published with the games it produced: until then the catch below sees no engine and clears them.
+      _engine = engine;
+      state = state.copyWith(loading: false, games: games, recipeProblems: problems);
       await engine.report(games, access: access.name);
     } catch (e) {
       state = state.copyWith(loading: false, error: '$e', games: _engine == null ? const [] : null);
