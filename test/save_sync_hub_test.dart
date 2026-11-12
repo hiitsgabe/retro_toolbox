@@ -24,6 +24,34 @@ GenMeta meta(String unit, DateTime t, List<int> zip, {List<String> parents = con
   );
 }
 
+class RecordingBackend implements HubBackend {
+  RecordingBackend(this.inner);
+
+  final HubBackend inner;
+  final log = <String>[];
+
+  @override
+  String get id => inner.id;
+
+  @override
+  Future<List<HubEntry>> list(String dir) => inner.list(dir);
+
+  @override
+  Future<List<int>> read(String path) => inner.read(path);
+
+  @override
+  Future<void> write(String path, List<int> bytes) {
+    log.add('write $path');
+    return inner.write(path, bytes);
+  }
+
+  @override
+  Future<void> delete(String path) {
+    log.add('delete $path');
+    return inner.delete(path);
+  }
+}
+
 void main() {
   late Directory tmp;
   late FolderBackend backend;
@@ -58,7 +86,10 @@ void main() {
   test('put writes zip then metadata; gens and units read them back', () async {
     final zip = [1, 2, 3];
     final m = meta('Farm_1', DateTime.utc(2026, 11, 10, 22), zip);
-    await hub.put(m, zip);
+    final rec = RecordingBackend(backend);
+    await Hub(rec).put(m, zip);
+    final base = 'units/stardew-valley/Farm_1/${m.gen}';
+    expect(rec.log, ['write $base.zip', 'write $base.json']);
     expect(await hub.units('stardew-valley'), ['Farm_1']);
     final gens = await Hub(backend).gens('stardew-valley', 'Farm_1');
     expect(gens.single.gen, m.gen);
@@ -110,10 +141,11 @@ void main() {
     await hub.put(m, [1]);
     await backend.write('$dir/20261101T000000Z-odin-02c4-deadbeef.zip', [0]);
     await backend.write('$dir/20261101T000000Z-thor-7f3a-cafebabe.zip', [0]);
-    expect(await hub.prune('stardew-valley', 'Farm_1', deviceId: 'thor-7f3a', now: DateTime.utc(2026, 11, 11)), 1);
+    expect(await hub.prune('stardew-valley', 'Farm_1', deviceId: 'thor-7f3a', now: DateTime.utc(2026, 11, 12)), 1);
     final names = (await backend.list(dir)).map((e) => e.name).toList();
     expect(names, contains('20261101T000000Z-odin-02c4-deadbeef.zip'));
     expect(names, isNot(contains('20261101T000000Z-thor-7f3a-cafebabe.zip')));
+    expect(names, contains('${m.gen}.zip'));
   });
 
   test('recipes: publish once per content, newest copy per id', () async {
