@@ -69,7 +69,7 @@ class GenMeta {
     try {
       return GenMeta(
         gen: j['gen'] as String,
-        parents: (j['parents'] as List).cast<String>(),
+        parents: List<String>.from(j['parents'] as List),
         kind: j['kind'] as String,
         recipe: j['recipe'] as String,
         unit: j['unit'] as String,

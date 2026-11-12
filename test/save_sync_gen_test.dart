@@ -41,6 +41,7 @@ void main() {
     expect(b.hashes, {'a': 'h1'});
     expect(() => GenMeta.fromJson({...a.toJson(), 'format': 2}), throwsFormatException);
     expect(() => GenMeta.fromJson({...a.toJson(), 'files': 'x'}), throwsFormatException);
+    expect(() => GenMeta.fromJson({...a.toJson(), 'parents': [1]}), throwsFormatException);
   });
 
   test('headsOf: gens nobody names as a parent', () {
