@@ -67,6 +67,29 @@ void main() {
     expect(headsOf(remaining).map((x) => x.gen), ['g21']);
   });
 
+  test('pruneCandidates lists parents first, so every prefix is safe to delete', () {
+    void expectSafePrefixes(List<GenMeta> gens, int keep, List<String> expected) {
+      final out = pruneCandidates(gens, keep: keep);
+      expect(out.map((x) => x.gen).toList(), expected);
+      final heads = headsOf(gens).map((x) => x.gen).toSet();
+      for (var n = 0; n <= out.length; n++) {
+        final gone = {for (final x in out.take(n)) x.gen};
+        final rest = gens.where((x) => !gone.contains(x.gen)).toList();
+        expect(headsOf(rest).map((x) => x.gen).toSet(), heads, reason: 'after deleting $n');
+      }
+    }
+
+    final chain = [for (var i = 1; i <= 22; i++) g('g$i', i == 1 ? [] : ['g${i - 1}'], at: DateTime.utc(2026, 11, 10, 10, i))];
+    expectSafePrefixes(chain, 20, ['g1', 'g2']);
+
+    final skewed = [
+      g('p', [], at: DateTime.utc(2026, 11, 10, 10)),
+      g('c', ['p'], at: DateTime.utc(2026, 11, 10, 9)), // child older than its parent
+      for (var i = 1; i <= 5; i++) g('n$i', [i == 1 ? 'c' : 'n${i - 1}'], at: DateTime.utc(2026, 11, 10, 11, i)),
+    ];
+    expectSafePrefixes(skewed, 3, ['p', 'c', 'n1', 'n2']);
+  });
+
   test('sameFiles compares path to hash maps', () {
     expect(sameFiles({'a': '1', 'b': '2'}, {'b': '2', 'a': '1'}), isTrue);
     expect(sameFiles({'a': '1'}, {'a': '2'}), isFalse);

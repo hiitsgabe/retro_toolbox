@@ -126,7 +126,8 @@ List<GenMeta> headsOf(List<GenMeta> gens) {
 
 /// Gens to delete: everything but the heads and the newest [keep]. A gen
 /// whose parent stays is kept too, so a device clock that runs behind never
-/// cuts a chain in the middle and brings an old gen back as a head.
+/// cuts a chain in the middle and brings an old gen back as a head. The list
+/// is ordered parents first, so every prefix of it is safe to delete.
 List<GenMeta> pruneCandidates(List<GenMeta> gens, {int keep = 20}) {
   final sorted = [...gens]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final kept = {for (final h in headsOf(gens)) h.gen, for (final x in sorted.take(keep)) x.gen};
@@ -141,7 +142,21 @@ List<GenMeta> pruneCandidates(List<GenMeta> gens, {int keep = 20}) {
       }
     }
   }
-  return sorted.where((x) => del.contains(x.gen)).toList();
+  // Parents first, so stopping after any prefix never leaves a child's parent
+  // deleted ahead of it or a parent without its child as a new head.
+  final pending = sorted.reversed.where((x) => del.contains(x.gen)).toList();
+  final left = {for (final x in pending) x.gen};
+  final ordered = <GenMeta>[];
+  while (pending.isNotEmpty) {
+    final ready = pending.where((x) => !x.parents.any(left.contains)).toList();
+    if (ready.isEmpty) break; // a parent cycle in corrupt metadata
+    for (final x in ready) {
+      ordered.add(x);
+      left.remove(x.gen);
+    }
+    pending.removeWhere((x) => !left.contains(x.gen));
+  }
+  return ordered;
 }
 
 bool sameFiles(Map<String, String> a, Map<String, String> b) => mapEquals(a, b);
