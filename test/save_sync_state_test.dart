@@ -61,6 +61,30 @@ void main() {
     expect(s.baseUnderOtherHubId('folder:/hub', 'stardew-valley', 'Farm_1', listed.difference({'20261110T220100Z-thor-7f3a-00000001'})), isNull);
   });
 
+  test('the hub choice: none at first, a folder, a Google account, then none again', () async {
+    final s = SyncState(MemoryStore());
+    expect(s.hubChoice, isNull);
+    await s.setHubChoice(const FolderHub('/storage/emulated/0/Retro Toolbox Saves'));
+    expect(s.hubChoice, isA<FolderHub>().having((h) => h.path, 'path', '/storage/emulated/0/Retro Toolbox Saves'));
+    await s.setHubChoice(const DriveHub(accountId: '1234567890', email: 'player@gmail.com'));
+    expect(s.hubChoice, isA<DriveHub>().having((h) => h.accountId, 'accountId', '1234567890').having((h) => h.email, 'email', 'player@gmail.com'));
+    await s.setHubChoice(null);
+    expect(s.hubChoice, isNull);
+    expect(s.hubFolder, '/storage/emulated/0/Retro Toolbox Saves', reason: 'kept for the next switch back to a folder');
+  });
+
+  test('a hub folder stored before hub kinds existed is a folder hub', () {
+    final store = MemoryStore()..values['save_sync_hub_folder'] = '/storage/emulated/0/Hub';
+    expect(SyncState(store).hubChoice, isA<FolderHub>().having((h) => h.path, 'path', '/storage/emulated/0/Hub'));
+  });
+
+  test('a Google hub whose stored account cannot be read is no choice', () {
+    final store = MemoryStore()
+      ..values['save_sync_hub_kind'] = 'drive'
+      ..values['save_sync_google_account'] = '{oops';
+    expect(SyncState(store).hubChoice, isNull);
+  });
+
   test('corrupt stored JSON reads as empty instead of throwing', () async {
     final store = MemoryStore()..values['save_sync_bindings'] = '{oops';
     expect(SyncState(store).binding('x'), isNull);

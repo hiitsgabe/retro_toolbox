@@ -56,8 +56,29 @@ class MemoryStore implements SyncStore {
   Future<void> set(String key, String value) async => values[key] = value;
 }
 
-/// What this device remembers: its id, the hub folder, recipe bindings, the
-/// base of every unit per hub, and when each game was last pushed or pulled.
+/// Where this device's hub lives: a folder another app syncs, or one Google
+/// account's Drive.
+sealed class HubChoice {
+  const HubChoice();
+}
+
+class FolderHub extends HubChoice {
+  const FolderHub(this.path);
+
+  final String path;
+}
+
+class DriveHub extends HubChoice {
+  const DriveHub({required this.accountId, required this.email});
+
+  /// Google's id for the account. It is part of the backend id, so each
+  /// account is its own hub and bases never mix between accounts.
+  final String accountId;
+  final String email;
+}
+
+/// What this device remembers: its id, its hub, recipe bindings, the base of
+/// every unit per hub, and when each game was last pushed or pulled.
 class SyncState {
   SyncState(this._store);
 
@@ -68,6 +89,8 @@ class SyncState {
   static const _bindingsKey = 'save_sync_bindings';
   static const _basesKey = 'save_sync_bases';
   static const _lastKey = 'save_sync_last';
+  static const _hubKindKey = 'save_sync_hub_kind';
+  static const _googleKey = 'save_sync_google_account';
 
   Future<String> deviceId(String model, {Random? random}) async {
     final have = _store.get(_deviceKey);
@@ -80,6 +103,39 @@ class SyncState {
   String? get hubFolder => _store.get(_hubKey);
 
   Future<void> setHubFolder(String path) => _store.set(_hubKey, path);
+
+  /// Null until the user picks a hub, and again after signing out. A hub
+  /// folder stored before hub kinds existed counts as a folder hub.
+  HubChoice? get hubChoice {
+    final folder = hubFolder;
+    switch (_store.get(_hubKindKey)) {
+      case null:
+      case 'folder':
+        return folder == null ? null : FolderHub(folder);
+      case 'drive':
+        final j = _map(_googleKey);
+        final id = j['id'];
+        final email = j['email'];
+        return id is String && id.isNotEmpty && email is String ? DriveHub(accountId: id, email: email) : null;
+      default:
+        return null;
+    }
+  }
+
+  /// Null forgets the choice. The folder path stays, so a later switch back
+  /// to a folder starts from it.
+  Future<void> setHubChoice(HubChoice? choice) async {
+    switch (choice) {
+      case FolderHub(:final path):
+        await _store.set(_hubKey, path);
+        await _store.set(_hubKindKey, 'folder');
+      case DriveHub(:final accountId, :final email):
+        await _store.set(_googleKey, jsonEncode({'id': accountId, 'email': email}));
+        await _store.set(_hubKindKey, 'drive');
+      case null:
+        await _store.set(_hubKindKey, 'none');
+    }
+  }
 
   Map<String, dynamic> _map(String key) {
     final s = _store.get(key);
