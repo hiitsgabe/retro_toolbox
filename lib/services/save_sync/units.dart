@@ -36,10 +36,20 @@ Map<String, List<String>> groupUnits(Recipe r, Iterable<String> rels) {
 /// Units with an `inProgress` match: a folder unit inside its folder, other units anywhere under the root.
 Set<String> busyUnits(Recipe r, Iterable<String> rels) {
   final keys = groupUnits(r, rels).keys;
-  return {
+  final busy = {
     for (final key in keys)
       if (rels.any((rel) => (r.unit != UnitKind.folder || rel.startsWith('$key/')) && _any(r.inProgress, key, rel))) key,
   };
+  if (r.unit == UnitKind.folder) {
+    // A folder holding only travelling leftovers (temp, _old) has no files in a group but is still mid-write.
+    for (final rel in rels) {
+      final slash = rel.indexOf('/');
+      if (slash <= 0) continue;
+      final key = rel.substring(0, slash);
+      if (_any(r.inProgress, key, rel)) busy.add(key);
+    }
+  }
+  return busy;
 }
 
 class LocalFile {
@@ -76,6 +86,8 @@ class UnitScanner {
     final hashes = await fs.sha256([for (final g in groups.values) ...g.map((r) => rel[r]!.path)]);
     final after = {for (final e in await fs.listFiles(rootDir)) e.path: e};
     return {
+      for (final key in busy)
+        if (!groups.containsKey(key)) key: LocalUnit(key, const {}, busy: true),
       for (final g in groups.entries)
         g.key: LocalUnit(
           g.key,
