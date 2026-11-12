@@ -220,6 +220,42 @@ void main() {
     expect(File(p.join(entry, 'Farm_1/SaveGameInfo')).lastModifiedSync().toUtc(), DateTime.utc(2020), reason: 'moved, not copied');
   });
 
+  test('a move aside that died after writing part of its destination leaves the original alone', () async {
+    final gen = await pushFromThor('Farm_1', 'day 5');
+    odin.writeFarm('Farm_1', 'day 3');
+    stardewBackups(odin, 'Farm_1');
+    File(p.join(odin.saves, 'Farm_1', 'BACKUP_SAVE')).writeAsStringSync('the real backup index');
+    odin.shell.partialMvFrom = 'Farm_1/BACKUP_SAVE';
+    await expectLater(pullInto(odin, 'Farm_1', gen), throwsA(isA<PullRolledBack>().having((e) => e.rollbackError, 'rollbackError', isNull)));
+    expect(File(p.join(odin.saves, 'Farm_1', 'BACKUP_SAVE')).readAsStringSync(), 'the real backup index');
+    expect(odin.farm('Farm_1'), contains('day 3'));
+  });
+
+  test('a move of a unit file the gen lacks that died half way leaves the original alone', () async {
+    final noVersion = Recipe.parse({...stardew.raw, 'version': null});
+    thor.writeFarm('Farm_1', 'day 5');
+    File(p.join(thor.saves, 'Farm_1', 'SaveGameInfo')).deleteSync();
+    final unit = (await UnitScanner(thor.fsFor(noVersion)).scan(noVersion, thor.saves))['Farm_1']!;
+    final gen = await Pusher(
+      fs: thor.fsFor(noVersion),
+      hub: hub,
+      stagingRoot: p.join(thor.paths.saveSync, '.staging'),
+      deviceId: 'thor-7f3a',
+      deviceName: 'AYN Thor',
+    ).push(recipe: noVersion, binding: binding, locationDir: thor.saves, unit: unit, parents: const []);
+
+    odin.writeFarm('Farm_1', 'day 3');
+    final info = File(p.join(odin.saves, 'Farm_1', 'SaveGameInfo')).readAsStringSync();
+    final expected = (await UnitScanner(odin.fsFor(noVersion)).scan(noVersion, odin.saves))['Farm_1']!.hashes;
+    odin.shell.partialMvFrom = 'Farm_1/SaveGameInfo';
+    await expectLater(
+      puller(odin).pull(recipe: noVersion, binding: binding, locationDir: odin.saves, unitKey: 'Farm_1', gen: gen, expectedLocal: expected),
+      throwsA(isA<PullRolledBack>().having((e) => e.rollbackError, 'rollbackError', isNull)),
+    );
+    expect(File(p.join(odin.saves, 'Farm_1', 'SaveGameInfo')).readAsStringSync(), info);
+    expect(odin.farm('Farm_1'), contains('day 3'));
+  });
+
   test('a damaged hub copy and a gen with files outside the unit are refused', () async {
     final gen = await pushFromThor('Farm_1', 'day 5');
     odin.writeFarm('Farm_1', 'day 3');

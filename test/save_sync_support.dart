@@ -32,6 +32,8 @@ class TestShell implements PrivilegedShell {
   int _replaces = 0;
   /// Runs the real `mv` onto a path ending in this, then reports it unreachable once (the reply is lost).
   String? loseReplyOnMvTo;
+  /// An `mv` of a path ending in this leaves half of it at the destination and fails (a copy fallback that died).
+  String? partialMvFrom;
   void Function(List<String> argv)? afterRun;
 
   /// Atomic replaces tried so far.
@@ -50,6 +52,11 @@ class TestShell implements PrivilegedShell {
       case 'mv' when argv.length == 4 && p.basename(argv[2]).startsWith('.rtsync-'):
         final n = _replaces++;
         if (n == failReplaceAt || (failReplaceFrom >= 0 && n >= failReplaceFrom)) return const ShellResult(1, '', 'injected failure');
+    }
+    if (argv.first == 'mv' && partialMvFrom != null && argv.length == 4 && argv[2].endsWith(partialMvFrom!)) {
+      final bytes = File(argv[2]).readAsBytesSync();
+      File(argv[3]).writeAsBytesSync(bytes.sublist(0, bytes.length ~/ 2));
+      return const ShellResult(1, '', 'injected partial move');
     }
     final r = await _real.run(argv);
     if (r.ok) afterRun?.call(argv);

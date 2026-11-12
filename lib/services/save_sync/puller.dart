@@ -110,7 +110,7 @@ class Puller {
         for (final rel in before.keys.where((r) => !gen.files.containsKey(r))) {
           final target = p.posix.join(locationDir, rel), kept = p.join(entry, rel);
           undo.add(() async {
-            if (await fs.exists(kept)) await fs.moveTo(kept, target);
+            if (!await fs.exists(target)) await fs.moveTo(kept, target);
           });
           await fs.moveTo(target, kept); // over its identical snapshot copy
         }
@@ -347,7 +347,7 @@ class Puller {
     (journal.data['aside'] as List<String>).add(rel);
     await journal.save();
     undo.add(() async {
-      if (await fs.exists(dst)) await fs.moveTo(dst, src);
+      if (!await fs.exists(src) && await fs.exists(dst)) await fs.moveTo(dst, src);
     });
     await fs.moveTo(src, dst);
   }
