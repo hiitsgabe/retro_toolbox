@@ -40,8 +40,42 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
   }
 
   Future<void> _pickHub() async {
-    final path = await pickDirectory(context, title: 'Choose the hub folder');
+    final current = ref.read(saveSyncProvider).hubFolder;
+    final path = await pickDirectory(context, title: 'Choose the hub folder', initialDir: current.isEmpty ? null : current);
     if (path != null) await ref.read(saveSyncProvider.notifier).setHubFolder(path);
+  }
+
+  /// Switches the hub. Game folders are never touched by a switch.
+  Future<void> _chooseHub() async {
+    final google = ref.read(saveSyncProvider).googleAvailable;
+    final pick = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Where should saves go?'),
+        children: [
+          if (google)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop('google'),
+              child: const ListTile(
+                leading: Icon(Icons.cloud),
+                title: Text('Google Drive'),
+                subtitle: Text('Sign in and pick the account on the next screen'),
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop('folder'),
+            child: const ListTile(
+              leading: Icon(Icons.folder_shared),
+              title: Text('A folder on this device'),
+              subtitle: Text('Another app (Syncthing, FolderSync) carries it between devices'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (pick == 'google') await ref.read(saveSyncProvider.notifier).signInWithGoogle();
+    if (pick == 'folder') await _pickHub();
   }
 
   Future<void> _showCheck(GameStatus g) async {
@@ -115,7 +149,8 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
   Widget build(BuildContext context) {
     final s = ref.watch(saveSyncProvider);
     final n = ref.read(saveSyncProvider.notifier);
-    final busy = s.busyRecipe != null || s.loading;
+    final busy = s.busyRecipe != null || s.loading || s.signingIn;
+    final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Save Sync'),
@@ -125,13 +160,39 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const ToolDescription(
+            ToolDescription(
               icon: Icons.sync,
-              text: "Pull a game's save before you play and push it after. Saves go to the hub folder, "
-                  'which another app (Syncthing, FolderSync) carries between devices. Every save this replaces '
-                  'is kept in history on this device.',
+              text: "Pull a game's save before you play and push it after. Saves go to the hub: "
+                  '${s.googleAvailable ? 'a Retro Toolbox Saves folder in your own Google Drive, or ' : ''}'
+                  'a folder another app (Syncthing, FolderSync) carries between devices. '
+                  'Every save this replaces is kept in history on this device.',
             ),
             const SizedBox(height: 12),
+            if (s.hubKind == HubKind.none) ...[
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Where should saves go?', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    if (s.googleAvailable)
+                      const Text('Google Drive keeps them in a "Retro Toolbox Saves" folder in your own Drive. '
+                          'Retro Toolbox sees only the files it creates there.'),
+                    Text(s.googleAvailable
+                        ? 'A folder works without Google: another app (Syncthing, FolderSync) carries it between devices.'
+                        : 'Another app (Syncthing, FolderSync) carries the folder between devices.'),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      if (s.googleAvailable)
+                        FilledButton.icon(onPressed: busy ? null : n.signInWithGoogle, icon: const Icon(Icons.login), label: const Text('Sign in with Google')),
+                      OutlinedButton.icon(onPressed: busy ? null : () => n.setHubFolder(), icon: const Icon(Icons.folder), label: const Text('Use a folder')),
+                    ]),
+                    if (s.signInError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.signInError!, style: errorStyle)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (s.access == SyncAccess.none)
               Card(
                 child: Padding(
@@ -155,18 +216,30 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
             else
               Text('Access: ${s.access == SyncAccess.root ? 'root' : 'Shizuku (shell)'}'),
             const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.folder_shared, size: 18),
-              const SizedBox(width: 8),
-              Expanded(child: Text(s.hubFolder.isEmpty ? 'Hub folder not set' : s.hubFolder, overflow: TextOverflow.ellipsis)),
-              TextButton(onPressed: busy ? null : _pickHub, child: const Text('Change')),
-            ]),
-            Text(
-              'Folder hub: "up to date" means up to date with what this folder holds right now.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (s.loading) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
-            if (s.error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+            if (s.hubKind == HubKind.drive)
+              Row(children: [
+                const Icon(Icons.cloud, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Google Drive: ${s.googleEmail}', overflow: TextOverflow.ellipsis)),
+                if (s.signInAgain) FilledButton(onPressed: busy ? null : n.signInWithGoogle, child: const Text('Sign in again')),
+                TextButton(onPressed: busy ? null : n.signOut, child: const Text('Sign out')),
+                TextButton(onPressed: busy ? null : _chooseHub, child: const Text('Change')),
+              ]),
+            if (s.hubKind == HubKind.folder) ...[
+              Row(children: [
+                const Icon(Icons.folder_shared, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(s.hubFolder, overflow: TextOverflow.ellipsis)),
+                TextButton(onPressed: busy ? null : _chooseHub, child: const Text('Change')),
+              ]),
+              Text(
+                'Folder hub: "up to date" means up to date with what this folder holds right now.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (s.signInError != null && s.hubKind != HubKind.none) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.signInError!, style: errorStyle)),
+            if (s.loading || s.signingIn) const Padding(padding: EdgeInsets.only(top: 8), child: LinearProgressIndicator()),
+            if (s.error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.error!, style: errorStyle)),
             for (final m in s.messages) Padding(padding: const EdgeInsets.only(top: 4), child: Text(m)),
             const SizedBox(height: 8),
             for (final g in s.games) _GameCard(game: g, busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),

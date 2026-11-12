@@ -36,6 +36,15 @@ class FakeNotifier extends SaveSyncNotifier {
   Future<void> confirmBinding(Binding b) async => calls.add('confirm ${b.recipe}');
 
   @override
+  Future<void> signInWithGoogle() async => calls.add('google');
+
+  @override
+  Future<void> setHubFolder([String? path]) async => calls.add('folder ${path ?? 'default'}');
+
+  @override
+  Future<void> signOut() async => calls.add('sign out');
+
+  @override
   Future<List<CheckLine>> check(String recipeId) async {
     if (checkThrows) throw StateError('bridge died');
     return const [
@@ -156,5 +165,80 @@ void main() {
     await t.tap(find.text('Use this place'));
     await t.pumpAndSettle();
     expect(fake.calls.last, 'confirm sea-of-stars');
+  });
+
+  testWidgets('first run offers Google and a folder, before anything else', (t) async {
+    final fake = await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, access: SyncAccess.shizuku));
+    expect(t.getTopLeft(find.text('Where should saves go?')).dy, lessThan(t.getTopLeft(find.text('Access: Shizuku (shell)')).dy));
+    expect(find.text('Change'), findsNothing);
+    await t.tap(find.text('Sign in with Google'));
+    await t.tap(find.text('Use a folder'));
+    expect(fake.calls, ['refresh', 'google', 'folder default']);
+  });
+
+  testWidgets('before the first refresh has read the hub, neither the first run nor a hub row shows', (t) async {
+    await pump(t, const SaveSyncState(googleAvailable: true));
+    expect(find.text('Where should saves go?'), findsNothing);
+    expect(find.text('Change'), findsNothing);
+  });
+
+  testWidgets('a build without Google offers only the folder', (t) async {
+    await pump(t, const SaveSyncState(hubKind: HubKind.none));
+    expect(find.text('Use a folder'), findsOneWidget);
+    expect(find.textContaining('Google'), findsNothing);
+  });
+
+  testWidgets('a Google hub shows the account with Sign out, and no folder note', (t) async {
+    final fake = await pump(t, const SaveSyncState(hubKind: HubKind.drive, googleEmail: 'player@gmail.com', googleAvailable: true, access: SyncAccess.shizuku));
+    expect(find.text('Google Drive: player@gmail.com'), findsOneWidget);
+    expect(find.textContaining('Folder hub'), findsNothing);
+    expect(find.text('Sign in again'), findsNothing);
+    await t.tap(find.text('Sign out'));
+    expect(fake.calls.last, 'sign out');
+  });
+
+  testWidgets('a folder hub shows its path, and Change switches to Google', (t) async {
+    final fake = await pump(t, const SaveSyncState(hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Hub', googleAvailable: true, access: SyncAccess.shizuku));
+    expect(find.text('/storage/emulated/0/Hub'), findsOneWidget);
+    expect(find.textContaining('Folder hub'), findsOneWidget);
+    await t.tap(find.text('Change'));
+    await t.pumpAndSettle();
+    expect(find.text('A folder on this device'), findsOneWidget);
+    await t.tap(find.text('Google Drive'));
+    await t.pumpAndSettle();
+    expect(fake.calls.last, 'google');
+  });
+
+  testWidgets('without Google the chooser offers only a folder', (t) async {
+    await pump(t, const SaveSyncState(hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Hub', access: SyncAccess.shizuku));
+    await t.tap(find.text('Change'));
+    await t.pumpAndSettle();
+    expect(find.text('A folder on this device'), findsOneWidget);
+    expect(find.text('Google Drive'), findsNothing);
+  });
+
+  testWidgets('Google wanting the user again, and a failed sign-in, are both shown', (t) async {
+    final fake = await pump(
+      t,
+      const SaveSyncState(
+        hubKind: HubKind.drive,
+        googleEmail: 'player@gmail.com',
+        googleAvailable: true,
+        signInAgain: true,
+        signInError: 'This build is not registered with Google, so it cannot use Google Drive. Use a folder instead.',
+        error: 'Sign in to Google again.',
+      ),
+    );
+    expect(find.textContaining('not registered with Google'), findsOneWidget);
+    expect(find.text('Sign in to Google again.'), findsOneWidget);
+    await t.tap(find.text('Sign in again'));
+    expect(fake.calls.last, 'google');
+  });
+
+  testWidgets('while signing in, the hub buttons wait', (t) async {
+    await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, signingIn: true));
+    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Sign in with Google')).onPressed, isNull);
+    expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Use a folder')).onPressed, isNull);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
   });
 }
