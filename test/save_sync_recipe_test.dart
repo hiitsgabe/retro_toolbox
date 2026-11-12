@@ -72,6 +72,8 @@ void main() {
   test('rejects bad recipes with a reason', () {
     final cases = <String, Map<String, dynamic>>{
       'unknown field': {...stardew(), 'extra': 1},
+      'checks not a list': {...stardew(), 'checks': <String, dynamic>{}},
+      'beforeRestore not a list': {...stardew(), 'beforeRestore': 'x'},
       'bad id': {...stardew(), 'id': 'Stardew Valley'},
       'empty include': {...stardew(), 'include': <String>[]},
       'absolute root': {

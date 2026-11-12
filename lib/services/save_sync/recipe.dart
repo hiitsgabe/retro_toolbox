@@ -179,8 +179,10 @@ class Recipe {
       throw RecipeError('unit file: patterns must name files directly under root');
     }
 
+    final br = j['beforeRestore'];
+    if (br != null && br is! List) throw RecipeError('beforeRestore must be a list');
     final beforeRestore = <BeforeRestoreStep>[];
-    for (final s in (j['beforeRestore'] as List?) ?? const []) {
+    for (final s in (br as List?) ?? const []) {
       if (s is Map<String, dynamic> && s.keys.toSet().difference({'moveAside'}).isEmpty && s['moveAside'] is List) {
         final paths = _strings(s, 'moveAside', required: true);
         for (final path in paths) {
@@ -196,8 +198,10 @@ class Recipe {
       }
     }
 
+    final ch = j['checks'];
+    if (ch != null && ch is! List) throw RecipeError('checks must be a list');
     final checks = <SaveCheck>[];
-    for (final c in (j['checks'] as List?) ?? const []) {
+    for (final c in (ch as List?) ?? const []) {
       if (c is! Map<String, dynamic>) throw RecipeError('each check is an object');
       final file = _string(c, 'file');
       _pattern(file, unit, 'checks');
