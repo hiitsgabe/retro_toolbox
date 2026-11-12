@@ -126,8 +126,14 @@ void main() {
     final dir = 'units/stardew-valley/Farm_1';
     await backend.write('$dir/20261101T000000Z-odin-02c4-deadbeef.zip', [0]);
     await backend.write('$dir/20261110T235900Z-odin-02c4-cafebabe.zip', [0]);
-    final removed = await hub.prune('stardew-valley', 'Farm_1', deviceId: 'odin-02c4', keep: 2, now: DateTime.utc(2026, 11, 11));
+    final rec = RecordingBackend(backend);
+    final removed = await Hub(rec).prune('stardew-valley', 'Farm_1', deviceId: 'odin-02c4', keep: 2, now: DateTime.utc(2026, 11, 11));
     expect(removed, 3);
+    for (final g in [all[0], all[1]]) {
+      final json = rec.log.indexOf('delete $dir/${g.gen}.json');
+      expect(json, isNonNegative);
+      expect(rec.log.indexOf('delete $dir/${g.gen}.zip'), greaterThan(json));
+    }
     final names = (await backend.list(dir)).map((e) => e.name).toList();
     expect(names.where((n) => n.endsWith('.json')).length, 2);
     expect(names, isNot(contains('20261101T000000Z-odin-02c4-deadbeef.zip')));
