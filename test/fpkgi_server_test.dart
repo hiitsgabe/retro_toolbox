@@ -28,7 +28,7 @@ void main() {
     final rain = entries.firstWhere((e) => e['name'] == 'HEAVY RAIN');
     expect(rain['title_id'], 'CUSA02356'); // Heavy Rain's CUSA in the boxart asset
     expect(rain['region'], 'EUR');
-    expect(rain['version'], '1.00');
+    expect(rain['version'], '01.00');
     expect(rain['size'], 1024);
     expect(rain['cover_url'], 'http://192.168.1.10:9095/fpkg/icon/CUSA02356.png');
     expect(routes.keys, contains('ps4/0'));

@@ -80,8 +80,9 @@ class FpkgiServerService {
   }
 
   static String? versionFor(String filename) {
-    final m = RegExp(r'\[(\d+\.\d+)\]').firstMatch(filename);
-    return m?.group(1);
+    final m = RegExp(r'\[(\d+)\.(\d+)\]').firstMatch(filename);
+    if (m == null) return null;
+    return '${m.group(1)!.padLeft(2, '0')}.${m.group(2)!.padLeft(2, '0')}';
   }
 
   /// PS4 files in [dir] by name without extension (a download stays `.pkg`).
