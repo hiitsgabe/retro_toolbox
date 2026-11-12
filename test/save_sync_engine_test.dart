@@ -204,9 +204,11 @@ void main() {
     odin.shell.startGameAfterReplaces = odin.shell.replaces + 2;
     odin.shell.failReplaceFrom = odin.shell.replaces + 2; // both files replaced, the game starts, the rollback fails
     await b.pull(stardew);
-    await b.status(stardew); // the game is running: no recovery, and no adopting either
+    odin.shell.failReplaceFrom = -1; // replaces work again, so a recover now would put day 1 back under the running game
+    final during = await b.status(stardew); // the game is running: no recovery, and no adopting either
+    expect(during.notes, isEmpty);
+    expect(odin.farm('Farm_1'), contains('day 5'));
     odin.shell.startGameAfterReplaces = -1;
-    odin.shell.failReplaceFrom = -1;
     final s = await b.status(stardew);
     expect(odin.farm('Farm_1'), contains('day 1'));
     expect(s.units['Farm_1']!.plan, isA<PullPlan>());
