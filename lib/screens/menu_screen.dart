@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,6 +33,7 @@ import 'package:retro_toolbox/screens/m3u_screen.dart';
 import 'package:retro_toolbox/screens/chd_convert_screen.dart';
 import 'package:retro_toolbox/screens/rts_server_screen.dart';
 import 'package:retro_toolbox/screens/fbi_server_screen.dart';
+import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
@@ -137,6 +140,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
         ])),
       ),
+      if (Platform.isAndroid)
+        MenuTile(
+          label: 'Save Sync',
+          icon: Icons.sync,
+          accentColor: const Color(0xFF2E7D5B),
+          onTap: () => _push(const SaveSyncScreen()),
+        ),
       MenuTile(
         label: 'Sports',
         icon: Icons.sports_esports,
