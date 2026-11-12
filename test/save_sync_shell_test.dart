@@ -19,6 +19,10 @@ void main() {
   test('ProcessShell reports a missing command as a failed result', () async {
     final r = await ProcessShell().run(['definitely-not-a-command-xyz']);
     expect(r.ok, isFalse);
+    // A command killed by a signal did run: 128+signal, never the sentinel.
+    final k = await ProcessShell().run(['sh', '-c', r'kill -HUP $$']);
+    expect(k.ran, isTrue);
+    expect(k.code, 129);
   });
 
   test('ShizukuShell passes argv and maps the reply', () async {

@@ -12,8 +12,9 @@ class ShellResult {
   final String out;
   final String err;
 
-  /// The code for "the command never ran or no answer came back". No process
-  /// exits with it, so a probe can tell it apart from a plain exit 1.
+  /// The code for "the command never ran or no answer came back". No exit
+  /// code maps to it (ProcessShell turns a death by signal into 128+signal),
+  /// so a probe can tell it apart from a plain exit 1.
   static const unreachable = -1;
 
   bool get ok => code == 0;
@@ -56,7 +57,10 @@ class ProcessShell implements PrivilegedShell {
       final r = viaSu
           ? await Process.run('su', ['--mount-master', '-c', argv.map(shellQuote).join(' ')], environment: _env).timeout(timeout)
           : await Process.run(argv.first, argv.sublist(1), environment: _env).timeout(timeout);
-      return ShellResult(r.exitCode, '${r.stdout}', '${r.stderr}');
+      // Dart reports a death by signal as -signal. A shell, and Shizuku's
+      // side, say 128+signal, which keeps negative codes for [unreachable].
+      final code = r.exitCode < 0 ? 128 - r.exitCode : r.exitCode;
+      return ShellResult(code, '${r.stdout}', '${r.stderr}');
     } on ProcessException catch (e) {
       return ShellResult(127, '', e.message);
     } on TimeoutException {
