@@ -99,6 +99,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   Future<void> _doRefresh() async {
     state = state.copyWith(loading: true, clearError: true);
+    _engine = null;
     try {
       final sync = await _sync();
       final hubFolder = sync.hubFolder ?? '${_paths.sdcard}/Retro Toolbox Saves';
@@ -145,7 +146,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       state = state.copyWith(loading: false, access: access, shizukuRunning: shizuku.running, hubFolder: hubFolder, games: games, recipeProblems: problems);
       await engine.report(games, access: access.name);
     } catch (e) {
-      state = state.copyWith(loading: false, error: '$e');
+      state = state.copyWith(loading: false, error: '$e', games: _engine == null ? const [] : null);
     }
   }
 
