@@ -170,6 +170,25 @@ void main() {
     expect((await b.status(stardew)).notes, isEmpty);
   });
 
+  test('status does not adopt a base from a half-done pull while the game runs', () async {
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);
+    thor.writeFarm('Farm_1', 'day 1');
+    await a.push(stardew);
+    await b.pull(stardew);
+    thor.writeFarm('Farm_1', 'day 5');
+    await a.push(stardew);
+    odin.shell.startGameAfterReplaces = odin.shell.replaces + 2;
+    odin.shell.failReplaceFrom = odin.shell.replaces + 2; // both files replaced, the game starts, the rollback fails
+    await b.pull(stardew);
+    await b.status(stardew); // the game is running: no recovery, and no adopting either
+    odin.shell.startGameAfterReplaces = -1;
+    odin.shell.failReplaceFrom = -1;
+    final s = await b.status(stardew);
+    expect(odin.farm('Farm_1'), contains('day 1'));
+    expect(s.units['Farm_1']!.plan, isA<PullPlan>());
+  });
+
   test('an interrupted pull the game saved over blocks only its unit, and says where both versions are', () async {
     final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
     final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);

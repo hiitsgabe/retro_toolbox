@@ -155,7 +155,7 @@ class SaveSyncEngine {
         if (stuck.contains(key)) {
           // Its files are half pulled: neither a push nor a base may come from them.
           plan = Blocked(key, 'interrupted pull needs attention');
-        } else if (plan is UpToDate && plan.adopt != null) {
+        } else if (!running && plan is UpToDate && plan.adopt != null) {
           await state.setBase(hub.key, r.id, key, Base(plan.adopt!.gen, plan.adopt!.hashes));
         }
         if (running && (plan is PushPlan || plan is PullPlan)) {
