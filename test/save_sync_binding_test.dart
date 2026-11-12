@@ -52,10 +52,15 @@ void main() {
 
   test('one location, verified, empty folder: bound (a fresh device can pull)', () async {
     final r = bundled('stardew-valley');
-    Directory(p.join(paths.area(Area.androidData, 'com.chucklefish.stardewvalley'), 'files/Saves')).createSync(recursive: true);
+    final saves = Directory(p.join(paths.area(Area.androidData, 'com.chucklefish.stardewvalley'), 'files/Saves'))..createSync(recursive: true);
     final b = (await binder(r, {'com.chucklefish.stardewvalley'}).bind(r)) as Bound;
     expect(b.binding.dir(paths), endsWith('Android/data/com.chucklefish.stardewvalley/files/Saves'));
     expect(b.binding.mode, 'sync');
+    // Verified, so saves already there bind without asking (a draft asks, below).
+    File(p.join(saves.path, 'Farm_1/Farm_1'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('x');
+    expect(await binder(r, {'com.chucklefish.stardewvalley'}).bind(r), isA<Bound>());
   });
 
   test('one location, not verified: binds only when empty, else asks to confirm', () async {
