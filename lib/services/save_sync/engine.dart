@@ -118,19 +118,20 @@ class SaveSyncEngine {
   Future<GameStatus> _status(Recipe r, String source) async {
     final fs = fsFor(r);
     final stored = state.binding(r.id);
-    BindResult bind;
-    if (stored != null) {
-      bind = stored.area == Area.internal && shell.privilege != Privilege.root ? NeedsRoot(stored) : Bound(stored);
-    } else {
-      bind = await RecipeBinder(fs, paths, privilege: shell.privilege).bind(r);
-      if (bind is Bound) await state.setBinding(bind.binding);
-    }
-    final binding = switch (bind) {
-      Bound(:final binding) => binding,
-      _ => null,
-    };
-    if (binding == null) return GameStatus(r, source, bind);
+    BindResult? bind;
+    // Binding probes the save folders too: a probe that fails is this game's error, not a throw that hides every game.
     try {
+      if (stored != null) {
+        bind = stored.area == Area.internal && shell.privilege != Privilege.root ? NeedsRoot(stored) : Bound(stored);
+      } else {
+        bind = await RecipeBinder(fs, paths, privilege: shell.privilege).bind(r);
+        if (bind is Bound) await state.setBinding(bind.binding);
+      }
+      final binding = switch (bind) {
+        Bound(:final binding) => binding,
+        _ => null,
+      };
+      if (binding == null) return GameStatus(r, source, bind);
       final running = await fs.running(binding.package);
       final notes = <String>[];
       final stuck = <String>{};
@@ -169,7 +170,7 @@ class SaveSyncEngine {
       }
       return GameStatus(r, source, bind, units: units, installedVersion: installed, running: running, notes: notes);
     } catch (e) {
-      return GameStatus(r, source, bind, error: '$e');
+      return GameStatus(r, source, bind ?? const NeedsDiscovery('could not look in the save folders'), error: '$e');
     }
   }
 

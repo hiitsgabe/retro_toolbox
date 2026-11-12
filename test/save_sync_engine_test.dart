@@ -3,15 +3,38 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
+import 'package:retro_toolbox/services/save_sync/game_fs.dart';
 import 'package:retro_toolbox/services/save_sync/hub.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
+import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
 
 import 'save_sync_support.dart';
+
+const seaOfStarsPkg = 'com.playdigious.seaofstars';
+
+/// Passes every command to [inner] except a `test` probe of a path under
+/// [dead], which gets no answer, the way a dropped Shizuku bridge fails.
+class DeadProbeShell implements PrivilegedShell {
+  DeadProbeShell(this.inner, this.dead);
+
+  final PrivilegedShell inner;
+  final String dead;
+
+  @override
+  Privilege get privilege => inner.privilege;
+
+  @override
+  Future<ShellResult> run(List<String> argv) async {
+    if (argv.first == 'test' && p.isWithin(dead, argv.last)) return const ShellResult(ShellResult.unreachable, '', 'bridge gone');
+    return inner.run(argv);
+  }
+}
 
 void main() {
   late Directory tmp;
@@ -24,7 +47,7 @@ void main() {
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  Future<(TestDevice, SaveSyncEngine)> device(String id, String name, int minute) async {
+  Future<(TestDevice, SaveSyncEngine)> device(String id, String name, int minute, {PrivilegedShell Function(TestDevice d)? shell}) async {
     final d = TestDevice(p.join(tmp.path, id), name);
     d.makeSavesFolder();
     final hub = Hub(FolderBackend(Directory(hubDir)));
@@ -32,7 +55,7 @@ void main() {
     return (
       d,
       SaveSyncEngine(
-        shell: d.shell,
+        shell: shell == null ? d.shell : shell(d),
         hub: hub,
         state: SyncState(MemoryStore()),
         paths: d.paths,
@@ -217,6 +240,38 @@ void main() {
     expect(await b.pull(stardew), ['Farm_2: pulled']);
     expect(odin.farm('Farm_2'), contains('two day 2'));
     expect(odin.farm('Farm_1'), contains('day 9'));
+  });
+
+  test('a save folder probe that fails gives that game an error and leaves the other game alone', () async {
+    final seaOfStars = bundledRecipe('sea-of-stars');
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1, shell: (d) => DeadProbeShell(d.shell, d.paths.area(Area.androidData, seaOfStarsPkg)));
+    thor.shell.installed.add(seaOfStarsPkg);
+    thor.writeFarm('Farm_1', 'day 1');
+
+    final sea = await a.status(seaOfStars);
+    expect(sea.error, contains('bridge gone'));
+    expect((sea.bind as NeedsDiscovery).reason, 'could not look in the save folders');
+
+    final farm = await a.status(stardew);
+    expect(farm.error, isNull);
+    expect(farm.bind, isA<Bound>());
+    expect(farm.units['Farm_1']!.plan, isA<PushPlan>());
+  });
+
+  test('the game list keeps every game when one status throws', () async {
+    final seaOfStars = bundledRecipe('sea-of-stars');
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    thor.writeFarm('Farm_1', 'day 1');
+
+    final games = await gameStatuses(
+      [(seaOfStars, 'bundled'), (stardew, 'bundled')],
+      (r, source) async => r.id == seaOfStars.id ? throw GameFsError('test failed: exit -1: bridge gone') : await a.status(r, source: source),
+    );
+    expect([for (final g in games) g.recipe.id], ['sea-of-stars', 'stardew-valley']);
+    expect(games.first.error, 'test failed: exit -1: bridge gone');
+    expect(games.first.bind, isA<NeedsDiscovery>());
+    expect(games.last.error, isNull);
+    expect(games.last.units['Farm_1']!.plan, isA<PushPlan>());
   });
 
   test('push publishes the recipe; report writes the device file and README', () async {

@@ -71,6 +71,20 @@ class SaveSyncState {
 
 final saveSyncProvider = StateNotifierProvider<SaveSyncNotifier, SaveSyncState>((ref) => SaveSyncNotifier());
 
+/// Every recipe's status, one at a time. A status that throws becomes that
+/// game's error, so one bad game never empties the whole list.
+Future<List<GameStatus>> gameStatuses(Iterable<(Recipe, String)> recipes, Future<GameStatus> Function(Recipe r, String source) status) async {
+  final games = <GameStatus>[];
+  for (final (r, source) in recipes) {
+    try {
+      games.add(await status(r, source));
+    } catch (e) {
+      games.add(GameStatus(r, source, const NeedsDiscovery('status failed'), error: '$e'));
+    }
+  }
+  return games;
+}
+
 class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   SaveSyncNotifier({DevicePaths paths = const DevicePaths(), RecipeStore? store})
       : _paths = paths,
@@ -141,7 +155,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         model: model,
         appVersion: (await PackageInfo.fromPlatform()).version,
       );
-      final games = [for (final (r, source) in _recipes.values) await engine.status(r, source: source)];
+      final games = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
       final access = shell.privilege == Privilege.root ? SyncAccess.root : SyncAccess.shizuku;
       state = state.copyWith(loading: false, access: access, shizukuRunning: shizuku.running, hubFolder: hubFolder, games: games, recipeProblems: problems);
       await engine.report(games, access: access.name);
