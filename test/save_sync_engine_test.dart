@@ -161,6 +161,42 @@ void main() {
     expect(thor.farm('Farm_1'), contains('day 2'));
   });
 
+  test('a hub.json replaced by another device keeps the bases whose gens the hub still lists', () async {
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    thor.writeFarm('Farm_1', 'day 1');
+    expect(await a.push(stardew), ['Farm_1: pushed']);
+    final pushed = a.state.base(a.hub.key, 'stardew-valley', 'Farm_1')!.gen;
+    // Odin opened its copy of the folder before Syncthing brought Thor's hub.json, and Syncthing kept Odin's newer one.
+    final odinCopy = Directory(p.join(tmp.path, 'odin-copy'));
+    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4');
+    File(p.join(odinCopy.path, 'hub.json')).copySync(p.join(hubDir, 'hub.json'));
+    final oldKey = a.hub.key;
+    await a.hub.open(deviceId: 'thor-7f3a');
+    expect(a.hub.key, isNot(oldKey));
+    expect(a.state.base(a.hub.key, 'stardew-valley', 'Farm_1'), isNull);
+
+    thor.writeFarm('Farm_1', 'day 2');
+    final s = await a.status(stardew);
+    expect(s.units['Farm_1']!.plan, isA<PushPlan>().having((x) => x.parents, 'parents', [pushed]));
+    expect(a.state.base(a.hub.key, 'stardew-valley', 'Farm_1')?.gen, pushed);
+  });
+
+  test('a hub recreated in the same place borrows no base, so the old local save diverges', () async {
+    final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
+    thor.writeFarm('Farm_1', 'day 1');
+    expect(await a.push(stardew), ['Farm_1: pushed']);
+    Directory(hubDir).deleteSync(recursive: true);
+    final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2); // its open writes a new hub.json
+    odin.writeFarm('Farm_1', 'odin day 1');
+    expect(await b.push(stardew), ['Farm_1: pushed']);
+    await a.hub.open(deviceId: 'thor-7f3a');
+
+    final s = await a.status(stardew);
+    expect(s.units['Farm_1']!.plan, isA<Diverged>().having((x) => x.localDiffers, 'localDiffers', isTrue));
+    expect(s.canPull, isFalse);
+    expect(a.state.base(a.hub.key, 'stardew-valley', 'Farm_1'), isNull);
+  });
+
   test('a stored internal binding without root needs root, and neither pushes nor pulls', () async {
     final (thor, a) = await device('thor-7f3a', 'AYN Thor', 1);
     final (_, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);

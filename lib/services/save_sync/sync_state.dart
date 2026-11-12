@@ -103,6 +103,33 @@ class SyncState {
 
   Future<void> setBase(String hub, String recipe, String unit, Base base) => _put(_basesKey, '$hub|$recipe|$unit', base.toJson());
 
+  /// A base kept under another hub id of [backend] whose gen is in [listed],
+  /// the newest if there are several. Two devices that open the folder before
+  /// folder sync meets each write a hub.json, and only one survives; the gens
+  /// still listed show it is the same hub. A base whose gen is not listed is
+  /// never returned, so a hub recreated in the same place still has none.
+  Base? baseUnderOtherHubId(String backend, String recipe, String unit, Set<String> listed) {
+    final prefix = '$backend#';
+    final suffix = '|$recipe|$unit';
+    Base? best;
+    for (final e in _map(_basesKey).entries) {
+      final k = e.key;
+      if (!k.startsWith(prefix) || !k.endsWith(suffix) || k.length < prefix.length + suffix.length) continue;
+      final id = k.substring(prefix.length, k.length - suffix.length);
+      if (id.contains('#') || id.contains('|')) continue; // another backend, recipe or unit
+      final j = e.value;
+      if (j is! Map<String, dynamic>) continue;
+      final Base b;
+      try {
+        b = Base.fromJson(j);
+      } catch (_) {
+        continue;
+      }
+      if (listed.contains(b.gen) && (best == null || b.gen.compareTo(best.gen) > 0)) best = b;
+    }
+    return best;
+  }
+
   DateTime? last(String recipe, String kind) => DateTime.tryParse('${_map(_lastKey)['$recipe|$kind'] ?? ''}');
 
   Future<void> setLast(String recipe, String kind, DateTime t) => _put(_lastKey, '$recipe|$kind', t.toUtc().toIso8601String());

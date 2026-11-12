@@ -152,7 +152,13 @@ class SaveSyncEngine {
       for (final key in keys) {
         final gens = await hub.gens(r.id, key);
         final l = local[key];
-        var plan = planUnit(unit: key, local: l?.hashes ?? const {}, busy: l?.busy ?? false, base: state.base(hub.key, r.id, key), gens: gens);
+        var base = state.base(hub.key, r.id, key);
+        if (base == null) {
+          // hub.json may have been replaced while the gens stayed: a base this hub still lists carries over.
+          base = state.baseUnderOtherHubId(hub.backend.id, r.id, key, {for (final g in gens) g.gen});
+          if (base != null) await state.setBase(hub.key, r.id, key, base);
+        }
+        var plan = planUnit(unit: key, local: l?.hashes ?? const {}, busy: l?.busy ?? false, base: base, gens: gens);
         if (stuck.contains(key)) {
           // Its files are half pulled: neither a push nor a base may come from them.
           plan = Blocked(key, 'interrupted pull needs attention');
