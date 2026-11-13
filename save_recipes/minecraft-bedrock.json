@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "minecraft-bedrock",
+  "name": "Minecraft",
+  "status": "draft",
+  "packages": ["com.mojang.minecraftpe"],
+  "locations": [{ "area": "androidData", "root": "files/games/com.mojang/minecraftWorlds" }],
+  "unit": "folder",
+  "include": ["*/**"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}

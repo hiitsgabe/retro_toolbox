@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "id": "silksong",
+  "name": "Hollow Knight: Silksong",
+  "status": "draft",
+  "packages": [
+    "com.game.silksong"
+  ],
+  "locations": [
+    {
+      "area": "androidData",
+      "root": "files/default"
+    }
+  ],
+  "unit": "all",
+  "include": [
+    "user*.dat",
+    "shared.dat"
+  ],
+  "deviceLocal": [
+    "user*_*.dat",
+    "*.bak*",
+    "Restore_Points*/**"
+  ],
+  "version": {
+    "from": "package",
+    "rule": "receiverAtLeastSave"
+  },
+  "nativeCloud": null
+}

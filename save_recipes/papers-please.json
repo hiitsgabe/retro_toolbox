@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "papers-please",
+  "name": "Papers, Please",
+  "status": "draft",
+  "packages": ["com.llc3909.papersplease"],
+  "locations": [{ "area": "androidData", "root": "files" }],
+  "unit": "all",
+  "include": ["save_*.sav", "headers.sav", "names.sav", "stash.sav", "stats.sav"],
+  "deviceLocal": ["settings.sav", "platover.sav"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "dredge",
+  "name": "DREDGE",
+  "status": "draft",
+  "packages": ["com.BlackSaltGames.DREDGE"],
+  "locations": [{ "area": "androidData", "root": "files" }],
+  "unit": "all",
+  "include": ["saves/**"],
+  "deviceLocal": ["backup-saves/**", "dredge-settings.bin", "dredge-settings.bin.bak"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}

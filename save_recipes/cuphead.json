@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "cuphead",
+  "name": "Cuphead",
+  "status": "draft",
+  "packages": ["com.SpanishFreddy.Cuphead"],
+  "locations": [{ "area": "androidData", "root": "files/Cuphead" }],
+  "unit": "file",
+  "include": ["cuphead_player_data_v1_slot_*.sav"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}
