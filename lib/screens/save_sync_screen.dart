@@ -175,7 +175,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     final catalog = await n.catalog();
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute<bool>(
-      builder: (_) => SaveSyncAddAppScreen(already: already, catalog: catalog),
+      builder: (_) => SaveSyncAddAppScreen(already: already, catalog: catalog, known: n.knownRecipeByPackage),
     ));
   }
 

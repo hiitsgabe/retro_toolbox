@@ -10,11 +10,17 @@ import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 /// it exists or not: an app with nothing published is a thing to write a
 /// recipe for, not a thing to hide.
 class SaveSyncAddAppScreen extends ConsumerStatefulWidget {
-  const SaveSyncAddAppScreen({super.key, required this.already, this.catalog});
+  const SaveSyncAddAppScreen({super.key, required this.already, this.catalog, this.known = const {}});
 
   /// Packages the hub already covers, shown as added rather than offered
   /// again.
   final Set<String> already;
+
+  /// Package to the recipe this app already knows for it — what the build
+  /// ships, what a hub published, what was written here. Consulted before the
+  /// catalog, because a recipe already in hand beats one that has to be
+  /// fetched.
+  final Map<String, String> known;
 
   /// The published catalog, when one could be read. Null means it was never
   /// reachable and nothing is cached, which changes what the rows offer but
@@ -86,6 +92,7 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
                       itemBuilder: (context, i) {
                         final a = shown[i];
                         final added = widget.already.contains(a.package);
+                        final mine = widget.known[a.package];
                         final hit = catalog?.byPackage[a.package];
                         return CheckboxListTile(
                           value: added || _picked.contains(a.package),
@@ -107,9 +114,11 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
                           subtitle: Text(
                             added
                                 ? 'Already added'
-                                : hit != null
-                                    ? 'Recipe available${hit.status == 'verified' ? ' · verified' : ''}'
-                                    : 'No recipe yet — hold its icon to describe it here',
+                                : mine != null
+                                    ? 'Recipe ready'
+                                    : hit != null
+                                        ? 'Recipe available${hit.status == 'verified' ? ' · verified' : ''}'
+                                        : 'No recipe yet — hold its icon to describe it here',
                             style: theme.textTheme.bodySmall,
                           ),
                         );
@@ -149,7 +158,7 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
     // The recipe a catalog names is recorded with the choice; an app with
     // none is recorded all the same, so the intent reaches the other devices
     // and a recipe can land later.
-    final chosen = {for (final p in _picked) p: catalog?.byPackage[p]?.id};
+    final chosen = {for (final p in _picked) p: widget.known[p] ?? catalog?.byPackage[p]?.id};
     await ref.read(saveSyncProvider.notifier).addApps(chosen);
     if (mounted) Navigator.of(context).pop(true);
   }

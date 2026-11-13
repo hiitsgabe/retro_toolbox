@@ -213,6 +213,14 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     return null;
   }
 
+  /// Package to the recipe this app already knows for it, whatever layer it
+  /// came from. The picker needs this: an app the build ships a recipe for
+  /// must not read as one nothing has been written for.
+  Map<String, String> get knownRecipeByPackage => {
+        for (final (recipe, _) in _recipes.values)
+          for (final pkg in recipe.packages) pkg: recipe.id,
+      };
+
   /// Every app with a launcher entry, for the picker. Icons come along, since
   /// the same call already has the package manager open.
   Future<List<({String package, AppInfo info})>> launchableApps() async {
