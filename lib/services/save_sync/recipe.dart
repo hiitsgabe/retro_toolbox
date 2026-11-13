@@ -109,7 +109,9 @@ class Recipe {
     this.raw = const {},
   });
 
-  static const supportedSchema = 1;
+  /// Schema 2 added one globbed segment in a location root, for apps that
+  /// bury their saves under a directory named per install.
+  static const supportedSchema = 2;
 
   /// The JSON this recipe was parsed from, published as-is to the hub.
   final Map<String, dynamic> raw;
@@ -159,7 +161,7 @@ class Recipe {
     final locations = [
       for (final l in locs)
         if (l is Map<String, dynamic> && l.keys.toSet().difference({'area', 'root'}).isEmpty)
-          RecipeLocation(_enum(Area.values, _string(l, 'area'), 'area'), _relative(_string(l, 'root'), 'root'))
+          RecipeLocation(_enum(Area.values, _string(l, 'area'), 'area'), _relative(_string(l, 'root'), 'root', schema: schema))
         else
           throw RecipeError('each location is {area, root}'),
     ];
@@ -277,10 +279,22 @@ class Recipe {
   static T _enum<T extends Enum>(List<T> values, String name, String field) =>
       values.firstWhere((e) => e.name == name, orElse: () => throw RecipeError('$field "$name" is not one of ${values.map((e) => e.name).join(', ')}'));
 
-  static String _relative(String s, String field) {
+  /// A relative path, and from schema 2 one of its segments may be a glob.
+  ///
+  /// One, deliberately: the segment stands for a directory this install named
+  /// itself, and a device resolves it before anything downstream ever sees a
+  /// pattern. Two would mean a tree to walk and more than one plausible
+  /// answer, which is how a save ends up restored into the wrong place.
+  static String _relative(String s, String field, {int schema = 1}) {
     if (!PathGuard.isSafeRelative(s)) throw RecipeError('$field "$s" must be a plain relative path');
+    final globbed = s.split('/').where((seg) => seg.contains('*') || seg.contains('?') || seg.contains('[')).length;
+    if (globbed > 0 && schema < 2) throw RecipeError('$field "$s" needs schema 2 to use a pattern');
+    if (globbed > 1) throw RecipeError('$field "$s" may have only one patterned segment');
     return s;
   }
+
+  /// Whether this recipe's roots have to be resolved on the device first.
+  bool get rootNeedsResolving => locations.any((l) => l.root.split('/').any((seg) => seg.contains('*') || seg.contains('?') || seg.contains('[')));
 
   static void _pattern(String s, UnitKind unit, String field) {
     for (final m in _placeholderRe.allMatches(s)) {

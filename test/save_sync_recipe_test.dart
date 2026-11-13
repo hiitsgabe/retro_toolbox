@@ -66,7 +66,36 @@ void main() {
   });
 
   test('a newer schema is RecipeTooNew, not a parse error', () {
-    expect(() => Recipe.parse({...stardew(), 'schema': 2}), throwsA(isA<RecipeTooNew>()));
+    expect(() => Recipe.parse({...stardew(), 'schema': 3}), throwsA(isA<RecipeTooNew>()));
+  });
+
+  group('a patterned root', () {
+    Map<String, dynamic> withRoot(String root, {int schema = 2}) => {
+          ...stardew(),
+          'schema': schema,
+          'locations': [
+            {'area': 'androidData', 'root': root},
+          ],
+        };
+
+    test('is allowed from schema 2, and only one segment of it', () {
+      expect(Recipe.parse(withRoot('files/save/0/*')).rootNeedsResolving, isTrue);
+      expect(
+        () => Recipe.parse(withRoot('files/*/save/*')),
+        throwsA(isA<RecipeError>().having((e) => e.message, 'message', contains('only one patterned segment'))),
+      );
+    });
+
+    test('is refused on schema 1, where nothing would resolve it', () {
+      expect(
+        () => Recipe.parse(withRoot('files/save/0/*', schema: 1)),
+        throwsA(isA<RecipeError>().having((e) => e.message, 'message', contains('needs schema 2'))),
+      );
+    });
+
+    test('a plain root still needs no resolving', () {
+      expect(Recipe.parse(withRoot('files/Saves')).rootNeedsResolving, isFalse);
+    });
   });
 
   test('rejects bad recipes with a reason', () {

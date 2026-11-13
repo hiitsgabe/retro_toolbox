@@ -1,5 +1,6 @@
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/save_sync/game_fs.dart';
+import 'package:retro_toolbox/services/save_sync/glob.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/units.dart';
@@ -94,10 +95,19 @@ class RecipeBinder {
     ];
     if (installed.isEmpty) return const NotInstalled();
     final mode = r.nativeCloud?.defaultMode ?? 'sync';
-    final candidates = [
+    final declared = [
       for (final pkg in installed)
         for (final l in r.locations) Binding(recipe: r.id, package: pkg, area: l.area, root: l.root, mode: mode),
     ];
+    // A root may carry one patterned segment, standing for a directory the
+    // install named itself. It is resolved here and nowhere else: a Binding
+    // is local and never travels, so every device looks the pattern up
+    // against its own disk, and everything downstream — unit keys, hub
+    // directories, stored bases — stays the plain path it always was.
+    final candidates = <Binding>[];
+    for (final b in declared) {
+      candidates.addAll(await _resolveRoot(b));
+    }
     bool reachable(Binding b) => b.area == Area.androidData || privilege == Privilege.root;
 
     if (candidates.length == 1) {
@@ -139,6 +149,28 @@ class RecipeBinder {
     if (existing.length == 1) return Bound(existing.single);
     if (existing.isEmpty) return FolderMissing(open.first);
     return const NeedsDiscovery('the save folder could be in more than one place');
+  }
+
+  /// Expands the one patterned segment, if there is one, against this device.
+  /// A root with no pattern comes back as it is. Several matches all come
+  /// back, so the caller decides between them the same way it decides between
+  /// two declared locations. No match keeps the literal root, which reads as
+  /// a folder that is not there — "open the app once" — rather than as
+  /// nothing at all.
+  Future<List<Binding>> _resolveRoot(Binding b) async {
+    final segs = b.root.split('/');
+    final i = segs.indexWhere((x) => x.contains('*') || x.contains('?') || x.contains('['));
+    if (i < 0) return [b];
+    final base = [paths.area(b.area, b.package), ...segs.take(i)].join('/');
+    final glob = Glob(segs[i]);
+    final rest = segs.skip(i + 1);
+    final out = <Binding>[];
+    for (final e in await fs.listDir(base)) {
+      if (!e.isDir || !glob.matches(e.name)) continue;
+      out.add(Binding(recipe: b.recipe, package: b.package, area: b.area, root: [...segs.take(i), e.name, ...rest].join('/'), mode: b.mode));
+    }
+    out.sort((x, y) => x.root.compareTo(y.root));
+    return out.isEmpty ? [b] : out;
   }
 
   /// The unit's files, or null when the folder is there and this device is

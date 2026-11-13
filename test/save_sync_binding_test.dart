@@ -55,6 +55,53 @@ void main() {
     return RecipeBinder(ShellGameFs(PmShell(installed, privilege: privilege), PathGuard(roots)), paths, privilege: privilege);
   }
 
+  // The reason schema 2 exists: some apps bury their saves under a directory
+  // they named themselves at install time, so the recipe cannot spell it out.
+  group('a root with one patterned segment', () {
+    Recipe patterned({String status = 'verified'}) => Recipe.parse({
+          'schema': 2,
+          'id': 'patterned',
+          'name': 'Alpha Title',
+          'status': status,
+          'packages': ['com.example.alpha'],
+          'locations': [
+            {'area': 'androidData', 'root': 'files/save/0/*[!0]*'},
+          ],
+          'unit': 'folder',
+          'include': ['*/**'],
+        });
+
+    String area() => paths.area(Area.androidData, 'com.example.alpha');
+
+    test('resolves to the directory this install actually made', () async {
+      Directory(p.join(area(), 'files/save/0/A1B2C3')).createSync(recursive: true);
+      final res = await binder(patterned(), {'com.example.alpha'}).bind(patterned());
+      expect(res, isA<Bound>());
+      expect((res as Bound).binding.root, 'files/save/0/A1B2C3');
+    });
+
+    test('a directory the pattern excludes is not picked', () async {
+      Directory(p.join(area(), 'files/save/0/00000')).createSync(recursive: true);
+      final res = await binder(patterned(), {'com.example.alpha'}).bind(patterned());
+      // Only the excluded one exists, so nothing resolved and the literal root
+      // stands — which reads as "open the app once", not as a silent match.
+      expect(res, isA<FolderMissing>());
+    });
+
+    test('two matching directories are a choice, not a guess', () async {
+      for (final d in ['A1B2C3', 'D4E5F6']) {
+        Directory(p.join(area(), 'files/save/0/$d')).createSync(recursive: true);
+      }
+      final res = await binder(patterned(), {'com.example.alpha'}).bind(patterned());
+      expect(res, isA<NeedsDiscovery>());
+    });
+
+    test('nothing there at all still asks for the app to be opened', () async {
+      Directory(p.join(area(), 'files/save/0')).createSync(recursive: true);
+      expect(await binder(patterned(), {'com.example.alpha'}).bind(patterned()), isA<FolderMissing>());
+    });
+  });
+
   test('not installed', () async {
     expect(await binder(bundled('stardew-valley'), {}).bind(bundled('stardew-valley')), isA<NotInstalled>());
   });

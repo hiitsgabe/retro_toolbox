@@ -105,6 +105,22 @@ void main() {
         'all': ['SOS_SaveDataIndex.sos', 'SOS_SaveSlot99.sos'],
       },
     ),
+    // An emulator keeps one save per emulated game, so the unit key is the
+    // game's id and each one travels on its own. The profile directory above
+    // them is resolved on the device and never appears here.
+    'yuzu': (
+      'yuzu',
+      [
+        'AAAAAAAAAAAAAAA1/game_data.sav',
+        'AAAAAAAAAAAAAAA1/game_sub_data.sav',
+        'BBBBBBBBBBBBBBB2/save.meta',
+        'BBBBBBBBBBBBBBB2/slot00/file01/main.bin',
+      ],
+      {
+        'AAAAAAAAAAAAAAA1': ['AAAAAAAAAAAAAAA1/game_data.sav', 'AAAAAAAAAAAAAAA1/game_sub_data.sav'],
+        'BBBBBBBBBBBBBBB2': ['BBBBBBBBBBBBBBB2/save.meta', 'BBBBBBBBBBBBBBB2/slot00/file01/main.bin'],
+      },
+    ),
     'minecraft-bedrock': (
       'minecraft-bedrock',
       ['AbCdEf==/db/000003.log', 'AbCdEf==/level.dat', 'GhIjKl==/level.dat'],

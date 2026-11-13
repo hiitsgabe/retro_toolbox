@@ -1,0 +1,12 @@
+{
+  "schema": 2,
+  "id": "eden",
+  "name": "Eden",
+  "status": "draft",
+  "packages": ["dev.eden.eden_emulator"],
+  "locations": [{ "area": "androidData", "root": "files/nand/user/save/0000000000000000/*[!0]*" }],
+  "unit": "folder",
+  "include": ["*/**"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}
