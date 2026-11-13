@@ -90,6 +90,12 @@ android {
     }
 
     buildTypes {
+        // ponytail: a debug build installs beside the release app instead of
+        // replacing it, so testing on a daily-driver handheld never wipes its
+        // data. It also keeps the two Shizuku provider authorities apart.
+        debug {
+            applicationIdSuffix = ".dev"
+        }
         release {
             if (releaseSigning) {
                 println("[Gradle] Using RELEASE signing config for build.")
