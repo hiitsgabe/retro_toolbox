@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:retro_toolbox/services/save_sync/drive_api.dart';
@@ -32,7 +33,12 @@ class GoogleAuthError implements Exception {
 
   @override
   String toString() => switch (problem) {
-        GoogleAuthProblem.canceled => 'Sign-in canceled.',
+        // Play services reports a build whose package and signing key are not
+        // on the API console as a cancel, and the plugin hands us no way to
+        // tell that from the owner tapping outside the sheet. So the sentence
+        // says both, rather than telling them they did something they didn't.
+        GoogleAuthProblem.canceled =>
+          'Sign-in canceled. If you did not cancel it, this build is not registered with Google — use a folder instead.',
         GoogleAuthProblem.notRegistered => 'This build is not registered with Google, so it cannot use Google Drive. Use a folder instead.',
         GoogleAuthProblem.noPlayServices => 'Google sign-in needs Google Play services, which this device does not have. Use a folder instead.',
         GoogleAuthProblem.offline => 'Could not reach Google. Check the connection and try again.',
@@ -136,6 +142,9 @@ class PluginGoogleAuth implements GoogleAuth {
       await user.authorizationClient.authorizeScopes(const [driveFileScope]);
       return GoogleAccount(id: user.id, email: user.email);
     } on GoogleSignInException catch (e) {
+      // The raw text, where `adb logcat` can see it: the screen only ever
+      // shows the sentence, and the sentence cannot name every cause.
+      debugPrint('Google sign-in failed: ${e.code.name}: ${e.description}');
       throw googleAuthError(e);
     }
   }
