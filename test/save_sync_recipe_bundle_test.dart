@@ -76,6 +76,35 @@ void main() {
         'all': ['saves/slot0.json'],
       },
     ),
+    // The only verified recipe, so the only one that binds without ever asking
+    // the owner to confirm the place. It is also the only one with
+    // beforeRestore, checks and inProgress, so it is the one that most needs a
+    // case here.
+    'stardew-valley': (
+      'stardew-valley',
+      [
+        'EMERGENCY_SAVE',
+        'Slot_1/Slot_1',
+        'Slot_1/Slot_1_SVBAK',
+        'Slot_1/Slot_1_old',
+        'Slot_1/SaveGameInfo',
+        'Slot_2/Slot_2',
+        'Slot_2/Slot_2_STARDEWVALLEYSAVETMP',
+        'Slot_2/SaveGameInfo',
+        'stray.txt',
+      ],
+      {
+        'Slot_1': ['Slot_1/SaveGameInfo', 'Slot_1/Slot_1'],
+        'Slot_2': ['Slot_2/SaveGameInfo', 'Slot_2/Slot_2'],
+      },
+    ),
+    'sea-of-stars': (
+      'sea-of-stars',
+      ['DecodedBanks/x.bank', 'SOS_SaveDataIndex.sos', 'SOS_SaveSlot99.sos', 'Unity/y.dat'],
+      {
+        'all': ['SOS_SaveDataIndex.sos', 'SOS_SaveSlot99.sos'],
+      },
+    ),
     'minecraft-bedrock': (
       'minecraft-bedrock',
       ['AbCdEf==/db/000003.log', 'AbCdEf==/level.dat', 'GhIjKl==/level.dat'],
