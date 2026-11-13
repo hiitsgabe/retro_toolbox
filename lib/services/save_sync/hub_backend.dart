@@ -21,6 +21,12 @@ abstract class HubBackend {
   /// when [dir] does not exist. Names starting with `.` are hidden.
   Future<List<HubEntry>> list(String dir);
 
+  /// Whether the place itself is reachable. An empty listing alone cannot tell
+  /// a hub that was never made apart from one whose card has been pulled, and
+  /// a backend that cannot be reached at all raises its own error here rather
+  /// than answering. Defaults to true for a backend that cannot tell.
+  Future<bool> placeExists() async => true;
+
   Future<List<int>> read(String path);
 
   /// Creates parent folders as needed. Replaces an existing file whole.
@@ -44,6 +50,9 @@ class FolderBackend implements HubBackend {
     if (!PathGuard.isSafeRelative(rel)) throw ArgumentError.value(rel, 'path');
     return p.join(root.path, rel);
   }
+
+  @override
+  Future<bool> placeExists() => root.exists();
 
   @override
   Future<List<HubEntry>> list(String dir) async {

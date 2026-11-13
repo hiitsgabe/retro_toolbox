@@ -6,6 +6,21 @@ import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
 import 'package:retro_toolbox/services/save_sync/path_guard.dart';
 
+/// The place a hub was supposed to be holds nothing. A removed card, a folder
+/// the owner moved, a document tree the system no longer honours: all of them
+/// read as an empty listing, which is indistinguishable from a fresh hub.
+/// Making one anyway would mint a second identity and orphan every base this
+/// device has stored against the first, so the caller is told instead.
+class HubMissing implements Exception {
+  const HubMissing(this.place);
+
+  /// The backend's id, so the message names the place that is not there.
+  final String place;
+
+  @override
+  String toString() => 'No hub at $place any more. Point Save Sync at it again, or pick another place.';
+}
+
 class HubTooNew implements Exception {
   HubTooNew(this.format);
 
@@ -59,7 +74,11 @@ class Hub {
   /// A unit key that is safe as one folder name.
   static bool isUnitKey(String key) => PathGuard.isSafeRelative(key) && !key.contains('/') && !key.startsWith('.');
 
-  Future<void> open({required String deviceId, DateTime? now}) async {
+  /// Reads the hub's identity, and with [create] makes one when the place is
+  /// empty. Only the step where the owner picks the place passes true: every
+  /// refresh after that must fail loudly on an empty listing rather than write
+  /// a new hub over the absence of the old one.
+  Future<void> open({required String deviceId, bool create = false, DateTime? now}) async {
     final top = await backend.list('');
     if (top.any((e) => e.name == 'hub.json' && !e.isDir)) {
       final j = jsonDecode(utf8.decode(await backend.read('hub.json')));
@@ -70,6 +89,10 @@ class Hub {
       _instanceId = id is String ? id : '';
       return;
     }
+    // An empty listing alone is not proof: ask the place itself. A backend
+    // that cannot be reached raises its own error here, so a dead sign-in
+    // still reads as a dead sign-in and not as a hub that vanished.
+    if (!create && !await backend.placeExists()) throw HubMissing(backend.id);
     final r = Random.secure();
     final id = [for (var i = 0; i < 2; i++) r.nextInt(1 << 32).toRadixString(16).padLeft(8, '0')].join();
     await backend.write(

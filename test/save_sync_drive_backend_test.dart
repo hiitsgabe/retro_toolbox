@@ -94,8 +94,8 @@ void main() {
     drive.add('hub.json', parent: b.id, bytes: utf8.encode('{"format":1,"id":"bbbbbbbbbbbbbbbb"}'), created: DateTime.utc(2026, 11, 1, 9, 0, 1));
     final thor = Hub(backend());
     final odin = Hub(backend());
-    await thor.open(deviceId: 'thor-7f3a');
-    await odin.open(deviceId: 'odin-02c4');
+    await thor.open(deviceId: 'thor-7f3a', create: true);
+    await odin.open(deviceId: 'odin-02c4', create: true);
     expect(thor.key, 'drive:1234567890#aaaaaaaaaaaaaaaa');
     expect(odin.key, thor.key);
   });
@@ -126,7 +126,7 @@ void main() {
     /// One handheld signed in to the same account; [state] outlives the engine like the app's preferences.
     Future<SaveSyncEngine> engine(TestDevice d, SyncState state, String id, int minute) async {
       final hub = Hub(backend());
-      await hub.open(deviceId: id);
+      await hub.open(deviceId: id, create: true);
       return SaveSyncEngine(
         shell: d.shell,
         hub: hub,

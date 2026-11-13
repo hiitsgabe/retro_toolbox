@@ -217,6 +217,9 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   Future<void>? _refreshing;
   bool _again = false;
 
+  /// Set only between the owner picking a place and the refresh that reads it.
+  bool _creatingHub = false;
+
   /// One refresh at a time: two would build two engines, and one could recover a pull the other is running.
   /// A refresh asked for while one runs (a sign out during the report upload) runs once more after it,
   /// so the caller never gets back a state built from the hub it just left.
@@ -291,7 +294,11 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       final deviceId = await sync.deviceId(model);
       final hub = Hub(_backend(choice));
       leaveHub(hub.backend.id);
-      await hub.open(deviceId: deviceId);
+      // Only the refresh that follows the owner choosing a place may make a
+      // hub there. Every later one must fail on an empty listing instead of
+      // minting a second hub over a card that is simply not in the slot.
+      await hub.open(deviceId: deviceId, create: _creatingHub);
+      _creatingHub = false;
       for (final e in (await hub.recipes()).entries) {
         final known = _recipes[e.key];
         if (known != null && known.$2 != 'hub') continue;
@@ -402,6 +409,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   Future<void> setHubFolder([String? path]) async {
     await (await _sync()).setHubChoice(FolderHub(path ?? defaultHubFolder));
     state = state.copyWith(clearSignInError: true);
+    _creatingHub = true;
     await refresh();
   }
 
@@ -413,6 +421,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     try {
       final account = await _google.signIn();
       await (await _sync()).setHubChoice(DriveHub(accountId: account.id, email: account.email));
+      _creatingHub = true;
     } catch (e) {
       state = state.copyWith(signingIn: false, signInError: '$e');
       return;

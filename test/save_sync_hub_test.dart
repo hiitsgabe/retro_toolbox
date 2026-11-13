@@ -25,6 +25,9 @@ GenMeta meta(String unit, DateTime t, List<int> zip, {List<String> parents = con
 }
 
 class RecordingBackend implements HubBackend {
+  @override
+  Future<bool> placeExists() async => true;
+
   RecordingBackend(this.inner);
 
   final HubBackend inner;
@@ -53,6 +56,22 @@ class RecordingBackend implements HubBackend {
 }
 
 void main() {
+  // A removed card, a moved folder or a stale document tree all read as an
+  // empty listing. Writing a hub into that absence would mint a second
+  // identity and orphan every base stored against the first.
+  test('a hub that is not there is refused, not made again', () async {
+    final gone = Directory(p.join(Directory.systemTemp.createTempSync('gone').path, 'never-made'));
+    final hub = Hub(FolderBackend(gone));
+    await expectLater(hub.open(deviceId: 'dev-1'), throwsA(isA<HubMissing>()));
+    expect(gone.existsSync(), isFalse, reason: 'nothing may be written where the hub was');
+  });
+
+  test('the step that picks the place may still make one', () async {
+    final fresh = Directory(p.join(Directory.systemTemp.createTempSync('fresh').path, 'hub'));
+    await Hub(FolderBackend(fresh)).open(deviceId: 'dev-1', create: true);
+    expect(File(p.join(fresh.path, 'hub.json')).existsSync(), isTrue);
+  });
+
   late Directory tmp;
   late FolderBackend backend;
   late Hub hub;
@@ -61,7 +80,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('hubtest');
     backend = FolderBackend(Directory(p.join(tmp.path, 'hub')));
     hub = Hub(backend);
-    await hub.open(deviceId: 'thor-7f3a', now: DateTime.utc(2026, 11, 10));
+    await hub.open(deviceId: 'thor-7f3a', create: true, now: DateTime.utc(2026, 11, 10));
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 
@@ -78,7 +97,7 @@ void main() {
     expect(again.key, hub.key);
     Directory(p.join(tmp.path, 'hub')).deleteSync(recursive: true);
     final recreated = Hub(backend);
-    await recreated.open(deviceId: 'odin-02c4');
+    await recreated.open(deviceId: 'odin-02c4', create: true);
     expect(recreated.key, isNot(hub.key));
     expect(recreated.key, startsWith('${backend.id}#'));
   });

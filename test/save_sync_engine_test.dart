@@ -51,7 +51,7 @@ void main() {
     final d = TestDevice(p.join(tmp.path, id), name);
     d.makeSavesFolder();
     final hub = Hub(FolderBackend(Directory(hubDir)));
-    await hub.open(deviceId: id);
+    await hub.open(deviceId: id, create: true);
     return (
       d,
       SaveSyncEngine(
@@ -168,10 +168,10 @@ void main() {
     final pushed = a.state.base(a.hub.key, 'stardew-valley', 'Farm_1')!.gen;
     // Odin opened its copy of the folder before Syncthing brought Thor's hub.json, and Syncthing kept Odin's newer one.
     final odinCopy = Directory(p.join(tmp.path, 'odin-copy'));
-    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4');
+    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4', create: true);
     File(p.join(odinCopy.path, 'hub.json')).copySync(p.join(hubDir, 'hub.json'));
     final oldKey = a.hub.key;
-    await a.hub.open(deviceId: 'thor-7f3a');
+    await a.hub.open(deviceId: 'thor-7f3a', create: true);
     expect(a.hub.key, isNot(oldKey));
     expect(a.state.base(a.hub.key, 'stardew-valley', 'Farm_1'), isNull);
 
@@ -186,13 +186,13 @@ void main() {
     thor.writeFarm('Farm_1', 'day 1');
     expect(await a.push(stardew), ['Farm_1: pushed']);
     final odinCopy = Directory(p.join(tmp.path, 'odin-copy'));
-    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4');
+    await Hub(FolderBackend(odinCopy)).open(deviceId: 'odin-02c4', create: true);
     File(p.join(odinCopy.path, 'hub.json')).copySync(p.join(hubDir, 'hub.json'));
     final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2);
     expect(await b.pull(stardew), ['Farm_1: pulled']);
     odin.writeFarm('Farm_1', 'odin day 2');
     expect(await b.push(stardew), ['Farm_1: pushed']);
-    await a.hub.open(deviceId: 'thor-7f3a');
+    await a.hub.open(deviceId: 'thor-7f3a', create: true);
 
     // Thor's base is listed but is no longer a head: unchanged here, so the child is a plain pull.
     final s = await a.status(stardew);
@@ -209,7 +209,7 @@ void main() {
     final (odin, b) = await device('odin-02c4', 'AYN Odin 2 Mini', 2); // its open writes a new hub.json
     odin.writeFarm('Farm_1', 'odin day 1');
     expect(await b.push(stardew), ['Farm_1: pushed']);
-    await a.hub.open(deviceId: 'thor-7f3a');
+    await a.hub.open(deviceId: 'thor-7f3a', create: true);
 
     final s = await a.status(stardew);
     expect(s.units['Farm_1']!.plan, isA<Diverged>().having((x) => x.localDiffers, 'localDiffers', isTrue));

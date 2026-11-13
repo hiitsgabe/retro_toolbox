@@ -30,7 +30,7 @@ void main() {
     thor = TestDevice(p.join(tmp.path, 'thor'), 'AYN Thor');
     odin = TestDevice(p.join(tmp.path, 'odin'), 'AYN Odin 2 Mini');
     hub = Hub(FolderBackend(Directory(p.join(tmp.path, 'hub'))));
-    await hub.open(deviceId: 'thor-7f3a');
+    await hub.open(deviceId: 'thor-7f3a', create: true);
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 

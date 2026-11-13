@@ -71,6 +71,15 @@ class DriveBackend implements HubBackend {
     return _dirs[dir] = [made.id];
   }
 
+  /// Drive makes the hub folder on demand, so the place is as reachable as
+  /// the account is. A dead sign-in raises its own error from here, which is
+  /// what the owner needs to read, rather than a missing hub.
+  @override
+  Future<bool> placeExists() async {
+    await _folders('');
+    return true;
+  }
+
   @override
   Future<List<HubEntry>> list(String dir) async {
     if (dir.isNotEmpty) _check(dir);

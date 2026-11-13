@@ -25,7 +25,7 @@ void main() {
     tmp = Directory.systemTemp.createTempSync('pusher');
     thor = TestDevice(p.join(tmp.path, 'thor'), 'AYN Thor');
     hub = Hub(FolderBackend(Directory(p.join(tmp.path, 'hub'))));
-    await hub.open(deviceId: 'thor-7f3a');
+    await hub.open(deviceId: 'thor-7f3a', create: true);
   });
   tearDown(() => tmp.deleteSync(recursive: true));
 

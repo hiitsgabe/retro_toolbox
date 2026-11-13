@@ -281,7 +281,7 @@ void main() {
       addTearDown(() => tmp.delete(recursive: true));
       final c = container({}, paths: DevicePaths(sdcard: tmp.path));
       final odin = Hub(DriveBackend('1234567890', DriveApi(drive, FakeTokens(['token-1']))));
-      await odin.open(deviceId: 'odin-02c4');
+      await odin.open(deviceId: 'odin-02c4', create: true);
       final raw = jsonDecode(File('save_recipes/stardew-valley.json').readAsStringSync()) as Map<String, dynamic>;
       await odin.publishRecipe({...raw, 'id': 'hub-only-game', 'name': 'Hub Only Game'}, source: 'user', deviceId: 'odin-02c4', now: DateTime.utc(2026, 11, 12));
 
@@ -300,7 +300,7 @@ void main() {
       addTearDown(() => tmp.delete(recursive: true));
       final c = container({}, paths: DevicePaths(sdcard: tmp.path));
       final odin = Hub(DriveBackend('1234567890', DriveApi(drive, FakeTokens(['token-1']))));
-      await odin.open(deviceId: 'odin-02c4');
+      await odin.open(deviceId: 'odin-02c4', create: true);
       final raw = jsonDecode(File('save_recipes/stardew-valley.json').readAsStringSync()) as Map<String, dynamic>;
       await odin.publishRecipe({...raw, 'id': 'broken-game', 'extra': 1}, source: 'user', deviceId: 'odin-02c4', now: DateTime.utc(2026, 11, 12));
 
