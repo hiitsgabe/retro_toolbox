@@ -67,8 +67,8 @@ class GameChecker {
         case NotInstalled():
           add(CheckLevel.fail, 'App', 'Not installed');
           return out;
-        case NeedsRoot(:final binding):
-          add(CheckLevel.fail, 'Access', '${binding.dir(paths)} needs root');
+        case NeedsRoot(:final binding, :final reason):
+          add(CheckLevel.fail, 'Access', '${binding.dir(paths)}: $reason, so this needs root');
           return out;
         case FolderMissing(:final binding):
           add(CheckLevel.fail, 'Save folder', '${binding.dir(paths)} does not exist yet; open the game once');

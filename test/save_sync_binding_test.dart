@@ -7,6 +7,7 @@ import 'package:retro_toolbox/services/save_sync/game_fs.dart';
 import 'package:retro_toolbox/services/save_sync/path_guard.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
+import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 
 class PmShell implements PrivilegedShell {
@@ -21,6 +22,19 @@ class PmShell implements PrivilegedShell {
   Future<ShellResult> run(List<String> argv) async {
     if (argv.first == 'pm') return installed.contains(argv[2]) ? ShellResult(0, 'package:/x/${argv[2]}.apk\n', '') : const ShellResult(1, '', '');
     return _real.run(argv);
+  }
+}
+
+/// A handheld whose save folder is right there but refuses a look inside:
+/// the folder was made under a parent that had lost its shared group, so the
+/// shell user is not in the group that may read it.
+class RefusingShell extends PmShell {
+  RefusingShell(super.installed);
+
+  @override
+  Future<ShellResult> run(List<String> argv) async {
+    if (argv.first == 'find') return const ShellResult(1, '', 'find: /sdcard/Android/data/x/files/Saves: Permission denied');
+    return super.run(argv);
   }
 }
 
@@ -48,6 +62,19 @@ void main() {
   test('one location: missing folder asks to open the game once', () async {
     final r = bundled('stardew-valley');
     expect(await binder(r, {'com.chucklefish.stardewvalley'}).bind(r), isA<FolderMissing>());
+  });
+
+  // The folder is there, the app is installed, and the shell is still refused.
+  // That reads as "needs root", not as a shell error pasted into the card.
+  test('one location the device may not look inside: needs root, with the reason', () async {
+    final r = bundled('stardew-valley');
+    Directory(p.join(paths.area(Area.androidData, 'com.chucklefish.stardewvalley'), 'files/Saves')).createSync(recursive: true);
+    final roots = [for (final a in Area.values) paths.area(a, 'com.chucklefish.stardewvalley')];
+    final refusing = RecipeBinder(ShellGameFs(RefusingShell({'com.chucklefish.stardewvalley'}), PathGuard(roots)), paths, privilege: Privilege.shell);
+    final res = await refusing.bind(r);
+    expect(res, isA<NeedsRoot>());
+    expect((res as NeedsRoot).reason, NeedsRoot.refused);
+    expect(bindLabel(res), isNot(contains('find')));
   });
 
   test('one location, verified, empty folder: bound (a fresh device can pull)', () async {

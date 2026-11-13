@@ -52,9 +52,19 @@ class NotInstalled extends BindResult {
 }
 
 class NeedsRoot extends BindResult {
-  const NeedsRoot(this.binding);
+  const NeedsRoot(this.binding, {this.reason = outOfReach});
+
+  /// The save folder lives where only root goes on any device.
+  static const outOfReach = 'this game keeps its saves where only root reaches';
+
+  /// The folder is right there, but this device keeps it private to the game.
+  /// Same app, same path, other handheld: readable. It comes down to the
+  /// group and the setgid bit on the folders above it, which nothing short of
+  /// root can put back.
+  static const refused = 'this device keeps that folder private to the game';
 
   final Binding binding;
+  final String reason;
 }
 
 /// The game has not created its save folder yet: open it once.
@@ -94,15 +104,21 @@ class RecipeBinder {
       final b = candidates.single;
       if (!reachable(b)) return NeedsRoot(b);
       if (!await fs.isDir(b.dir(paths))) return FolderMissing(b);
-      final files = await _unitFiles(r, b.dir(paths));
+      final files = await _unitFilesOrRefused(r, b.dir(paths));
+      if (files == null) return NeedsRoot(b, reason: NeedsRoot.refused);
       return r.status == RecipeStatus.verified || files.isEmpty ? Bound(b) : NeedsConfirm(b, files);
     }
 
     final withSaves = <(Binding, List<String>)>[];
+    final refused = <Binding>[];
     for (final b in candidates.where(reachable)) {
       if (!await fs.isDir(b.dir(paths))) continue;
-      final files = await _unitFiles(r, b.dir(paths));
-      if (files.isNotEmpty) withSaves.add((b, files));
+      final files = await _unitFilesOrRefused(r, b.dir(paths));
+      if (files == null) {
+        refused.add(b);
+      } else if (files.isNotEmpty) {
+        withSaves.add((b, files));
+      }
     }
     if (withSaves.length == 1) {
       final (b, files) = withSaves.single;
@@ -115,6 +131,7 @@ class RecipeBinder {
     // yet, the first place it would use.
     final open = candidates.where(reachable).toList();
     if (open.isEmpty) return NeedsRoot(candidates.first);
+    if (refused.isNotEmpty) return NeedsRoot(refused.first, reason: NeedsRoot.refused);
     final existing = <Binding>[];
     for (final b in open) {
       if (await fs.isDir(b.dir(paths))) existing.add(b);
@@ -123,6 +140,20 @@ class RecipeBinder {
     if (existing.isEmpty) return FolderMissing(open.first);
     return const NeedsDiscovery('the save folder could be in more than one place');
   }
+
+  /// The unit's files, or null when the folder is there and this device is
+  /// refused a look inside. Only a refusal reads as null: anything else is a
+  /// real failure and still throws.
+  Future<List<String>?> _unitFilesOrRefused(Recipe r, String dir) async {
+    try {
+      return await _unitFiles(r, dir);
+    } on GameFsError catch (e) {
+      if (_refused(e.message)) return null;
+      rethrow;
+    }
+  }
+
+  static bool _refused(String message) => message.contains('Permission denied') || message.contains('Operation not permitted');
 
   Future<List<String>> _unitFiles(Recipe r, String dir) async {
     final rels = [for (final e in await fs.listFiles(dir)) p.posix.relative(e.path, from: dir)];

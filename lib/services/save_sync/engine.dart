@@ -69,7 +69,7 @@ String bindLabel(BindResult b) => switch (b) {
       Bound() => 'ready',
       NeedsConfirm() => 'confirm where the saves are',
       NotInstalled() => 'not installed',
-      NeedsRoot() => 'needs root',
+      NeedsRoot(:final reason) => 'needs root: $reason',
       FolderMissing() => 'open the game once so it creates its save folder',
       NeedsDiscovery(:final reason) => 'save location unknown ($reason)',
     };
