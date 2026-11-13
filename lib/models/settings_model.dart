@@ -32,6 +32,11 @@ class AppSettings {
   // Games Library and downloads, opt-in. Null until the first load decides it
   // (on when a user catalog already exists, see SettingsNotifier).
   final bool? libraryEnabled;
+  // Console install servers, opt-in (Settings → Extra servers). Off until the
+  // user turns one on; the switch also gates its Servers-menu tile.
+  final bool? tinfoilEnabled;
+  final bool? fbiEnabled;
+  final bool? fpkgiEnabled;
 
   const AppSettings({
     this.consoleSettings = const {},
@@ -47,9 +52,15 @@ class AppSettings {
     this.preferredLocalIp,
     this.boot9Path,
     this.libraryEnabled,
+    this.tinfoilEnabled,
+    this.fbiEnabled,
+    this.fpkgiEnabled,
   });
 
   bool get isLibraryEnabled => libraryEnabled ?? false;
+  bool get isTinfoilEnabled => tinfoilEnabled ?? false;
+  bool get isFbiEnabled => fbiEnabled ?? false;
+  bool get isFpkgiEnabled => fpkgiEnabled ?? false;
 
   bool get hasIaCredentials =>
       iaAccessKey != null && iaAccessKey!.isNotEmpty &&
@@ -77,6 +88,9 @@ class AppSettings {
     String? boot9Path,
     bool clearBoot9Path = false,
     bool? libraryEnabled,
+    bool? tinfoilEnabled,
+    bool? fbiEnabled,
+    bool? fpkgiEnabled,
   }) {
     return AppSettings(
       consoleSettings: consoleSettings ?? this.consoleSettings,
@@ -92,6 +106,9 @@ class AppSettings {
       preferredLocalIp: clearPreferredLocalIp ? null : (preferredLocalIp ?? this.preferredLocalIp),
       boot9Path: clearBoot9Path ? null : (boot9Path ?? this.boot9Path),
       libraryEnabled: libraryEnabled ?? this.libraryEnabled,
+      tinfoilEnabled: tinfoilEnabled ?? this.tinfoilEnabled,
+      fbiEnabled: fbiEnabled ?? this.fbiEnabled,
+      fpkgiEnabled: fpkgiEnabled ?? this.fpkgiEnabled,
     );
   }
 
@@ -110,6 +127,9 @@ class AppSettings {
       if (preferredLocalIp != null) 'preferredLocalIp': preferredLocalIp,
       if (boot9Path != null) 'boot9Path': boot9Path,
       if (libraryEnabled != null) 'libraryEnabled': libraryEnabled,
+      if (tinfoilEnabled != null) 'tinfoilEnabled': tinfoilEnabled,
+      if (fbiEnabled != null) 'fbiEnabled': fbiEnabled,
+      if (fpkgiEnabled != null) 'fpkgiEnabled': fpkgiEnabled,
     };
   }
 
@@ -128,6 +148,9 @@ class AppSettings {
       preferredLocalIp: json['preferredLocalIp'] as String?,
       boot9Path: json['boot9Path'] as String?,
       libraryEnabled: json['libraryEnabled'] as bool?,
+      tinfoilEnabled: json['tinfoilEnabled'] as bool?,
+      fbiEnabled: json['fbiEnabled'] as bool?,
+      fpkgiEnabled: json['fpkgiEnabled'] as bool?,
     );
   }
 }

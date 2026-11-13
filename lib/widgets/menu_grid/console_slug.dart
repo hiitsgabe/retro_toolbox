@@ -111,6 +111,7 @@ const List<MapEntry<String, List<String>>> _rules = [
   MapEntry('wii', ['wii']),
   MapEntry('3ds', ['nintendo 3ds', '3ds']),
   MapEntry('nds', ['nintendo ds', 'nds']),
+  MapEntry('switch2', ['switch 2', 'switch2']),
   MapEntry('switch', ['switch', 'nsw']),
   // Before nes: "genesis" contains "nes".
   MapEntry('sega32x', ['32x']),
@@ -151,10 +152,10 @@ const List<MapEntry<String, List<String>>> _rules = [
 const Set<String> _bundledLogos = {
   'nes', 'snes', 'n64', 'gamecube', 'wii', 'wiiu', 'switch', 'gb', 'gbc', 'gba',
   'nds', '3ds', 'virtualboy', 'genesis', 'mastersystem', 'gamegear', 'saturn',
-  'dreamcast', 'segacd', 'sega32x', 'sg1000', 'psx', 'ps2', 'ps3', 'psp', 'xbox',
+  'dreamcast', 'segacd', 'sega32x', 'sg1000', 'psx', 'ps2', 'ps3', 'ps4', 'psp', 'xbox',
   'xbox360', 'pcengine', 'neogeo', 'ngp', 'arcade', 'atari2600', 'atari7800',
   'atarilynx', 'atarijaguar', '3do', 'colecovision', 'intellivision', 'msx', 'c64',
-  'amiga', 'wonderswan',
+  'amiga', 'wonderswan', 'switch2',
 };
 
 /// Per-console accent color, keyed by iconic hardware identity (not brand
@@ -169,6 +170,7 @@ const Map<String, Color> _slugColors = {
   'wii': Color(0xFF1CA9E0), // light blue glow
   'wiiu': Color(0xFF0A6CB6), // deeper blue
   'switch': Color(0xFFE4000F), // neon red
+  'switch2': Color(0xFFE60012), // Nintendo Switch 2 red
   'gb': Color(0xFF3B6FB5), // blue
   'gbc': Color(0xFFB0479E), // berry
   'gba': Color(0xFF4A56A6), // glacier indigo

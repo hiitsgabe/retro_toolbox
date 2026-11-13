@@ -18,6 +18,7 @@ import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
 
@@ -72,6 +73,14 @@ class SettingsContent extends ConsumerWidget {
               icon: Icons.download,
               title: 'Games Library',
               child: const LibrarySetting(),
+            ),
+            const SizedBox(height: 8),
+            _section(
+              context,
+              icon: Icons.dns,
+              title: 'Extra servers',
+              subtitle: 'Optional per-console install servers.',
+              child: const ExtraServersSetting(),
             ),
             const SizedBox(height: 8),
           ],

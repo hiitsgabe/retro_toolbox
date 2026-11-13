@@ -59,6 +59,19 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await _settingsService.saveSettings(newState);
   }
 
+  /// Extra console servers (Settings → Extra servers): each one's switch
+  /// gates its Servers-menu tile. [id] is 'tinfoil', 'fbi' or 'fpkgi'.
+  Future<void> setExtraServerEnabled(String id, bool enabled) async {
+    final newState = switch (id) {
+      'tinfoil' => state.copyWith(tinfoilEnabled: enabled),
+      'fbi' => state.copyWith(fbiEnabled: enabled),
+      'fpkgi' => state.copyWith(fpkgiEnabled: enabled),
+      _ => state,
+    };
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
   Future<void> setGeneralSetting<T>(String key, T value) async {
     final newState = state.copyWith(
       generalSettings: state.generalSettings.setSetting(key, value),
