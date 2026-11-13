@@ -245,7 +245,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
             if (s.error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.error!, style: errorStyle)),
             for (final m in s.messages) Padding(padding: const EdgeInsets.only(top: 4), child: Text(m)),
             const SizedBox(height: 8),
-            for (final g in shown) _GameCard(game: g, busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),
+            for (final g in shown) _GameCard(game: g, info: s.appInfo[g.recipe.packages.first], busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),
             if (shown.isEmpty && !s.loading && s.hubKind != HubKind.none)
               Text(
                 s.games.isEmpty ? 'No recipes loaded.' : 'None of the games these recipes cover are installed on this device.',
@@ -260,9 +260,12 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
 }
 
 class _GameCard extends StatelessWidget {
-  const _GameCard({required this.game, required this.busy, required this.onPush, required this.onPull, required this.onCheck, required this.onConfirm});
+  const _GameCard({required this.game, required this.info, required this.busy, required this.onPush, required this.onPull, required this.onCheck, required this.onConfirm});
 
   final GameStatus game;
+
+  /// What Android shows for this app, when it could be read.
+  final AppInfo? info;
   final bool busy;
   final VoidCallback onPush;
   final VoidCallback onPull;
@@ -277,7 +280,21 @@ class _GameCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(g.recipe.name, style: Theme.of(context).textTheme.titleMedium),
+          // The app's own icon and name, the way the launcher shows them. The
+          // recipe's name is only the fallback, for a game the device cannot
+          // describe.
+          Row(children: [
+            if (info?.icon != null) ...[
+              Image.memory(info!.icon!, width: 48, height: 48, gaplessPlayback: true, filterQuality: FilterQuality.medium),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Text(
+                info?.label.isNotEmpty == true ? info!.label : g.recipe.name,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ]),
           Text(
             [
               '${g.source} recipe',

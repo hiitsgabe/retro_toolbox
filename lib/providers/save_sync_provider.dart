@@ -24,6 +24,17 @@ enum SyncAccess { none, shizuku, root }
 /// choice; [none] until the user makes one.
 enum HubKind { unknown, none, folder, drive }
 
+/// What Android itself shows for an installed package.
+class AppInfo {
+  const AppInfo(this.label, this.icon);
+
+  final String label;
+
+  /// PNG bytes, or null when the icon could not be read. The same instance is
+  /// handed out every time so the image decodes once for the whole list.
+  final Uint8List? icon;
+}
+
 class SaveSyncState {
   const SaveSyncState({
     this.loading = false,
@@ -37,6 +48,7 @@ class SaveSyncState {
     this.signInAgain = false,
     this.signInError,
     this.games = const [],
+    this.appInfo = const {},
     this.recipeProblems = const {},
     this.busyRecipe,
     this.messages = const [],
@@ -65,6 +77,10 @@ class SaveSyncState {
   final String? signInError;
   final List<GameStatus> games;
 
+  /// Package to the icon and label Android itself shows for it. Empty until
+  /// the look-up answers, and empty for good on a host with no platform side.
+  final Map<String, AppInfo> appInfo;
+
   /// Recipe file to why it was not loaded.
   final Map<String, String> recipeProblems;
   final String? busyRecipe;
@@ -86,6 +102,7 @@ class SaveSyncState {
     String? signInError,
     bool clearSignInError = false,
     List<GameStatus>? games,
+    Map<String, AppInfo>? appInfo,
     Map<String, String>? recipeProblems,
     String? busyRecipe,
     bool clearBusy = false,
@@ -105,6 +122,7 @@ class SaveSyncState {
         signInAgain: signInAgain ?? this.signInAgain,
         signInError: clearSignInError ? null : (signInError ?? this.signInError),
         games: games ?? this.games,
+        appInfo: appInfo ?? this.appInfo,
         recipeProblems: recipeProblems ?? this.recipeProblems,
         busyRecipe: clearBusy ? null : (busyRecipe ?? this.busyRecipe),
         messages: messages ?? this.messages,
@@ -149,6 +167,43 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   final _recipes = <String, (Recipe, String)>{};
 
   static const _native = MethodChannel('retrotoolbox/native');
+
+  /// Icons and labels for this process's life. The same [AppInfo] instance is
+  /// handed back every time, so the list decodes each PNG once instead of once
+  /// per rebuild. Packages that answered with nothing are remembered too, so a
+  /// game the device cannot show is not asked about on every refresh.
+  static final _appInfo = <String, AppInfo?>{};
+
+  /// Asks Android for the icon and label of any package not asked about yet.
+  /// One call for the whole list. Silent where there is no platform side, so
+  /// widget tests see an empty map instead of an error.
+  Future<Map<String, AppInfo>> _loadAppInfo(Iterable<String> packages) async {
+    final wanted = {for (final p in packages) p};
+    final missing = [for (final p in wanted) if (!_appInfo.containsKey(p)) p];
+    if (missing.isNotEmpty) {
+      try {
+        final got = await _native.invokeMapMethod<String, dynamic>('appInfo', {'packages': missing});
+        for (final p in missing) {
+          final e = got?[p];
+          _appInfo[p] = e is Map
+              ? AppInfo((e['label'] as String?) ?? '', e['icon'] is Uint8List ? e['icon'] as Uint8List : null)
+              : null;
+        }
+      } on MissingPluginException {
+        for (final p in missing) {
+          _appInfo[p] = null;
+        }
+      } on PlatformException {
+        for (final p in missing) {
+          _appInfo[p] = null;
+        }
+      }
+    }
+    return {
+      for (final p in wanted)
+        if (_appInfo[p] != null) p: _appInfo[p]!,
+    };
+  }
 
   Future<SyncState>? _syncState;
 
@@ -259,7 +314,11 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       final games = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
       // The engine is published with the games it produced: until then the catch below sees no engine and clears them.
       _engine = engine;
+      // The rows go up first; the icons land on the frame after. A list that
+      // waits for the package manager is a list that stutters.
       state = state.copyWith(loading: false, games: games, recipeProblems: problems);
+      final info = await _loadAppInfo([for (final g in games) ...g.recipe.packages]);
+      if (info.isNotEmpty) state = state.copyWith(appInfo: info);
       await engine.report(games, access: access.name);
     } on DriveSignInNeeded catch (e) {
       state = state.copyWith(loading: false, error: '$e', signInAgain: true, games: _engine == null ? const [] : null);

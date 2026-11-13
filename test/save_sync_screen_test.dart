@@ -126,6 +126,32 @@ void main() {
     expect(fake.calls.last, 'grant');
   });
 
+  testWidgets('the row takes its name from Android', (t) async {
+    await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
+        games: [GameStatus(stardew, 'bundled', const Bound(binding))],
+        appInfo: {binding.package: const AppInfo('What the launcher calls it', null)},
+      ),
+    );
+    expect(find.text('What the launcher calls it'), findsOneWidget);
+    expect(find.text(stardew.name), findsNothing);
+  });
+
+  testWidgets('a game Android cannot describe keeps the recipe name', (t) async {
+    await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
+        games: [GameStatus(stardew, 'bundled', const Bound(binding))],
+      ),
+    );
+    expect(find.text(stardew.name), findsOneWidget);
+  });
+
   testWidgets('a game this device does not have is left out of the list', (t) async {
     await pump(
       t,

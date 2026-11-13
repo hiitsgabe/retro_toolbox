@@ -80,6 +80,13 @@
             <data android:scheme="https" />
         </intent>
         <package android:name="moe.shizuku.privileged.api" />
+        <!-- Save Sync shows each game's own icon and label. Seeing launchable
+             packages is enough for that, so the app does not file for
+             QUERY_ALL_PACKAGES, which Play restricts. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
