@@ -197,23 +197,21 @@ jobs:
             echo "::warning::GDRIVE_SERVER_CLIENT_ID not set: Save Sync offers only the folder hub in this build."
           fi
 
-      # Flavors (android/app/build.gradle.kts): "direct" for the APKs people
-      # install themselves, "play" for the Play Store bundle.
+      # Flavors (android/app/build.gradle): "direct" for the APKs people
+      # install themselves, "play" for the Play Store bundle. Only the APKs
+      # are built here: the bundle Play receives is the one EAS builds in the
+      # play-store job, so building a second one here would ship nowhere.
       - name: Build Android APKs (split ABI)
         run: flutter build apk --release --split-per-abi --flavor direct --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
 
       - name: Build Android universal APK
         run: flutter build apk --release --flavor direct --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
 
-      - name: Build Android App Bundle
-        run: flutter build appbundle --release --flavor play --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
-
       - name: Rename artifacts
         run: |
           cp build/app/outputs/flutter-apk/app-arm64-v8a-direct-release.apk retro_toolbox_arm64.apk
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-direct-release.apk retro_toolbox_arm32.apk
           cp build/app/outputs/flutter-apk/app-direct-release.apk retro_toolbox_universal.apk
-          cp build/app/outputs/bundle/playRelease/app-play-release.aab retro_toolbox.aab
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
@@ -223,7 +221,6 @@ jobs:
             retro_toolbox_arm64.apk
             retro_toolbox_arm32.apk
             retro_toolbox_universal.apk
-            retro_toolbox.aab
           retention-days: 30
 
   build-macos:
@@ -702,7 +699,6 @@ jobs:
             | 🤖 Android (arm64) | `retro_toolbox_arm64.apk` | Modern Android devices |
             | 🤖 Android (arm32) | `retro_toolbox_arm32.apk` | Older Android devices |
             | 🤖 Android (universal) | `retro_toolbox_universal.apk` | All architectures |
-            | 🤖 Android (Play Store) | `retro_toolbox.aab` | App Bundle for Play Store |
             | 🍎 macOS (Apple Silicon) | `retro_toolbox_macos_arm64.dmg` | M1/M2/M3 Macs |
             | 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |
             | 🐧 Linux | `retro_toolbox_linux_x64.tar.gz` | Linux x64 (GTK 3) |
@@ -740,7 +736,6 @@ jobs:
             dist/retro_toolbox_arm64.apk
             dist/retro_toolbox_arm32.apk
             dist/retro_toolbox_universal.apk
-            dist/retro_toolbox.aab
             dist/retro_toolbox_macos_x64.dmg
             dist/retro_toolbox_macos_arm64.dmg
             dist/retro_toolbox_linux_x64.tar.gz

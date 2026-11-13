@@ -1,19 +1,22 @@
 # Publishing on Google Play
 
-The release workflow builds `retro_toolbox.aab` from the `play` flavor
-(`flutter build appbundle --release --flavor play`). It differs from the
-`direct` APKs in one way: `android/app/src/play/AndroidManifest.xml` drops
-`REQUEST_INSTALL_PACKAGES`, and the in-app updater only links to the release
-page (an app on Play may not update itself, and Play signs with its own key
-anyway).
+The bundle Play receives is built on EAS, by the `play-store` job (see below);
+the release workflow builds only the `direct` APKs. Building a second bundle
+there shipped nowhere, so it does not.
+
+The bundle is the `play` flavor (`flutter build appbundle --release --flavor
+play`, or a bare `flutter build appbundle --release`, which Gradle resolves to
+the same thing). It differs from the `direct` APKs in one way:
+`android/app/src/play/AndroidManifest.xml` drops `REQUEST_INSTALL_PACKAGES`,
+and the in-app updater only links to the release page (an app on Play may not
+update itself, and Play signs with its own key anyway).
 
 ## Before the first upload
 
 - **Play App Signing.** Upload the `.aab` and let Play re-sign it. Whatever
-  signed the first upload becomes the *upload* key: the Expo-generated keystore
-  on the Launch route, the CI keystore (`KEYSTORE64` secret) if the workflow's
-  bundle is uploaded. Keep it; losing it means a key-reset request through Play
-  support.
+  signed the first upload becomes the *upload* key — the Expo-generated
+  keystore, since EAS builds the bundle. Keep it; losing it means a key-reset
+  request through Play support.
 - **Target API.** The app targets 36 (`flutter.targetSdkVersion`), which meets
   the current requirement.
 - **16 KB page size.** Required for apps targeting Android 15+. Every
@@ -99,7 +102,7 @@ How Launch itself signs a Flutter project is not documented; the three signing
 variables make the build independent of it. The Gradle log says which config
 was used (`[Gradle] Using RELEASE signing config for build.`).
 
-Differences from the workflow's `retro_toolbox.aab`: no bundled example catalog
+Differences from the artifacts the release workflow builds: no bundled example catalog
 (`EXAMPLE_DATA_URL` is only read by the workflow) and the desktop chdman assets
 (about 5 MB) are not trimmed. `versionCode` is EAS's remote build number
 (Launch's `eas/configure_android_version` step overrides it; it went 3, 4, …
