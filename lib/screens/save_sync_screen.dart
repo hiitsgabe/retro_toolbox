@@ -48,6 +48,45 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     Future.microtask(() => ref.read(saveSyncProvider.notifier).refresh());
   }
 
+  /// Some apps keep their saves under a directory they named at install time,
+  /// and more than one of them can look right. The binder finds them all and
+  /// refuses to pick; this is where the owner picks, seeing how much is in
+  /// each one rather than guessing from a name that means nothing.
+  Future<void> _chooseLocation(GameStatus g) async {
+    if (g.bind case final NeedsDiscovery d when d.places.length > 1) {
+      final picked = await showModalBottomSheet<Binding>(
+        context: context,
+        builder: (context) {
+          final theme = Theme.of(context);
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Which of these holds your saves?', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text(
+                  'This app names its own save folder, and more than one here could be it.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+                for (final (binding, files) in d.places)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.folder),
+                      title: Text(binding.root.split('/').last, style: const TextStyle(fontFamily: 'monospace')),
+                      subtitle: Text(files.isEmpty ? 'Nothing read from it yet' : '${files.length} file${files.length == 1 ? '' : 's'}'),
+                      onTap: () => Navigator.of(context).pop(binding),
+                    ),
+                  ),
+              ]),
+            ),
+          );
+        },
+      );
+      if (picked != null && mounted) await ref.read(saveSyncProvider.notifier).confirmBinding(picked);
+    }
+  }
+
   /// Puts back the save a pull replaced. The hub keeps one per handheld, so
   /// the choice is which handheld's, and the confirm says plainly that what
   /// is here now goes away.
@@ -389,6 +428,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 onCheck: () => _showCheck(g),
                 onConfirm: _confirm,
                 onRestore: () => _restore(g),
+                onChooseLocation: () => _chooseLocation(g),
                 hasAccess: s.access != SyncAccess.none,
                 onPushUnit: (unit) => n.push(g.recipe.id, unit: unit),
                 onPullUnit: (unit) => n.pull(g.recipe.id, unit: unit),
@@ -460,6 +500,7 @@ class _AppRow extends StatelessWidget {
     required this.onConfirm,
     required this.onChooseVersion,
     required this.onRestore,
+    required this.onChooseLocation,
     required this.onPushUnit,
     required this.onPullUnit,
     required this.hasAccess,
@@ -483,6 +524,7 @@ class _AppRow extends StatelessWidget {
   final void Function(NeedsConfirm) onConfirm;
   final VoidCallback onChooseVersion;
   final VoidCallback onRestore;
+  final VoidCallback onChooseLocation;
   final void Function(String unit) onPushUnit;
   final void Function(String unit) onPullUnit;
   final bool hasAccess;
@@ -597,6 +639,8 @@ class _AppRow extends StatelessWidget {
         RowNeedsPull() => FilledButton.icon(onPressed: anyBusy ? null : onPull, icon: const Icon(Icons.download), label: const Text('Download')),
         RowNeedsPush() => FilledButton.icon(onPressed: anyBusy ? null : onPush, icon: const Icon(Icons.upload), label: const Text('Upload')),
         RowNeedsConfirm(:final bind) => FilledButton(onPressed: anyBusy ? null : () => onConfirm(bind), child: const Text('Confirm location')),
+        RowBlocked(:final reason) when reason == BlockReason.locationUnknown && game.bind is NeedsDiscovery && (game.bind as NeedsDiscovery).places.length > 1 =>
+          FilledButton(onPressed: anyBusy ? null : onChooseLocation, child: const Text('Choose location')),
         RowBlocked(:final reason) when reason == BlockReason.backupOnly =>
           FilledButton.icon(onPressed: anyBusy ? null : onPush, icon: const Icon(Icons.upload), label: const Text('Upload')),
         RowConflict() => FilledButton(onPressed: anyBusy ? null : onChooseVersion, child: const Text('Choose version')),

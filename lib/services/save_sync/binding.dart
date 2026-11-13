@@ -76,9 +76,14 @@ class FolderMissing extends BindResult {
 }
 
 class NeedsDiscovery extends BindResult {
-  const NeedsDiscovery(this.reason);
+  const NeedsDiscovery(this.reason, {this.places = const []});
 
   final String reason;
+
+  /// The places that could be it, when there is more than one, each with the
+  /// files found there. Carried so the owner can be shown the choice instead
+  /// of being told one exists.
+  final List<(Binding, List<String>)> places;
 }
 
 class RecipeBinder {
@@ -134,7 +139,7 @@ class RecipeBinder {
       final (b, files) = withSaves.single;
       return r.status == RecipeStatus.verified ? Bound(b) : NeedsConfirm(b, files);
     }
-    if (withSaves.length > 1) return const NeedsDiscovery('saves found in more than one place');
+    if (withSaves.length > 1) return NeedsDiscovery('saves found in more than one place', places: withSaves);
     // Nothing has saves yet. A device that has never played the game is the
     // reason to sync in the first place, so bind it anyway rather than giving
     // up: the single place that exists, or, when the game has not made one
@@ -148,7 +153,10 @@ class RecipeBinder {
     }
     if (existing.length == 1) return Bound(existing.single);
     if (existing.isEmpty) return FolderMissing(open.first);
-    return const NeedsDiscovery('the save folder could be in more than one place');
+    return NeedsDiscovery(
+      'the save folder could be in more than one place',
+      places: [for (final b in existing) (b, const <String>[])],
+    );
   }
 
   /// Expands the one patterned segment, if there is one, against this device.

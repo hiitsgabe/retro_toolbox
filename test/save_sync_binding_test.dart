@@ -94,6 +94,12 @@ void main() {
       }
       final res = await binder(patterned(), {'com.example.alpha'}).bind(patterned());
       expect(res, isA<NeedsDiscovery>());
+      // Carried out, not just counted: the owner is shown the places rather
+      // than told that several exist.
+      expect(
+        [for (final (b, _) in (res as NeedsDiscovery).places) b.root],
+        ['files/save/0/A1B2C3', 'files/save/0/D4E5F6'],
+      );
     });
 
     test('nothing there at all still asks for the app to be opened', () async {

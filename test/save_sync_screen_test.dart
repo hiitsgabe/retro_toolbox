@@ -274,6 +274,34 @@ void main() {
     expect(fake.calls.last, 'restore stardew-valley Farm_1 odin-1');
   });
 
+  // An app that names its own save folder can leave more than one that looks
+  // right. The binder refuses to pick; the owner picks here.
+  testWidgets('several possible places become a choice the owner can make', (t) async {
+    const a = Binding(recipe: 'stardew-valley', package: 'com.chucklefish.stardewvalley', area: Area.androidData, root: 'files/save/0/AAA');
+    const b = Binding(recipe: 'stardew-valley', package: 'com.chucklefish.stardewvalley', area: Area.androidData, root: 'files/save/0/BBB');
+    final fake = await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+        GameStatus(stardew, 'bundled', const NeedsDiscovery('saves found in more than one place', places: [
+          (a, ['one.sav']),
+          (b, ['two.sav', 'three.sav']),
+        ])),
+      ]),
+    );
+    expect(find.textContaining('could be in more than one place'), findsOneWidget);
+
+    await t.tap(find.widgetWithText(FilledButton, 'Choose location'));
+    await t.pumpAndSettle();
+    // Shown by what is in each, not by a name that means nothing on its own.
+    expect(find.text('AAA'), findsOneWidget);
+    expect(find.text('1 file'), findsOneWidget);
+    expect(find.text('2 files'), findsOneWidget);
+
+    await t.tap(find.text('BBB'));
+    await t.pumpAndSettle();
+    expect(fake.calls.last, 'confirm stardew-valley');
+  });
+
   testWidgets('a hub that is set up offers somewhere to add apps', (t) async {
     await pump(
       t,
