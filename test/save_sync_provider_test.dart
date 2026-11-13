@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -145,7 +147,12 @@ void main() {
   });
 
   test('the notifier opens the save sync store once, and again only after an open that failed', () async {
-    const hubFolder = '/storage/emulated/0/Hub';
+    // A real folder: opening a hub that is not there is its own error now,
+    // and this test is about the store, not about the hub.
+    final tmp = Directory.systemTemp.createTempSync('rt-store-');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final hubFolder = p.join(tmp.path, 'Hub');
+    Directory(hubFolder).createSync();
     final prefs = CountingPrefs({'save_sync_hub_folder': hubFolder});
     SharedPreferencesAsyncPlatform.instance = prefs;
     mockShizuku({'running': false, 'granted': false, 'uid': -1});

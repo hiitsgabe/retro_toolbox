@@ -12,6 +12,7 @@ import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/errors.dart';
 import 'package:retro_toolbox/services/save_sync/google_auth.dart';
 import 'package:retro_toolbox/services/save_sync/hub.dart';
+import 'package:retro_toolbox/services/save_sync/hub_config.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
@@ -286,8 +287,12 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         _hubId = id;
       }
 
-      if (shell == null || choice == null) {
-        if (choice == null) leaveHub(null);
+      // No place chosen yet is the only state with nothing to show. A device
+      // with no privileged access still opens the hub, still reads the
+      // configuration and still builds its rows: reading a hub needs no
+      // privilege, and a screen that goes blank hides what the owner set up.
+      if (choice == null) {
+        leaveHub(null);
         state = state.copyWith(loading: false, games: const [], recipeProblems: problems);
         return;
       }
@@ -309,6 +314,33 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
           problems = {...problems, 'hub: ${e.key}': '$err'};
         }
       }
+      var config = await hub.config();
+      // The recipe body travels with the decision, so a device adopting this
+      // configuration needs neither the network nor a catalog of its own.
+      Future<void> publish(Iterable<String> packages) async {
+        for (final (recipe, source) in _recipes.values) {
+          if (source == 'hub' || !packages.contains(recipe.packages.first)) continue;
+          try {
+            await hub.publishRecipe(recipe.raw, source: source, deviceId: deviceId);
+          } catch (_) {
+            // A hub that will not take the body still carries the saves.
+          }
+        }
+      }
+
+      // Reading a hub needs no privilege, so a device with no access still
+      // shows what the owner set up, every row blocked and saying why.
+      if (shell == null) {
+        state = state.copyWith(
+          loading: false,
+          recipeProblems: problems,
+          games: [
+            for (final (recipe, source) in _recipes.values)
+              if (config.packages.contains(recipe.packages.first)) GameStatus(recipe, source, const NotInstalled()),
+          ],
+        );
+        return;
+      }
       final engine = SaveSyncEngine(
         shell: shell,
         hub: hub,
@@ -319,7 +351,23 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         model: model,
         appVersion: (await PackageInfo.fromPlatform()).version,
       );
-      final games = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
+      final all = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
+      // An existing hub has no configuration folder, and one nobody has added
+      // apps to has nothing in it. Either way this device writes one from the
+      // games it actually has, so the list it shows travels to the next
+      // handheld instead of living only here.
+      if (config.isEmpty) {
+        final at = DateTime.now().toUtc();
+        final adopt = {
+          for (final g in all)
+            if (g.bind is! NotInstalled) g.recipe.packages.first: ConfigEntry(recipe: g.recipe.id, updatedAt: at, by: deviceId),
+        };
+        if (adopt.isNotEmpty && await hub.putConfig(adopt, deviceId: deviceId, now: at)) config = await hub.config();
+      }
+      await publish(config.packages);
+      // Membership is the configuration: a recipe the app happens to ship is
+      // a candidate to add, not a row.
+      final games = config.isEmpty ? all : [for (final g in all) if (config.packages.contains(g.recipe.packages.first)) g];
       // The engine is published with the games it produced: until then the catch below sees no engine and clears them.
       _engine = engine;
       // Settled here, once, and never in build: the list is rebuilt on every
