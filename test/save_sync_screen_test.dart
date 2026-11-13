@@ -126,6 +126,34 @@ void main() {
     expect(fake.calls.last, 'grant');
   });
 
+  testWidgets('a game this device does not have is left out of the list', (t) async {
+    await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
+        games: [
+          GameStatus(stardew, 'bundled', const Bound(binding)),
+          GameStatus(bundledRecipe('sea-of-stars'), 'bundled', const NotInstalled()),
+        ],
+      ),
+    );
+    expect(find.text(stardew.name), findsOneWidget);
+    expect(find.text('Sea of Stars'), findsNothing);
+  });
+
+  testWidgets('with nothing installed the list says so instead of sitting empty', (t) async {
+    await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
+        games: [GameStatus(stardew, 'bundled', const NotInstalled())],
+      ),
+    );
+    expect(find.textContaining('None of the games'), findsOneWidget);
+  });
+
   testWidgets('Check opens a dialog with every line', (t) async {
     await pump(
       t,

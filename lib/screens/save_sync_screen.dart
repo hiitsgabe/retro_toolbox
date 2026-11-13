@@ -150,6 +150,9 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     final s = ref.watch(saveSyncProvider);
     final n = ref.read(saveSyncProvider.notifier);
     final busy = s.busyRecipe != null || s.loading || s.signingIn;
+    // ponytail: a game this handheld does not have is noise, not a row to act
+    // on. It still reaches the hub report, so other devices keep seeing it.
+    final shown = s.games.where((g) => g.bind is! NotInstalled).toList();
     final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
     return Scaffold(
       appBar: AppBar(
@@ -242,7 +245,12 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
             if (s.error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.error!, style: errorStyle)),
             for (final m in s.messages) Padding(padding: const EdgeInsets.only(top: 4), child: Text(m)),
             const SizedBox(height: 8),
-            for (final g in s.games) _GameCard(game: g, busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),
+            for (final g in shown) _GameCard(game: g, busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),
+            if (shown.isEmpty && !s.loading && s.hubKind != HubKind.none)
+              Text(
+                s.games.isEmpty ? 'No recipes loaded.' : 'None of the games these recipes cover are installed on this device.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             for (final e in s.recipeProblems.entries) Text('Recipe ${e.key} not loaded: ${e.value}', style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
