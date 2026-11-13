@@ -212,6 +212,53 @@ class SaveSyncEngine {
         return out.isEmpty ? ['Nothing to push'] : out;
       });
 
+  /// Files this device's current save into the hub as its one backup for the
+  /// unit, replacing whatever was there. Never a generation: a generation is
+  /// a head, and a backup that became a head would read as a push from this
+  /// device and put every other one into divergence.
+  ///
+  /// A backup that cannot be written does not stop the pull: the pull is what
+  /// the owner asked for, the local history still holds a copy, and saying so
+  /// is better than refusing.
+  Future<String?> _backUp(Recipe r, Binding binding, LocalUnit? local, {required String unitKey}) async {
+    if (local == null || local.files.isEmpty) return null;
+    try {
+      final meta = await Pusher(fs: fsFor(r), hub: hub, stagingRoot: _staging, deviceId: deviceId, deviceName: deviceName, clock: _clock)
+          .pack(recipe: r, binding: binding, locationDir: binding.dir(paths), unit: local, kind: 'backup');
+      await hub.putBackup(meta.$1, meta.$2, deviceId: deviceId);
+      await _log(r.id, unitKey, 'backup', meta.$1.gen, 'ok');
+      return null;
+    } catch (e) {
+      await _log(r.id, unitKey, 'backup', '-', '$e');
+      return '$unitKey: the save here could not be backed up to the hub ($e)';
+    }
+  }
+
+  /// Puts a backup back, from this device's own copy or another handheld's.
+  Future<List<String>> restoreBackup(Recipe r, String unitKey, {required String fromDevice, String source = 'bundled'}) => _serial(() async {
+        final s = await _status(r, source);
+        final binding = s.binding;
+        if (binding == null) return ['${r.name}: ${bindLabel(s.bind)}'];
+        final meta = await hub.backup(fromDevice, r.id, unitKey);
+        if (meta == null) return ['$unitKey: there is no backup from that device'];
+        try {
+          await _puller(fsFor(r)).pull(
+            recipe: r,
+            binding: binding,
+            locationDir: binding.dir(paths),
+            unitKey: unitKey,
+            gen: meta,
+            expectedLocal: s.units[unitKey]?.local?.hashes ?? const {},
+            payload: await hub.backupPayload(fromDevice, r.id, unitKey),
+          );
+          await _log(r.id, unitKey, 'restore', meta.gen, 'ok');
+          return ['$unitKey: restored from ${meta.deviceName}'];
+        } catch (e) {
+          await _log(r.id, unitKey, 'restore', meta.gen, '$e');
+          return ['$unitKey: $e'];
+        }
+      });
+
   /// Settles a unit both sides changed, by keeping one version. [keep] is
   /// [keepLocal] or the id of a head in the hub.
   ///
@@ -274,6 +321,12 @@ class SaveSyncEngine {
           final plan = u.plan;
           if (plan is! PullPlan) continue;
           try {
+            // The save about to be replaced goes to the hub first, as this
+            // device's one backup. The local history already keeps copies,
+            // but it keeps them on the handheld that is about to be
+            // overwritten — no use at all if that is the thing that failed.
+            final warn = await _backUp(r, binding, u.local, unitKey: plan.unit);
+            if (warn != null) out.add(warn);
             await puller.pull(
               recipe: r,
               binding: binding,

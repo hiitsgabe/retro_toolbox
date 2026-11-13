@@ -35,12 +35,37 @@ class Pusher {
   final DateTime Function() _clock;
   final Random _random;
 
+  /// Packs the unit and writes it to the hub as a generation.
   Future<GenMeta> push({
     required Recipe recipe,
     required Binding binding,
     required String locationDir,
     required LocalUnit unit,
     required List<GenMeta> parents,
+    String kind = 'save',
+  }) async {
+    final (meta, zip) = await pack(
+      recipe: recipe,
+      binding: binding,
+      locationDir: locationDir,
+      unit: unit,
+      parents: parents,
+      kind: kind,
+    );
+    await hub.put(meta, zip);
+    return meta;
+  }
+
+  /// Reads the unit, verifies every file against what was scanned, runs the
+  /// recipe's checks and returns the archive with its description. Separate
+  /// from writing it, because a backup is packed exactly like a generation
+  /// and then filed somewhere a generation must never go.
+  Future<(GenMeta, List<int>)> pack({
+    required Recipe recipe,
+    required Binding binding,
+    required String locationDir,
+    required LocalUnit unit,
+    List<GenMeta> parents = const [],
     String kind = 'save',
   }) async {
     if (unit.busy) throw SyncBlocked('${unit.key}: a save is in progress; open and close the game, then try again');
@@ -93,8 +118,7 @@ class Pusher {
         files: {for (final rel in rels) rel: GenFile(unit.files[rel]!.sha256, staged[rel]!.length)},
         payloadSha256: payloadSha,
       );
-      await hub.put(meta, zip);
-      return meta;
+      return (meta, zip);
     } finally {
       await stage.delete(recursive: true);
     }

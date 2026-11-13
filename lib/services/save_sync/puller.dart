@@ -57,8 +57,12 @@ class Puller {
     required String unitKey,
     required GenMeta gen,
     required Map<String, String> expectedLocal,
+
+    /// The archive, when the caller already has it. A backup does not live
+    /// under units/, so it cannot be fetched by generation id.
+    List<int>? payload,
   }) async {
-    final staged = await _download(recipe, unitKey, gen);
+    final staged = await _download(recipe, unitKey, gen, payload: payload);
     await _versionGate(recipe, binding, gen);
     if (await fs.running(binding.package)) throw SyncBlocked('${recipe.name} is running; close it first');
     if (!await fs.isDir(locationDir)) throw PullRefused('Open ${recipe.name} once so it creates its save folder, then try again');
@@ -264,8 +268,8 @@ class Puller {
     return hashes.keys.every((rel) => got[p.normalize(copies[rel]!)] == hashes[rel]);
   }
 
-  Future<Map<String, List<int>>> _download(Recipe recipe, String unitKey, GenMeta gen) async {
-    final archive = ZipDecoder().decodeBytes(await hub.payload(gen));
+  Future<Map<String, List<int>>> _download(Recipe recipe, String unitKey, GenMeta gen, {List<int>? payload}) async {
+    final archive = ZipDecoder().decodeBytes(payload ?? await hub.payload(gen));
     final staged = <String, List<int>>{};
     for (final f in archive) {
       if (!f.isFile) continue;

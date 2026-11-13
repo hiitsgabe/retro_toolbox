@@ -139,6 +139,44 @@ class Hub {
     _metaCache['$dir/${meta.gen}.json'] = meta;
   }
 
+  /// One file per device per unit: the save this device had just before it
+  /// took somebody else's. Replaced every time, so there is exactly one, and
+  /// kept deliberately OUTSIDE units/ — a backup is not a generation, and a
+  /// generation is a head. Filed under the writing device, which is the same
+  /// single-writer rule `devices/<id>.json` already follows, so no two devices
+  /// ever write the same file.
+  String _backupDir(String deviceId, String recipe, String unit) => 'backups/$deviceId/$recipe/$unit';
+
+  Future<void> putBackup(GenMeta meta, List<int> zip, {required String deviceId}) async {
+    final dir = _backupDir(deviceId, meta.recipe, meta.unit);
+    await backend.write('$dir/save.zip', zip);
+    await backend.write('$dir/save.json', utf8.encode(jsonEncode(meta.toJson())));
+  }
+
+  /// The one backup a device left, or null when it has none.
+  Future<GenMeta?> backup(String deviceId, String recipe, String unit) async {
+    try {
+      final j = jsonDecode(utf8.decode(await backend.read('${_backupDir(deviceId, recipe, unit)}/save.json')));
+      return j is Map<String, dynamic> ? GenMeta.fromJson(j) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<int>> backupPayload(String deviceId, String recipe, String unit) =>
+      backend.read('${_backupDir(deviceId, recipe, unit)}/save.zip');
+
+  /// Every device that left a backup of this unit, so a restore can be
+  /// offered from another handheld's copy too.
+  Future<List<String>> backupDevices(String recipe, String unit) async {
+    final out = <String>[];
+    for (final d in await backend.list('backups')) {
+      if (!d.isDir) continue;
+      if ((await backend.list(_backupDir(d.name, recipe, unit))).any((e) => e.name == 'save.json')) out.add(d.name);
+    }
+    return out;
+  }
+
   Future<List<int>> payload(GenMeta g) async {
     final bytes = await backend.read('units/${g.recipe}/${g.unit}/${g.gen}.zip');
     if (sha256.convert(bytes).toString() != g.payloadSha256) throw PayloadCorrupt(g.gen);
