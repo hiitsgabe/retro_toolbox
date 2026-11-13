@@ -419,3 +419,20 @@ Two further measurements from the same install:
 Still not measured: whether an install actually reads a title directory copied
 in under a different profile id. That needs the emulator launched, which is a
 person's job, not a shell's.
+
+### Slice 0, as answered on hardware
+
+Four of the five checks are done. The one that is left needs the emulator
+launched, which a shell cannot do.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | A title directory copied under another install's profile is read | **not done** — needs the game launched |
+| 2 | `save/account/` exists on any fork | **no**, on all four. None has migrated to the newer layout, so this design covers all of them |
+| 3 | The all-zeros profile holds titles | **yes**, it holds one. Device saves are real here, so the slice that covers them is not optional |
+| 4 | The profile id appears inside the save files | **no** — 28 files across 4 title directories, six encodings, zero hits |
+| 5 | The predicted directories exist | `nand/user/Contents/registered`, `sdmc/` and `shader/` exist, so the never-sync list is about real paths on this device. `nand/user/Album` and `temp/` do not exist on this install |
+
+Also measured: exactly one real profile directory beside the all-zeros one, so
+the glob resolves to a single match here and the several-profiles path is not
+the common case on this hardware.
