@@ -40,6 +40,11 @@ class PatcherInfo {
   /// national teams. False from a library older than the fill.
   final bool supportsNationFill;
 
+  /// PES 2013: fill the club slots the leagues leave with today's best
+  /// European clubs; the nation fill becomes a box of its own. False from a
+  /// library older than the club fill.
+  final bool supportsClubFill;
+
   /// Team-slot groups the game splits its clubs into; empty when it has none.
   final List<SlotGroup> slotGroups;
 
@@ -79,6 +84,7 @@ class PatcherInfo {
     this.supportsNationals = false,
     this.nationalSlotBase,
     this.supportsNationFill = false,
+    this.supportsClubFill = false,
     this.slotGroups = const [],
     this.slotOrder = const [],
     this.teamSlots,
@@ -100,7 +106,15 @@ class PatcherInfo {
   /// The sports_patch job keys for the slots a league leaves: [left] where the
   /// fill is offered, else the Look step's [blankUnused] and the [nationals]
   /// switches. The fill never travels with blank_unused or nationals.
-  Map<String, bool> leftSlotsJob(LeftSlots left, {bool blankUnused = false, bool nationals = false}) => supportsNationFill
+  /// With the club fill, [left] is about the club slots and [fillNations] (the
+  /// nations box) updates the national teams; clearing then empties the clubs only.
+  Map<String, Object> leftSlotsJob(LeftSlots left, {bool blankUnused = false, bool nationals = false, bool fillNations = false}) => supportsClubFill
+      ? {
+          if (left == LeftSlots.fill) 'fill_clubs': true,
+          if (left == LeftSlots.clear && supportsBlankUnused) 'blank_unused': fillNations ? 'clubs' : true,
+          if (fillNations) 'fill_nations': true,
+        }
+      : supportsNationFill
       ? {
           if (left == LeftSlots.fill) 'fill_nations': true,
           if (left == LeftSlots.clear && supportsBlankUnused) 'blank_unused': true,
@@ -133,6 +147,7 @@ class PatcherInfo {
         supportsNationals: (j['supports_nationals'] ?? false) as bool,
         nationalSlotBase: (j['national_slot_base'] as num?)?.toInt(),
         supportsNationFill: (j['supports_nation_fill'] ?? false) as bool,
+        supportsClubFill: (j['supports_club_fill'] ?? false) as bool,
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],

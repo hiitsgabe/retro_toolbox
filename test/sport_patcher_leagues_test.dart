@@ -183,5 +183,38 @@ void main() {
     expect(find.text('Slots the league leaves'), findsOneWidget);
     // No blank_unused on this game: keep or fill only.
     expect(find.byType(RadioListTile<LeftSlots>), findsNWidgets(2));
+    // Without the club fill: fill means nations, and there is no nations box.
+    expect(find.text("Fill with today's top national teams"), findsOneWidget);
+    expect(find.text('Update the national teams'), findsNothing);
+  });
+
+  testWidgets('PES with the club fill: fill takes the clubs, a box above updates the nations', (t) async {
+    const pes = PatcherInfo(
+      gameId: 'pes2013-ps2',
+      platform: 'ps2',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsBlankUnused: true,
+      supportsNationals: true,
+      supportsNationFill: true,
+      supportsClubFill: true,
+      slotGroups: [SlotGroup('England', 0, 20), SlotGroup('France', 20, 2)],
+      maxLeagues: 2,
+    );
+    await pump(t, game: pes);
+    expect(find.text('Club slots the leagues leave'), findsOneWidget);
+    expect(find.text("Fill with today's best European clubs"), findsOneWidget);
+    expect(find.text("Fill with today's top national teams"), findsNothing);
+    expect(find.byType(RadioListTile<LeftSlots>), findsNWidgets(3));
+    expect(t.widget<RadioGroup<LeftSlots>>(find.byType(RadioGroup<LeftSlots>)).groupValue, LeftSlots.fill);
+    // The box sits above the choice, ticked by default.
+    final box = find.widgetWithText(CheckboxListTile, 'Update the national teams');
+    expect(t.getTopLeft(box).dy, lessThan(t.getTopLeft(find.text('Club slots the leagues leave')).dy));
+    expect(t.widget<CheckboxListTile>(box).value, isTrue);
+    await t.tap(box);
+    await t.pumpAndSettle();
+    expect(t.widget<CheckboxListTile>(box).value, isFalse);
+    expect(find.text('National teams'), findsNothing);
   });
 }

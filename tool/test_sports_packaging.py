@@ -182,6 +182,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         supports_kits = True
         supports_nationals = True
         supports_nation_fill = True
+        supports_club_fill = True
         national_slot_base = 1000
         slot_order = (3, 1, 2)
         team_slots = 36
@@ -199,17 +200,17 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
     class SlotsOnly(Base):  # groups that describe the slots (WE2002): one league
         slot_groups = (('Master League', 0, 32), ('National only', 32, 31))
 
-    saved = main._top_nations
-    main._top_nations = lambda: print
+    saved = main._top_nations, main._top_clubs
+    main._top_nations = main._top_clubs = lambda: print
     try:
         full = main._capabilities(Full, Base)
     finally:
-        main._top_nations = saved
+        main._top_nations, main._top_clubs = saved
     assert full == {
         'languages': ['en'], 'supports_logos': True, 'supports_blank_unused': True, 'supports_looks': True,
         'image_slots': ['title'],
         'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'supports_nation_fill': True,
-        'national_slot_base': 1000,
+        'supports_club_fill': True, 'national_slot_base': 1000,
         'team_slots': 36, 'slot_order': [3, 1, 2],
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
         'max_leagues': 2, 'multi_league': True, 'writes_formation': True, 'formations': ['4-4-2', '4-3-3']}
@@ -217,7 +218,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'supports_looks': False,
         'image_slots': [],
         'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'supports_nation_fill': False,
-        'national_slot_base': None, 'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
+        'supports_club_fill': False, 'national_slot_base': None, 'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
         'writes_formation': False, 'formations': []}
     slots_only = main._capabilities(SlotsOnly, Base)
     assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
@@ -881,6 +882,39 @@ def test_a_library_without_the_fetch_offers_no_nation_fill():
             sys.modules[name] = saved
 
 
+def test_a_library_without_the_club_fetch_offers_no_club_fill():
+    import types
+
+    class Fill:
+        supports_club_fill = True
+
+    name = 'retro_roster_patcher.sports.clubs'
+    saved = sys.modules.get(name)
+    sys.modules[name] = types.ModuleType(name)  # a library before the club fill: no clubs module content
+    try:
+        assert main._top_clubs() is None
+        assert main._capabilities(Fill, object)['supports_club_fill'] is False
+    finally:
+        if saved is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = saved
+    # The class must say so too, whatever the library has.
+    assert main._capabilities(type('NoFill', (), {}), object)['supports_club_fill'] is False
+
+
+def test_blank_unused_keeps_its_kind_only_where_the_game_has_the_club_fill():
+    class Pes:
+        supports_blank_unused = supports_club_fill = True
+
+    class Iss:
+        supports_blank_unused = True
+
+    assert main._patch_options({'blank_unused': 'clubs'}, Pes()) == {'blank_unused': 'clubs'}
+    assert main._patch_options({'blank_unused': True}, Pes()) == {'blank_unused': True}
+    assert main._patch_options({'blank_unused': 'clubs'}, Iss()) == {'blank_unused': True}
+
+
 def _fill_job(down=False):
     """(progress lines, emitted result, fetch calls, mapped tags, patch options) of an
     ISS patch with fill_nations, nationals and blank_unused all set; with down, the
@@ -1174,3 +1208,111 @@ if __name__ == '__main__':
         if name.startswith('test_'):
             fn()
             print('ok', name)
+
+
+def _club_fill_job(job, down=False, club_fill=True):
+    """(progress lines, emitted result, fetch calls, mapped tags, patch options) of a PES
+    patch with a slot map (league slots 3 and 5) and the job's keys; with down, the club
+    fill raises ApiError as an ESPN outage would; without club_fill, the library predates it."""
+    import json
+    import types
+
+    calls, mapped, patched = [], [], {}
+
+    class Mapped:
+        def __init__(self, teams):
+            self.teams = teams
+
+        def merge(self, other):
+            return Mapped({**self.teams, **other.teams})
+
+    class P:
+        supports_nation_fill = supports_blank_unused = True
+        supports_club_fill = club_fill
+
+        def __init__(self, **kw):
+            self.on_status = None
+
+        def map_rosters(self, data, slot_mapping):
+            mapped.append(data.tag)
+            return Mapped({'league': {3: 'club', 5: 'club'}, 'clubs': {98: 'club'}, 'nations': {1000: 'nation'}}[data.tag])
+
+        def patch(self, rom_path, output_path, rosters, on_progress, **options):
+            patched.update(options, slots=sorted(rosters.teams))
+            open(output_path, 'wb').write(b'rom')
+            return types.SimpleNamespace(output_path=str(output_path),
+                                         to_dict=lambda: {'output_path': str(output_path)})
+
+    def clubs(patcher, rom, season, taken, on_progress=None, *, exclude_ids=(), mode='ranking'):
+        calls.append(('clubs', rom.name, season, set(taken), set(exclude_ids)))
+        if down:
+            raise FakeRrp.ApiError('ESPN down')
+        patcher.status('Skipped Qarabag: ESPN has no team for it')
+        return types.SimpleNamespace(tag='clubs'), [object()]
+
+    def nations(patcher, rom, season, taken, on_progress=None, *, exclude_ids=()):
+        calls.append(('nations', rom.name, set(taken), set(exclude_ids)))
+        return types.SimpleNamespace(tag='nations'), [object()]
+
+    class SlotMapping:
+        @staticmethod
+        def from_dict(m):
+            return types.SimpleNamespace(slot_index=m['slot_index'], team_id=m['team_id'])
+
+    league = types.SimpleNamespace(season=2025)
+    rrp = types.SimpleNamespace(get_patcher=lambda game_id: P, RetroRosterError=ValueError, ApiError=FakeRrp.ApiError,
+                                SlotMapping=SlotMapping,
+                                league_data_from_dict=lambda d: types.SimpleNamespace(
+                                    tag='league', league=league,
+                                    teams=[types.SimpleNamespace(team=types.SimpleNamespace(id=t)) for t in ('359', '360')]))
+    P.status = lambda self, m: self.on_status(m)
+    src, out = tempfile.mkdtemp(), tempfile.mkdtemp()
+    rom, rosters = os.path.join(src, 'PES.iso'), os.path.join(src, 'rosters.json')
+    open(rom, 'wb').write(b'rom')
+    json.dump({}, open(rosters, 'w'))
+    saved = main._top_nations, main._top_clubs, main._league_season
+    main._top_nations, main._top_clubs = (lambda: nations), (lambda: clubs if club_fill else None)
+    # Today's Champions League season, whatever season the leagues are.
+    main._league_season = lambda league_id, code=None: {'uefa.champions': 2026}[code]
+    try:
+        lines, sent = _with_rrp(rrp, {'type': 'sports_patch', 'game_id': 'pes2013-ps2', 'rom_path': rom,
+                                      'output_dir': out, 'label': 'EPL', 'rosters_file': rosters, 'season': 2025,
+                                      'slot_mapping': [{'slot_index': 3, 'team_id': '359'},
+                                                       {'slot_index': 5, 'team_id': '360'}], **job})
+    finally:
+        main._top_nations, main._top_clubs, main._league_season = saved
+    return lines, sent, calls, mapped, patched
+
+
+def test_fill_clubs_fills_the_club_slots_the_leagues_leave_then_the_nations():
+    lines, sent, calls, mapped, patched = _club_fill_job({'fill_clubs': True, 'fill_nations': True})
+    assert lines[-1] == 'DONE', lines
+    # The clubs take the slots the leagues leave, never a league's own club; the nations come after.
+    assert calls == [('clubs', 'PES.iso', 2026, {3, 5}, {'359', '360'}),
+                     ('nations', 'PES.iso', {3, 5, 98}, {'359', '360'})]
+    assert mapped == ['league', 'clubs', 'nations'] and patched['slots'] == [3, 5, 98, 1000]
+    assert 'STATUS:Skipped Qarabag: ESPN has no team for it' in lines
+    assert sent['notes'] == ['Skipped Qarabag: ESPN has no team for it']
+
+
+def test_fill_clubs_alone_leaves_the_nations_and_clearing_keeps_its_kind():
+    _lines, _sent, calls, _mapped, patched = _club_fill_job({'fill_clubs': True})
+    assert [c[0] for c in calls] == ['clubs'] and 'blank_unused' not in patched
+    # Clear with the nations box: the club slots are emptied, the nations filled.
+    _lines, _sent, calls, _mapped, patched = _club_fill_job({'blank_unused': 'clubs', 'fill_nations': True})
+    assert [c[0] for c in calls] == ['nations'] and patched['blank_unused'] == 'clubs'
+
+
+def test_an_espn_outage_during_the_club_fill_keeps_the_original_teams():
+    lines, sent, calls, mapped, patched = _club_fill_job({'fill_clubs': True, 'fill_nations': True}, down=True)
+    assert lines[-1] == 'DONE', lines
+    assert mapped == ['league', 'nations'] and patched['slots'] == [3, 5, 1000]
+    assert sent['notes'] == ['Club fill skipped, the original teams stay: ESPN down']
+
+
+def test_an_older_library_patches_pes_as_before():
+    lines, _sent, calls, mapped, patched = _club_fill_job(
+        {'fill_clubs': True, 'fill_nations': True, 'blank_unused': 'clubs'}, club_fill=False)
+    assert lines[-1] == 'DONE', lines
+    # No club fill; the nation fill wins over clearing, as today.
+    assert [c[0] for c in calls] == ['nations'] and mapped == ['league', 'nations'] and 'blank_unused' not in patched

@@ -313,7 +313,9 @@ def _patch_options(job, patcher, team_kits=None):
     if getattr(patcher, 'supports_logos', False) and 'logos' in job:
         options['logos'] = bool(job['logos'])
     if getattr(patcher, 'supports_blank_unused', False) and job.get('blank_unused'):
-        options['blank_unused'] = True
+        # One kind of slot ("clubs" beside the nation fill) where the game has the club fill.
+        kind = job['blank_unused']
+        options['blank_unused'] = kind if kind in ('clubs', 'nations') and getattr(patcher, 'supports_club_fill', False) else True
     if getattr(patcher, 'supports_looks', False) and 'looks' in job:
         options['looks'] = bool(job['looks'])
     images = job.get('images') or {}
@@ -344,6 +346,9 @@ def _capabilities(cls, base):
         # Fill the slots a league leaves with today's top national teams:
         # needs the patcher's own flag and a library that has the fetch.
         'supports_nation_fill': bool(getattr(cls, 'supports_nation_fill', False)) and _top_nations() is not None,
+        # PES 2013: fill the club slots the leagues leave with today's best
+        # European clubs; same rule.
+        'supports_club_fill': bool(getattr(cls, 'supports_club_fill', False)) and _top_clubs() is not None,
         'national_slot_base': getattr(cls, 'national_slot_base', None),
         # The order to fill slots in when the teams map in sequence (ISS
         # Deluxe keeps the nations its stadiums are named after for last).
@@ -366,6 +371,15 @@ def _top_nations():
     except ImportError:
         return None
     return fetch_top_nations
+
+
+def _top_clubs():
+    """The library's fetch_top_clubs, or None on a library older than it."""
+    try:
+        from retro_roster_patcher.sports.clubs import fetch_top_clubs
+    except ImportError:
+        return None
+    return fetch_top_clubs
 
 
 def _overrides(cls, name, base):
@@ -962,7 +976,11 @@ def run_sports(job):
             # The top national teams fill the slots the league leaves; that
             # wins over the old nationals switch and over clearing them.
             fill = _top_nations() if job.get('fill_nations') and getattr(patcher, 'supports_nation_fill', False) else None
-            if fill:
+            # PES 2013: today's best European clubs fill the club slots the leagues leave.
+            club_fill = _top_clubs() if job.get('fill_clubs') and getattr(patcher, 'supports_club_fill', False) else None
+            # A fill answers for its own kind of slot: clearing keeps only the other kind.
+            blank = options.get('blank_unused')
+            if (club_fill and blank != 'nations') or (fill and blank != 'clubs'):
                 options.pop('blank_unused', None)
             nationals = not fill and bool(job.get('nationals')) and getattr(patcher, 'supports_nationals', False)
             season = job.get('season') or sources[0][0].league.season
@@ -989,15 +1007,27 @@ def run_sports(job):
                 # The national squads are fetched here: pairing them with the
                 # disc's rows needs the actual image.
                 merged = noted(_merge_rosters, patcher, sources, rom)
+                # A team the leagues already hold (a World Cup or friendlies
+                # league's nation, a club) is not placed a second time.
+                league_ids = {m.team_id for _d, mp in sources for m in mp} if slot_mapping else {
+                    t.team.id for d, _mp in sources for t in d.teams}
+                if club_fill:
+                    # As the nation fill below: "Skipped <club>" lines via live,
+                    # an outage keeps the original teams, progress stays at 0.
+                    try:
+                        data, mapping = club_fill(patcher, Path(rom), _league_season(None, 'uefa.champions'),
+                                                  set(merged.teams), on_progress and (lambda _f, m: on_progress(0, m)),
+                                                  exclude_ids=league_ids)
+                    except rrp.ApiError as exc:
+                        notes.append(f'Club fill skipped, the original teams stay: {exc}')
+                    else:
+                        if mapping:
+                            merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
                 if fill:
                     # Its "Skipped <nation>" lines reach the progress file and the notes via live.
                     # Fill is the default, so an ESPN outage keeps the original
                     # teams instead of failing the patch. Progress stays at 0, as
                     # the nationals fetch does, so the bar does not jump back.
-                    # A nation the league already holds (a World Cup or
-                    # friendlies league) is not placed a second time.
-                    league_ids = {m.team_id for _d, mp in sources for m in mp} if slot_mapping else {
-                        t.team.id for d, _mp in sources for t in d.teams}
                     extra = ({'exclude_ids': league_ids}
                              if 'exclude_ids' in inspect.signature(fill).parameters else {})
                     try:

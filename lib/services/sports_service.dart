@@ -346,7 +346,7 @@ class SportsService {
     String? language,
     bool? logos,
     bool? looks,
-    Map<String, bool> leftSlots = const {},
+    Map<String, Object> leftSlots = const {},
     Map<String, String> images = const {},
     Map<int, String> teamLogos = const {},
     Map<String, dynamic>? kits,
@@ -367,7 +367,7 @@ class SportsService {
         if (language != null) 'language': language,
         if (logos != null) 'logos': logos,
         if (looks != null) 'looks': looks,
-        // fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
+        // fill_clubs, fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
         ...leftSlots,
         if (images.isNotEmpty) 'images': images,
         if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},

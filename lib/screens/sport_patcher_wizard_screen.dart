@@ -136,6 +136,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   /// Where the fill is offered: what the slots the league leaves get.
   LeftSlots _leftSlots = LeftSlots.fill;
+
+  /// With the club fill (PES 2013): update the national teams too.
+  bool _fillNations = true;
   // One node for the ROM step's pick control, whether the full row's Choose
   // or the small link a found card collapses it to: a card arriving while
   // the user sits on Choose keeps the focus on the link.
@@ -761,7 +764,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         language: _language,
         logos: info.supportsLogos ? _useLogos : null,
         looks: info.supportsLooks ? _matchLooks : null,
-        leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals),
+        leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals, fillNations: _fillNations),
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
         onProgress: (v) => setState(() => _progress = v),
@@ -1150,13 +1153,24 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   /// Keep, clear or fill the slots the league leaves (fixes the league's
-  /// clubs sitting beside the game's old national teams).
+  /// clubs sitting beside the game's old national teams). With the club fill
+  /// the choice is about the club slots, and a box above it updates the nations.
   Widget _leftSlotsChoice(ThemeData theme) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Slots the league leaves', style: theme.textTheme.labelLarge),
+            if (info.supportsClubFill)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('Update the national teams'),
+                subtitle: const Text('Today\'s top national teams, with their current squads.'),
+                value: _fillNations,
+                onChanged: (v) => setState(() => _fillNations = v ?? _fillNations),
+              ),
+            Text(info.supportsClubFill ? 'Club slots the leagues leave' : 'Slots the league leaves',
+                style: theme.textTheme.labelLarge),
             RadioGroup<LeftSlots>(
               groupValue: _leftSlots,
               onChanged: (v) => setState(() => _leftSlots = v ?? _leftSlots),
@@ -1174,12 +1188,19 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                       title: Text('Clear them'),
                       subtitle: Text('An empty name and flag instead of the game\'s originals.'),
                     ),
-                  const RadioListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: LeftSlots.fill,
-                    title: Text('Fill with today\'s top national teams'),
-                    subtitle: Text('The best of the FIFA ranking, with their current squads.'),
-                  ),
+                  info.supportsClubFill
+                      ? const RadioListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: LeftSlots.fill,
+                          title: Text('Fill with today\'s best European clubs'),
+                          subtitle: Text('The best of the UEFA club ranking, with their current squads.'),
+                        )
+                      : const RadioListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: LeftSlots.fill,
+                          title: Text('Fill with today\'s top national teams'),
+                          subtitle: Text('The best of the FIFA ranking, with their current squads.'),
+                        ),
                 ],
               ),
             ),

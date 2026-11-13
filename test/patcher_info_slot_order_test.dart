@@ -51,4 +51,30 @@ void main() {
     expect(old.leftSlotsJob(LeftSlots.fill), isEmpty);
     expect(old.leftSlotsJob(LeftSlots.fill, blankUnused: true, nationals: true), {'blank_unused': true, 'nationals': true});
   });
+
+  test('club fill: read when sent, false from an older library', () {
+    expect(PatcherInfo.fromJson({'game_id': 'g', 'supports_club_fill': true}).supportsClubFill, isTrue);
+    expect(PatcherInfo.fromJson({'game_id': 'g'}).supportsClubFill, isFalse);
+  });
+
+  test('with the club fill, the choice is the club slots and the nations box travels on its own', () {
+    final pes = PatcherInfo.fromJson({
+      'game_id': 'pes2013-ps2',
+      'supports_club_fill': true,
+      'supports_nation_fill': true,
+      'supports_blank_unused': true,
+      'supports_nationals': true
+    });
+    expect(pes.leftSlotsJob(LeftSlots.fill, fillNations: true), {'fill_clubs': true, 'fill_nations': true});
+    expect(pes.leftSlotsJob(LeftSlots.fill), {'fill_clubs': true});
+    // Clearing beside the nation fill empties the club slots only.
+    expect(pes.leftSlotsJob(LeftSlots.clear, fillNations: true), {'blank_unused': 'clubs', 'fill_nations': true});
+    expect(pes.leftSlotsJob(LeftSlots.clear), {'blank_unused': true});
+    expect(pes.leftSlotsJob(LeftSlots.keep, fillNations: true, blankUnused: true, nationals: true), {'fill_nations': true});
+    expect(pes.leftSlotsJob(LeftSlots.keep), isEmpty);
+    // An older library (no club fill): fill means nations, as before; the box is ignored.
+    final old = PatcherInfo.fromJson({'game_id': 'pes2013-ps2', 'supports_nation_fill': true, 'supports_blank_unused': true});
+    expect(old.leftSlotsJob(LeftSlots.fill, fillNations: false), {'fill_nations': true});
+    expect(old.leftSlotsJob(LeftSlots.clear, fillNations: true), {'blank_unused': true});
+  });
 }
