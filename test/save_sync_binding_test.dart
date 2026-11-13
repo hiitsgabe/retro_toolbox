@@ -111,9 +111,21 @@ void main() {
     expect(await binder(r, {'com.playdigious.seaofstars'}, privilege: Privilege.root).bind(r), isA<NeedsDiscovery>());
   });
 
-  test('two locations, no saves anywhere: discovery', () async {
+  // A handheld that has the game but has never played it is the whole reason
+  // to sync, so it has to end up bindable rather than stuck on discovery.
+  test('two locations, no saves and no folder: open the game once', () async {
     final r = bundled('sea-of-stars');
-    expect(await binder(r, {'com.playdigious.seaofstars'}).bind(r), isA<NeedsDiscovery>());
+    final res = await binder(r, {'com.playdigious.seaofstars'}).bind(r);
+    expect(res, isA<FolderMissing>());
+    expect((res as FolderMissing).binding.area, Area.androidData);
+  });
+
+  test('two locations, no saves but one reachable folder: bound, so it can pull', () async {
+    final r = bundled('sea-of-stars');
+    Directory(p.join(paths.area(Area.androidData, 'com.playdigious.seaofstars'), 'files')).createSync(recursive: true);
+    final res = await binder(r, {'com.playdigious.seaofstars'}).bind(r);
+    expect(res, isA<Bound>());
+    expect((res as Bound).binding.area, Area.androidData);
   });
 
   test('binding JSON round-trip', () {

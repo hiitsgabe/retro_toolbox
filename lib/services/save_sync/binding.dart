@@ -108,8 +108,20 @@ class RecipeBinder {
       final (b, files) = withSaves.single;
       return r.status == RecipeStatus.verified ? Bound(b) : NeedsConfirm(b, files);
     }
-    if (withSaves.isEmpty && !candidates.any(reachable)) return NeedsRoot(candidates.first);
-    return NeedsDiscovery(withSaves.isEmpty ? 'no saves found in the known places' : 'saves found in more than one place');
+    if (withSaves.length > 1) return const NeedsDiscovery('saves found in more than one place');
+    // Nothing has saves yet. A device that has never played the game is the
+    // reason to sync in the first place, so bind it anyway rather than giving
+    // up: the single place that exists, or, when the game has not made one
+    // yet, the first place it would use.
+    final open = candidates.where(reachable).toList();
+    if (open.isEmpty) return NeedsRoot(candidates.first);
+    final existing = <Binding>[];
+    for (final b in open) {
+      if (await fs.isDir(b.dir(paths))) existing.add(b);
+    }
+    if (existing.length == 1) return Bound(existing.single);
+    if (existing.isEmpty) return FolderMissing(open.first);
+    return const NeedsDiscovery('the save folder could be in more than one place');
   }
 
   Future<List<String>> _unitFiles(Recipe r, String dir) async {
