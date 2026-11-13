@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/drive_api.dart';
@@ -16,6 +17,7 @@ import 'package:retro_toolbox/services/save_sync/hub_config.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
+import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
@@ -175,6 +177,61 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   /// per rebuild. Packages that answered with nothing are remembered too, so a
   /// game the device cannot show is not asked about on every refresh.
   static final _appInfo = <String, AppInfo?>{};
+
+  RecipeIndex? _index;
+
+  /// The published catalog, read only when somebody is about to choose an app.
+  /// Null when this build was seeded with nowhere to look, which changes what
+  /// the picker can offer and nothing else.
+  Future<RecipeCatalog?> catalog() async {
+    final base = const String.fromEnvironment('SAVE_SYNC_CATALOG_URL');
+    if (base.isEmpty) return null;
+    _index ??= RecipeIndex(baseUrl: base, cacheDir: Directory('${(await getApplicationSupportDirectory()).path}/save_sync'));
+    return _index!.load();
+  }
+
+  /// Every app with a launcher entry, for the picker. Icons come along, since
+  /// the same call already has the package manager open.
+  Future<List<({String package, AppInfo info})>> launchableApps() async {
+    try {
+      final got = await _native.invokeListMethod<Object?>('launchableApps');
+      final out = <({String package, AppInfo info})>[];
+      for (final e in got ?? const []) {
+        if (e is! Map) continue;
+        final package = e['package'];
+        if (package is! String) continue;
+        final info = AppInfo((e['label'] as String?) ?? package, e['icon'] is Uint8List ? e['icon'] as Uint8List : null);
+        _appInfo[package] = info;
+        out.add((package: package, info: info));
+      }
+      out.sort((a, b) => a.info.label.toLowerCase().compareTo(b.info.label.toLowerCase()));
+      return out;
+    } on MissingPluginException {
+      return const [];
+    } on PlatformException {
+      return const [];
+    }
+  }
+
+  /// Adds apps to the hub's configuration, so the choice reaches every other
+  /// device. Writing only the change is what keeps two handhelds from
+  /// colliding when they add different apps at the same time.
+  Future<void> addApps(Map<String, String?> packageToRecipe) async {
+    if (packageToRecipe.isEmpty) return;
+    final sync = await _sync();
+    final choice = sync.hubChoice;
+    if (choice == null) return;
+    final at = DateTime.now().toUtc();
+    final deviceId = await sync.deviceId(await _deviceModel());
+    final hub = Hub(_backend(choice));
+    await hub.open(deviceId: deviceId);
+    await hub.putConfig(
+      {for (final e in packageToRecipe.entries) e.key: ConfigEntry(recipe: e.value, updatedAt: at, by: deviceId)},
+      deviceId: deviceId,
+      now: at,
+    );
+    await refresh();
+  }
 
   /// Asks Android for the icon and label of any package not asked about yet.
   /// One call for the whole list. Silent where there is no platform side, so

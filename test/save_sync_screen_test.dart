@@ -167,6 +167,18 @@ void main() {
     expect(find.text(stardew.name), findsOneWidget);
   });
 
+  testWidgets('a hub that is set up offers somewhere to add apps', (t) async {
+    await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        hubKind: HubKind.folder,
+        games: [GameStatus(stardew, 'bundled', const Bound(binding))],
+      ),
+    );
+    expect(find.widgetWithText(FilledButton, 'Add an app'), findsOneWidget);
+  });
+
   testWidgets('a game this device does not have is left out of the list', (t) async {
     await pump(
       t,

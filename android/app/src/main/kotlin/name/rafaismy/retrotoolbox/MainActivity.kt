@@ -103,6 +103,30 @@ class MainActivity : FlutterActivity() {
                     // One call for a whole list: loading an icon touches the
                     // package manager and decodes a drawable, so a call per row
                     // would stutter the list it is drawing.
+                    // Every app with a launcher entry, which is what the
+                    // queries block lets this app see and all a person would
+                    // ever pick from.
+                    "launchableApps" -> {
+                        Thread {
+                            val out = ArrayList<Map<String, Any>>()
+                            try {
+                                val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                                for (r in packageManager.queryIntentActivities(main, 0)) {
+                                    val info = r.activityInfo?.applicationInfo ?: continue
+                                    if (info.packageName == packageName) continue
+                                    val entry = HashMap<String, Any>()
+                                    entry["package"] = info.packageName
+                                    entry["label"] = packageManager.getApplicationLabel(info).toString()
+                                    iconPng(packageManager.getApplicationIcon(info))?.let { entry["icon"] = it }
+                                    out.add(entry)
+                                }
+                            } catch (_: Exception) {
+                                // An empty list reads as "nothing to add here",
+                                // which is survivable; a crash is not.
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
                     "appInfo" -> {
                         val packages = call.argument<List<String>>("packages").orEmpty()
                         Thread {

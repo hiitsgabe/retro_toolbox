@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
+import 'package:retro_toolbox/screens/save_sync_add_app_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
@@ -45,6 +46,19 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(saveSyncProvider.notifier).refresh());
+  }
+
+  /// Picks more apps for this set of handhelds. The catalog is read here
+  /// rather than on every refresh: it is wanted only when somebody is about
+  /// to choose, and it is never a precondition for anything else.
+  Future<void> _addApps() async {
+    final n = ref.read(saveSyncProvider.notifier);
+    final already = {for (final g in ref.read(saveSyncProvider).games) g.recipe.packages.first};
+    final catalog = await n.catalog();
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute<bool>(
+      builder: (_) => SaveSyncAddAppScreen(already: already, catalog: catalog),
+    ));
   }
 
   /// A handheld with no place chosen has nothing to list, so the first run
@@ -280,6 +294,14 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                     ),
                 ],
               ),
+            if (s.hubKind != HubKind.none && s.hubKind != HubKind.unknown) ...[
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: busy ? null : _addApps,
+                icon: const Icon(Icons.add),
+                label: const Text('Add an app'),
+              ),
+            ],
             if (s.recipeProblems.isNotEmpty)
               ExpansionTile(
                 title: Text('Recipes that did not load (${s.recipeProblems.length})'),
