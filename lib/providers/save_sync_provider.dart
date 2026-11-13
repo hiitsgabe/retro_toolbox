@@ -526,9 +526,9 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     await refresh();
   }
 
-  Future<void> push(String recipeId) => _act(recipeId, (e, r, s) => e.push(r, source: s));
+  Future<void> push(String recipeId, {String? unit}) => _act(recipeId, (e, r, s) => e.push(r, source: s, only: unit));
 
-  Future<void> pull(String recipeId) => _act(recipeId, (e, r, s) => e.pull(r, source: s));
+  Future<void> pull(String recipeId, {String? unit}) => _act(recipeId, (e, r, s) => e.pull(r, source: s, only: unit));
 
   /// Which handhelds left a backup of this unit in the hub, newest name
   /// first. Empty when the hub is not open or nothing has been replaced yet.

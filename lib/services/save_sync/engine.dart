@@ -180,7 +180,10 @@ class SaveSyncEngine {
     }
   }
 
-  Future<List<String>> push(Recipe r, {String source = 'bundled'}) => _serial(() async {
+  /// Uploads what this device owes. With [only], just that one unit: an
+  /// emulator keeps one save per game under a single recipe, and the game you
+  /// are ahead in is not the game somebody else is ahead in.
+  Future<List<String>> push(Recipe r, {String source = 'bundled', String? only}) => _serial(() async {
         final s = await _status(r, source);
         final binding = s.binding;
         if (binding == null) return ['${r.name}: ${bindLabel(s.bind)}'];
@@ -191,6 +194,7 @@ class SaveSyncEngine {
         for (final u in s.units.values) {
           final plan = u.plan;
           if (plan is! PushPlan) continue;
+          if (only != null && plan.unit != only) continue;
           try {
             final known = {for (final g in await hub.gens(r.id, plan.unit)) g.gen: g};
             final parents = [for (final id in plan.parents) known[id] ?? (throw SyncBlocked('$id is no longer in the hub; refresh and try again'))];
@@ -308,7 +312,8 @@ class SaveSyncEngine {
         }
       });
 
-  Future<List<String>> pull(Recipe r, {String source = 'bundled'}) => _serial(() async {
+  /// Downloads what this device is behind on. With [only], just that one unit.
+  Future<List<String>> pull(Recipe r, {String source = 'bundled', String? only}) => _serial(() async {
         final s = await _status(r, source);
         final binding = s.binding;
         if (binding == null) return ['${r.name}: ${bindLabel(s.bind)}'];
@@ -320,6 +325,7 @@ class SaveSyncEngine {
         for (final u in s.units.values) {
           final plan = u.plan;
           if (plan is! PullPlan) continue;
+          if (only != null && plan.unit != only) continue;
           try {
             // The save about to be replaced goes to the hub first, as this
             // device's one backup. The local history already keeps copies,

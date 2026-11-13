@@ -74,6 +74,29 @@ void main() {
     expect(rowStateFor(conflicted, hasAccess: true), isA<RowConflict>());
   });
 
+  // The reason this exists: an emulator keeps one save per game under one
+  // recipe, so one game being behind must not make another game read as behind.
+  test('each save reads on its own, whatever the others owe', () {
+    final mixed = status(const Bound(binding), units: {
+      'ahead-here': const UnitStatus(PushPlan('ahead-here', [])),
+      'ahead-there': UnitStatus(PullPlan('ahead-there', head(t, 'Other'), missingLocally: false), newest: head(t, 'Other')),
+      'settled': const UnitStatus(UpToDate('settled')),
+    });
+    expect(rowStateForUnit(mixed, 'ahead-here', hasAccess: true), isA<RowNeedsPush>());
+    expect(rowStateForUnit(mixed, 'ahead-there', hasAccess: true), isA<RowNeedsPull>());
+    expect(rowStateForUnit(mixed, 'settled', hasAccess: true), isA<RowUpToDate>());
+  });
+
+  test('a device with no access blocks every save, not just the urgent one', () {
+    final mixed = status(const Bound(binding), units: {
+      'one': const UnitStatus(PushPlan('one', [])),
+      'two': const UnitStatus(UpToDate('two')),
+    });
+    for (final u in ['one', 'two']) {
+      expect((rowStateForUnit(mixed, u, hasAccess: false) as RowBlocked).reason, BlockReason.noAccess);
+    }
+  });
+
   test('the order puts what needs doing first and what cannot be done last', () {
     final ranks = [
       rowRank(const RowConflict()),

@@ -389,6 +389,9 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 onCheck: () => _showCheck(g),
                 onConfirm: _confirm,
                 onRestore: () => _restore(g),
+                hasAccess: s.access != SyncAccess.none,
+                onPushUnit: (unit) => n.push(g.recipe.id, unit: unit),
+                onPullUnit: (unit) => n.pull(g.recipe.id, unit: unit),
                 onChooseVersion: () {
                   for (final e in g.units.entries) {
                     if (e.value.plan case final Diverged d) {
@@ -457,6 +460,9 @@ class _AppRow extends StatelessWidget {
     required this.onConfirm,
     required this.onChooseVersion,
     required this.onRestore,
+    required this.onPushUnit,
+    required this.onPullUnit,
+    required this.hasAccess,
   });
 
   final GameStatus game;
@@ -477,6 +483,16 @@ class _AppRow extends StatelessWidget {
   final void Function(NeedsConfirm) onConfirm;
   final VoidCallback onChooseVersion;
   final VoidCallback onRestore;
+  final void Function(String unit) onPushUnit;
+  final void Function(String unit) onPullUnit;
+  final bool hasAccess;
+
+  /// The saves this recipe covers here, in a settled order.
+  List<String> get units => game.units.keys.toList()..sort();
+
+  /// A unit key is a folder name: a farm, or an emulated game's id. Shown as
+  /// it is until something can name it better.
+  String unitLabel(String unit) => unit;
 
   bool get _dim => state is RowBlocked || state is RowNotInstalled;
 
@@ -491,7 +507,8 @@ class _AppRow extends StatelessWidget {
           onTap: onCheck,
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _Thumb(icon: info?.icon, badge: _badge(theme)),
               const SizedBox(width: 12),
               Expanded(
@@ -506,7 +523,7 @@ class _AppRow extends StatelessWidget {
               if (busy)
                 const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
               else ...[
-                _verb() ?? const SizedBox.shrink(),
+                if (units.length < 2) _verb() ?? const SizedBox.shrink(),
                 // The row keeps one verb; everything else that can be done to
                 // a game lives behind the dots, so a rare action never sits
                 // next to the common one.
@@ -520,6 +537,21 @@ class _AppRow extends StatelessWidget {
                   ],
                 ),
               ],
+              ]),
+              // An emulator keeps one save per game under a single recipe, and
+              // the game you are ahead in is not the game the other handheld is
+              // ahead in. So each save gets its own line and its own verb, and
+              // nothing acts on all of them at once.
+              if (units.length > 1)
+                for (final unit in units)
+                  _UnitRow(
+                    label: unitLabel(unit),
+                    state: rowStateForUnit(game, unit, hasAccess: hasAccess),
+                    busy: busy,
+                    anyBusy: anyBusy,
+                    onPush: () => onPushUnit(unit),
+                    onPull: () => onPullUnit(unit),
+                  ),
             ]),
           ),
         ),
@@ -570,6 +602,66 @@ class _AppRow extends StatelessWidget {
         RowConflict() => FilledButton(onPressed: anyBusy ? null : onChooseVersion, child: const Text('Choose version')),
         RowFailed() => OutlinedButton(onPressed: anyBusy ? null : onCheck, child: const Text('Details')),
         _ => null,
+      };
+}
+
+/// One save inside a game that keeps several: a farm, or one emulated title.
+/// Carries its own state and its own verb, because acting on all of them at
+/// once is exactly what loses somebody's progress.
+class _UnitRow extends StatelessWidget {
+  const _UnitRow({
+    required this.label,
+    required this.state,
+    required this.busy,
+    required this.anyBusy,
+    required this.onPush,
+    required this.onPull,
+  });
+
+  final String label;
+  final RowState state;
+  final bool busy;
+  final bool anyBusy;
+  final VoidCallback onPush;
+  final VoidCallback onPull;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, left: 60),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: theme.textTheme.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(_line(), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        switch (state) {
+          RowNeedsPull() => OutlinedButton.icon(
+              onPressed: anyBusy ? null : onPull,
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Download'),
+            ),
+          RowNeedsPush() => OutlinedButton.icon(
+              onPressed: anyBusy ? null : onPush,
+              icon: const Icon(Icons.upload, size: 18),
+              label: const Text('Upload'),
+            ),
+          _ => const SizedBox.shrink(),
+        },
+      ]),
+    );
+  }
+
+  String _line() => switch (state) {
+        RowUpToDate(:final at) => at == null ? 'Up to date' : 'Up to date · ${_when(at)}',
+        RowNeedsPush() => 'Needs upload — this device is newer',
+        RowNeedsPull(:final fromDevice) => 'Needs download — $fromDevice is newer',
+        RowConflict() => 'Both sides changed',
+        RowFailed(:final message) => message,
+        _ => '',
       };
 }
 

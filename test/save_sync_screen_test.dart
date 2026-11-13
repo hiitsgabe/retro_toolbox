@@ -26,10 +26,10 @@ class FakeNotifier extends SaveSyncNotifier {
   Future<void> refresh() async => calls.add('refresh');
 
   @override
-  Future<void> push(String recipeId) async => calls.add('push $recipeId');
+  Future<void> push(String recipeId, {String? unit}) async => calls.add('push $recipeId${unit == null ? '' : ' $unit'}');
 
   @override
-  Future<void> pull(String recipeId) async => calls.add('pull $recipeId');
+  Future<void> pull(String recipeId, {String? unit}) async => calls.add('pull $recipeId${unit == null ? '' : ' $unit'}');
 
   @override
   Future<void> resolve(String recipeId, String unit, {required String keep}) async => calls.add('resolve $recipeId $unit $keep');
@@ -97,7 +97,7 @@ void main() {
     return fake;
   }
 
-  testWidgets('the row names the direction, and the verb does it', (t) async {
+  testWidgets('a game with several saves acts on one at a time', (t) async {
     final fake = await pump(
       t,
       SaveSyncState(access: SyncAccess.shizuku, hubFolder: '/storage/emulated/0/Retro Toolbox Saves', games: [
@@ -109,13 +109,18 @@ void main() {
     );
     expect(fake.calls, ['refresh']);
     expect(find.text('Stardew Valley'), findsOneWidget);
-    // A download outranks an upload: the row owes the newer copy first, and
-    // only one verb is ever offered.
-    expect(find.textContaining('Needs download'), findsOneWidget);
-    expect(find.textContaining('AYN Thor'), findsOneWidget);
+    // Two saves under one game, so each gets its own line and its own verb,
+    // and the card offers none: acting on both at once is what loses
+    // somebody's progress.
+    expect(find.text('Farm_1'), findsOneWidget);
+    expect(find.text('Farm_2'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Upload'), findsNothing);
-    await t.tap(find.widgetWithText(FilledButton, 'Download'));
-    expect(fake.calls, ['refresh', 'pull stardew-valley']);
+
+    await t.tap(find.widgetWithText(OutlinedButton, 'Upload'));
+    expect(fake.calls.last, 'push stardew-valley Farm_1');
+    await t.tap(find.widgetWithText(OutlinedButton, 'Download'));
+    expect(fake.calls.last, 'pull stardew-valley Farm_2');
   });
 
   testWidgets('with only an upload owing, the verb is Upload', (t) async {

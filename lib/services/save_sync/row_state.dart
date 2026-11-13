@@ -87,6 +87,26 @@ class RowFailed extends RowState {
   final String message;
 }
 
+/// One unit's state. A recipe can cover many independent saves — a farm each,
+/// or a whole emulated game each — and the row for one of them must not read
+/// as the state of all of them.
+RowState rowStateForUnit(GameStatus g, String unitKey, {required bool hasAccess}) {
+  if (g.bind is! Bound) return rowStateFor(g, hasAccess: hasAccess);
+  if (!hasAccess) return const RowBlocked(BlockReason.noAccess);
+  if (g.backupOnly) return const RowBlocked(BlockReason.backupOnly);
+  final u = g.units[unitKey];
+  if (u == null) return const RowUpToDate(null);
+  final at = u.newest?.createdAt;
+  return switch (u.plan) {
+    Diverged() => const RowConflict(),
+    PullPlan() => RowNeedsPull(at, u.newest?.deviceName ?? 'another device'),
+    PushPlan() => RowNeedsPush(at),
+    Busy() => const RowBlocked(BlockReason.folderMissing),
+    Blocked(:final reason) => RowFailed(reason),
+    UpToDate() => RowUpToDate(at),
+  };
+}
+
 /// The one place a [GameStatus] turns into something the screen can draw.
 RowState rowStateFor(GameStatus g, {required bool hasAccess}) {
   switch (g.bind) {
