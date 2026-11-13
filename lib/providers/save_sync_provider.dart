@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
@@ -12,10 +13,12 @@ import 'package:retro_toolbox/services/save_sync/drive_transport.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/errors.dart';
 import 'package:retro_toolbox/services/save_sync/google_auth.dart';
+import 'package:retro_toolbox/services/save_sync/game_fs.dart';
 import 'package:retro_toolbox/services/save_sync/hub.dart';
 import 'package:retro_toolbox/services/save_sync/hub_config.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
+import 'package:retro_toolbox/services/save_sync/path_guard.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
@@ -190,6 +193,26 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     return _index!.load();
   }
 
+  /// Where this device keeps its own save-sync files.
+  String get saveSyncDir => _paths.saveSync;
+
+  /// Looks for an app's save folder and reports what is directly inside it,
+  /// so somebody describing the app is shown the real thing rather than asked
+  /// to type a path.
+  Future<({String root, List<({String name, bool isDir})> entries})?> probeSaveFolder(String package) async {
+    final shell = await _shell(await ShizukuShell.status());
+    if (shell == null) return null;
+    final fs = ShellGameFs(shell, PathGuard([for (final a in Area.values) _paths.area(a, package)]));
+    for (final area in Area.values) {
+      for (final root in ['${_paths.area(area, package)}/files', _paths.area(area, package)]) {
+        if (!await fs.isDir(root)) continue;
+        final entries = await fs.listDir(root);
+        if (entries.isNotEmpty) return (root: root, entries: entries);
+      }
+    }
+    return null;
+  }
+
   /// Every app with a launcher entry, for the picker. Icons come along, since
   /// the same call already has the package manager open.
   Future<List<({String package, AppInfo info})>> launchableApps() async {
@@ -334,7 +357,13 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         for (final r in load.recipes) {
           _recipes[r.id] = (r, 'bundled');
         }
-        problems = {...load.rejected, for (final f in load.tooNew) f: 'needs a newer Retro Toolbox'};
+        // Written here, so they win: somebody described this app's saves by
+        // hand, which says more than any published copy can.
+        final mine = await _store.loadUser(Directory(p.join(_paths.saveSync, 'recipes')));
+        for (final r in mine.recipes) {
+          _recipes[r.id] = (r, 'user');
+        }
+        problems = {...mine.rejected, ...load.rejected, for (final f in load.tooNew) f: 'needs a newer Retro Toolbox'};
       }
       // Recipes another hub published, and their problems, do not belong to this one.
       void leaveHub(String? id) {

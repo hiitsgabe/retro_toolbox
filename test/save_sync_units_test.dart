@@ -139,6 +139,9 @@ void main() {
 
 /// Appends to one file right before the second listing, as a game writing mid-scan would.
 class _ChangingFs implements GameFs {
+  @override
+  Future<List<({String name, bool isDir})>> listDir(String dir) async => const [];
+
   _ChangingFs(this.inner, this.victim);
 
   final GameFs inner;

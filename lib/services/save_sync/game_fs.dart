@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'dart:math';
 
 import 'package:path/path.dart' as p;
@@ -30,6 +32,11 @@ abstract class GameFs {
 
   /// Every file under [dir], recursively; empty when [dir] is missing.
   Future<List<FsEntry>> listFiles(String dir);
+
+  /// What is directly inside [dir], folders included, one level only. The
+  /// recursive listing cannot show an empty folder or tell one from a file,
+  /// and both matter when somebody is being shown a save folder to describe.
+  Future<List<({String name, bool isDir})>> listDir(String dir);
 
   /// Path to lowercase hex sha256.
   Future<Map<String, String>> sha256(List<String> paths);
@@ -86,6 +93,24 @@ class ShellGameFs implements GameFs {
 
   @override
   Future<bool> isDir(String path) => _probe(['test', '-d', guard.check(path)]);
+
+  @override
+  Future<List<({String name, bool isDir})>> listDir(String dir) async {
+    final d = guard.check(dir);
+    final r = await shell.run(['sh', '-c', 'cd ${_quote(d)} 2>/dev/null && for e in * .*; do [ "\$e" = . ] || [ "\$e" = .. ] || { [ -d "\$e" ] && echo "d \$e" || echo "f \$e"; }; done']);
+    if (!r.ok) return const [];
+    final out = <({String name, bool isDir})>[];
+    for (final line in const LineSplitter().convert(r.out)) {
+      if (line.length < 3) continue;
+      final name = line.substring(2);
+      if (name == '*' || name == '.*') continue;
+      out.add((name: name, isDir: line.startsWith('d ')));
+    }
+    out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return out;
+  }
+
+  static String _quote(String s) => "'${s.replaceAll("'", r"'''")}'";
 
   @override
   Future<List<FsEntry>> listFiles(String dir) async {

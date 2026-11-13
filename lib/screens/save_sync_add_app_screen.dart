@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
+import 'package:retro_toolbox/screens/save_sync_recipe_wizard_screen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 
 /// Picking which apps this set of handhelds keeps in step.
@@ -91,9 +92,15 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
                           onChanged: added || _adding
                               ? null
                               : (on) => setState(() => on == true ? _picked.add(a.package) : _picked.remove(a.package)),
-                          secondary: a.info.icon != null
-                              ? Image.memory(a.info.icon!, width: 40, height: 40, gaplessPlayback: true)
-                              : const Icon(Icons.videogame_asset, size: 40),
+                          secondary: GestureDetector(
+                            // An app with nothing published is a thing to
+                            // describe, not a thing to hide: the way in is on
+                            // its own row.
+                            onLongPress: added ? null : () => _describe(a),
+                            child: a.info.icon != null
+                                ? Image.memory(a.info.icon!, width: 40, height: 40, gaplessPlayback: true)
+                                : const Icon(Icons.videogame_asset, size: 40),
+                          ),
                           title: Text(a.info.label),
                           // Not an error and not a dead end: an app with no
                           // recipe is one to write a recipe for.
@@ -102,7 +109,7 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
                                 ? 'Already added'
                                 : hit != null
                                     ? 'Recipe available${hit.status == 'verified' ? ' · verified' : ''}'
-                                    : 'No recipe yet — it can be written on this device',
+                                    : 'No recipe yet — hold its icon to describe it here',
                             style: theme.textTheme.bodySmall,
                           ),
                         );
@@ -125,6 +132,15 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
         ]),
       ),
     );
+  }
+
+  /// Opens the authoring flow for one app and brings its recipe straight into
+  /// the set, so describing an app and adding it are one errand.
+  Future<void> _describe(({String package, AppInfo info}) a) async {
+    final added = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => SaveSyncRecipeWizardScreen(package: a.package, label: a.info.label),
+    ));
+    if (added == true && mounted) Navigator.of(context).pop(true);
   }
 
   Future<void> _add() async {
