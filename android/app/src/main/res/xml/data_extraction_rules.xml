@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cloud backup and device-to-device transfer on Android 12 (API 31) and
+     higher. Only excludes, so everything else still goes as before. Save sync
+     state (device id, hub folder, bindings, bases) is per install: carried to
+     another handheld it would make that one push as the old device. See
+     PrefsStore in lib/services/save_sync/sync_state.dart. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="retro_toolbox_save_sync.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="retro_toolbox_save_sync.xml" />
+    </device-transfer>
+</data-extraction-rules>

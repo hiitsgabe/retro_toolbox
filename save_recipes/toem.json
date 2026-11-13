@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "toem",
+  "name": "TOEM",
+  "status": "draft",
+  "packages": ["com.snapbreak.toem"],
+  "locations": [{ "area": "androidData", "root": "files/Save" }],
+  "unit": "all",
+  "include": ["**"],
+  "deviceLocal": ["Settings.json"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": null
+}

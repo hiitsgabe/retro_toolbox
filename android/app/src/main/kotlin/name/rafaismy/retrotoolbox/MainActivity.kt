@@ -1,6 +1,10 @@
 package name.rafaismy.retrotoolbox
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -10,11 +14,32 @@ import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
 import java.io.File
 
+/// An app icon as PNG bytes at [ICON_PX], the size the list draws it at.
+/// Adaptive icons are not Bitmaps, so they go through a Canvas.
+private const val ICON_PX = 96
+
 class MainActivity : FlutterActivity() {
+    private fun iconPng(d: Drawable): ByteArray? = try {
+        val bitmap = if (d is BitmapDrawable && d.bitmap != null) {
+            Bitmap.createScaledBitmap(d.bitmap, ICON_PX, ICON_PX, true)
+        } else {
+            Bitmap.createBitmap(ICON_PX, ICON_PX, Bitmap.Config.ARGB_8888).also {
+                val canvas = Canvas(it)
+                d.setBounds(0, 0, canvas.width, canvas.height)
+                d.draw(canvas)
+            }
+        }
+        ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+    } catch (_: Exception) {
+        null
+    }
+
     private var pickResult: MethodChannel.Result? = null
     private var pickingDir = false
+    private var shizuku: ShizukuBridge? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -74,6 +99,53 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "nativeLibDir" -> result.success(applicationInfo.nativeLibraryDir)
+                    "deviceModel" -> result.success("${Build.MANUFACTURER} ${Build.MODEL}".trim())
+                    // One call for a whole list: loading an icon touches the
+                    // package manager and decodes a drawable, so a call per row
+                    // would stutter the list it is drawing.
+                    // Every app with a launcher entry, which is what the
+                    // queries block lets this app see and all a person would
+                    // ever pick from.
+                    "launchableApps" -> {
+                        Thread {
+                            val out = ArrayList<Map<String, Any>>()
+                            try {
+                                val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                                for (r in packageManager.queryIntentActivities(main, 0)) {
+                                    val info = r.activityInfo?.applicationInfo ?: continue
+                                    if (info.packageName == packageName) continue
+                                    val entry = HashMap<String, Any>()
+                                    entry["package"] = info.packageName
+                                    entry["label"] = packageManager.getApplicationLabel(info).toString()
+                                    iconPng(packageManager.getApplicationIcon(info))?.let { entry["icon"] = it }
+                                    out.add(entry)
+                                }
+                            } catch (_: Exception) {
+                                // An empty list reads as "nothing to add here",
+                                // which is survivable; a crash is not.
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
+                    "appInfo" -> {
+                        val packages = call.argument<List<String>>("packages").orEmpty()
+                        Thread {
+                            val out = HashMap<String, Map<String, Any>>()
+                            for (pkg in packages) {
+                                try {
+                                    val info = packageManager.getApplicationInfo(pkg, 0)
+                                    val entry = HashMap<String, Any>()
+                                    entry["label"] = packageManager.getApplicationLabel(info).toString()
+                                    iconPng(packageManager.getApplicationIcon(info))?.let { entry["icon"] = it }
+                                    out[pkg] = entry
+                                } catch (_: Exception) {
+                                    // Not installed, or hidden from this app's
+                                    // view: the row falls back to its own name.
+                                }
+                            }
+                            runOnUiThread { result.success(out) }
+                        }.start()
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -131,6 +203,13 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        shizuku = ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
+    }
+
+    override fun onDestroy() {
+        shizuku?.dispose()
+        shizuku = null
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

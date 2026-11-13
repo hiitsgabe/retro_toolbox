@@ -48,6 +48,10 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+    buildFeatures {
+        aidl = true
+    }
+
     // Extract native libs to disk at install so the bundled chdman (shipped as
     // jniLibs/<abi>/libchdman.so) lands in the read-only nativeLibraryDir and
     // can be exec'd — Android blocks running binaries from writable app dirs.
@@ -86,6 +90,12 @@ android {
     }
 
     buildTypes {
+        // ponytail: a debug build installs beside the release app instead of
+        // replacing it, so testing on a daily-driver handheld never wipes its
+        // data. It also keeps the two Shizuku provider authorities apart.
+        debug {
+            applicationIdSuffix = ".dev"
+        }
         release {
             if (releaseSigning) {
                 println("[Gradle] Using RELEASE signing config for build.")
@@ -152,4 +162,9 @@ rootProject.subprojects { sub ->
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation "dev.rikka.shizuku:api:13.1.5"
+    implementation "dev.rikka.shizuku:provider:13.1.5"
 }

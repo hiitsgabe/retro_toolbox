@@ -35,8 +35,12 @@ jobs:
       - uses: eas/resolve_build_config
       - uses: eas/inject_android_credentials
       - uses: eas/configure_android_version
+      # GDRIVE_SERVER_CLIENT_ID is an EAS environment variable (docs/play-store.md); without it the
+      # Play app offers only the folder hub for Save Sync. The check puts in the log whether this job sees it.
+      - name: Check the Google client id
+        run: if [ -n "$GDRIVE_SERVER_CLIENT_ID" ]; then echo "GDRIVE_SERVER_CLIENT_ID is set"; else echo "GDRIVE_SERVER_CLIENT_ID is EMPTY, so Save Sync offers only the folder hub in this bundle"; fi
       - name: Build Android app
-        run: fvm flutter build appbundle --release --build-name "$FLUTTER_BUILD_NAME" --build-number "${ eas.metadata.appBuildVersion }"
+        run: fvm flutter build appbundle --release --build-name "$FLUTTER_BUILD_NAME" --build-number "${ eas.metadata.appBuildVersion }" --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
       # One file: the Gradle build also leaves a copy under bundle/playRelease/.
       - uses: eas/upload_artifact
         with:

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "id": "sea-of-stars",
+  "name": "Sea of Stars",
+  "status": "draft",
+  "packages": ["com.playdigious.seaofstars"],
+  "locations": [
+    { "area": "androidData", "root": "files" },
+    { "area": "internal", "root": "files" }
+  ],
+  "unit": "all",
+  "include": ["*.sos", "Saves/*.sos"],
+  "version": { "from": "package", "rule": "sameBuild" },
+  "nativeCloud": { "provider": "googlePlayGames", "defaultMode": "backup" }
+}

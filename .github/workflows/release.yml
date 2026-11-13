@@ -87,6 +87,10 @@ jobs:
   build-android:
     needs: [resolve-version, download-catalog]
     runs-on: ubuntu-latest
+    env:
+      # Web OAuth client id for Save Sync's Google Drive hub (docs/google-cloud.md).
+      # Empty in forks: the app then hides Google Drive and offers a folder hub.
+      GDRIVE_SERVER_CLIENT_ID: ${{ secrets.GDRIVE_SERVER_CLIENT_ID }}
     steps:
       # Check out the tag created by resolve-version — the plain github.sha is
       # the pre-bump commit, which would build with the previous version.
@@ -187,16 +191,22 @@ jobs:
         run: |
           for os in macos linux windows; do rm -f assets/chdman/$os/*; : > assets/chdman/$os/.gitkeep; done
 
+      - name: Check the Google client id
+        run: |
+          if [ -z "$GDRIVE_SERVER_CLIENT_ID" ]; then
+            echo "::warning::GDRIVE_SERVER_CLIENT_ID not set: Save Sync offers only the folder hub in this build."
+          fi
+
       # Flavors (android/app/build.gradle.kts): "direct" for the APKs people
       # install themselves, "play" for the Play Store bundle.
       - name: Build Android APKs (split ABI)
-        run: flutter build apk --release --split-per-abi --flavor direct
+        run: flutter build apk --release --split-per-abi --flavor direct --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
 
       - name: Build Android universal APK
-        run: flutter build apk --release --flavor direct
+        run: flutter build apk --release --flavor direct --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
 
       - name: Build Android App Bundle
-        run: flutter build appbundle --release --flavor play
+        run: flutter build appbundle --release --flavor play --dart-define=GDRIVE_SERVER_CLIENT_ID="$GDRIVE_SERVER_CLIENT_ID"
 
       - name: Rename artifacts
         run: |

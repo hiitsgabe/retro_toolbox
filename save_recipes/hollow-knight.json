@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "id": "hollow-knight",
+  "name": "Hollow Knight",
+  "status": "draft",
+  "packages": [
+    "com.TeamCherry.HollowKnight"
+  ],
+  "locations": [
+    {
+      "area": "androidData",
+      "root": "files"
+    }
+  ],
+  "unit": "all",
+  "include": [
+    "user*.dat"
+  ],
+  "deviceLocal": [
+    "user*_*.dat",
+    "*.bak*",
+    "GraphicsSettings.txt"
+  ],
+  "version": {
+    "from": "package",
+    "rule": "receiverAtLeastSave"
+  },
+  "nativeCloud": null
+}

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +34,7 @@ import 'package:retro_toolbox/screens/chd_convert_screen.dart';
 import 'package:retro_toolbox/screens/rts_server_screen.dart';
 import 'package:retro_toolbox/screens/fbi_server_screen.dart';
 import 'package:retro_toolbox/screens/fpkgi_server_screen.dart';
+import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
@@ -116,6 +119,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
+          if (Platform.isAndroid)
+            MenuTile(
+                label: 'Save Sync',
+                icon: Icons.sync,
+                accentColor: const Color(0xFF2E7D5B),
+                badge: 'ALPHA',
+                onTap: () => _push(const SaveSyncScreen())),
           if (Handheld.current)
             MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
           if (Handheld.current)

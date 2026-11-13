@@ -3,7 +3,9 @@
         android:label="Retro Toolbox"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:extractNativeLibs="true">
+        android:extractNativeLibs="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -58,6 +60,14 @@
         <meta-data
             android:name="ic_notification"
             android:resource="@drawable/ic_notification" />
+        <!-- Shizuku hands its binder to the app through this provider. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
     <queries>
         <intent>
@@ -68,6 +78,14 @@
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
             <data android:scheme="https" />
+        </intent>
+        <package android:name="moe.shizuku.privileged.api" />
+        <!-- Save Sync shows each game's own icon and label. Seeing launchable
+             packages is enough for that, so the app does not file for
+             QUERY_ALL_PACKAGES, which Play restricts. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
     <uses-permission android:name="android.permission.INTERNET"/>

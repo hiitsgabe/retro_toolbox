@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "stardew-valley",
+  "name": "Stardew Valley",
+  "status": "verified",
+  "packages": ["com.chucklefish.stardewvalley"],
+  "locations": [{ "area": "androidData", "root": "files/Saves" }],
+  "unit": "folder",
+  "include": ["*/{folder}", "*/SaveGameInfo"],
+  "deviceLocal": ["*/*_old", "*/*_SVBAK", "*/*_SVEMERG", "*/BACKUP_SAVE", "EMERGENCY_SAVE"],
+  "inProgress": ["*/*_STARDEWVALLEYSAVETMP", "*/*_tmp"],
+  "beforeRestore": [
+    { "moveAside": ["{folder}/BACKUP_SAVE", "{folder}/{folder}_SVBAK", "{folder}/{folder}_SVEMERG"] },
+    { "moveAsideIfFirstStringIs": "{folder}", "file": "EMERGENCY_SAVE" }
+  ],
+  "checks": [{ "file": "*/{folder}", "xmlEndsWith": "</SaveGame>" }],
+  "version": { "file": "*/SaveGameInfo", "xmlTag": "gameVersion", "parts": 3, "rule": "receiverAtLeastSave" },
+  "nativeCloud": null
+}
