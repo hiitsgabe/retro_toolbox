@@ -24,6 +24,7 @@ import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
+import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 
 enum SyncAccess { none, shizuku, root }
 
@@ -56,6 +57,7 @@ class SaveSyncState {
     this.signInError,
     this.games = const [],
     this.appInfo = const {},
+    this.titles = const {},
     this.recipeProblems = const {},
     this.busyRecipe,
     this.messages = const [],
@@ -88,6 +90,11 @@ class SaveSyncState {
   /// the look-up answers, and empty for good on a host with no platform side.
   final Map<String, AppInfo> appInfo;
 
+  /// Title id to what it is called. Loaded only when a recipe covers more
+  /// than one save, since only an emulator names its folders after a console's
+  /// own ids.
+  final Map<String, TitleInfo> titles;
+
   /// Recipe file to why it was not loaded.
   final Map<String, String> recipeProblems;
   final String? busyRecipe;
@@ -110,6 +117,7 @@ class SaveSyncState {
     bool clearSignInError = false,
     List<GameStatus>? games,
     Map<String, AppInfo>? appInfo,
+    Map<String, TitleInfo>? titles,
     Map<String, String>? recipeProblems,
     String? busyRecipe,
     bool clearBusy = false,
@@ -130,6 +138,7 @@ class SaveSyncState {
         signInError: clearSignInError ? null : (signInError ?? this.signInError),
         games: games ?? this.games,
         appInfo: appInfo ?? this.appInfo,
+        titles: titles ?? this.titles,
         recipeProblems: recipeProblems ?? this.recipeProblems,
         busyRecipe: clearBusy ? null : (busyRecipe ?? this.busyRecipe),
         messages: messages ?? this.messages,
@@ -477,6 +486,12 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       state = state.copyWith(loading: false, games: games, recipeProblems: problems);
       final info = await _loadAppInfo([for (final g in games) ...g.recipe.packages]);
       if (info.isNotEmpty) state = state.copyWith(appInfo: info);
+      // Same again for the ids inside an emulator: the rows are already up, and
+      // a list where every recipe holds one save never pays for the catalog.
+      if (games.any((g) => g.units.length > 1)) {
+        final titles = await TitleCatalog.load();
+        if (titles.isNotEmpty && mounted) state = state.copyWith(titles: titles);
+      }
       await engine.report(games, access: access.name);
     } on DriveSignInNeeded catch (e) {
       state = state.copyWith(loading: false, error: '$e', signInAgain: true, games: _engine == null ? const [] : null);

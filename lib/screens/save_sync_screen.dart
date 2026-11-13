@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
@@ -12,6 +13,7 @@ import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
+import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Words for a unit's plan.
@@ -421,6 +423,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 game: g,
                 state: rowStateFor(g, hasAccess: s.access != SyncAccess.none),
                 info: s.appInfo[g.recipe.packages.first],
+                titles: s.titles,
                 busy: s.busyRecipe == g.recipe.id,
                 anyBusy: busy,
                 onPush: () => n.push(g.recipe.id),
@@ -492,6 +495,7 @@ class _AppRow extends StatelessWidget {
     required this.game,
     required this.state,
     required this.info,
+    this.titles = const {},
     required this.busy,
     required this.anyBusy,
     required this.onPush,
@@ -512,6 +516,10 @@ class _AppRow extends StatelessWidget {
   /// What Android shows for this app, when it could be read.
   final AppInfo? info;
 
+  /// What the console calls the ids this recipe's saves are filed under. Empty
+  /// for everything that is not an emulator, and empty until the catalog lands.
+  final Map<String, TitleInfo> titles;
+
   /// This row is the one working.
   final bool busy;
 
@@ -529,12 +537,13 @@ class _AppRow extends StatelessWidget {
   final void Function(String unit) onPullUnit;
   final bool hasAccess;
 
-  /// The saves this recipe covers here, in a settled order.
-  List<String> get units => game.units.keys.toList()..sort();
+  /// The saves this recipe covers here, in a settled order: by what they are
+  /// called, so a list of games reads alphabetically rather than by id.
+  List<String> get units => game.units.keys.toList()..sort((a, b) => unitLabel(a).toLowerCase().compareTo(unitLabel(b).toLowerCase()));
 
-  /// A unit key is a folder name: a farm, or an emulated game's id. Shown as
-  /// it is until something can name it better.
-  String unitLabel(String unit) => unit;
+  /// A unit key is a folder name: a farm, or an emulated game's id. An id the
+  /// catalog knows is shown as the game; anything else is shown as it is.
+  String unitLabel(String unit) => titles[unit.toUpperCase()]?.name ?? unit;
 
   bool get _dim => state is RowBlocked || state is RowNotInstalled;
 
@@ -588,6 +597,7 @@ class _AppRow extends StatelessWidget {
                 for (final unit in units)
                   _UnitRow(
                     label: unitLabel(unit),
+                    art: titles[unit.toUpperCase()]?.image,
                     state: rowStateForUnit(game, unit, hasAccess: hasAccess),
                     busy: busy,
                     anyBusy: anyBusy,
@@ -655,6 +665,7 @@ class _AppRow extends StatelessWidget {
 class _UnitRow extends StatelessWidget {
   const _UnitRow({
     required this.label,
+    this.art,
     required this.state,
     required this.busy,
     required this.anyBusy,
@@ -663,6 +674,9 @@ class _UnitRow extends StatelessWidget {
   });
 
   final String label;
+
+  /// Art for this save's game, when the catalog had some.
+  final String? art;
   final RowState state;
   final bool busy;
   final bool anyBusy;
@@ -675,6 +689,22 @@ class _UnitRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 60),
       child: Row(children: [
+        if (art case final url?) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: CachedNetworkImage(
+              imageUrl: url,
+              width: 32,
+              height: 32,
+              fit: BoxFit.cover,
+              // Art is decoration: a slow or dead URL must never hold up or
+              // disfigure the row that carries the verb.
+              placeholder: (_, __) => const SizedBox(width: 32, height: 32),
+              errorWidget: (_, __, ___) => const SizedBox(width: 32, height: 32),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: theme.textTheme.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),

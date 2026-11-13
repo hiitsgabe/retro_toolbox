@@ -10,6 +10,7 @@ import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
+import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 import 'package:retro_toolbox/services/save_sync/units.dart';
 
 import 'save_sync_support.dart';
@@ -121,6 +122,39 @@ void main() {
     expect(fake.calls.last, 'push stardew-valley Farm_1');
     await t.tap(find.widgetWithText(OutlinedButton, 'Download'));
     expect(fake.calls.last, 'pull stardew-valley Farm_2');
+  });
+
+  testWidgets('an emulated game is named, not left as its id', (t) async {
+    final eden = bundledRecipe('eden');
+    const edenBind = Binding(recipe: 'eden', package: 'dev.eden.eden_emulator', area: Area.androidData, root: 'files/nand/user/save/0000000000000000/ABC');
+    final fake = await pump(
+      t,
+      SaveSyncState(
+        access: SyncAccess.shizuku,
+        titles: const {
+          '0100000000ABC000': TitleInfo('Alpha Title', 'https://art.example/alpha.png'),
+          '0100000000DEF000': TitleInfo('Beta Title', null),
+        },
+        games: [
+          GameStatus(eden, 'bundled', const Bound(edenBind), units: {
+            '0100000000ABC000': const UnitStatus(PushPlan('0100000000ABC000', [])),
+            '0100000000DEF000': const UnitStatus(UpToDate('0100000000DEF000')),
+            '0100000000FFF000': const UnitStatus(UpToDate('0100000000FFF000')),
+          }),
+        ],
+      ),
+    );
+    expect(find.text('Alpha Title'), findsOneWidget);
+    expect(find.text('Beta Title'), findsOneWidget);
+    // An id the catalog never heard of is still a save worth syncing, so it
+    // keeps its id rather than disappearing or reading as unknown.
+    expect(find.text('0100000000FFF000'), findsOneWidget);
+    expect(find.text('0100000000ABC000'), findsNothing);
+
+    // The name is decoration; the key is what travels. Pushing the row that
+    // says Alpha Title must push the id it stands for.
+    await t.tap(find.widgetWithText(OutlinedButton, 'Upload'));
+    expect(fake.calls.last, 'push eden 0100000000ABC000');
   });
 
   testWidgets('with only an upload owing, the verb is Upload', (t) async {
