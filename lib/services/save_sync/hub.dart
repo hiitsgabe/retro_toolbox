@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
+import 'package:retro_toolbox/services/save_sync/hub_config.dart';
 import 'package:retro_toolbox/services/save_sync/path_guard.dart';
 
 /// The place a hub was supposed to be holds nothing. A removed card, a folder
@@ -188,6 +189,35 @@ class Hub {
       '$dir/${makeGenId(t, deviceId, sha)}.json',
       utf8.encode(jsonEncode({'source': source, 'device': deviceId, 'publishedAt': t.toIso8601String(), 'recipe': recipe})),
     );
+    return true;
+  }
+
+  /// Every app the owner chose, folded from the files each device wrote.
+  /// Unreadable files are skipped, the way [recipes] already skips them.
+  Future<HubConfig> config() async {
+    final files = <List<int>>[];
+    for (final f in await backend.list('config')) {
+      if (f.isDir || !_genFile.hasMatch(f.name)) continue;
+      try {
+        files.add(await backend.read('config/${f.name}'));
+      } catch (_) {
+        continue;
+      }
+    }
+    return mergeConfigFiles(files);
+  }
+
+  /// Writes one new file holding only what this device changed. Nothing
+  /// already in the hub is rewritten, so two devices changing different apps
+  /// never collide. A change identical to one already written is skipped, the
+  /// same guard [publishRecipe] uses.
+  Future<bool> putConfig(Map<String, ConfigEntry> changed, {required String deviceId, DateTime? now}) async {
+    if (changed.isEmpty) return false;
+    final t = (now ?? DateTime.now()).toUtc();
+    final bytes = encodeConfigFile(changed, deviceId: deviceId, writtenAt: t);
+    final sha = sha256.convert(bytes).toString();
+    if ((await backend.list('config')).any((e) => e.name.endsWith('-${sha.substring(0, 8)}.json'))) return false;
+    await backend.write('config/${makeGenId(t, deviceId, sha)}.json', bytes);
     return true;
   }
 
