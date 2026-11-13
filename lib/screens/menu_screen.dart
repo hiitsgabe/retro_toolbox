@@ -119,6 +119,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
+          if (Platform.isAndroid)
+            MenuTile(
+                label: 'Save Sync',
+                icon: Icons.sync,
+                accentColor: const Color(0xFF2E7D5B),
+                badge: 'ALPHA',
+                onTap: () => _push(const SaveSyncScreen())),
           if (Handheld.current)
             MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
           if (Handheld.current)
@@ -148,13 +155,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
         ])),
       ),
-      if (Platform.isAndroid)
-        MenuTile(
-          label: 'Save Sync',
-          icon: Icons.sync,
-          accentColor: const Color(0xFF2E7D5B),
-          onTap: () => _push(const SaveSyncScreen()),
-        ),
       MenuTile(
         label: 'Sports',
         icon: Icons.sports_esports,
