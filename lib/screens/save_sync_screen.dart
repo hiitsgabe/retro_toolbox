@@ -48,6 +48,71 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     Future.microtask(() => ref.read(saveSyncProvider.notifier).refresh());
   }
 
+  /// Puts back the save a pull replaced. The hub keeps one per handheld, so
+  /// the choice is which handheld's, and the confirm says plainly that what
+  /// is here now goes away.
+  Future<void> _restore(GameStatus g) async {
+    final n = ref.read(saveSyncProvider.notifier);
+    final units = g.units.keys.toList()..sort();
+    final unit = units.length == 1 ? units.first : null;
+    if (unit == null && units.isEmpty) return;
+    final backups = await n.backupsFor(g.recipe.id, unit ?? units.first);
+    if (!mounted) return;
+    if (backups.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No backup yet'),
+          content: const Text('A backup is left in the hub each time a download replaces a save here. Nothing has been replaced yet.'),
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
+    final picked = await showModalBottomSheet<({String device, String name, DateTime at})>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Restore a backup', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(
+                'The save that was here before a download replaced it. One is kept per handheld.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              for (final b in backups)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(b.name),
+                    subtitle: Text(_when(b.at)),
+                    onTap: () => Navigator.of(context).pop(b),
+                  ),
+                ),
+            ]),
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Put this one back?'),
+        content: Text('The save here now is replaced by the backup from ${picked.name}. It is kept in this device\'s history first.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Restore')),
+        ],
+      ),
+    );
+    if (go == true && mounted) await n.restoreBackup(g.recipe.id, unit ?? units.first, fromDevice: picked.device);
+  }
+
   /// The two versions of a save that drifted apart, side by side, so the
   /// choice is made on what each one is rather than on which button is
   /// nearer. Nothing here destroys anything: whichever is kept, the one it
@@ -323,6 +388,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 onPull: () => n.pull(g.recipe.id),
                 onCheck: () => _showCheck(g),
                 onConfirm: _confirm,
+                onRestore: () => _restore(g),
                 onChooseVersion: () {
                   for (final e in g.units.entries) {
                     if (e.value.plan case final Diverged d) {
@@ -390,6 +456,7 @@ class _AppRow extends StatelessWidget {
     required this.onCheck,
     required this.onConfirm,
     required this.onChooseVersion,
+    required this.onRestore,
   });
 
   final GameStatus game;
@@ -409,6 +476,7 @@ class _AppRow extends StatelessWidget {
   final VoidCallback onCheck;
   final void Function(NeedsConfirm) onConfirm;
   final VoidCallback onChooseVersion;
+  final VoidCallback onRestore;
 
   bool get _dim => state is RowBlocked || state is RowNotInstalled;
 
@@ -437,8 +505,21 @@ class _AppRow extends StatelessWidget {
               const SizedBox(width: 8),
               if (busy)
                 const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
-              else
+              else ...[
                 _verb() ?? const SizedBox.shrink(),
+                // The row keeps one verb; everything else that can be done to
+                // a game lives behind the dots, so a rare action never sits
+                // next to the common one.
+                PopupMenuButton<String>(
+                  enabled: !anyBusy,
+                  tooltip: 'More',
+                  onSelected: (v) => v == 'restore' ? onRestore() : onCheck(),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'restore', child: Text('Restore a backup…')),
+                    PopupMenuItem(value: 'check', child: Text('Check')),
+                  ],
+                ),
+              ],
             ]),
           ),
         ),

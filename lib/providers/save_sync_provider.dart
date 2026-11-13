@@ -530,6 +530,24 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   Future<void> pull(String recipeId) => _act(recipeId, (e, r, s) => e.pull(r, source: s));
 
+  /// Which handhelds left a backup of this unit in the hub, newest name
+  /// first. Empty when the hub is not open or nothing has been replaced yet.
+  Future<List<({String device, String name, DateTime at})>> backupsFor(String recipeId, String unit) async {
+    final engine = _engine;
+    if (engine == null) return const [];
+    final out = <({String device, String name, DateTime at})>[];
+    for (final d in await engine.hub.backupDevices(recipeId, unit)) {
+      final meta = await engine.hub.backup(d, recipeId, unit);
+      if (meta != null) out.add((device: d, name: meta.deviceName, at: meta.createdAt));
+    }
+    out.sort((a, b) => b.at.compareTo(a.at));
+    return out;
+  }
+
+  /// Puts a backup back over what is here now.
+  Future<void> restoreBackup(String recipeId, String unit, {required String fromDevice}) =>
+      _act(recipeId, (e, r, s) => e.restoreBackup(r, unit, fromDevice: fromDevice, source: s));
+
   /// Settles a unit both sides changed by keeping one version.
   Future<void> resolve(String recipeId, String unit, {required String keep}) =>
       _act(recipeId, (e, r, s) => e.resolve(r, unit, keep: keep, source: s));

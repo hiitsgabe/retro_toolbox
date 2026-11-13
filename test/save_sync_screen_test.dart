@@ -35,6 +35,18 @@ class FakeNotifier extends SaveSyncNotifier {
   Future<void> resolve(String recipeId, String unit, {required String keep}) async => calls.add('resolve $recipeId $unit $keep');
 
   @override
+  Future<List<({String device, String name, DateTime at})>> backupsFor(String recipeId, String unit) async {
+    calls.add('backupsFor $recipeId $unit');
+    return backups;
+  }
+
+  List<({String device, String name, DateTime at})> backups = const [];
+
+  @override
+  Future<void> restoreBackup(String recipeId, String unit, {required String fromDevice}) async =>
+      calls.add('restore $recipeId $unit $fromDevice');
+
+  @override
   Future<void> requestShizuku() async => calls.add('grant');
 
   @override
@@ -194,6 +206,67 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Keep this').last);
     await t.pumpAndSettle();
     expect(fake.calls.last, startsWith('resolve stardew-valley Farm_1'));
+  });
+
+  // The rare actions live behind the dots so they never sit beside the one
+  // verb the row is actually for.
+  testWidgets('the dots hold restore and check, and the row keeps one verb', (t) async {
+    await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+        GameStatus(stardew, 'bundled', const Bound(binding), units: {
+          'Farm_1': const UnitStatus(PushPlan('Farm_1', [])),
+        }),
+      ]),
+    );
+    expect(find.widgetWithText(FilledButton, 'Upload'), findsOneWidget);
+    expect(find.text('Restore a backup…'), findsNothing);
+
+    await t.tap(find.byIcon(Icons.more_vert));
+    await t.pumpAndSettle();
+    expect(find.text('Restore a backup…'), findsOneWidget);
+    expect(find.text('Check'), findsOneWidget);
+  });
+
+  testWidgets('with nothing replaced yet, restore says so instead of opening empty', (t) async {
+    await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+        GameStatus(stardew, 'bundled', const Bound(binding), units: {
+          'Farm_1': const UnitStatus(PushPlan('Farm_1', [])),
+        }),
+      ]),
+    );
+    await t.tap(find.byIcon(Icons.more_vert));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Restore a backup…'));
+    await t.pumpAndSettle();
+    expect(find.text('No backup yet'), findsOneWidget);
+  });
+
+  testWidgets('picking a handheld restores from it, after saying what goes away', (t) async {
+    final fake = await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+        GameStatus(stardew, 'bundled', const Bound(binding), units: {
+          'Farm_1': const UnitStatus(PushPlan('Farm_1', [])),
+        }),
+      ]),
+    );
+    fake.backups = [(device: 'odin-1', name: 'AYN Odin2 Mini', at: DateTime.utc(2026, 11, 13, 2))];
+
+    await t.tap(find.byIcon(Icons.more_vert));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Restore a backup…'));
+    await t.pumpAndSettle();
+    expect(find.text('AYN Odin2 Mini'), findsOneWidget);
+
+    await t.tap(find.text('AYN Odin2 Mini'));
+    await t.pumpAndSettle();
+    expect(find.text('Put this one back?'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Restore'));
+    await t.pumpAndSettle();
+    expect(fake.calls.last, 'restore stardew-valley Farm_1 odin-1');
   });
 
   testWidgets('a hub that is set up offers somewhere to add apps', (t) async {
