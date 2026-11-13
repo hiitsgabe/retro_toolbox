@@ -211,6 +211,19 @@ void main() {
     expect(dragOn(), isFalse);
   });
 
+  testWidgets('a game placed by team code (MVP) does not ask for the slot order', (t) async {
+    await pump(t,
+        info: const PatcherInfo(gameId: 'mvp-psp', platform: 'psp', sport: 'baseball', requiresSlotMapping: false, providers: ['espn']));
+    expect(find.textContaining('slot order'), findsNothing);
+    expect(find.text('Each team goes to its own slot; tap to edit a squad.'), findsOneWidget);
+  });
+
+  testWidgets('a game placed by slot order says so', (t) async {
+    await pump(t,
+        info: const PatcherInfo(gameId: 'iss-snes', platform: 'snes', sport: 'soccer', requiresSlotMapping: true, providers: ['espn']));
+    expect(find.textContaining('(slot order)'), findsOneWidget);
+  });
+
   const nhl94 = PatcherInfo(gameId: 'nhl94-snes', platform: 'snes', sport: 'hockey', requiresSlotMapping: false, providers: ['espn']);
   RosterTeam club(int id, String name, String code) =>
       RosterTeam(teamRaw: {'id': id, 'name': name, 'code': code}, players: [], statsRaw: {}, extraRaw: {});

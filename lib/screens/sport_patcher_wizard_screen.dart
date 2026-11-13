@@ -1292,8 +1292,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   int _leftOut(RosterDoc doc) => _singleCap == null ? 0 : doc.teams.length - info.keptTeams(doc.teams.length);
 
-  String get _reorderHint => gameStoresByPosition(info.gameId)
-      // The library slots these by team code, whatever the order.
+  String get _reorderHint => !info.requiresSlotMapping
+      // No slot map: the library slots these by team code, whatever the order.
       ? (_slotsPending ? "Reading the ROM's slots…" : 'Each team goes to its own slot; tap to edit a squad.')
       : Handheld.current
           ? 'Move or swap to reorder (slot order), tap to edit a squad.'
