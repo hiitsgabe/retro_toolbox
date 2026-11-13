@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
+import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
@@ -36,10 +37,26 @@ class SaveSyncScreen extends ConsumerStatefulWidget {
 }
 
 class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
+  /// So a handheld that leaves setup without choosing is not sent straight
+  /// back into it.
+  bool _offeredSetup = false;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(saveSyncProvider.notifier).refresh());
+  }
+
+  /// A handheld with no place chosen has nothing to list, so the first run
+  /// gets its own two questions rather than a screen of empty cards.
+  void _setupIfUnset(HubKind kind) {
+    if (_offeredSetup || kind != HubKind.none) return;
+    _offeredSetup = true;
+    Future.microtask(() async {
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute<bool>(builder: (_) => const SaveSyncSetupScreen()));
+      if (mounted) await ref.read(saveSyncProvider.notifier).refresh();
+    });
   }
 
   Future<void> _pickHub() async {
@@ -156,6 +173,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     // A game this handheld does not have is not a row to act on, so it folds
     // into its own group below instead of sitting among the live ones. It
     // still reaches the hub report, so other devices keep seeing it.
+    _setupIfUnset(s.hubKind);
     final shown = s.games.where((g) => g.bind is! NotInstalled).toList();
     final absent = s.games.where((g) => g.bind is NotInstalled).toList();
     final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
@@ -176,31 +194,8 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                   'Every save this replaces is kept in history on this device.',
             ),
             const SizedBox(height: 12),
-            if (s.hubKind == HubKind.none) ...[
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Where should saves go?', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    if (s.googleAvailable)
-                      const Text('Google Drive keeps them in a "Retro Toolbox Saves" folder in your own Drive. '
-                          'Retro Toolbox sees only the files it creates there.'),
-                    Text(s.googleAvailable
-                        ? 'A folder works without Google: another app (Syncthing, FolderSync) carries it between devices.'
-                        : 'Another app (Syncthing, FolderSync) carries the folder between devices.'),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      if (s.googleAvailable)
-                        FilledButton.icon(onPressed: busy ? null : n.signInWithGoogle, icon: const Icon(Icons.login), label: const Text('Sign in with Google')),
-                      OutlinedButton.icon(onPressed: busy ? null : () => n.setHubFolder(), icon: const Icon(Icons.folder), label: const Text('Use a folder')),
-                    ]),
-                    if (s.signInError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.signInError!, style: errorStyle)),
-                  ]),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
+            // The first run has its own screen now; a chooser here as well
+            // would be a second place to answer the same question.
             if (s.access == SyncAccess.none)
               Card(
                 child: Padding(

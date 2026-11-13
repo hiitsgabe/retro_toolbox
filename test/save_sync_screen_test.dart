@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
+import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
@@ -236,13 +237,13 @@ void main() {
     expect(fake.calls.last, 'confirm sea-of-stars');
   });
 
-  testWidgets('first run offers Google and a folder, before anything else', (t) async {
-    final fake = await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, access: SyncAccess.shizuku));
-    expect(t.getTopLeft(find.text('Where should saves go?')).dy, lessThan(t.getTopLeft(find.text('Access: Shizuku (shell)')).dy));
-    expect(find.text('Change'), findsNothing);
-    await t.tap(find.text('Sign in with Google'));
-    await t.tap(find.text('Use a folder'));
-    expect(fake.calls, ['refresh', 'google', 'folder default']);
+  // A handheld with no place chosen has nothing to list, so it is sent to the
+  // two questions rather than shown a screen of empty cards.
+  testWidgets('first run goes to setup, and the list asks nothing itself', (t) async {
+    await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, access: SyncAccess.shizuku));
+    await t.pumpAndSettle();
+    expect(find.byType(SaveSyncSetupScreen), findsOneWidget);
+    expect(find.text('Save Sync'), findsWidgets);
   });
 
   testWidgets('before the first refresh has read the hub, neither the first run nor a hub row shows', (t) async {
@@ -253,8 +254,9 @@ void main() {
 
   testWidgets('a build without Google offers only the folder', (t) async {
     await pump(t, const SaveSyncState(hubKind: HubKind.none));
+    await t.pumpAndSettle();
     expect(find.text('Use a folder'), findsOneWidget);
-    expect(find.textContaining('Google'), findsNothing);
+    expect(find.textContaining('Sign in with Google'), findsNothing);
   });
 
   testWidgets('a Google hub shows the account with Sign out, and no folder note', (t) async {
@@ -306,8 +308,12 @@ void main() {
 
   testWidgets('while signing in, the hub buttons wait', (t) async {
     await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, signingIn: true));
+    // Not pumpAndSettle: the progress bar never settles while signing in.
+    await t.pump();
+    await t.pump();
     expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Sign in with Google')).onPressed, isNull);
     expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Use a folder')).onPressed, isNull);
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    // One on the setup screen, one on the list behind it.
+    expect(find.byType(LinearProgressIndicator), findsWidgets);
   });
 }
