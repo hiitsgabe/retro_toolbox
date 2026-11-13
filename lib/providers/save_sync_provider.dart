@@ -16,6 +16,7 @@ import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
 import 'package:retro_toolbox/services/save_sync/privileged_shell.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
+import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
 
 enum SyncAccess { none, shizuku, root }
@@ -321,6 +322,14 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       final games = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
       // The engine is published with the games it produced: until then the catch below sees no engine and clears them.
       _engine = engine;
+      // Settled here, once, and never in build: the list is rebuilt on every
+      // icon that lands, and a sort that runs there would reorder rows under
+      // the owner's thumb.
+      games.sort((a, b) {
+        final byRank = rowRank(rowStateFor(a, hasAccess: access != SyncAccess.none))
+            .compareTo(rowRank(rowStateFor(b, hasAccess: access != SyncAccess.none)));
+        return byRank != 0 ? byRank : a.recipe.name.toLowerCase().compareTo(b.recipe.name.toLowerCase());
+      });
       // The rows go up first; the icons land on the frame after. A list that
       // waits for the package manager is a list that stutters.
       state = state.copyWith(loading: false, games: games, recipeProblems: problems);

@@ -80,7 +80,7 @@ void main() {
     return fake;
   }
 
-  testWidgets('shows each unit state and pushes and pulls the game', (t) async {
+  testWidgets('the row names the direction, and the verb does it', (t) async {
     final fake = await pump(
       t,
       SaveSyncState(access: SyncAccess.shizuku, hubFolder: '/storage/emulated/0/Retro Toolbox Saves', games: [
@@ -92,15 +92,30 @@ void main() {
     );
     expect(fake.calls, ['refresh']);
     expect(find.text('Stardew Valley'), findsOneWidget);
-    expect(find.textContaining('Farm_1: push pending'), findsOneWidget);
-    expect(find.textContaining('Farm_2: not on this device, pull available'), findsOneWidget);
+    // A download outranks an upload: the row owes the newer copy first, and
+    // only one verb is ever offered.
+    expect(find.textContaining('Needs download'), findsOneWidget);
     expect(find.textContaining('AYN Thor'), findsOneWidget);
-    await t.tap(find.widgetWithText(FilledButton, 'Push'));
-    await t.tap(find.widgetWithText(OutlinedButton, 'Pull'));
-    expect(fake.calls, ['refresh', 'push stardew-valley', 'pull stardew-valley']);
+    expect(find.widgetWithText(FilledButton, 'Upload'), findsNothing);
+    await t.tap(find.widgetWithText(FilledButton, 'Download'));
+    expect(fake.calls, ['refresh', 'pull stardew-valley']);
   });
 
-  testWidgets('a blocked unit shows why, with the game status notes and no Pull', (t) async {
+  testWidgets('with only an upload owing, the verb is Upload', (t) async {
+    final fake = await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, games: [
+        GameStatus(stardew, 'bundled', const Bound(binding), units: {
+          'Farm_1': const UnitStatus(PushPlan('Farm_1', [])),
+        }),
+      ]),
+    );
+    expect(find.textContaining('Needs upload'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Upload'));
+    expect(fake.calls, ['refresh', 'push stardew-valley']);
+  });
+
+  testWidgets('a game that is running says so and offers no verb', (t) async {
     await pump(
       t,
       SaveSyncState(access: SyncAccess.shizuku, games: [
@@ -114,10 +129,9 @@ void main() {
         ),
       ]),
     );
-    expect(find.textContaining('Farm_2: Stardew Valley is running'), findsOneWidget);
-    expect(find.text('Recovered an interrupted pull of Farm_1'), findsOneWidget);
-    expect(find.text('Stardew Valley is running: close it to sync'), findsOneWidget);
-    expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Pull')).onPressed, isNull);
+    expect(find.text('Close the game first'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Upload'), findsNothing);
   });
 
   testWidgets('without access it offers the Shizuku grant', (t) async {
@@ -177,7 +191,8 @@ void main() {
         games: [GameStatus(stardew, 'bundled', const NotInstalled())],
       ),
     );
-    expect(find.textContaining('None of the games'), findsOneWidget);
+    expect(find.textContaining('Not on this device (1)'), findsOneWidget);
+    expect(find.textContaining('Nothing here is set up to sync yet'), findsOneWidget);
   });
 
   testWidgets('Check opens a dialog with every line', (t) async {
@@ -185,7 +200,7 @@ void main() {
       t,
       SaveSyncState(access: SyncAccess.shizuku, games: [GameStatus(stardew, 'bundled', const Bound(binding))]),
     );
-    await t.tap(find.widgetWithText(TextButton, 'Check'));
+    await t.tap(find.byType(InkWell).first);
     await t.pumpAndSettle();
     expect(find.text('Hub Farm_1'), findsOneWidget);
     expect(find.text('damaged'), findsOneWidget);
@@ -197,7 +212,7 @@ void main() {
       SaveSyncState(access: SyncAccess.shizuku, games: [GameStatus(stardew, 'bundled', const Bound(binding))]),
     );
     fake.checkThrows = true;
-    await t.tap(find.widgetWithText(TextButton, 'Check'));
+    await t.tap(find.byType(InkWell).first);
     await t.pumpAndSettle();
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.textContaining('bridge died'), findsOneWidget);
@@ -213,7 +228,7 @@ void main() {
         )),
       ]),
     );
-    await t.tap(find.text('Confirm save location'));
+    await t.tap(find.text('Confirm location'));
     await t.pumpAndSettle();
     expect(find.text('SOS_SaveSlot0.sos'), findsOneWidget);
     await t.tap(find.text('Use this place'));

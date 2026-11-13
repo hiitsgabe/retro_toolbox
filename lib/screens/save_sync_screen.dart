@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
@@ -6,6 +8,7 @@ import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
+import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
@@ -150,9 +153,11 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     final s = ref.watch(saveSyncProvider);
     final n = ref.read(saveSyncProvider.notifier);
     final busy = s.busyRecipe != null || s.loading || s.signingIn;
-    // ponytail: a game this handheld does not have is noise, not a row to act
-    // on. It still reaches the hub report, so other devices keep seeing it.
+    // A game this handheld does not have is not a row to act on, so it folds
+    // into its own group below instead of sitting among the live ones. It
+    // still reaches the hub report, so other devices keep seeing it.
     final shown = s.games.where((g) => g.bind is! NotInstalled).toList();
+    final absent = s.games.where((g) => g.bind is NotInstalled).toList();
     final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
     return Scaffold(
       appBar: AppBar(
@@ -245,13 +250,49 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
             if (s.error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(s.error!, style: errorStyle)),
             for (final m in s.messages) Padding(padding: const EdgeInsets.only(top: 4), child: Text(m)),
             const SizedBox(height: 8),
-            for (final g in shown) _GameCard(game: g, info: s.appInfo[g.recipe.packages.first], busy: busy, onPush: () => n.push(g.recipe.id), onPull: () => n.pull(g.recipe.id), onCheck: () => _showCheck(g), onConfirm: _confirm),
-            if (shown.isEmpty && !s.loading && s.hubKind != HubKind.none)
-              Text(
-                s.games.isEmpty ? 'No recipes loaded.' : 'None of the games these recipes cover are installed on this device.',
-                style: Theme.of(context).textTheme.bodySmall,
+            for (final g in shown)
+              _AppRow(
+                game: g,
+                state: rowStateFor(g, hasAccess: s.access != SyncAccess.none),
+                info: s.appInfo[g.recipe.packages.first],
+                busy: s.busyRecipe == g.recipe.id,
+                anyBusy: busy,
+                onPush: () => n.push(g.recipe.id),
+                onPull: () => n.pull(g.recipe.id),
+                onCheck: () => _showCheck(g),
+                onConfirm: _confirm,
               ),
-            for (final e in s.recipeProblems.entries) Text('Recipe ${e.key} not loaded: ${e.value}', style: Theme.of(context).textTheme.bodySmall),
+            if (shown.isEmpty && !s.loading && s.hubKind != HubKind.none)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(children: [
+                  Icon(Icons.inbox, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  Text(s.games.isEmpty ? 'No recipes loaded.' : 'Nothing here is set up to sync yet.'),
+                ]),
+              ),
+            // Not hidden, just folded away: a game that vanished from the list
+            // reads as lost data, especially when the hub says it is covered.
+            if (absent.isNotEmpty)
+              ExpansionTile(
+                title: Text('Not on this device (${absent.length})'),
+                children: [
+                  for (final g in absent)
+                    ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.videogame_asset, size: 20),
+                      title: Text(s.appInfo[g.recipe.packages.first]?.label ?? g.recipe.name),
+                    ),
+                ],
+              ),
+            if (s.recipeProblems.isNotEmpty)
+              ExpansionTile(
+                title: Text('Recipes that did not load (${s.recipeProblems.length})'),
+                children: [
+                  for (final e in s.recipeProblems.entries)
+                    ListTile(dense: true, title: Text(e.key), subtitle: Text(e.value)),
+                ],
+              ),
           ],
         ),
       ),
@@ -259,71 +300,155 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
   }
 }
 
-class _GameCard extends StatelessWidget {
-  const _GameCard({required this.game, required this.info, required this.busy, required this.onPush, required this.onPull, required this.onCheck, required this.onConfirm});
+class _AppRow extends StatelessWidget {
+  const _AppRow({
+    required this.game,
+    required this.state,
+    required this.info,
+    required this.busy,
+    required this.anyBusy,
+    required this.onPush,
+    required this.onPull,
+    required this.onCheck,
+    required this.onConfirm,
+  });
 
   final GameStatus game;
+  final RowState state;
 
   /// What Android shows for this app, when it could be read.
   final AppInfo? info;
+
+  /// This row is the one working.
   final bool busy;
+
+  /// Some row is working. The engine takes one action at a time, so the other
+  /// rows' verbs wait — but taps, Check and the rest of the screen stay live.
+  final bool anyBusy;
   final VoidCallback onPush;
   final VoidCallback onPull;
   final VoidCallback onCheck;
   final void Function(NeedsConfirm) onConfirm;
 
+  bool get _dim => state is RowBlocked || state is RowNotInstalled;
+
   @override
   Widget build(BuildContext context) {
-    final g = game;
-    final small = Theme.of(context).textTheme.bodySmall;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // The app's own icon and name, the way the launcher shows them. The
-          // recipe's name is only the fallback, for a game the device cannot
-          // describe.
-          Row(children: [
-            if (info?.icon != null) ...[
-              Image.memory(info!.icon!, width: 48, height: 48, gaplessPlayback: true, filterQuality: FilterQuality.medium),
+    final theme = Theme.of(context);
+    final label = info?.label.isNotEmpty == true ? info!.label : game.recipe.name;
+    return Opacity(
+      opacity: _dim ? 0.5 : 1,
+      child: Card(
+        child: InkWell(
+          onTap: onCheck,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _Thumb(icon: info?.icon, badge: _badge(theme)),
               const SizedBox(width: 12),
-            ],
-            Expanded(
-              child: Text(
-                info?.label.isNotEmpty == true ? info!.label : g.recipe.name,
-                style: Theme.of(context).textTheme.titleMedium,
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(label, style: theme.textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(_line(), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  Text('${game.source} recipe', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  if (game.running) Text('Close the game first', style: theme.textTheme.bodySmall),
+                ]),
               ),
-            ),
-          ]),
-          Text(
-            [
-              '${g.source} recipe',
-              bindLabel(g.bind),
-              if (g.installedVersion != null) 'version ${g.installedVersion}',
-              if (g.backupOnly) 'backup only (the game has its own cloud)',
-            ].join(' · '),
-            style: small,
+              const SizedBox(width: 8),
+              if (busy)
+                const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+              else
+                _verb() ?? const SizedBox.shrink(),
+            ]),
           ),
-          if (g.error != null) Text(g.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          if (g.running) Text('${g.recipe.name} is running: close it to sync'),
-          for (final note in g.notes) Text(note, style: small),
-          const SizedBox(height: 6),
-          for (final e in g.units.entries)
-            Text(
-              [
-                '${e.key}: ${planLabel(e.value.plan)}',
-                if (e.value.newest != null) 'newest by ${e.value.newest!.deviceName}, ${_when(e.value.newest!.createdAt)}',
-              ].join(' · '),
-            ),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            if (g.bind case final NeedsConfirm c) FilledButton(onPressed: busy ? null : () => onConfirm(c), child: const Text('Confirm save location')),
-            OutlinedButton.icon(onPressed: !busy && g.canPull ? onPull : null, icon: const Icon(Icons.download), label: const Text('Pull')),
-            FilledButton.icon(onPressed: !busy && g.canPush ? onPush : null, icon: const Icon(Icons.upload), label: const Text('Push')),
-            TextButton.icon(onPressed: busy ? null : onCheck, icon: const Icon(Icons.fact_check), label: const Text('Check')),
-          ]),
-        ]),
+        ),
       ),
+    );
+  }
+
+  /// Four shapes and no more. Blocked wears the neutral lock, a failure wears
+  /// the error colour: a condition of the device and an incident never look
+  /// alike.
+  ({IconData icon, Color color})? _badge(ThemeData theme) => switch (state) {
+        RowUpToDate() => (icon: Icons.check_circle, color: theme.colorScheme.primary),
+        RowNeedsPush() => (icon: Icons.arrow_circle_up, color: theme.colorScheme.primary),
+        RowNeedsPull() => (icon: Icons.arrow_circle_down, color: theme.colorScheme.primary),
+        RowConflict() => (icon: Icons.error, color: theme.colorScheme.error),
+        RowFailed() => (icon: Icons.error, color: theme.colorScheme.error),
+        RowBlocked() || RowNotInstalled() => (icon: Icons.lock_outline, color: theme.colorScheme.onSurfaceVariant),
+        RowNeedsConfirm() => null,
+      };
+
+  /// One sentence. The direction is always named and the time always relative.
+  String _line() => switch (state) {
+        RowUpToDate(:final at) => at == null ? 'Up to date' : 'Up to date · ${_when(at)}',
+        RowNeedsPush(:final at) => at == null ? 'Needs upload — nothing in the hub yet' : 'Needs upload — this device is newer (${_when(at)})',
+        RowNeedsPull(:final fromDevice, :final at) => 'Needs download — $fromDevice is newer${at == null ? '' : ' (${_when(at)})'}',
+        RowConflict() => 'Both sides changed since the last sync',
+        RowNeedsConfirm() => 'Confirm where the saves are',
+        RowNotInstalled() => 'Not installed here',
+        RowFailed(:final message) => message,
+        RowBlocked(:final reason) => switch (reason) {
+            BlockReason.needsRoot => "Saves live in a folder only root can open. This device isn't rooted.",
+            BlockReason.notOpenableHere => "This device can't open this app's save folder — it works on your other handheld.",
+            BlockReason.folderMissing => 'Open the app once so it makes its save folder.',
+            BlockReason.locationUnknown => 'The saves could be in more than one place here.',
+            BlockReason.noAccess => 'Nothing syncs from this device yet.',
+            BlockReason.backupOnly => 'This app has its own cloud — uploads only.',
+          },
+      };
+
+  /// One verb, never two, and whichever direction the row needs is the
+  /// affirmative one. A state with nothing to do offers nothing.
+  Widget? _verb() => switch (state) {
+        RowNeedsPull() => FilledButton.icon(onPressed: anyBusy ? null : onPull, icon: const Icon(Icons.download), label: const Text('Download')),
+        RowNeedsPush() => FilledButton.icon(onPressed: anyBusy ? null : onPush, icon: const Icon(Icons.upload), label: const Text('Upload')),
+        RowNeedsConfirm(:final bind) => FilledButton(onPressed: anyBusy ? null : () => onConfirm(bind), child: const Text('Confirm location')),
+        RowBlocked(:final reason) when reason == BlockReason.backupOnly =>
+          FilledButton.icon(onPressed: anyBusy ? null : onPush, icon: const Icon(Icons.upload), label: const Text('Upload')),
+        RowFailed() => OutlinedButton(onPressed: anyBusy ? null : onCheck, child: const Text('Details')),
+        _ => null,
+      };
+}
+
+/// The app's own icon in the house thumbnail frame, with the state badge
+/// overlaid. No icon — no launcher activity, or any run off Android — falls
+/// back to a neutral glyph in the same frame, so rows never change height.
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.icon, required this.badge});
+
+  final Uint8List? icon;
+  final ({IconData icon, Color color})? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: icon != null
+              ? Image.memory(icon!, width: 48, height: 48, gaplessPlayback: true, filterQuality: FilterQuality.medium)
+              : Icon(Icons.videogame_asset, color: theme.colorScheme.onSurfaceVariant),
+        ),
+        if (badge != null)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(color: theme.colorScheme.surface, shape: BoxShape.circle),
+              child: Icon(badge!.icon, size: 14, color: badge!.color),
+            ),
+          ),
+      ]),
     );
   }
 }
