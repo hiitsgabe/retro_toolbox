@@ -212,6 +212,55 @@ class SaveSyncEngine {
         return out.isEmpty ? ['Nothing to push'] : out;
       });
 
+  /// Settles a unit both sides changed, by keeping one version. [keep] is
+  /// [keepLocal] or the id of a head in the hub.
+  ///
+  /// Nothing is thrown away: keeping the hub's copy pulls it, which files the
+  /// replaced save into this device's history first, and either way the
+  /// result is pushed as one generation naming every head as a parent. That
+  /// single descendant is what ends the divergence — for this device and for
+  /// every other one, without any of them being asked the question again.
+  static const keepLocal = 'local';
+
+  Future<List<String>> resolve(Recipe r, String unitKey, {required String keep, String source = 'bundled'}) => _serial(() async {
+        final s = await _status(r, source);
+        final binding = s.binding;
+        if (binding == null) return ['${r.name}: ${bindLabel(s.bind)}'];
+        if (s.error != null) return ['${r.name}: ${s.error}'];
+        final plan = s.units[unitKey]?.plan;
+        if (plan is! Diverged) return ['$unitKey: nothing to settle'];
+        final heads = plan.heads;
+        try {
+          if (keep != keepLocal) {
+            final chosen = heads.where((h) => h.gen == keep).firstOrNull;
+            if (chosen == null) return ['$unitKey: that version is no longer in the hub; refresh and try again'];
+            await _puller(fsFor(r)).pull(
+              recipe: r,
+              binding: binding,
+              locationDir: binding.dir(paths),
+              unitKey: unitKey,
+              gen: chosen,
+              expectedLocal: s.units[unitKey]?.local?.hashes ?? const {},
+            );
+            await _log(r.id, unitKey, 'resolve-pull', chosen.gen, 'ok');
+          }
+          // Re-read: keeping the hub's copy has just changed what is here.
+          final after = await _status(r, source);
+          final local = after.units[unitKey]?.local;
+          if (local == null) return ['$unitKey: nothing to push'];
+          final gen = await Pusher(fs: fsFor(r), hub: hub, stagingRoot: _staging, deviceId: deviceId, deviceName: deviceName, clock: _clock)
+              .push(recipe: r, binding: binding, locationDir: binding.dir(paths), unit: local, parents: heads, kind: 'merge');
+          await state.setBase(hub.key, r.id, unitKey, Base(gen.gen, gen.hashes));
+          await hub.prune(r.id, unitKey, deviceId: deviceId, now: _clock());
+          await state.setLast(r.id, 'push', _clock());
+          await _log(r.id, unitKey, 'resolve', gen.gen, 'ok');
+          return ['$unitKey: settled'];
+        } catch (e) {
+          await _log(r.id, unitKey, 'resolve', '-', '$e');
+          return ['$unitKey: $e'];
+        }
+      });
+
   Future<List<String>> pull(Recipe r, {String source = 'bundled'}) => _serial(() async {
         final s = await _status(r, source);
         final binding = s.binding;

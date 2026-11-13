@@ -501,6 +501,10 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   Future<void> pull(String recipeId) => _act(recipeId, (e, r, s) => e.pull(r, source: s));
 
+  /// Settles a unit both sides changed by keeping one version.
+  Future<void> resolve(String recipeId, String unit, {required String keep}) =>
+      _act(recipeId, (e, r, s) => e.resolve(r, unit, keep: keep, source: s));
+
   Future<List<CheckLine>> check(String recipeId) async {
     final engine = _engine;
     final entry = _recipes[recipeId];

@@ -10,6 +10,7 @@ import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
+import 'package:retro_toolbox/services/save_sync/units.dart';
 
 import 'save_sync_support.dart';
 
@@ -29,6 +30,9 @@ class FakeNotifier extends SaveSyncNotifier {
 
   @override
   Future<void> pull(String recipeId) async => calls.add('pull $recipeId');
+
+  @override
+  Future<void> resolve(String recipeId, String unit, {required String keep}) async => calls.add('resolve $recipeId $unit $keep');
 
   @override
   Future<void> requestShizuku() async => calls.add('grant');
@@ -165,6 +169,31 @@ void main() {
       ),
     );
     expect(find.text(stardew.name), findsOneWidget);
+  });
+
+  // The state that used to be a dead end: both buttons disabled under a line
+  // saying that picking a version came later.
+  testWidgets('a conflict offers the choice, and keeping one settles it', (t) async {
+    final fake = await pump(
+      t,
+      SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+        GameStatus(stardew, 'bundled', const Bound(binding), units: {
+          'Farm_1': UnitStatus(
+            Diverged('Farm_1', [remote], localDiffers: true),
+            local: const LocalUnit('Farm_1', {'Farm_1/Farm_1': LocalFile('abc', 12)}),
+            newest: remote,
+          ),
+        }),
+      ]),
+    );
+    expect(find.textContaining('Both sides changed'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Choose version'));
+    await t.pumpAndSettle();
+    expect(find.text('On this device'), findsOneWidget);
+    expect(find.text('AYN Thor'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Keep this').last);
+    await t.pumpAndSettle();
+    expect(fake.calls.last, startsWith('resolve stardew-valley Farm_1'));
   });
 
   testWidgets('a hub that is set up offers somewhere to add apps', (t) async {

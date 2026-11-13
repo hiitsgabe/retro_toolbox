@@ -48,6 +48,59 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     Future.microtask(() => ref.read(saveSyncProvider.notifier).refresh());
   }
 
+  /// The two versions of a save that drifted apart, side by side, so the
+  /// choice is made on what each one is rather than on which button is
+  /// nearer. Nothing here destroys anything: whichever is kept, the one it
+  /// replaces is filed into this device's history first.
+  Future<void> _chooseVersion(GameStatus g, String unit, Diverged plan) async {
+    final local = g.units[unit]?.local;
+    final keep = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Which version should win?', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 12),
+              if (local != null)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.smartphone),
+                    title: const Text('On this device'),
+                    subtitle: Text('${local.hashes.length} file${local.hashes.length == 1 ? '' : 's'}'),
+                    trailing: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(SaveSyncEngine.keepLocal),
+                      child: const Text('Keep this'),
+                    ),
+                  ),
+                ),
+              for (final head in plan.heads)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.cloud),
+                    title: Text(head.deviceName),
+                    subtitle: Text('${_when(head.createdAt)} · ${head.files.length} file${head.files.length == 1 ? '' : 's'}'),
+                    trailing: FilledButton(
+                      onPressed: () => Navigator.of(context).pop(head.gen),
+                      child: const Text('Keep this'),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'Every save this replaces is kept in history on this device.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+    if (keep != null && mounted) await ref.read(saveSyncProvider.notifier).resolve(g.recipe.id, unit, keep: keep);
+  }
+
   /// Picks more apps for this set of handhelds. The catalog is read here
   /// rather than on every refresh: it is wanted only when somebody is about
   /// to choose, and it is never a precondition for anything else.
@@ -270,6 +323,14 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 onPull: () => n.pull(g.recipe.id),
                 onCheck: () => _showCheck(g),
                 onConfirm: _confirm,
+                onChooseVersion: () {
+                  for (final e in g.units.entries) {
+                    if (e.value.plan case final Diverged d) {
+                      _chooseVersion(g, e.key, d);
+                      return;
+                    }
+                  }
+                },
               ),
             if (shown.isEmpty && !s.loading && s.hubKind != HubKind.none)
               Padding(
@@ -328,6 +389,7 @@ class _AppRow extends StatelessWidget {
     required this.onPull,
     required this.onCheck,
     required this.onConfirm,
+    required this.onChooseVersion,
   });
 
   final GameStatus game;
@@ -346,6 +408,7 @@ class _AppRow extends StatelessWidget {
   final VoidCallback onPull;
   final VoidCallback onCheck;
   final void Function(NeedsConfirm) onConfirm;
+  final VoidCallback onChooseVersion;
 
   bool get _dim => state is RowBlocked || state is RowNotInstalled;
 
@@ -423,6 +486,7 @@ class _AppRow extends StatelessWidget {
         RowNeedsConfirm(:final bind) => FilledButton(onPressed: anyBusy ? null : () => onConfirm(bind), child: const Text('Confirm location')),
         RowBlocked(:final reason) when reason == BlockReason.backupOnly =>
           FilledButton.icon(onPressed: anyBusy ? null : onPush, icon: const Icon(Icons.upload), label: const Text('Upload')),
+        RowConflict() => FilledButton(onPressed: anyBusy ? null : onChooseVersion, child: const Text('Choose version')),
         RowFailed() => OutlinedButton(onPressed: anyBusy ? null : onCheck, child: const Text('Details')),
         _ => null,
       };
