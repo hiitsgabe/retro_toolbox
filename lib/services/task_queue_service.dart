@@ -216,6 +216,7 @@ class TaskQueueService {
                 chdmanPath: task.params['chdmanPath'] as String?,
                 keysPath: task.params['keysPath'] as String?,
                 boot9Path: task.params['boot9Path'] as String?,
+                isoAsCd: task.params['isoAsCd'] as bool? ?? false,
               );
           break;
         case TaskType.archiveExtraction:

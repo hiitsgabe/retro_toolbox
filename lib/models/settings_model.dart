@@ -6,6 +6,7 @@ class AppSettings {
   static const String extractToFolder = 'extractToFolder';
   static const String autoApplyFormations = 'autoApplyFormations';
   static const String additionalHandler = 'additionalHandler';
+  static const String chdIsoAsCd = 'chdIsoAsCd';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
@@ -15,6 +16,7 @@ class AppSettings {
     extractToFolder: bool,
     autoApplyFormations: bool,
     additionalHandler: String,
+    chdIsoAsCd: bool,
   };
 
   final Map<String, BaseSettings> consoleSettings;
@@ -165,6 +167,8 @@ class BaseSettings {
   final bool? autoApplyFormations;
   /// Per-console handler choice: a GameHandler id, or 'none'. Null = catalog's.
   final String? additionalHandler;
+  /// Per-console: the CHD handler packs an .iso as a CD CHD (AetherSX2) instead of a DVD one.
+  final bool? chdIsoAsCd;
 
   const BaseSettings({
     this.downloadDir,
@@ -175,6 +179,7 @@ class BaseSettings {
     this.authToken,
     this.autoApplyFormations,
     this.additionalHandler,
+    this.chdIsoAsCd,
   });
 
   BaseSettings copyWith({
@@ -188,6 +193,7 @@ class BaseSettings {
     bool? autoApplyFormations,
     String? additionalHandler,
     bool clearAdditionalHandler = false,
+    bool? chdIsoAsCd,
   }) {
     return BaseSettings(
       downloadDir: downloadDir == '' ? null : downloadDir ?? this.downloadDir,
@@ -198,6 +204,7 @@ class BaseSettings {
       authToken: clearAuthToken ? null : (authToken ?? this.authToken),
       autoApplyFormations: autoApplyFormations ?? this.autoApplyFormations ?? true,
       additionalHandler: clearAdditionalHandler ? null : (additionalHandler ?? this.additionalHandler),
+      chdIsoAsCd: chdIsoAsCd ?? this.chdIsoAsCd,
     );
   }
 
@@ -211,6 +218,7 @@ class BaseSettings {
       if (authToken != null) 'authToken': authToken,
       if (autoApplyFormations != null) AppSettings.autoApplyFormations: autoApplyFormations,
       if (additionalHandler != null) AppSettings.additionalHandler: additionalHandler,
+      if (chdIsoAsCd != null) AppSettings.chdIsoAsCd: chdIsoAsCd,
     };
   }
 
@@ -230,6 +238,8 @@ class BaseSettings {
         return (autoApplyFormations ?? true) as T?;
       case AppSettings.additionalHandler:
         return additionalHandler as T?;
+      case AppSettings.chdIsoAsCd:
+        return chdIsoAsCd as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -251,6 +261,8 @@ class BaseSettings {
         return copyWith(autoApplyFormations: value as bool?);
       case AppSettings.additionalHandler:
         return copyWith(additionalHandler: value as String?, clearAdditionalHandler: value == null);
+      case AppSettings.chdIsoAsCd:
+        return copyWith(chdIsoAsCd: value as bool?);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -266,6 +278,7 @@ class BaseSettings {
       authToken: json['authToken'] as String?,
       autoApplyFormations: json[AppSettings.autoApplyFormations] as bool?,
       additionalHandler: json[AppSettings.additionalHandler] as String?,
+      chdIsoAsCd: json[AppSettings.chdIsoAsCd] as bool?,
     );
   }
 }

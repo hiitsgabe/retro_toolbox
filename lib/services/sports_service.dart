@@ -355,6 +355,9 @@ class SportsService {
   }) async {
     assert(rostersFile != null || rostersFiles != null);
     final out = _tmp('patchresult');
+    final fromChd = p.extension(romPath).toLowerCase() == '.chd';
+    // Read before patching: the repack keeps the source's CHD type (CD vs DVD).
+    final isoAsCd = fromChd && await ChdService.isCdChd(romPath, chdmanPath: chdmanPath);
     final data = await _runData(
       tag: 'patch_${gameId.hashCode.abs()}',
       job: {
@@ -386,11 +389,12 @@ class SportsService {
       onStatus: onStatus,
     );
     final result = PatchResult.fromJson(Map<String, dynamic>.from(data as Map));
-    if (p.extension(romPath).toLowerCase() != '.chd') return result;
+    if (!fromChd) return result;
     // A CHD in, a CHD out; if packing fails the patched game stays playable.
     onStatus?.call('Packing the patched game into a CHD…');
     try {
-      final chd = await ChdService.repackPatched(result.outputPath, chdmanPath: chdmanPath, onProgress: onProgress);
+      final chd = await ChdService.repackPatched(result.outputPath,
+          chdmanPath: chdmanPath, onProgress: onProgress, isoAsCd: isoAsCd);
       return PatchResult(
           outputPath: chd, teamsPatched: result.teamsPatched, playersPatched: result.playersPatched, notes: result.notes);
     } catch (e) {

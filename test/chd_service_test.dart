@@ -180,6 +180,35 @@ void main() {
       expect(Directory(out).listSync().map((e) => p.basename(e.path)).toList(), ['League 2026 - Game.chd']);
     }, skip: noChdman);
 
+    test('an .iso packed as a CD CHD unpacks to the same .iso and repacks as a CD again', () async {
+      final src = Directory(p.join(root.path, 'src'))..createSync();
+      final bytes = List.generate(2048 * 64, (i) => i % 251);
+      final iso = File(p.join(src.path, 'Game.iso'))..writeAsBytesSync(bytes);
+      final chd = await ChdService()
+          .convert(inputPath: iso.path, outputDir: src.path, chdmanPath: chdman, onProgress: (_) {}, isoAsCd: true);
+      expect(await ChdService.isCdChd(chd, chdmanPath: chdman), isTrue);
+
+      final unpacked = await ChdService.unpackForReading(chd, cacheRoot: p.join(root.path, 'cache'), chdmanPath: chdman);
+      expect(p.basename(unpacked), 'Game.iso');
+      expect(File(unpacked).readAsBytesSync(), bytes);
+
+      final out = Directory(p.join(root.path, 'out'))..createSync();
+      final patched = File(unpacked).copySync(p.join(out.path, 'League 2026 - Game.iso'));
+      final repacked = await ChdService.repackPatched(patched.path, chdmanPath: chdman, isoAsCd: true);
+      expect(await ChdService.isCdChd(repacked, chdmanPath: chdman), isTrue);
+      expect(patched.existsSync(), isFalse);
+    }, skip: noChdman);
+
+    test('a DVD CHD stays a DVD through unpack and repack', () async {
+      final src = Directory(p.join(root.path, 'src'))..createSync();
+      final iso = File(p.join(src.path, 'Game.iso'))..writeAsBytesSync(List.filled(2048 * 64, 3));
+      final chd = await ChdService().convert(inputPath: iso.path, outputDir: src.path, chdmanPath: chdman, onProgress: (_) {});
+      expect(await ChdService.isCdChd(chd, chdmanPath: chdman), isFalse);
+      final unpacked = await ChdService.unpackForReading(chd, cacheRoot: p.join(root.path, 'cache'), chdmanPath: chdman);
+      final repacked = await ChdService.repackPatched(unpacked, chdmanPath: chdman);
+      expect(await ChdService.isCdChd(repacked, chdmanPath: chdman), isFalse);
+    }, skip: noChdman);
+
     test('repacks a patched .iso', () async {
       final out = Directory(p.join(root.path, 'out'))..createSync();
       File(p.join(out.path, 'League 2026 - Game.iso')).writeAsBytesSync(List.filled(2048 * 64, 1));

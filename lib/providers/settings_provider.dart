@@ -133,6 +133,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
         nszEnabled: state.nszDecompressEnabled,
       );
 
+  /// Whether [consoleId]'s CHD handler packs an .iso as a CD CHD (default: DVD).
+  bool chdIsoAsCd(String consoleId) => getConsoleSetting<bool>(consoleId, AppSettings.chdIsoAsCd) ?? false;
+
+  Future<void> setChdIsoAsCd(String consoleId, bool value) =>
+      setConsoleSetting<bool>(consoleId, AppSettings.chdIsoAsCd, value);
+
   /// Saves [handler] (null = none) as [consoleId]'s choice over the catalog's.
   Future<void> setActiveHandler(String consoleId, GameHandler? handler) =>
       setConsoleSetting<String>(consoleId, AppSettings.additionalHandler, handler?.id ?? 'none');

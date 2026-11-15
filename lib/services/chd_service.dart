@@ -278,15 +278,37 @@ class ChdService {
     // Unpacked under another name first, so a crash never leaves a half copy
     // that looks ready.
     final partial = '$dir.partial';
-    await ChdService().convert(inputPath: chd, outputDir: partial, chdmanPath: chdmanPath, onProgress: onProgress, splitBin: true);
+    final cue = await ChdService().convert(inputPath: chd, outputDir: partial, chdmanPath: chdmanPath, onProgress: onProgress, splitBin: true);
+    _cueToIsoIfPlain(cue);
     await Directory(partial).rename(dir);
     return image(dir)!;
   }
 
+  /// An .iso packed as a CD CHD extracts to a .cue over one MODE1/2048 track:
+  /// that .bin is the .iso byte for byte. Hand the reader the .iso it expects.
+  static void _cueToIsoIfPlain(String cuePath) {
+    if (p.extension(cuePath).toLowerCase() != '.cue') return;
+    final cue = File(cuePath).readAsStringSync();
+    final tracks = consumedFiles(cuePath).skip(1).toList();
+    if (tracks.length != 1 || !cue.contains('MODE1/2048') || RegExp('TRACK').allMatches(cue).length != 1) return;
+    File(tracks.single).renameSync(p.setExtension(cuePath, '.iso'));
+    File(cuePath).deleteSync();
+  }
+
+  /// Whether [chd] holds a CD image (vs a DVD/raw one), from `chdman info`.
+  static Future<bool> isCdChd(String chd, {String? chdmanPath}) async {
+    final chdman = await resolveChdman(chdmanPath);
+    if (chdman == null) throw StateError('chdman not found.');
+    final info = await Process.run(chdman, ['info', '-i', chd]);
+    return extractPlanFromChdInfo('${info.stdout}').command == 'extractcd';
+  }
+
   /// Packs a patched disc back into a .chd beside it and deletes the plain
   /// files. [patchedPath] is the image the patcher wrote: a set's data .bin
-  /// (its .cue sits next to it) or an .iso. Returns the .chd path.
-  static Future<String> repackPatched(String patchedPath, {String? chdmanPath, void Function(double)? onProgress}) async {
+  /// (its .cue sits next to it) or an .iso. Returns the .chd path. Pass
+  /// [isoAsCd] when the source CHD was a CD, so an .iso goes back as one.
+  static Future<String> repackPatched(String patchedPath,
+      {String? chdmanPath, void Function(double)? onProgress, bool isoAsCd = false}) async {
     var input = patchedPath;
     if (p.extension(patchedPath).toLowerCase() == '.bin') {
       input = Directory(p.dirname(patchedPath)).listSync().whereType<File>().map((f) => f.path)
@@ -296,7 +318,12 @@ class ChdService {
           (throw StateError('No .cue lists ${p.basename(patchedPath)}'));
     }
     return ChdService().convert(
-        inputPath: input, outputDir: p.dirname(input), chdmanPath: chdmanPath, onProgress: onProgress ?? (_) {}, deleteOriginals: true);
+        inputPath: input,
+        outputDir: p.dirname(input),
+        chdmanPath: chdmanPath,
+        onProgress: onProgress ?? (_) {},
+        deleteOriginals: true,
+        isoAsCd: isoAsCd);
   }
 
   /// Whether a chdman is available right now (for gating the UI).

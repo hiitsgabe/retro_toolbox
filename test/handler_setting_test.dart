@@ -25,4 +25,24 @@ void main() {
     await t.pumpAndSettle();
     expect(chd().value, isFalse);
   });
+
+  testWidgets('with CHD on, Advanced picks the CHD type for .iso, DVD by default', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    const console = Console(id: 'disc', name: 'Disc', urls: [], gameFilesFormat: ['.iso']);
+    await t.pumpWidget(const ProviderScope(
+      child: MaterialApp(home: Scaffold(body: SingleChildScrollView(child: HandlerSetting(console: console)))),
+    ));
+    expect(find.text('Advanced'), findsNothing);
+
+    await t.tap(find.text('Convert to CHD'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Advanced'));
+    await t.pumpAndSettle();
+    Set<bool> selected() => t.widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>)).selected;
+    expect(selected(), {false});
+
+    await t.tap(find.text('CD (createcd)'));
+    await t.pumpAndSettle();
+    expect(selected(), {true});
+  });
 }

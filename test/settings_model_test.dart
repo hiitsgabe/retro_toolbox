@@ -36,4 +36,10 @@ void main() {
     expect(back.getSetting<String>(AppSettings.additionalHandler), 'none');
     expect(back.setSetting<String>(AppSettings.additionalHandler, null).getSetting<String>(AppSettings.additionalHandler), isNull);
   });
+
+  test('BaseSettings round-trips chdIsoAsCd', () {
+    final set = const BaseSettings().setSetting(AppSettings.chdIsoAsCd, true);
+    expect(BaseSettings.fromJson(set.toJson()).getSetting<bool>(AppSettings.chdIsoAsCd), isTrue);
+    expect(const BaseSettings().getSetting<bool>(AppSettings.chdIsoAsCd), isNull);
+  });
 }

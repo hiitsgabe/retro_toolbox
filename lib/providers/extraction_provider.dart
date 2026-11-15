@@ -234,6 +234,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       'inputs': inputs,
       'files': files,
       'chdmanPath': _ref.read(settingsProvider).chdmanPath,
+      'isoAsCd': settings.chdIsoAsCd(consoleId),
       'keysPath': settings.getNszKeysPath(),
       'boot9Path': settings.getBoot9Path(),
     });
@@ -250,6 +251,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     String? chdmanPath,
     String? keysPath,
     String? boot9Path,
+    bool isoAsCd = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
@@ -277,7 +279,8 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         final consumed = handler == GameHandler.chdCompress ? ChdService.consumedFiles(input, within: files?.toSet()) : [input];
         switch (handler) {
           case GameHandler.chdCompress:
-            await ChdService().convert(inputPath: input, outputDir: outputDir, chdmanPath: chdmanPath, onProgress: onProgress);
+            await ChdService().convert(
+                inputPath: input, outputDir: outputDir, chdmanPath: chdmanPath, onProgress: onProgress, isoAsCd: isoAsCd);
           case GameHandler.cia3ds:
             await NszService.convert3dsToCia(inputFile: input, outputDir: outputDir, boot9Path: boot9Path, onProgress: onProgress);
           case GameHandler.nszDecompress:
