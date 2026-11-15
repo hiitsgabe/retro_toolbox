@@ -154,7 +154,7 @@ class RtsServerService {
           return;
         }
         // /f/<idx>/<filename>
-        await _serveFile(req, folder, Uri.decodeComponent(segs.sublist(2).join('/')));
+        await _serveFile(req, folder, segs.sublist(2).join('/'));
         return;
       }
       req.response.statusCode = HttpStatus.notFound;
@@ -170,7 +170,7 @@ class RtsServerService {
 
   Future<void> _handleLibrary(HttpRequest req, List<String> segs) async {
     final lib = _library;
-    final c = lib == null ? null : (await lib.consoles())[Uri.decodeComponent(segs[1])];
+    final c = lib == null ? null : (await lib.consoles())[segs[1]];
     if (lib == null || c == null) {
       req.response.statusCode = HttpStatus.notFound;
       await req.response.close();
@@ -182,7 +182,7 @@ class RtsServerService {
       _send(req, buildListingJson(forwardedListing(games, dir)), ContentType('application', 'json', charset: 'utf-8'));
       return;
     }
-    final name = Uri.decodeComponent(segs.sublist(2).join('/'));
+    final name = segs.sublist(2).join('/');
     final path = p.normalize(p.join(dir, name));
     if (p.isWithin(dir, path)) {
       final file = File(path);

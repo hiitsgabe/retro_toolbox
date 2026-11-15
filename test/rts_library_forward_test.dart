@@ -149,4 +149,25 @@ void main() {
       expect((await get(path)).$1, 404, reason: path);
     }
   });
+
+  test('server: a literal % in a name is not decoded twice', () async {
+    games.add(game('100% Pure.zip', 100));
+    var (s, b) = await get('/lib/gb/${Uri.encodeComponent('100% Pure.zip')}');
+    expect(s, 200);
+    expect(b, body);
+
+    final folder = Directory(p.join(dir.path, 'f'))..createSync();
+    File(p.join(folder.path, '100% Pure.zip')).writeAsBytesSync([9]);
+    File(p.join(folder.path, '%41.zip')).writeAsBytesSync([7]);
+    final other = RtsServerService();
+    await other.start(port: 0, folders: [RtsFolder(name: 'F', path: folder.path, romsSubfolder: 'r')]);
+    addTearDown(other.stop);
+    final client = HttpClient();
+    addTearDown(() => client.close(force: true));
+    for (final (name, byte) in [('100% Pure.zip', 9), ('%41.zip', 7)]) {
+      final res = await (await client.getUrl(Uri.parse('http://127.0.0.1:${other.port}/f/0/${Uri.encodeComponent(name)}'))).close();
+      expect(res.statusCode, 200, reason: name);
+      expect(await res.fold<List<int>>([], (a, c) => a..addAll(c)), [byte], reason: name);
+    }
+  });
 }
