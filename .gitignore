@@ -354,3 +354,6 @@ docs/superpowers/
 ### Python ###
 __pycache__/
 *.pyc
+
+# Release bundle dropped in as the Docker build context (server/README.md)
+server/*.tar.gz
