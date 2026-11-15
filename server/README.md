@@ -4,8 +4,7 @@ Runs the Linux desktop build headless on a Linux x64 host and shows it in the br
 KasmVNC provides the virtual display and the web client (HTTPS, password, clipboard sync);
 a watchdog restarts the app if it exits or keeps using too much memory while idle.
 
-Requirements: a Linux x86-64 host with Docker and Compose. The current release bundle needs an
-x86-64-v3 CPU (AVX2); on older CPUs the app exits with "CPU ISA level is lower than required".
+Requirements: a Linux x86-64 host with Docker and Compose.
 
 ## Install
 
@@ -65,6 +64,11 @@ docker build --platform linux/amd64 -f server/Dockerfile -t retro-toolbox-server
 ```
 
 The KasmVNC version is the `KASMVNC_VERSION` build arg in the Dockerfile.
+
+## Publishing
+
+The release workflow pushes the image to GHCR after the release succeeds. After the first publish,
+make the package public once in its GHCR package settings so `docker compose pull` works without a login.
 
 ## Manual checks
 

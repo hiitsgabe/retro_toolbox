@@ -328,7 +328,10 @@ jobs:
 
   build-linux:
     needs: [resolve-version, download-catalog]
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest's newer toolchain marks the launcher x86-64-v3
+    # (AVX2) and bundles a libarchive that needs libxml2.so.16, so the build
+    # would not start on Ubuntu 24.04 or older CPUs.
+    runs-on: ubuntu-24.04
     steps:
       # Check out the tag created by resolve-version — the plain github.sha is
       # the pre-bump commit, which would build with the previous version.
@@ -756,6 +759,65 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Headless server image (Linux build + KasmVNC). Not in release.needs: a
+  # failed image never blocks the release.
+  build-server:
+    needs: [resolve-version, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
+
+      - name: Download Linux tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-tarball
+
+      - name: Build image
+        run: |
+          cp retro_toolbox_linux_x64.tar.gz server/
+          docker build --platform linux/amd64 -f server/Dockerfile -t retro_toolbox-server:ci server
+
+      - name: Save image
+        run: docker save retro_toolbox-server:ci | gzip > server-image.tar.gz
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-image
+          path: server-image.tar.gz
+          retention-days: 1
+
+  # Pushes the image to GHCR once the release exists. The package must be made
+  # public once, in its settings, after the first push.
+  publish-server:
+    needs: [resolve-version, release, build-server]
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.build-server.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Download image
+        uses: actions/download-artifact@v4
+        with:
+          name: server-image
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/retro_toolbox-server
+          VERSION_NAME: ${{ needs.resolve-version.outputs.version_name }}
+        run: |
+          gunzip -c server-image.tar.gz | docker load
+          docker tag retro_toolbox-server:ci "$IMAGE:$VERSION_NAME"
+          docker tag retro_toolbox-server:ci "$IMAGE:latest"
+          docker push "$IMAGE:$VERSION_NAME"
+          docker push "$IMAGE:latest"
 
   # Google Play: starts .eas/workflows/play-store.yml on EAS (the build Expo
   # Launch runs, then EAS Submit) for the tagged version and returns without
