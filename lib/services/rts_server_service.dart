@@ -3,8 +3,25 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/rts_folder_model.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
+
+/// The hub's own library, forwarded to handhelds: its consoles, their game
+/// lists, the credentials used to reach the source, and where downloads land.
+class RtsLibrary {
+  final Future<Map<String, Console>> Function() consoles;
+  final Future<List<Game>> Function(Console) games;
+  final Map<String, String> Function(Console) authHeaders;
+  final String Function(Console) downloadDir;
+  const RtsLibrary({
+    required this.consoles,
+    required this.games,
+    required this.authHeaders,
+    required this.downloadDir,
+  });
+}
 
 /// Serves local folders as a catalog another app can consume via New Catalog
 /// Source: a generated `consoles.json`, an HTML listing per folder (matching
@@ -41,10 +58,48 @@ class RtsServerService {
     return out;
   }
 
+  /// The hub's console as a handhelds sees it: pointed at this server, with the
+  /// hub's credentials and source-specific listing settings stripped.
+  static Map<String, dynamic> forwardedConsoleJson(Console c, String hostPort) {
+    final j = c.toJson();
+    for (final k in ['id', 'auth', 'download_url', 'list_url', 'list_systems', 'regex', 'list_json_file_location', 'list_item_id']) {
+      j.remove(k);
+    }
+    return j
+      ..['url'] = 'http://$hostPort/lib/${Uri.encodeComponent(c.id)}/'
+      // The listing may announce an unpacked file whose extension isn't in
+      // original_format; the consumer already skips re-unpacking it.
+      ..['ignore_extension_filtering'] = true
+      ..['added'] = true;
+  }
+
+  /// `dir/filename` if present, else the only file in [dir] sharing its stem
+  /// (the unpacked form of a zip), else null.
+  // ponytail: two files with the same stem (cue/bin) count as not local, so
+  // multi-file unpacks are re-fetched from the source.
+  static String? localFileFor(String dir, String filename) {
+    final exact = File(p.join(dir, filename));
+    if (exact.existsSync()) return exact.path;
+    final d = Directory(dir);
+    if (!d.existsSync()) return null;
+    final stem = p.basenameWithoutExtension(filename);
+    final hits = d.listSync(followLinks: false).whereType<File>().where((f) => p.basenameWithoutExtension(f.path) == stem).toList();
+    return hits.length == 1 ? hits.single.path : null;
+  }
+
+  static List<({String name, int size})> forwardedListing(List<Game> games, String dir) => [
+        for (final g in games)
+          if (localFileFor(dir, g.filename) case final local?)
+            (name: p.basename(local), size: File(local).lengthSync())
+          else
+            (name: g.filename, size: g.size),
+      ];
+
   static Future<List<String>> localAddresses() => TinfoilServerService.localAddresses();
 
   HttpServer? _server;
   List<RtsFolder> _folders = const [];
+  RtsLibrary? _library;
   final activeTransfers = ValueNotifier<int>(0);
 
   bool get running => _server != null;
@@ -52,8 +107,9 @@ class RtsServerService {
 
   void setFolders(List<RtsFolder> folders) => _folders = folders;
 
-  Future<void> start({required int port, required List<RtsFolder> folders}) async {
+  Future<void> start({required int port, required List<RtsFolder> folders, RtsLibrary? library}) async {
     _folders = folders;
+    _library = library;
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _server!.listen(_handle, onError: (e) => debugPrint('rts server error: $e'));
   }
@@ -72,7 +128,16 @@ class RtsServerService {
       final hostPort = '$hostName:$port';
 
       if (segs.length == 1 && segs[0] == 'consoles.json') {
-        _send(req, buildConsolesJson(_folders, hostPort), ContentType('application', 'json', charset: 'utf-8'));
+        final lib = _library;
+        final entries = [
+          for (var i = 0; i < _folders.length; i++) consoleJson(_folders[i], i, hostPort),
+          if (lib != null) for (final c in (await lib.consoles()).values) forwardedConsoleJson(c, hostPort),
+        ];
+        _send(req, jsonEncode(entries), ContentType('application', 'json', charset: 'utf-8'));
+        return;
+      }
+      if (segs.length >= 2 && segs[0] == 'lib') {
+        await _handleLibrary(req, segs);
         return;
       }
       if (segs.isNotEmpty && segs[0] == 'f' && segs.length >= 2) {
@@ -101,6 +166,49 @@ class RtsServerService {
         await req.response.close();
       } catch (_) {}
     }
+  }
+
+  Future<void> _handleLibrary(HttpRequest req, List<String> segs) async {
+    final lib = _library;
+    final c = lib == null ? null : (await lib.consoles())[Uri.decodeComponent(segs[1])];
+    if (lib == null || c == null) {
+      req.response.statusCode = HttpStatus.notFound;
+      await req.response.close();
+      return;
+    }
+    final dir = Directory(lib.downloadDir(c)).absolute.path;
+    final games = await lib.games(c);
+    if (segs.length == 2) {
+      _send(req, buildListingJson(forwardedListing(games, dir)), ContentType('application', 'json', charset: 'utf-8'));
+      return;
+    }
+    final name = Uri.decodeComponent(segs.sublist(2).join('/'));
+    final path = p.normalize(p.join(dir, name));
+    if (p.isWithin(dir, path)) {
+      final file = File(path);
+      if (file.existsSync()) {
+        activeTransfers.value++;
+        try {
+          await TinfoilServerService.serveFile(req, file);
+        } finally {
+          activeTransfers.value--;
+        }
+        return;
+      }
+      final game = games.where((g) => g.filename == name).firstOrNull;
+      if (game != null) {
+        Directory(dir).createSync(recursive: true);
+        activeTransfers.value++;
+        try {
+          await TinfoilServerService.proxyUpstream(req, url: game.url, headers: lib.authHeaders(c), saveTo: File(path));
+        } finally {
+          activeTransfers.value--;
+        }
+        return;
+      }
+    }
+    req.response.statusCode = HttpStatus.notFound;
+    await req.response.close();
   }
 
   void _send(HttpRequest req, String body, ContentType type) {
