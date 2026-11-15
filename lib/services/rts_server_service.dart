@@ -73,24 +73,35 @@ class RtsServerService {
       ..['added'] = true;
   }
 
-  /// `dir/filename` if present, else the only file in [dir] sharing its stem
-  /// (the unpacked form of a zip), else null.
+  /// Each game's copy in [dir] (none if null), keyed by its filename: the
+  /// exact file, else the only file sharing its stem (the unpacked form of a
+  /// zip) whose extension is in [formats] (any, if empty). One listing of [dir].
   // ponytail: two files with the same stem (cue/bin) count as not local, so
   // multi-file unpacks are re-fetched from the source.
-  static String? localFileFor(String dir, String filename) {
-    final exact = File(p.join(dir, filename));
-    if (exact.existsSync()) return exact.path;
-    final d = Directory(dir);
-    if (!d.existsSync()) return null;
-    final stem = p.basenameWithoutExtension(filename);
-    final hits = d.listSync(followLinks: false).whereType<File>().where((f) => p.basenameWithoutExtension(f.path) == stem).toList();
-    return hits.length == 1 ? hits.single.path : null;
+  static Map<String, String> localFiles(List<Game> games, String? dir, List<String> formats) {
+    if (dir == null || !Directory(dir).existsSync()) return const {};
+    final exts = formats.map((e) => e.toLowerCase()).toSet();
+    final names = <String>{};
+    final byStem = <String, List<String>>{};
+    for (final f in Directory(dir).listSync(followLinks: false).whereType<File>()) {
+      final n = p.basename(f.path);
+      names.add(n);
+      if (exts.isEmpty || exts.contains(p.extension(n).toLowerCase())) (byStem[p.basenameWithoutExtension(n)] ??= []).add(n);
+    }
+    return {
+      for (final g in games)
+        if (names.contains(g.filename))
+          g.filename: p.join(dir, g.filename)
+        else if (byStem[p.basenameWithoutExtension(g.filename)] case [final only])
+          g.filename: p.join(dir, only),
+    };
   }
 
-  static List<({String name, int size})> forwardedListing(List<Game> games, String dir) => [
+  /// The catalog, announcing a game's [local] copy (from [localFiles]) instead.
+  static List<({String name, int size})> forwardedListing(List<Game> games, Map<String, String> local) => [
         for (final g in games)
-          if (localFileFor(dir, g.filename) case final local?)
-            (name: p.basename(local), size: File(local).lengthSync())
+          if (local[g.filename] case final l?)
+            (name: p.basename(l), size: File(l).lengthSync())
           else
             (name: g.filename, size: g.size),
       ];
@@ -176,39 +187,51 @@ class RtsServerService {
       await req.response.close();
       return;
     }
-    final dir = Directory(lib.downloadDir(c)).absolute.path;
+    final raw = lib.downloadDir(c);
+    // An unset folder would resolve to the working directory (`/` on Android):
+    // then nothing is served from or saved to disk.
+    final dir = raw.isEmpty ? null : Directory(raw).absolute.path;
     final games = await lib.games(c);
+    final local = localFiles(games, dir, c.gameFilesFormat ?? const []);
     if (segs.length == 2) {
-      _send(req, buildListingJson(forwardedListing(games, dir)), ContentType('application', 'json', charset: 'utf-8'));
+      _send(req, buildListingJson(forwardedListing(games, local)), ContentType('application', 'json', charset: 'utf-8'));
       return;
     }
     final name = segs.sublist(2).join('/');
-    final path = p.normalize(p.join(dir, name));
-    if (p.isWithin(dir, path)) {
-      final file = File(path);
-      if (file.existsSync()) {
-        activeTransfers.value++;
-        try {
-          await TinfoilServerService.serveFile(req, file);
-        } finally {
-          activeTransfers.value--;
-        }
-        return;
+    // Only a catalog game, under the name the listing announced: never any
+    // other file in the folder.
+    final copy = local.values.where((l) => p.basename(l) == name).firstOrNull;
+    if (copy != null) {
+      activeTransfers.value++;
+      try {
+        await TinfoilServerService.serveFile(req, File(copy));
+      } finally {
+        activeTransfers.value--;
       }
-      final game = games.where((g) => g.filename == name).firstOrNull;
-      if (game != null) {
+      return;
+    }
+    final game = games.where((g) => g.filename == name).firstOrNull;
+    if (game == null) {
+      req.response.statusCode = HttpStatus.notFound;
+      await req.response.close();
+      return;
+    }
+    File? saveTo;
+    if (dir != null) {
+      try {
         Directory(dir).createSync(recursive: true);
-        activeTransfers.value++;
-        try {
-          await TinfoilServerService.proxyUpstream(req, url: game.url, headers: lib.authHeaders(c), saveTo: File(path));
-        } finally {
-          activeTransfers.value--;
-        }
-        return;
+        // Game.filename is sanitized (no separators), so this stays in dir.
+        saveTo = File(p.join(dir, name));
+      } on FileSystemException {
+        // unwritable: stream without a copy
       }
     }
-    req.response.statusCode = HttpStatus.notFound;
-    await req.response.close();
+    activeTransfers.value++;
+    try {
+      await TinfoilServerService.proxyUpstream(req, url: game.url, headers: lib.authHeaders(c), saveTo: saveTo);
+    } finally {
+      activeTransfers.value--;
+    }
   }
 
   void _send(HttpRequest req, String body, ContentType type) {

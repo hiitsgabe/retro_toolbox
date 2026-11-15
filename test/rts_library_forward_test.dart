@@ -24,6 +24,7 @@ void main() {
   late List<HttpRequest> seen;
   late RtsServerService rts;
   late List<Game> games;
+  late String downloadDir;
   final body = List<int>.generate(100, (i) => i);
 
   Game game(String name, int size) => Game(
@@ -36,11 +37,10 @@ void main() {
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('rts_lib');
     seen = [];
-    final seenAuth = <String?>[];
+    downloadDir = p.join(dir.path, 'dl');
     upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     upstream.listen((req) async {
       seen.add(req);
-      seenAuth.add(req.headers.value('x-test-auth'));
       req.response.add(body);
       await req.response.close();
     });
@@ -53,7 +53,7 @@ void main() {
         consoles: () async => {'gb': console},
         games: (_) async => games,
         authHeaders: (_) => {'x-test-auth': 'hub'},
-        downloadDir: (_) => p.join(dir.path, 'dl'),
+        downloadDir: (_) => downloadDir,
       ),
     );
     Directory(p.join(dir.path, 'dl')).createSync();
@@ -61,6 +61,10 @@ void main() {
   });
 
   tearDown(() async {
+    // The hub finishes its copy after the client has its bytes.
+    for (var i = 0; i < 500 && rts.activeTransfers.value > 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
     await rts.stop();
     await upstream.close(force: true);
     await dir.delete(recursive: true);
@@ -86,20 +90,28 @@ void main() {
     expect(j['decompress'], 'unzip');
   });
 
-  test('localFileFor matches exact name and a single unpacked file', () {
+  test('localFiles matches exact name and a single unpacked file', () {
     final d = Directory(p.join(dir.path, 'm'))..createSync();
-    for (final n in ['a.zip', 'b.gbc', 'c.cue', 'c.bin']) {
+    for (final n in ['a.zip', 'b.gbc', 'c.cue', 'c.bin', 'e.sav', 'f.gbc', 'f.sav']) {
       File(p.join(d.path, n)).writeAsStringSync('x');
     }
-    expect(RtsServerService.localFileFor(d.path, 'a.zip'), endsWith('a.zip'));
-    expect(RtsServerService.localFileFor(d.path, 'b.zip'), endsWith('b.gbc'));
-    expect(RtsServerService.localFileFor(d.path, 'c.zip'), isNull);
-    expect(RtsServerService.localFileFor(d.path, 'd.zip'), isNull);
-    expect(RtsServerService.localFileFor(p.join(dir.path, 'missing'), 'a.zip'), isNull);
+    final gs = [for (final n in ['a.zip', 'b.zip', 'c.zip', 'd.zip', 'e.zip', 'f.zip']) game(n, 1)];
+    final any = RtsServerService.localFiles(gs, d.path, const []);
+    expect(any['a.zip'], endsWith('a.zip'));
+    expect(any['b.zip'], endsWith('b.gbc'));
+    expect(any.containsKey('c.zip'), isFalse);
+    expect(any.containsKey('d.zip'), isFalse);
+    // A lone save file is not the game; with formats known it is ignored.
+    final gbc = RtsServerService.localFiles(gs, d.path, const ['.GBC']);
+    expect(gbc.containsKey('e.zip'), isFalse);
+    expect(gbc['f.zip'], endsWith('f.gbc'));
+    expect(RtsServerService.localFiles(gs, p.join(dir.path, 'missing'), const []), isEmpty);
+    expect(RtsServerService.localFiles(gs, null, const []), isEmpty);
   });
 
   test('listing announces local files', () {
-    final l = RtsServerService.forwardedListing(games.take(2).toList(), p.join(dir.path, 'dl'));
+    final gs = games.take(2).toList();
+    final l = RtsServerService.forwardedListing(gs, RtsServerService.localFiles(gs, downloadDir, const []));
     expect(l, [(name: 'a.zip', size: 3), (name: 'd.zip', size: 7)]);
   });
 
@@ -143,11 +155,55 @@ void main() {
     expect(b, body);
   });
 
-  test('server: unknown console, unknown game, path escape -> 404', () async {
+  test('server: unknown console, unknown game, path escape, non-game file -> 404', () async {
     File(p.join(dir.path, 'secret.txt')).writeAsStringSync('s');
-    for (final path in ['/lib/nope/', '/lib/gb/zzz.zip', '/lib/gb/..%2F..%2Fetc%2Fpasswd', '/lib/gb/..%2Fsecret.txt']) {
+    File(p.join(downloadDir, 'notes.txt')).writeAsStringSync('n');
+    File(p.join(downloadDir, 'd.zip.part')).writeAsStringSync('p');
+    Directory(p.join(downloadDir, 'sub')).createSync();
+    File(p.join(downloadDir, 'sub', 'x.zip')).writeAsStringSync('x');
+    for (final path in [
+      '/lib/nope/',
+      '/lib/gb/zzz.zip',
+      '/lib/gb/..%2F..%2Fetc%2Fpasswd',
+      '/lib/gb/..%2Fsecret.txt',
+      '/lib/gb/notes.txt',
+      '/lib/gb/d.zip.part',
+      '/lib/gb/sub/x.zip',
+      '/lib/gb/sub%2Fx.zip',
+    ]) {
       expect((await get(path)).$1, 404, reason: path);
     }
+  });
+
+  test('server: no download folder set -> proxied, nothing read or written locally', () async {
+    // An empty path resolves to the working directory: point it somewhere harmless.
+    final cwd = Directory.current;
+    Directory.current = dir;
+    addTearDown(() => Directory.current = cwd);
+    downloadDir = '';
+    final cwdFile = File(p.join(dir.path, 'probe.zip'))..writeAsBytesSync([5]);
+    games.add(game('probe.zip', 100));
+    final (_, lb) = await get('/lib/gb/');
+    expect((jsonDecode(utf8.decode(lb)) as List).last, {'name': 'probe.zip', 'size': 100});
+    var (s, b) = await get('/lib/gb/probe.zip');
+    expect(s, 200);
+    expect(b, body);
+    expect(cwdFile.readAsBytesSync(), [5]);
+    (s, b) = await get('/lib/gb/d.zip');
+    expect(b, body);
+    for (var i = 0; i < 50 && rts.activeTransfers.value > 0; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(File(p.join(dir.path, 'd.zip')).existsSync(), isFalse);
+    expect(File(p.join(dir.path, 'd.zip.part')).existsSync(), isFalse);
+  });
+
+  test('server: an uncreatable download folder still streams the game', () async {
+    File(p.join(dir.path, 'blocker')).writeAsStringSync('');
+    downloadDir = p.join(dir.path, 'blocker', 'dl');
+    final (s, b) = await get('/lib/gb/d.zip');
+    expect(s, 200);
+    expect(b, body);
   });
 
   test('server: a literal % in a name is not decoded twice', () async {
