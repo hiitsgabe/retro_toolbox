@@ -142,6 +142,14 @@ void main() {
     expect(part.existsSync(), isFalse);
   });
 
+  test('unwritable save location still serves the client', () async {
+    saveTo = File(p.join(dir.path, 'missing', 'game.zip'));
+    final (status, bytes) = await fetch();
+    expect(status, 200);
+    expect(bytes, body);
+    expect(Directory(p.join(dir.path, 'missing')).existsSync(), isFalse);
+  });
+
   test('in-flight part is left alone', () async {
     part.writeAsStringSync('x');
     final (status, bytes) = await fetch();

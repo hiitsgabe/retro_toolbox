@@ -302,11 +302,24 @@ class TinfoilServerService {
         if (v != null) req.response.headers.set(h, v);
       }
       final part = saveTo == null ? null : File('${saveTo.path}.part');
-      if (saveTo == null || part == null || upstreamRes.statusCode != HttpStatus.ok || part.existsSync()) {
+      var claimed = false;
+      if (part != null && upstreamRes.statusCode == HttpStatus.ok) {
+        // Atomic claim (no await between check and create): two simultaneous
+        // downloads must not share one .part. Failure (exists, no folder)
+        // means plain proxying.
+        try {
+          part.createSync(exclusive: true);
+          claimed = true;
+        } on FileSystemException {
+          // proxy only
+        }
+      }
+      if (!claimed) {
         await upstreamRes.pipe(req.response);
         return;
       }
-      final sink = part.openWrite();
+      final sink = part!.openWrite();
+      sink.done.catchError((_) {}); // disk errors surface from close() below
       var written = 0;
       var upstreamDone = false;
       try {
@@ -321,20 +334,26 @@ class TinfoilServerService {
             out.close();
           },
         )));
-        await sink.close();
+        // Serve the client first: a local disk failure must not hang it.
         await req.response.close();
+      } catch (_) {
+        await sink.close().catchError((_) {});
+        await part.delete().catchError((_) => part);
+        rethrow;
+      }
+      try {
+        await sink.close();
         final expected = upstreamRes.contentLength;
         // addStream returns quietly (dropping the upstream) when the client
         // has gone, so an unfinished upstream means an incomplete copy.
         if (!upstreamDone || (expected >= 0 && written != expected)) {
           await part.delete();
         } else {
-          await part.rename(saveTo.path);
+          await part.rename(saveTo!.path);
         }
       } catch (_) {
-        await sink.close().catchError((_) {});
+        // The client already has its bytes; just drop the copy.
         await part.delete().catchError((_) => part);
-        rethrow;
       }
     } finally {
       activeTransfers.value--;
