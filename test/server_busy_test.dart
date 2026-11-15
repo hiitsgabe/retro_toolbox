@@ -92,6 +92,20 @@ void main() {
     await writeBusyFlag(false, path: f.path);
   });
 
+  test('rapid unawaited writes end in the last value', () async {
+    final f = File('${(await Directory.systemTemp.createTemp()).path}/busy');
+    for (var i = 0; i < 20; i++) {
+      writeBusyFlag(true, path: f.path);
+      writeBusyFlag(false, path: f.path);
+    }
+    writeBusyFlag(true, path: f.path);
+    await writeBusyFlag(true, path: f.path);
+    expect(f.existsSync(), isTrue);
+    writeBusyFlag(true, path: f.path);
+    await writeBusyFlag(false, path: f.path);
+    expect(f.existsSync(), isFalse);
+  });
+
   test('writeBusyFlag without a path does nothing', () async {
     await writeBusyFlag(true, path: '');
   });

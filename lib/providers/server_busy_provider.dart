@@ -28,7 +28,14 @@ final serverBusyProvider = Provider<bool>((ref) {
 
 /// Creates ([busy]) or removes the busy file. Path defaults to
 /// `RETRO_TOOLBOX_BUSY_FILE`; null/empty is a no-op.
-Future<void> writeBusyFlag(bool busy, {String? path}) async {
+Future<void> writeBusyFlag(bool busy, {String? path}) {
+  // Serialised so overlapping unawaited calls apply in order.
+  return _last = _last.then((_) => _write(busy, path));
+}
+
+Future<void> _last = Future.value();
+
+Future<void> _write(bool busy, String? path) async {
   final p = path ?? Platform.environment['RETRO_TOOLBOX_BUSY_FILE'];
   if (p == null || p.isEmpty) return;
   final f = File(p);
