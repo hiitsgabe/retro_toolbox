@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:retro_toolbox/services/ftp_service.dart';
 import 'package:retro_toolbox/services/file_ops.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/utils/remote_tree.dart';
 
 enum FtpMode { client, server }
@@ -130,6 +131,7 @@ class FtpNotifier extends StateNotifier<FtpState> {
         serverDir: prefs.getString(_srvDirKey) ?? '',
         serverPort: prefs.getInt(_srvPortKey) ?? 2121,
       );
+      if (ServerMode.shouldRestore(prefs, 'ftp')) startServer();
     });
   }
 
@@ -339,6 +341,7 @@ class FtpNotifier extends StateNotifier<FtpState> {
       await _server.start(dir: state.serverDir, port: state.serverPort, readOnly: state.serverReadOnly);
       final addresses = await FtpServerService.localAddresses();
       state = state.copyWith(serverRunning: true, serverAddresses: addresses, clearServerError: true);
+      await ServerMode.remember('ftp', true);
     } catch (e) {
       state = state.copyWith(serverRunning: false, serverError: '$e');
     }
@@ -347,6 +350,7 @@ class FtpNotifier extends StateNotifier<FtpState> {
   Future<void> stopServer() async {
     await _server.stop();
     state = state.copyWith(serverRunning: false, serverAddresses: const []);
+    await ServerMode.remember('ftp', false);
   }
 
   @override
