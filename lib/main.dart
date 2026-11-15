@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/fpkgi_server_provider.dart';
 import 'package:retro_toolbox/providers/ftp_provider.dart';
 import 'package:retro_toolbox/providers/jdkv_server_provider.dart';
 import 'package:retro_toolbox/providers/rts_server_provider.dart';
+import 'package:retro_toolbox/providers/server_busy_provider.dart';
 import 'package:retro_toolbox/providers/tinfoil_server_provider.dart';
 import 'package:retro_toolbox/screens/jdkv_server_screen.dart';
 import 'package:retro_toolbox/services/extraction_service.dart';
@@ -30,7 +31,7 @@ void main() {
   ExtractionService.initialize();
   WidgetsFlutterBinding.ensureInitialized();
   installFocusDebug();
-  if (Platform.isAndroid || Handheld.current) capImageCache(PaintingBinding.instance.imageCache);
+  if (Platform.isAndroid || Handheld.current || ServerMode.current) capImageCache(PaintingBinding.instance.imageCache);
   // Tapping the JDKV notification asks the app to open the JDKV screen.
   FlutterForegroundTask.addTaskDataCallback((data) {
     if (data is Map && data['action'] == 'open_jdkv') {
@@ -45,6 +46,9 @@ void main() {
     for (final p in serverProviders) {
       container.read(p);
     }
+    // A stale flag from a previous run must not block the watchdog.
+    writeBusyFlag(false);
+    container.listen(serverBusyProvider, (_, b) => writeBusyFlag(b), fireImmediately: true);
   }
   runApp(
     UncontrolledProviderScope(
