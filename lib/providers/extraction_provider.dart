@@ -153,6 +153,8 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     required String inputPath,
     required String outputDir,
     String? chdmanPath,
+    bool deleteOriginals = false,
+    bool isoAsCd = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
@@ -168,6 +170,8 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         inputPath: inputPath,
         outputDir: outputDir,
         chdmanPath: chdmanPath,
+        deleteOriginals: deleteOriginals,
+        isoAsCd: isoAsCd,
         onProgress: (progress) {
           _updateProgress(taskId, progress);
           ExtractionService.updateNotification('$verb $fileName... ${(progress * 100).round()}%');

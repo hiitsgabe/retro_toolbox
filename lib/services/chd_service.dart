@@ -24,14 +24,16 @@ class ChdService {
       p.extension(path).toLowerCase() == '.chd' ? ChdMode.extract : ChdMode.compress;
 
   /// The chdman subcommand and resulting extension for [inputPath], or null if
-  /// the extension isn't handled.
-  static ChdPlan? planFor(String inputPath) {
+  /// the extension isn't handled. [isoAsCd] packs an .iso as a CD CHD instead
+  /// of a DVD one: AetherSX2/NetherSX2 predate DVD CHD support and only boot CD
+  /// CHDs, which current PCSX2 builds read too.
+  static ChdPlan? planFor(String inputPath, {bool isoAsCd = false}) {
     final ext = p.extension(inputPath).toLowerCase();
     if (ext == '.chd') return (command: 'extractcd', outExt: '.cue');
     if (_cdInputs.contains(ext)) return (command: 'createcd', outExt: '.chd');
     // ponytail: .iso -> createdvd heuristic. PS2/PSP/GC ISOs are DVD/UMD; PS1
     // discs come as .cue not .iso in practice. Revisit if CD-sized ISOs appear.
-    if (_dvdInputs.contains(ext)) return (command: 'createdvd', outExt: '.chd');
+    if (_dvdInputs.contains(ext)) return (command: isoAsCd ? 'createcd' : 'createdvd', outExt: '.chd');
     return null;
   }
 
@@ -49,6 +51,16 @@ class ChdService {
     final m = RegExp(r'(\d+(?:\.\d+)?)%').firstMatch(line);
     if (m == null) return null;
     return (double.tryParse(m.group(1)!) ?? 0) / 100.0;
+  }
+
+  /// What to show when chdman fails: its stderr minus progress lines, or —
+  /// when that's empty, as for an unknown subcommand, which prints only usage
+  /// to stdout — the first lines of stdout (they carry the chdman version).
+  static String failureDetail(String stderr, String stdout) {
+    List<String> meaningful(String s) =>
+        s.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty && parseProgress(l) == null).toList();
+    final err = meaningful(stderr);
+    return (err.isNotEmpty ? err : meaningful(stdout).take(3)).join('\n');
   }
 
   // --- binary resolution --------------------------------------------------
@@ -138,14 +150,18 @@ class ChdService {
 
   /// Runs a conversion for [inputPath] into [outputDir]. Streams chdman output
   /// to [onProgress] (0.0–1.0). Throws if chdman is missing or exits non-zero.
+  /// With [deleteOriginals], a successful run then deletes the input (and a
+  /// .cue/.gdi's tracks); a failed one leaves everything in place.
   Future<String> convert({
     required String inputPath,
     required String outputDir,
     String? chdmanPath,
     required void Function(double progress) onProgress,
     bool splitBin = false,
+    bool deleteOriginals = false,
+    bool isoAsCd = false,
   }) async {
-    final plan = planFor(inputPath);
+    final plan = planFor(inputPath, isoAsCd: isoAsCd);
     if (plan == null) {
       throw UnsupportedError('Unsupported file type: ${p.extension(inputPath)}');
     }
@@ -173,16 +189,26 @@ class ChdService {
       if (pct != null) onProgress(pct);
     }
 
-    process.stdout.transform(const SystemEncoding().decoder).transform(const LineSplitter()).listen(handle);
+    final outBuffer = StringBuffer();
     final errBuffer = StringBuffer();
-    process.stderr.transform(const SystemEncoding().decoder).transform(const LineSplitter()).listen((line) {
+    final outDone = process.stdout.transform(const SystemEncoding().decoder).transform(const LineSplitter()).listen((line) {
+      handle(line);
+      outBuffer.writeln(line);
+    }).asFuture<void>();
+    final errDone = process.stderr.transform(const SystemEncoding().decoder).transform(const LineSplitter()).listen((line) {
       handle(line);
       errBuffer.writeln(line);
-    });
+    }).asFuture<void>();
 
     final exitCode = await process.exitCode;
+    await Future.wait([outDone, errDone]);
     if (exitCode != 0) {
-      throw Exception('chdman failed (exit $exitCode): ${errBuffer.toString().trim()}');
+      throw Exception('chdman failed (exit $exitCode): ${failureDetail('$errBuffer', '$outBuffer')}');
+    }
+    if (deleteOriginals) {
+      for (final f in consumedFiles(inputPath)) {
+        if (!p.equals(f, outPath)) File(f).deleteSync();
+      }
     }
     onProgress(1.0);
     return outPath;
@@ -269,12 +295,8 @@ class ChdService {
               .firstOrNull ??
           (throw StateError('No .cue lists ${p.basename(patchedPath)}'));
     }
-    final chd = await ChdService()
-        .convert(inputPath: input, outputDir: p.dirname(input), chdmanPath: chdmanPath, onProgress: onProgress ?? (_) {});
-    for (final f in consumedFiles(input)) {
-      File(f).deleteSync();
-    }
-    return chd;
+    return ChdService().convert(
+        inputPath: input, outputDir: p.dirname(input), chdmanPath: chdmanPath, onProgress: onProgress ?? (_) {}, deleteOriginals: true);
   }
 
   /// Whether a chdman is available right now (for gating the UI).

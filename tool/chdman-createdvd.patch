@@ -1,0 +1,180 @@
+diff --git a/src/lib/util/chd.h b/src/lib/util/chd.h
+index 8d3e639..4157b30 100644
+--- a/src/lib/util/chd.h
++++ b/src/lib/util/chd.h
+@@ -231,6 +231,9 @@ constexpr chd_metadata_tag GDROM_OLD_METADATA_TAG = CHD_MAKE_TAG('C','H','G','T'
+ constexpr chd_metadata_tag GDROM_TRACK_METADATA_TAG = CHD_MAKE_TAG('C', 'H', 'G', 'D');
+ extern const char *GDROM_TRACK_METADATA_FORMAT;
+ 
++// standard DVD metadata
++constexpr chd_metadata_tag DVD_METADATA_TAG = CHD_MAKE_TAG('D', 'V', 'D', ' ');
++
+ // standard A/V metadata
+ constexpr chd_metadata_tag AV_METADATA_TAG = CHD_MAKE_TAG('A','V','A','V');
+ extern const char *AV_METADATA_FORMAT;
+diff --git a/src/tools/chdman.cpp b/src/tools/chdman.cpp
+index 4301c9c..a65bc79 100644
+--- a/src/tools/chdman.cpp
++++ b/src/tools/chdman.cpp
+@@ -69,10 +69,12 @@ const int MODE_GDI = 2;
+ #define COMMAND_CREATE_HD "createhd"
+ #define COMMAND_CREATE_CD "createcd"
+ #define COMMAND_CREATE_LD "createld"
++#define COMMAND_CREATE_DVD "createdvd"
+ #define COMMAND_EXTRACT_RAW "extractraw"
+ #define COMMAND_EXTRACT_HD "extracthd"
+ #define COMMAND_EXTRACT_CD "extractcd"
+ #define COMMAND_EXTRACT_LD "extractld"
++#define COMMAND_EXTRACT_DVD "extractdvd"
+ #define COMMAND_COPY "copy"
+ #define COMMAND_ADD_METADATA "addmeta"
+ #define COMMAND_DEL_METADATA "delmeta"
+@@ -123,6 +125,7 @@ static void do_create_raw(parameters_map &params);
+ static void do_create_hd(parameters_map &params);
+ static void do_create_cd(parameters_map &params);
+ static void do_create_ld(parameters_map &params);
++static void do_create_dvd(parameters_map &params);
+ static void do_copy(parameters_map &params);
+ static void do_extract_raw(parameters_map &params);
+ static void do_extract_cd(parameters_map &params);
+@@ -665,6 +668,22 @@ static const command_description s_commands[] =
+ 		}
+ 	},
+ 
++	{ COMMAND_CREATE_DVD, do_create_dvd, ": create a DVD CHD from the input file",
++		{
++			REQUIRED OPTION_OUTPUT,
++			OPTION_OUTPUT_PARENT,
++			OPTION_OUTPUT_FORCE,
++			REQUIRED OPTION_INPUT,
++			OPTION_INPUT_START_BYTE,
++			OPTION_INPUT_START_HUNK,
++			OPTION_INPUT_LENGTH_BYTES,
++			OPTION_INPUT_LENGTH_HUNKS,
++			OPTION_HUNK_SIZE,
++			OPTION_COMPRESSION,
++			OPTION_NUMPROCESSORS
++		}
++	},
++
+ 	{ COMMAND_CREATE_HD, do_create_hd, ": create a hard disk CHD from the input file",
+ 		{
+ 			REQUIRED OPTION_OUTPUT,
+@@ -725,6 +744,19 @@ static const command_description s_commands[] =
+ 		}
+ 	},
+ 
++	{ COMMAND_EXTRACT_DVD, do_extract_raw, ": extract DVD file from a CHD input file",
++		{
++			REQUIRED OPTION_OUTPUT,
++			OPTION_OUTPUT_FORCE,
++			REQUIRED OPTION_INPUT,
++			OPTION_INPUT_PARENT,
++			OPTION_INPUT_START_BYTE,
++			OPTION_INPUT_START_HUNK,
++			OPTION_INPUT_LENGTH_BYTES,
++			OPTION_INPUT_LENGTH_HUNKS
++		}
++	},
++
+ 	{ COMMAND_EXTRACT_HD, do_extract_raw, ": extract raw hard disk file from a CHD input file",
+ 		{
+ 			REQUIRED OPTION_OUTPUT,
+@@ -2065,6 +2097,97 @@ static void do_create_cd(parameters_map &params)
+ }
+ 
+ 
++//-------------------------------------------------
++//  do_create_dvd - create a new compressed dvd
++//  image from a raw file (backported from MAME
++//  0.256+: a raw CHD with 2048-byte units and the
++//  standard 'DVD ' metadata tag)
++//-------------------------------------------------
++
++static void do_create_dvd(parameters_map &params)
++{
++	// process input file
++	util::core_file::ptr input_file;
++	auto input_file_str = params.find(OPTION_INPUT);
++	if (input_file_str != params.end())
++	{
++		std::error_condition const filerr = util::core_file::open(*input_file_str->second, OPEN_FLAG_READ, input_file);
++		if (filerr)
++			report_error(1, "Unable to open file (%s): %s", *input_file_str->second, filerr.message());
++	}
++
++	// process output CHD
++	chd_file output_parent;
++	std::string *output_chd_str = parse_output_chd_parameters(params, output_parent);
++
++	// process hunk size (upstream default: two sectors)
++	uint32_t hunk_size = output_parent.opened() ? output_parent.hunk_bytes() : 2 * 2048;
++	parse_hunk_size(params, 2048, hunk_size);
++	if (output_parent.opened() && output_parent.unit_bytes() != 2048)
++		report_error(1, "Output parent CHD sector size %u bytes does not match DVD-ROM sector size 2048 bytes", output_parent.unit_bytes());
++
++	// process input start/end (needs to know hunk_size)
++	uint64_t input_start;
++	uint64_t input_end;
++	uint64_t input_size = 0;
++	input_file->length(input_size); // FIXME: check error return
++	parse_input_start_end(params, input_size, hunk_size, hunk_size, input_start, input_end);
++	if ((input_end - input_start) % 2048)
++		report_error(1, "Data size %s is not divisible by sector size 2048", big_int_string(input_end - input_start).c_str());
++
++	// process compression (upstream uses the hard disk defaults)
++	chd_codec_type compression[4];
++	memcpy(compression, s_default_hd_compression, sizeof(compression));
++	parse_compression(params, compression);
++
++	// process numprocessors
++	parse_numprocessors(params);
++
++	// print some info
++	printf("Output CHD:   %s\n", output_chd_str->c_str());
++	if (output_parent.opened())
++		printf("Parent CHD:   %s\n", params.find(OPTION_OUTPUT_PARENT)->second->c_str());
++	printf("Input file:   %s\n", input_file_str->second->c_str());
++	if (input_start != 0 || input_end != input_size)
++	{
++		printf("Input start:  %s\n", big_int_string(input_start).c_str());
++		printf("Input length: %s\n", big_int_string(input_end - input_start).c_str());
++	}
++	printf("Compression:  %s\n", compression_string(compression).c_str());
++	printf("Logical size: %s\n", big_int_string(input_end - input_start).c_str());
++
++	// catch errors so we can close & delete the output file
++	try
++	{
++		// create the new DVD
++		std::unique_ptr<chd_file_compressor> chd(new chd_rawfile_compressor(*input_file, input_start, input_end));
++		std::error_condition err;
++		if (output_parent.opened())
++			err = chd->create(output_chd_str->c_str(), input_end - input_start, hunk_size, compression, output_parent);
++		else
++			err = chd->create(output_chd_str->c_str(), input_end - input_start, hunk_size, 2048, compression);
++		if (err)
++			report_error(1, "Error creating CHD file (%s): %s", output_chd_str, err.message());
++
++		// add the standard DVD type tag
++		err = chd->write_metadata(DVD_METADATA_TAG, 0, std::string());
++		if (err)
++			report_error(1, "Error adding DVD metadata: %s", err.message());
++
++		// compress it generically
++		compress_common(*chd);
++	}
++	catch (...)
++	{
++		// delete the output file
++		auto output_chd_str = params.find(OPTION_OUTPUT);
++		if (output_chd_str != params.end())
++			osd_file::remove(*output_chd_str->second);
++		throw;
++	}
++}
++
++
+ //-------------------------------------------------
+ //  do_create_ld - create a new A/V file from an
+ //  input AVI file and metadata

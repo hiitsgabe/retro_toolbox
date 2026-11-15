@@ -19,6 +19,10 @@ void main() {
     expect(ChdService.planFor('g.chd')?.outExt, '.cue');
     expect(ChdService.planFor('g.cue')?.outExt, '.chd');
     expect(ChdService.planFor('g.txt'), isNull);
+    // AetherSX2 only reads CD CHDs, so an .iso can be packed as one on request.
+    expect(ChdService.planFor('g.iso', isoAsCd: true)?.command, 'createcd');
+    expect(ChdService.planFor('g.cue', isoAsCd: true)?.command, 'createcd');
+    expect(ChdService.planFor('g.chd', isoAsCd: true)?.command, 'extractcd');
   });
 
   test('extractPlanFromChdInfo picks cd vs dvd from info metadata', () {
@@ -35,6 +39,17 @@ void main() {
     expect(ChdService.parseProgress('Compressing, 42.3% complete...'), closeTo(0.423, 1e-9));
     expect(ChdService.parseProgress('Extracting, 100.0% complete'), 1.0);
     expect(ChdService.parseProgress('Output CHD:   game.chd'), isNull);
+  });
+
+  test('failureDetail falls back to stdout when chdman says nothing on stderr', () {
+    // An unknown subcommand makes chdman print its usage to stdout only.
+    const usage = 'chdman - MAME Compressed Hunks of Data (CHD) manager 0.238-CBT_edition (mame0238)\n'
+        'Usage:\n   chdman info: displays information about a CHD\n   chdman verify: verifies a CHD';
+    expect(ChdService.failureDetail('', usage), startsWith('chdman - MAME'));
+    expect(ChdService.failureDetail('', usage), contains('0.238'));
+    expect(ChdService.failureDetail('Error: bad input\n', usage), 'Error: bad input');
+    expect(ChdService.failureDetail('Compressing, 5.0% complete...\n', 'Output CHD: x.chd'),
+        'Output CHD: x.chd');
   });
 
   group('consumedFiles', () {
@@ -140,6 +155,21 @@ void main() {
       ]);
       expect(both[0], both[1]);
       expect(File(both[0]).existsSync(), isTrue);
+    }, skip: noChdman);
+
+    test('deleteOriginals removes the cue and its tracks only after a good convert', () async {
+      final dir = p.join(root.path, 'src');
+      final cue = disc(dir, 'Game');
+      final chd = await ChdService()
+          .convert(inputPath: cue, outputDir: dir, chdmanPath: chdman, onProgress: (_) {}, deleteOriginals: true);
+      expect(Directory(dir).listSync().map((e) => p.basename(e.path)).toList(), [p.basename(chd)]);
+
+      // A failed convert keeps the originals.
+      final bad = File(p.join(root.path, 'bad.iso'))..writeAsBytesSync(List.filled(1000, 1)); // not 2048-aligned
+      await expectLater(
+          ChdService().convert(inputPath: bad.path, outputDir: root.path, chdmanPath: chdman, onProgress: (_) {}, deleteOriginals: true),
+          throwsException);
+      expect(bad.existsSync(), isTrue);
     }, skip: noChdman);
 
     test('repacks a patched set into one .chd beside it and removes the set', () async {

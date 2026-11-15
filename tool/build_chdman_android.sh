@@ -26,7 +26,14 @@ BIN=$(echo "$NDK"/toolchains/llvm/prebuilt/*/bin)
 mkdir -p "$WORK"
 [ -d "$WORK/chdman/.git" ] || git clone "$SRC_REPO" "$WORK/chdman"
 git -C "$WORK/chdman" checkout --quiet "$SRC_COMMIT"
+# The fork is MAME 0.238, which predates createdvd/extractdvd (MAME 0.256) —
+# ChdService runs those for .iso (PS2/PSP). Backport them onto a clean tree.
+git -C "$WORK/chdman" reset --quiet --hard
+git -C "$WORK/chdman" apply "$ROOT/tool/chdman-createdvd.patch"
 
+# The fork's CMake never defines LSB_FIRST (MAME's genie build does), so MAME
+# code assumes big-endian: CHD header SHA1s come out wrong and upstream
+# `chdman verify` rejects every CHD made here. arm64 is little-endian.
 # The project links -lpthread -lutil on UNIX. bionic has both inside libc and
 # the NDK ships neither archive, so empty ones stand in.
 mkdir -p "$WORK/stubs"
@@ -40,6 +47,7 @@ cmake -S "$WORK/chdman" -B "$WORK/build" -G Ninja \
   -DANDROID_PLATFORM=android-$API \
   -DANDROID_STL=c++_static \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_FLAGS=-DLSB_FIRST -DCMAKE_CXX_FLAGS=-DLSB_FIRST \
   -DCMAKE_EXE_LINKER_FLAGS="-L$WORK/stubs -Wl,-z,max-page-size=16384"
 cmake --build "$WORK/build" --target chdman
 "$BIN/llvm-strip" -o "$OUT" "$WORK/build/chdman"

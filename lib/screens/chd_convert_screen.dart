@@ -30,6 +30,8 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   String? _outputDir;
   bool? _chdmanReady;
   String? _activeTaskId;
+  bool _deleteOriginals = false;
+  bool _isoAsCd = false;
 
   @override
   void initState() {
@@ -98,6 +100,8 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
       'inputPath': _inputPath!,
       'outputDir': _outputDir!,
       'chdmanPath': ref.read(settingsProvider).chdmanPath,
+      'deleteOriginals': _deleteOriginals,
+      'isoAsCd': _isoAsCd,
     });
     // Stay on the page and track progress here instead of popping to the queue.
     setState(() => _activeTaskId = taskId);
@@ -189,7 +193,7 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   Widget _convertUi(BuildContext context) {
     final theme = Theme.of(context);
     final input = _inputPath;
-    final plan = input == null ? null : ChdService.planFor(input);
+    final plan = input == null ? null : ChdService.planFor(input, isoAsCd: _isoAsCd);
     final canRun = input != null && _outputDir != null && plan != null;
     final action = input == null
         ? ''
@@ -209,7 +213,40 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
           const SizedBox(height: 12),
           Text(action, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        CheckboxListTile(
+          value: _deleteOriginals,
+          onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
+          title: const Text('Delete original when done'),
+          subtitle: const Text('Only after a successful conversion. A .cue/.gdi takes its track files with it.'),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+        ExpansionTile(
+          title: const Text('Advanced'),
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('.iso format', style: theme.textTheme.labelMedium),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('DVD (createdvd)')),
+                ButtonSegment(value: true, label: Text('CD (createcd)')),
+              ],
+              selected: {_isoAsCd},
+              onSelectionChanged: (s) => setState(() => _isoAsCd = s.first),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'DVD is the standard for PS2/PSP. Pick CD for AetherSX2/NetherSX2, which only boot CD CHDs '
+              '(current PCSX2 builds read both).',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(

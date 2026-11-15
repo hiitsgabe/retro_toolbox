@@ -270,6 +270,8 @@ class TaskQueueService {
       inputPath: task.params['inputPath'] as String,
       outputDir: task.params['outputDir'] as String,
       chdmanPath: task.params['chdmanPath'] as String?,
+      deleteOriginals: task.params['deleteOriginals'] as bool? ?? false,
+      isoAsCd: task.params['isoAsCd'] as bool? ?? false,
     );
   }
 
