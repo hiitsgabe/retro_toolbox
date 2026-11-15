@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+
 /// Follows redirects manually, re-sending [headers] on every hop, and returns
 /// the final URL. HTTP clients strip Authorization/Cookie on cross-host
 /// redirects (e.g. archive.org -> its data nodes), so authenticated downloads
@@ -181,6 +184,19 @@ Future<String> signinForToken(Map<String, dynamic> signin, Map<String, String> f
   } finally {
     client.close();
   }
+}
+
+Map<String, String> sourceAuthHeaders(AppSettings settings, Console console) {
+  // Same auth as the app's own downloads: IA restricted items want session
+  // cookies first, S3 keys as fallback.
+  return buildDownloadHeaders(
+    console.url,
+    {
+      ...buildConsoleAuthHeaders(console.auth, tokenOverride: settings.consoleSettings[console.id]?.authToken),
+      if (console.usesInternetArchive)
+        ...iaAuthHeaders(cookies: settings.iaCookies, accessKey: settings.iaAccessKey, secretKey: settings.iaSecretKey),
+    },
+  );
 }
 
 Map<String, String> buildDownloadHeaders(String url, [Map<String, String>? extra]) {

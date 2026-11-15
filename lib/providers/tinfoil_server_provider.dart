@@ -74,26 +74,12 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
     return result;
   }
 
-  Map<String, String> _authHeaders(Console console) {
-    final settings = _ref.read(settingsProvider);
-    // Same auth as the app's own downloads: IA restricted items want session
-    // cookies first, S3 keys as fallback.
-    return buildDownloadHeaders(
-      console.url,
-      {
-        ...buildConsoleAuthHeaders(console.auth, tokenOverride: settings.consoleSettings[console.id]?.authToken),
-        if (console.usesInternetArchive)
-          ...iaAuthHeaders(cookies: settings.iaCookies, accessKey: settings.iaAccessKey, secretKey: settings.iaSecretKey),
-      },
-    );
-  }
-
   Future<void> enable() async {
     try {
       await _service.start(
         port: state.port,
         loadGames: _loadGames,
-        authHeaders: _authHeaders,
+        authHeaders: (c) => sourceAuthHeaders(_ref.read(settingsProvider), c),
         // Games already downloaded here go out from disk, not the internet.
         downloadDir: (c) => _ref.read(settingsProvider.notifier).getDownloadDir(c.id),
       );
