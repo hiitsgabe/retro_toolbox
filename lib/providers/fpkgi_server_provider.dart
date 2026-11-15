@@ -54,7 +54,12 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
     SharedPreferences.getInstance().then((prefs) {
       final port = prefs.getInt(_portKey);
       if (port != null && mounted) state = state.copyWith(port: port);
-      if (mounted && ServerMode.shouldRestore(prefs, 'fpkgi')) enable();
+      if (mounted && ServerMode.shouldRestore(prefs, 'fpkgi')) {
+        // Catalog servers read settings (auth, paths); wait for them.
+        _ref.read(settingsProvider.notifier).loaded.then((_) {
+          if (mounted) enable();
+        });
+      }
     });
   }
 

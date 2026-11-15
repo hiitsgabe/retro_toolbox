@@ -17,6 +17,7 @@ const _portKey = 'ftp_port';
 const _userKey = 'ftp_user';
 const _srvDirKey = 'ftp_server_dir';
 const _srvPortKey = 'ftp_server_port';
+const _srvReadOnlyKey = 'ftp_server_read_only';
 
 class FtpTransfer {
   final String name;
@@ -130,6 +131,8 @@ class FtpNotifier extends StateNotifier<FtpState> {
         username: prefs.getString(_userKey) ?? '',
         serverDir: prefs.getString(_srvDirKey) ?? '',
         serverPort: prefs.getInt(_srvPortKey) ?? 2121,
+        // Server mode only: an unattended restart must not widen a read-only share.
+        serverReadOnly: ServerMode.current ? prefs.getBool(_srvReadOnlyKey) ?? false : state.serverReadOnly,
       );
       if (ServerMode.shouldRestore(prefs, 'ftp')) startServer();
     });
@@ -330,7 +333,10 @@ class FtpNotifier extends StateNotifier<FtpState> {
     await prefs.setInt(_srvPortKey, port);
   }
 
-  void setServerReadOnly(bool v) => state = state.copyWith(serverReadOnly: v);
+  Future<void> setServerReadOnly(bool v) async {
+    state = state.copyWith(serverReadOnly: v);
+    if (ServerMode.current) await (await SharedPreferences.getInstance()).setBool(_srvReadOnlyKey, v);
+  }
 
   Future<void> startServer() async {
     if (state.serverDir.isEmpty) {

@@ -1,12 +1,21 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/providers/tinfoil_server_provider.dart';
+import 'package:retro_toolbox/providers/ftp_provider.dart';
 import 'package:retro_toolbox/providers/rts_server_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+    const MethodChannel('plugins.flutter.io/path_provider'),
+    (call) async => Directory.systemTemp.path,
+  );
   tearDown(() => ServerMode.current = ServerMode.isServer());
 
   test('isServer only on linux with RETRO_TOOLBOX_SERVER=1', () {
@@ -76,5 +85,34 @@ void main() {
       await n.disable();
       expect(prefs.getBool(ServerMode.onKey('rts')), isFalse);
     });
+  });
+
+  test('ftp restore keeps the saved read-only choice', () async {
+    ServerMode.current = true;
+    final dir = Directory.systemTemp.createTempSync();
+    addTearDown(() => dir.deleteSync(recursive: true));
+    SharedPreferences.setMockInitialValues({
+      ServerMode.onKey('ftp'): true,
+      'ftp_server_dir': dir.path,
+      'ftp_server_port': 0,
+      'ftp_server_read_only': true,
+    });
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.read(ftpProvider);
+    await pumpEventQueue();
+    expect(c.read(ftpProvider).serverReadOnly, isTrue);
+    expect(c.read(ftpProvider).serverRunning, isTrue);
+  });
+
+  test('tinfoil restore waits for settings to load', () async {
+    ServerMode.current = true;
+    SharedPreferences.setMockInitialValues({ServerMode.onKey('tinfoil'): true, 'tinfoil_server_port_v2': 0});
+    final c = ProviderContainer();
+    addTearDown(c.dispose);
+    c.read(tinfoilServerProvider);
+    await c.read(settingsProvider.notifier).loaded;
+    await pumpEventQueue();
+    expect(c.read(tinfoilServerProvider).running, isTrue);
   });
 }

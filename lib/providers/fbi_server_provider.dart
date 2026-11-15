@@ -76,7 +76,12 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       state = state.copyWith(port: prefs.getInt(_portKey) ?? state.port, threeDsIp: prefs.getString(_ipKey) ?? '');
-      if (ServerMode.shouldRestore(prefs, 'fbi')) enable();
+      if (ServerMode.shouldRestore(prefs, 'fbi')) {
+        // Catalog servers read settings (auth, paths); wait for them.
+        _ref.read(settingsProvider.notifier).loaded.then((_) {
+          if (mounted) enable();
+        });
+      }
     });
   }
 
