@@ -1,7 +1,8 @@
 #!/bin/bash
 # In-container supervisor: runs the app, restarts it if it dies, and restarts it
 # when RSS stays above the limit while idle. Usage: watchdog.sh /path/to/app
-# Test knobs: WATCHDOG_INTERVAL, WATCHDOG_STRIKES, WATCHDOG_ONCE=1, WATCHDOG_RSS_KB.
+# Knobs: WATCHDOG_INTERVAL (RSS check, 60), WATCHDOG_POLL (liveness, 2), WATCHDOG_STRIKES (3),
+# WATCHDOG_BACKOFF_MIN (5), WATCHDOG_KILL_GRACE (20); tests: WATCHDOG_ONCE=1, WATCHDOG_RSS_KB.
 
 # wd_decide <rss_kb> <limit_mb> <strikes_so_far> <busy:0|1> -> ok|strike|wait-busy|restart
 wd_decide() {
@@ -15,8 +16,8 @@ wd_decide() {
 
 # wd_backoff <previous_s> -> next delay: 5, 10, 20 ... capped at 300
 wd_backoff() {
-  local n=$(($1 * 2))
-  [ "$n" -lt 5 ] && n=5
+  local min=${WATCHDOG_BACKOFF_MIN:-5} n=$(($1 * 2))
+  [ "$n" -lt "$min" ] && n=$min
   [ "$n" -gt 300 ] && n=300
   echo "$n"
 }
@@ -26,6 +27,8 @@ if [ -n "${WATCHDOG_FUNCTION_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
 APP=${1:?usage: watchdog.sh /path/to/app}
 LIMIT_MB=${RETRO_TOOLBOX_MEMORY_LIMIT_MB:-2048}
 INTERVAL=${WATCHDOG_INTERVAL:-60}
+POLL=${WATCHDOG_POLL:-2}
+GRACE=${WATCHDOG_KILL_GRACE:-20}
 STRIKES_MAX=${WATCHDOG_STRIKES:-3}
 BUSY_FILE=${RETRO_TOOLBOX_BUSY_FILE:-}   # unset = never busy
 
@@ -37,7 +40,7 @@ start_app() { "$APP" & pid=$!; started=$SECONDS; }
 stop_app() {
   kill -TERM "$pid" 2>/dev/null
   local i=0
-  while kill -0 "$pid" 2>/dev/null && [ $i -lt 20 ]; do nap 1; i=$((i + 1)); done
+  while kill -0 "$pid" 2>/dev/null && [ $i -lt "$GRACE" ]; do nap 1; i=$((i + 1)); done
   kill -KILL "$pid" 2>/dev/null
   wait "$pid" 2>/dev/null
 }
@@ -46,8 +49,9 @@ trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; exit 0' TERM INT
 
 pid=0 started=0 strikes=0 delay=0 rss_kb=0
 start_app
+last=$SECONDS
 while :; do
-  nap "$INTERVAL"
+  nap "$POLL"
   if ! kill -0 "$pid" 2>/dev/null; then
     wait "$pid" 2>/dev/null
     [ $((SECONDS - started)) -ge 600 ] && delay=0
@@ -55,8 +59,10 @@ while :; do
     log "exited, restarting in ${delay}s"
     nap "$delay"
     strikes=0
-    start_app
-  else
+    start_app; last=$SECONDS
+    [ -n "${WATCHDOG_ONCE:-}" ] && { stop_app; exit 0; }
+  elif [ $((SECONDS - last)) -ge "$INTERVAL" ]; then
+    last=$SECONDS
     rss_kb=${WATCHDOG_RSS_KB:-$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null)}
     rss_kb=${rss_kb:-0}
     busy=0
@@ -67,6 +73,6 @@ while :; do
       wait-busy) log "wait-busy" ;;
       restart) log "restart"; stop_app; strikes=0; start_app ;;
     esac
+    [ -n "${WATCHDOG_ONCE:-}" ] && { stop_app; exit 0; }
   fi
-  [ -n "${WATCHDOG_ONCE:-}" ] && { stop_app; exit 0; }
 done
