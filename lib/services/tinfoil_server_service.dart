@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -249,7 +250,13 @@ class TinfoilServerService {
   /// Streams [url] to [req] through the storage host's redirects, injecting
   /// [headers] (auth) on every hop and forwarding Range. Never hands a
   /// client an auth/error page as if it were the game file.
-  static Future<void> proxyUpstream(HttpRequest req, {required String url, required Map<String, String> headers}) async {
+  ///
+  /// With [saveTo], a full (status 200) download is also written to
+  /// `<saveTo>.part` and renamed into place only if the whole body arrived;
+  /// any failure deletes the part. An existing `.part` (another transfer in
+  /// flight) disables the copy.
+  static Future<void> proxyUpstream(HttpRequest req,
+      {required String url, required Map<String, String> headers, File? saveTo}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     // A proxy must forward bytes verbatim: auto-decompressing while forwarding
@@ -294,7 +301,41 @@ class TinfoilServerService {
         final v = upstreamRes.headers.value(h);
         if (v != null) req.response.headers.set(h, v);
       }
-      await upstreamRes.pipe(req.response);
+      final part = saveTo == null ? null : File('${saveTo.path}.part');
+      if (saveTo == null || part == null || upstreamRes.statusCode != HttpStatus.ok || part.existsSync()) {
+        await upstreamRes.pipe(req.response);
+        return;
+      }
+      final sink = part.openWrite();
+      var written = 0;
+      var upstreamDone = false;
+      try {
+        await req.response.addStream(upstreamRes.transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
+          handleData: (c, out) {
+            sink.add(c);
+            written += c.length;
+            out.add(c);
+          },
+          handleDone: (out) {
+            upstreamDone = true;
+            out.close();
+          },
+        )));
+        await sink.close();
+        await req.response.close();
+        final expected = upstreamRes.contentLength;
+        // addStream returns quietly (dropping the upstream) when the client
+        // has gone, so an unfinished upstream means an incomplete copy.
+        if (!upstreamDone || (expected >= 0 && written != expected)) {
+          await part.delete();
+        } else {
+          await part.rename(saveTo.path);
+        }
+      } catch (_) {
+        await sink.close().catchError((_) {});
+        await part.delete().catchError((_) => part);
+        rethrow;
+      }
     } finally {
       activeTransfers.value--;
       client.close();
