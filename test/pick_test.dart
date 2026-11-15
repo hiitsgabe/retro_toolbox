@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
+import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
 class _FakePicker extends FilePicker with MockPlatformInterfaceMixin {
   FileType? type;
@@ -171,5 +173,17 @@ void main() {
       expect(docPath('com.google.android.apps.docs.storage', 'acc=1;doc=2', root), isNull);
       expect(docPath('com.android.externalstorage.documents', null, root), isNull);
     });
+  });
+
+  testWidgets('server mode: pickDirectory uses the in-app browser, not the native picker', (t) async {
+    ServerMode.current = true;
+    addTearDown(() => ServerMode.current = false);
+    final tmp = Directory.systemTemp.createTempSync('pick_test');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final c = await ctxOf(t);
+    unawaited(pickDirectory(c, title: 'D', initialDir: tmp.path));
+    await listed(t);
+    expect(find.byType(PathBrowser), findsOneWidget);
+    expect(fake.title, isNull);
   });
 }

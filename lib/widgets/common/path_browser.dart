@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
@@ -65,8 +66,9 @@ class PathBrowser extends StatefulWidget {
 /// `/storage/emulated/0` is a dead end and there is no other way to reach a
 /// removable card. `getExternalStorageDirectories` reports one app-specific
 /// dir per mounted volume — trimming `/Android/...` off each gives the roots.
-Future<Map<String, String>> storageVolumes() async {
+Future<Map<String, String>> storageVolumes({@visibleForTesting List<String> Function()? serverList}) async {
   if (Handheld.current) return handheldRoots();
+  if (ServerMode.current) return serverRoots(list: serverList);
   if (!Platform.isAndroid) return const {};
   var appDirs = <String>[];
   var storageEntries = <String>[];
@@ -90,6 +92,19 @@ const _handheldRoots = ['/userdata', '/mnt/mmc', '/mnt/sdcard', '/storage', '/ro
 Map<String, String> handheldRoots({bool Function(String)? exists}) {
   final check = exists ?? (d) => Directory(d).existsSync();
   return {for (final r in _handheldRoots) if (check(r)) r: r};
+}
+
+/// Server mode: every host folder mounted under `/storage/<name>`, as
+/// `path -> name` sorted by name. [list] is injectable for tests.
+Map<String, String> serverRoots({List<String> Function()? list}) {
+  List<String> dirs;
+  try {
+    dirs = list?.call() ?? [for (final e in Directory('/storage').listSync(followLinks: false)) if (e is Directory) e.path];
+  } catch (_) {
+    return {};
+  }
+  final byLabel = {for (final d in dirs) d: p.basename(d)};
+  return Map.fromEntries(byLabel.entries.toList()..sort((a, b) => a.value.compareTo(b.value)));
 }
 
 /// `root path -> label` from the app-specific dirs (one per mounted volume,

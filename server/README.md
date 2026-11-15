@@ -34,9 +34,9 @@ Set by the image, don't change: `RETRO_TOOLBOX_SERVER=1`, `RETRO_TOOLBOX_BUSY_FI
 - `/data` is the home folder of the container user (`retro`, uid/gid 1000): settings, cache,
   the default downloads folder and the web certificate (`/data/.kasmvnc/`). Keep it on a named
   volume so it survives updates.
-- Mount ROM folders wherever you like (the example uses `/roms`). The app's file browser and file
-  pickers see the container's disk, so pick `/roms`, not the host path. In a file picker,
-  Ctrl+L lets you type a path.
+- Mount each host folder under `/storage/<name>` (the example uses `/storage/roms`). They show up
+  next to Home in File Explorer and in every file/folder picker, which see the container's disk,
+  so pick `/storage/roms`, not the host path.
 - Mounted folders must be writable by uid 1000: `sudo chown -R 1000:1000 /srv/roms`.
 
 The container uses `network_mode: host`, so the app's servers listen on the host's IP and
@@ -78,6 +78,7 @@ Not yet done on a real x64 host:
 - [ ] Firefox: the same through the web client's clipboard panel.
 - [ ] Rendering with llvmpipe is acceptable on real hardware (only checked under emulation).
 - [ ] The screen that uses `flutter_inappwebview` behaves as in the Linux desktop build.
+- [ ] A mounted /storage folder shows in File Explorer and pickers.
 - [ ] Turn on a console server, restart the container, it comes back on (needs a release with server mode).
 - [ ] A console on the LAN reaches the server and the IP shown is the host's.
 - [ ] RSS in normal use (`grep VmRSS /proc/$(pgrep -x retro_toolbox)/status`) is well under the 2048 MB default.

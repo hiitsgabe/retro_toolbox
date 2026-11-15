@@ -10,7 +10,7 @@ ADD https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/ka
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       /tmp/kasmvnc.deb libgtk-3-0t64 libgl1-mesa-dri libegl1 libgles2 libarchive13t64 \
-      xdg-user-dirs zenity tini openssl matchbox-window-manager \
+      xdg-user-dirs tini openssl matchbox-window-manager \
  && rm -rf /var/lib/apt/lists/* /tmp/kasmvnc.deb \
  && userdel -r ubuntu \
  && useradd -u 1000 -U -m -d /data -s /bin/bash retro

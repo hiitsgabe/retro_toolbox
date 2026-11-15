@@ -13,7 +13,9 @@ services:
       # RETRO_TOOLBOX_MEMORY_LIMIT_MB: "2048"
     volumes:
       - retro-toolbox-data:/data
-      - /srv/roms:/roms       # example ROM folder; must be writable by uid 1000
+      # Every host folder goes under /storage/<name> (shown in File Explorer and the pickers);
+      # it must be writable by uid 1000.
+      - /srv/roms:/storage/roms
 
 volumes:
   retro-toolbox-data:
