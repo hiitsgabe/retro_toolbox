@@ -9,9 +9,12 @@ import 'package:retro_toolbox/providers/fpkgi_server_provider.dart';
 import 'package:retro_toolbox/providers/ftp_provider.dart';
 import 'package:retro_toolbox/providers/jdkv_server_provider.dart';
 import 'package:retro_toolbox/providers/rts_server_provider.dart';
+import 'package:retro_toolbox/providers/save_sync_provider.dart';
+import 'package:retro_toolbox/providers/smb_provider.dart';
 import 'package:retro_toolbox/providers/server_busy_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/providers/tinfoil_server_provider.dart';
+import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
@@ -70,7 +73,20 @@ class _FTP extends StateNotifier<FtpState> implements FtpNotifier {
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
-ProviderContainer _container({bool downloading = false, int rts = 0}) => ProviderContainer(overrides: [
+class _SMB extends StateNotifier<SmbState> implements SmbNotifier {
+  _SMB(super.s);
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _SS extends StateNotifier<SaveSyncState> implements SaveSyncNotifier {
+  _SS(super.s);
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+ProviderContainer _container({bool downloading = false, int rts = 0, bool smb = false, bool sync = false}) =>
+    ProviderContainer(overrides: [
       downloadProvider.overrideWith((_) => _DL(DownloadState(downloading: downloading))),
       taskQueueProvider.overrideWith((_) => _TQ()),
       extractionProvider.overrideWith((_) => _EX()),
@@ -80,6 +96,9 @@ ProviderContainer _container({bool downloading = false, int rts = 0}) => Provide
       rtsServerProvider.overrideWith((_) => _RTS(RtsServerState(activeTransfers: rts))),
       jdkvServerProvider.overrideWith((_) => _JD()),
       ftpProvider.overrideWith((_) => _FTP()),
+      smbProvider.overrideWith((_) => _SMB(SmbState(
+          transfer: smb ? const SmbTransfer(name: 'a', done: 0, total: 0, upload: true) : null))),
+      saveSyncProvider.overrideWith((_) => _SS(SaveSyncState(busyRecipe: sync ? 'r' : null))),
     ]);
 
 void main() {
@@ -106,6 +125,15 @@ void main() {
     expect(f.existsSync(), isFalse);
   });
 
+  test('a failed write does not block later writes', () async {
+    final dir = (await Directory.systemTemp.createTemp()).path;
+    File('$dir/file').writeAsStringSync('');
+    await writeBusyFlag(true, path: '$dir/file/busy'); // parent is a file: create throws
+    final f = File('$dir/busy');
+    await writeBusyFlag(true, path: f.path);
+    expect(f.existsSync(), isTrue);
+  });
+
   test('writeBusyFlag without a path does nothing', () async {
     await writeBusyFlag(true, path: '');
   });
@@ -120,5 +148,29 @@ void main() {
     final rts = _container(rts: 1);
     addTearDown(rts.dispose);
     expect(rts.read(serverBusyProvider), isTrue);
+  });
+
+  test('busy while an SMB transfer runs', () {
+    final c = _container(smb: true);
+    addTearDown(c.dispose);
+    expect(c.read(serverBusyProvider), isTrue);
+  });
+
+  test('busy while a save-sync run is in progress', () {
+    final c = _container(sync: true);
+    addTearDown(c.dispose);
+    expect(c.read(serverBusyProvider), isTrue);
+  });
+
+  test('busy while a roster patch runs', () {
+    final c = _container();
+    addTearDown(c.dispose);
+    final seen = <bool>[];
+    c.listen(serverBusyProvider, (_, b) => seen.add(b), fireImmediately: true);
+    SportsService.patchesInFlight.value++;
+    expect(c.read(serverBusyProvider), isTrue);
+    SportsService.patchesInFlight.value--;
+    expect(c.read(serverBusyProvider), isFalse);
+    expect(seen, [false, true, false]);
   });
 }

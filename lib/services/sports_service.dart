@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
@@ -21,6 +22,9 @@ typedef KitPreviews = ({Map<String, String> kits, Map<String, Map<String, dynami
 /// after the job reports DONE. The fetched-rosters JSON is deliberately kept on
 /// disk so [patchRom] can reuse it without re-fetching.
 class SportsService {
+  /// Patches running now; server mode counts them as busy.
+  static final patchesInFlight = ValueNotifier<int>(0);
+
   static Future<String> _cacheDir() async {
     final dir = p.join((await getApplicationSupportDirectory()).path, 'rrp_cache');
     await Directory(dir).create(recursive: true);
@@ -353,57 +357,62 @@ class SportsService {
     void Function(double)? onProgress,
     void Function(String)? onStatus,
   }) async {
-    assert(rostersFile != null || rostersFiles != null);
-    final out = _tmp('patchresult');
-    final fromChd = p.extension(romPath).toLowerCase() == '.chd';
-    // Read before patching: the repack keeps the source's CHD type (CD vs DVD).
-    final isoAsCd = fromChd && await ChdService.isCdChd(romPath, chdmanPath: chdmanPath);
-    final data = await _runData(
-      tag: 'patch_${gameId.hashCode.abs()}',
-      job: {
-        'type': 'sports_patch',
-        'game_id': gameId,
-        'provider': provider,
-        'rom_path': romPath,
-        'output_dir': outputDir,
-        'label': label,
-        if (language != null) 'language': language,
-        if (logos != null) 'logos': logos,
-        if (looks != null) 'looks': looks,
-        // fill_clubs, fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
-        ...leftSlots,
-        if (images.isNotEmpty) 'images': images,
-        if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},
-        if (kits != null && kits.isNotEmpty) 'kits': kits,
-        if (rostersFiles != null)
-          'rosters_files': [
-            for (final r in rostersFiles) {'file': r.file, 'first_slot': r.firstSlot, 'count': r.count},
-          ]
-        else
-          'rosters_file': rostersFile,
-        'slot_mapping': slotMapping?.map((m) => m.toJson()).toList(),
-        'cache_dir': await _cacheDir(),
-      },
-      outputFile: out,
-      onProgress: onProgress,
-      onStatus: onStatus,
-    );
-    final result = PatchResult.fromJson(Map<String, dynamic>.from(data as Map));
-    if (!fromChd) return result;
-    // A CHD in, a CHD out; if packing fails the patched game stays playable.
-    onStatus?.call('Packing the patched game into a CHD…');
+    patchesInFlight.value++;
     try {
-      final chd = await ChdService.repackPatched(result.outputPath,
-          chdmanPath: chdmanPath, onProgress: onProgress, isoAsCd: isoAsCd);
-      return PatchResult(
-          outputPath: chd, teamsPatched: result.teamsPatched, playersPatched: result.playersPatched, notes: result.notes);
-    } catch (e) {
-      return PatchResult(
-        outputPath: result.outputPath,
-        teamsPatched: result.teamsPatched,
-        playersPatched: result.playersPatched,
-        notes: [...result.notes, 'Kept as plain files, not CHD: $e'],
+      assert(rostersFile != null || rostersFiles != null);
+      final out = _tmp('patchresult');
+      final fromChd = p.extension(romPath).toLowerCase() == '.chd';
+      // Read before patching: the repack keeps the source's CHD type (CD vs DVD).
+      final isoAsCd = fromChd && await ChdService.isCdChd(romPath, chdmanPath: chdmanPath);
+      final data = await _runData(
+        tag: 'patch_${gameId.hashCode.abs()}',
+        job: {
+          'type': 'sports_patch',
+          'game_id': gameId,
+          'provider': provider,
+          'rom_path': romPath,
+          'output_dir': outputDir,
+          'label': label,
+          if (language != null) 'language': language,
+          if (logos != null) 'logos': logos,
+          if (looks != null) 'looks': looks,
+          // fill_clubs, fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
+          ...leftSlots,
+          if (images.isNotEmpty) 'images': images,
+          if (teamLogos.isNotEmpty) 'team_logos': {for (final e in teamLogos.entries) '${e.key}': e.value},
+          if (kits != null && kits.isNotEmpty) 'kits': kits,
+          if (rostersFiles != null)
+            'rosters_files': [
+              for (final r in rostersFiles) {'file': r.file, 'first_slot': r.firstSlot, 'count': r.count},
+            ]
+          else
+            'rosters_file': rostersFile,
+          'slot_mapping': slotMapping?.map((m) => m.toJson()).toList(),
+          'cache_dir': await _cacheDir(),
+        },
+        outputFile: out,
+        onProgress: onProgress,
+        onStatus: onStatus,
       );
+      final result = PatchResult.fromJson(Map<String, dynamic>.from(data as Map));
+      if (!fromChd) return result;
+      // A CHD in, a CHD out; if packing fails the patched game stays playable.
+      onStatus?.call('Packing the patched game into a CHD…');
+      try {
+        final chd = await ChdService.repackPatched(result.outputPath,
+            chdmanPath: chdmanPath, onProgress: onProgress, isoAsCd: isoAsCd);
+        return PatchResult(
+            outputPath: chd, teamsPatched: result.teamsPatched, playersPatched: result.playersPatched, notes: result.notes);
+      } catch (e) {
+        return PatchResult(
+          outputPath: result.outputPath,
+          teamsPatched: result.teamsPatched,
+          playersPatched: result.playersPatched,
+          notes: [...result.notes, 'Kept as plain files, not CHD: $e'],
+        );
+      }
+    } finally {
+      patchesInFlight.value--;
     }
   }
 }
