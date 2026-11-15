@@ -26,6 +26,9 @@ if [ -n "${WATCHDOG_FUNCTION_ONLY:-}" ]; then return 0 2>/dev/null || exit 0; fi
 
 APP=${1:?usage: watchdog.sh /path/to/app}
 LIMIT_MB=${RETRO_TOOLBOX_MEMORY_LIMIT_MB:-2048}
+case $LIMIT_MB in
+  ''|*[!0-9]*) echo "RETRO_TOOLBOX_MEMORY_LIMIT_MB must be a whole number of MB" >&2; exit 1 ;;
+esac
 INTERVAL=${WATCHDOG_INTERVAL:-60}
 POLL=${WATCHDOG_POLL:-2}
 GRACE=${WATCHDOG_KILL_GRACE:-20}

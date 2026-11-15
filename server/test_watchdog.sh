@@ -68,4 +68,10 @@ sleep 0.3
 check "TERM exits 0" '[ $rc -eq 0 ]'
 check "TERM: app gone, not restarted" '[ "$(starts)" = 1 ] && ! ps ax | grep -v grep | grep -q "$T/app"'
 
+# a non-numeric limit is refused at startup, before the app starts
+for bad in 2G abc; do
+  rm -f "$T/starts"; RETRO_TOOLBOX_MEMORY_LIMIT_MB=$bad bash "$W" "$T/app" > "$T/out" 2>&1; rc=$?
+  check "limit '$bad' refused" '[ $rc -eq 1 ] && grep -q "whole number" "$T/out" && [ ! -e "$T/starts" ]'
+done
+
 [ "$fails" -eq 0 ] || { echo "$fails failed"; exit 1; }
