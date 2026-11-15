@@ -4,11 +4,17 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/rts_folder_model.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/rts_server_service.dart';
+import 'package:retro_toolbox/utils/network.dart';
 
 const _portKey = 'rts_server_port_v2';
 const _foldersKey = 'rts_server_folders';
+const _forwardKey = 'rts_server_forward_library';
 
 class RtsServerState {
   final bool running;
@@ -16,6 +22,7 @@ class RtsServerState {
   final List<String> addresses;
   final List<RtsFolder> folders;
   final int activeTransfers;
+  final bool forwardLibrary;
   final String? error;
 
   const RtsServerState({
@@ -24,6 +31,7 @@ class RtsServerState {
     this.addresses = const [],
     this.folders = const [],
     this.activeTransfers = 0,
+    this.forwardLibrary = false,
     this.error,
   });
 
@@ -33,6 +41,7 @@ class RtsServerState {
     List<String>? addresses,
     List<RtsFolder>? folders,
     int? activeTransfers,
+    bool? forwardLibrary,
     String? error,
     bool clearError = false,
   }) =>
@@ -42,16 +51,18 @@ class RtsServerState {
         addresses: addresses ?? this.addresses,
         folders: folders ?? this.folders,
         activeTransfers: activeTransfers ?? this.activeTransfers,
+        forwardLibrary: forwardLibrary ?? this.forwardLibrary,
         error: clearError ? null : (error ?? this.error),
       );
 }
 
-final rtsServerProvider = StateNotifierProvider<RtsServerNotifier, RtsServerState>((ref) => RtsServerNotifier());
+final rtsServerProvider = StateNotifierProvider<RtsServerNotifier, RtsServerState>((ref) => RtsServerNotifier(ref));
 
 class RtsServerNotifier extends StateNotifier<RtsServerState> {
+  final Ref _ref;
   final _service = RtsServerService();
 
-  RtsServerNotifier() : super(const RtsServerState()) {
+  RtsServerNotifier(this._ref) : super(const RtsServerState()) {
     _service.activeTransfers.addListener(() {
       if (mounted) state = state.copyWith(activeTransfers: _service.activeTransfers.value);
     });
@@ -65,7 +76,7 @@ class RtsServerNotifier extends StateNotifier<RtsServerState> {
     final folders = raw == null
         ? <RtsFolder>[]
         : (jsonDecode(raw) as List).map((e) => RtsFolder.fromJson(Map<String, dynamic>.from(e))).toList();
-    if (mounted) state = state.copyWith(port: port ?? state.port, folders: folders);
+    if (mounted) state = state.copyWith(port: port ?? state.port, folders: folders, forwardLibrary: prefs.getBool(_forwardKey) ?? false);
   }
 
   Future<void> _saveFolders() async {
@@ -99,9 +110,40 @@ class RtsServerNotifier extends StateNotifier<RtsServerState> {
     await prefs.setInt(_portKey, port);
   }
 
+  Future<void> setForwardLibrary(bool value) async {
+    state = state.copyWith(forwardLibrary: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_forwardKey, value);
+  }
+
+  Future<List<Game>> _loadGames(Console console) async {
+    final settings = _ref.read(settingsProvider);
+    try {
+      return await CatalogService().loadCatalog(
+        console.id,
+        iaAccessKey: settings.iaAccessKey,
+        iaSecretKey: settings.iaSecretKey,
+        authToken: settings.consoleSettings[console.id]?.authToken,
+      );
+    } catch (_) {
+      return []; // one broken console must not break the rest
+    }
+  }
+
   Future<void> enable() async {
     try {
-      await _service.start(port: state.port, folders: state.folders);
+      await _service.start(
+        port: state.port,
+        folders: state.folders,
+        library: state.forwardLibrary
+            ? RtsLibrary(
+                consoles: () => CatalogService().getConsoles(),
+                games: _loadGames,
+                authHeaders: (c) => sourceAuthHeaders(_ref.read(settingsProvider), c),
+                downloadDir: (c) => _ref.read(settingsProvider.notifier).getDownloadDir(c.id),
+              )
+            : null,
+      );
       final addresses = await RtsServerService.localAddresses();
       state = state.copyWith(running: true, addresses: addresses, port: _service.port, clearError: true);
       if (Platform.isAndroid) {

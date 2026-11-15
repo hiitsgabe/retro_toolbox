@@ -49,16 +49,30 @@ class RtsServerScreen extends ConsumerWidget {
             margin: EdgeInsets.zero,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enable server'),
-                subtitle: Text(state.running
-                    ? 'Sharing ${state.folders.length} folder(s)'
-                    : state.folders.isEmpty
-                        ? 'Add a folder first'
-                        : 'Off'),
-                value: state.running,
-                onChanged: state.folders.isEmpty && !state.running ? null : (v) => v ? notifier.enable() : notifier.disable(),
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Enable server'),
+                    subtitle: Text(state.running
+                        ? 'Sharing ${state.folders.length} folder(s)${state.forwardLibrary ? ' and your library' : ''}'
+                        : state.folders.isEmpty && !state.forwardLibrary
+                            ? 'Add a folder or forward your library first'
+                            : 'Off'),
+                    value: state.running,
+                    onChanged: (state.folders.isEmpty && !state.forwardLibrary) && !state.running
+                        ? null
+                        : (v) => v ? notifier.enable() : notifier.disable(),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Forward my library'),
+                    subtitle: const Text(
+                        "Every console in your library, using this device's sign-ins. Games downloaded through here are kept on this device."),
+                    value: state.forwardLibrary,
+                    onChanged: state.running ? null : notifier.setForwardLibrary,
+                  ),
+                ],
               ),
             ),
           ),
