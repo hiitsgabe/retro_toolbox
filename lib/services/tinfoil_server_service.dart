@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/link_download.dart';
 
 /// Serves a Tinfoil "shop": an index of the catalog's Switch games plus a
 /// streaming proxy that injects source auth (IA S3 / bearer / cookie). Games
@@ -253,8 +254,8 @@ class TinfoilServerService {
   ///
   /// With [saveTo], a full (status 200) download is also written to
   /// `<saveTo>.part` and renamed into place only if the whole body arrived;
-  /// any failure deletes the part. An existing `.part` (another transfer in
-  /// flight) disables the copy.
+  /// any failure deletes the part. A compressed body or an HTML page is never
+  /// copied, and while one transfer writes a part, others just proxy.
   static Future<void> proxyUpstream(HttpRequest req,
       {required String url, required Map<String, String> headers, File? saveTo}) async {
     final client = HttpClient();
@@ -264,6 +265,7 @@ class TinfoilServerService {
     // reports "failed to open nsp".
     client.autoUncompress = false;
     activeTransfers.value++;
+    String? claimed;
     try {
       // Follow redirects with the data request itself (auth on every hop),
       // never a separate probe: some storage hosts hand out links that break
@@ -302,23 +304,32 @@ class TinfoilServerService {
         if (v != null) req.response.headers.set(h, v);
       }
       final part = saveTo == null ? null : File('${saveTo.path}.part');
-      var claimed = false;
-      if (part != null && upstreamRes.statusCode == HttpStatus.ok) {
-        // Atomic claim (no await between check and create): two simultaneous
-        // downloads must not share one .part. Failure (exists, no folder)
-        // means plain proxying.
+      final encoding = upstreamRes.headers.value(HttpHeaders.contentEncodingHeader);
+      final type = upstreamRes.headers.value(HttpHeaders.contentTypeHeader) ?? '';
+      if (part != null &&
+          upstreamRes.statusCode == HttpStatus.ok &&
+          // The client decodes a compressed body; the copy would stay encoded.
+          (encoding == null || encoding == 'identity') &&
+          // A sign-in or interstitial page, not the game.
+          !type.toLowerCase().startsWith('text/html') &&
+          // A link download resuming this very part.
+          !downloadPathReserved(saveTo!.path) &&
+          // Claim in-process (no await between check and add): two simultaneous
+          // downloads must not share one .part. A part left by a killed run
+          // is not in the set, so it is truncated and reused.
+          _partsInFlight.add(part.absolute.path)) {
         try {
-          part.createSync(exclusive: true);
-          claimed = true;
+          part.createSync(); // no folder -> plain proxying
+          claimed = part.absolute.path;
         } on FileSystemException {
-          // proxy only
+          _partsInFlight.remove(part.absolute.path);
         }
       }
-      if (!claimed) {
+      if (claimed == null) {
         await upstreamRes.pipe(req.response);
         return;
       }
-      final sink = part!.openWrite();
+      final sink = part!.openWrite(); // FileMode.write: truncates a stale part
       sink.done.catchError((_) {}); // disk errors surface from close() below
       var written = 0;
       var upstreamDone = false;
@@ -356,10 +367,16 @@ class TinfoilServerService {
         await part.delete().catchError((_) => part);
       }
     } finally {
+      if (claimed != null) _partsInFlight.remove(claimed);
       activeTransfers.value--;
       client.close();
     }
   }
+
+  /// `.part` files a [proxyUpstream] in this isolate is writing, across all servers.
+  // ponytail: in-process claim; another process writing the same folder isn't
+  // seen. A lock file would cover that if two app instances ever share one.
+  static final _partsInFlight = <String>{};
 
   /// Local IPv4 addresses, home-LAN ones first (192.168.x is where a Switch
   /// usually sits; Tailscale/CGNAT 100.64-127.x and docker nets are demoted).

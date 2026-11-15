@@ -149,6 +149,9 @@ Future<void> downloadToFile({
 /// Paths handed out by [reserveDownloadPath] whose download hasn't finished this session.
 final _reserved = <String>{};
 
+/// Whether an unfinished link download (maybe awaiting a retry) owns `<path>.part`.
+bool downloadPathReserved(String path) => _reserved.contains(path);
+
 /// A free path for [name] in [dir]: no file, no leftover `.part` and no
 /// unfinished download this session uses it. Held until its [downloadJob] succeeds.
 String reserveDownloadPath(String dir, String name) {

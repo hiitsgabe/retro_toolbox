@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/services/link_download.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 void main() {
@@ -150,12 +151,71 @@ void main() {
     expect(Directory(p.join(dir.path, 'missing')).existsSync(), isFalse);
   });
 
-  test('in-flight part is left alone', () async {
+  test('a stale part from a killed run is overwritten and the download saved', () async {
+    part.writeAsStringSync('x');
+    final (status, bytes) = await fetch();
+    expect(status, 200);
+    expect(bytes, body);
+    await waitUntil(() => saveTo.existsSync());
+    expect(saveTo.readAsBytesSync(), body);
+    expect(part.existsSync(), isFalse);
+  });
+
+  test("a link download's part is left alone", () async {
+    expect(reserveDownloadPath(dir.path, 'game.zip'), saveTo.path);
     part.writeAsStringSync('x');
     final (status, bytes) = await fetch();
     expect(status, 200);
     expect(bytes, body);
     expect(part.readAsStringSync(), 'x');
     expect(saveTo.existsSync(), isFalse);
+  });
+
+  test('two concurrent full downloads save exactly one correct file', () async {
+    upstreamHandler = (req) async {
+      req.response.contentLength = body.length;
+      req.response.add(body.sublist(0, 50));
+      await req.response.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      req.response.add(body.sublist(50));
+      await req.response.close();
+    };
+    final results = await Future.wait([fetch(), fetch()]);
+    for (final (status, bytes) in results) {
+      expect(status, 200);
+      expect(bytes, body);
+    }
+    await waitUntil(() => saveTo.existsSync() && !part.existsSync());
+    expect(saveTo.readAsBytesSync(), body);
+    expect(dir.listSync().map((e) => p.basename(e.path)), ['game.zip']);
+  });
+
+  test('a compressed body reaches the client intact but is not saved', () async {
+    upstreamHandler = (req) async {
+      final gz = gzip.encode(body);
+      req.response.headers.set(HttpHeaders.contentEncodingHeader, 'gzip');
+      req.response.contentLength = gz.length;
+      req.response.add(gz);
+      await req.response.close();
+    };
+    final (status, bytes) = await fetch(); // HttpClient decodes gzip
+    expect(status, 200);
+    expect(bytes, body);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(saveTo.existsSync(), isFalse);
+    expect(part.existsSync(), isFalse);
+  });
+
+  test('an HTML page is proxied but not saved', () async {
+    upstreamHandler = (req) async {
+      req.response.headers.contentType = ContentType.html;
+      req.response.write('<html>sign in</html>');
+      await req.response.close();
+    };
+    final (status, _) = await fetch();
+    expect(status, 200);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(saveTo.existsSync(), isFalse);
+    expect(part.existsSync(), isFalse);
   });
 }
