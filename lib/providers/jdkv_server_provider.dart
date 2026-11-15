@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/jksv_backend.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
@@ -82,6 +83,7 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       state = state.copyWith(port: prefs.getInt(_portKey) ?? state.port, folder: prefs.getString(_folderKey));
+      if (ServerMode.shouldRestore(prefs, 'jdkv')) enable();
     });
   }
 
@@ -153,6 +155,7 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
           callback: jdkvKeepAliveCallback,
         );
       }
+      await ServerMode.remember('jdkv', true);
     } catch (e) {
       state = state.copyWith(running: false, error: '$e');
     }
@@ -162,6 +165,7 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     await _server.stop();
     if (Platform.isAndroid) await FlutterForegroundTask.stopService();
     state = state.copyWith(running: false, addresses: const []);
+    await ServerMode.remember('jdkv', false);
   }
 
   /// Pull a confirmed incoming Switch save into the export folder (req #1/#2):

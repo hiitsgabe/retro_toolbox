@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -75,6 +76,12 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       state = state.copyWith(port: prefs.getInt(_portKey) ?? state.port, threeDsIp: prefs.getString(_ipKey) ?? '');
+      if (ServerMode.shouldRestore(prefs, 'fbi')) {
+        // Catalog servers read settings (auth, paths); wait for them.
+        _ref.read(settingsProvider.notifier).loaded.then((_) {
+          if (mounted) enable();
+        });
+      }
     });
   }
 
@@ -138,6 +145,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
         );
       }
       refreshGames();
+      await ServerMode.remember('fbi', true);
     } catch (e) {
       state = state.copyWith(running: false, error: '$e');
     }
@@ -147,6 +155,7 @@ class FbiServerNotifier extends StateNotifier<FbiServerState> {
     await _service.stop();
     if (Platform.isAndroid) await FlutterForegroundTask.stopService();
     state = state.copyWith(running: false, addresses: const [], games: const []);
+    await ServerMode.remember('fbi', false);
   }
 
   Future<void> setPort(int port) async {

@@ -1,0 +1,21 @@
+# Example deployment. Put RETRO_TOOLBOX_PASSWORD=... in a .env file next to this one, then:
+#   docker compose up -d
+services:
+  retro-toolbox:
+    image: ghcr.io/hiitsgabe/retro_toolbox-server:latest
+    platform: linux/amd64
+    network_mode: host        # consoles must reach the app's servers on the host's IP
+    restart: unless-stopped
+    mem_limit: 3g             # last resort, above the watchdog's 2048 MB app limit
+    environment:
+      RETRO_TOOLBOX_PASSWORD: ${RETRO_TOOLBOX_PASSWORD:?set RETRO_TOOLBOX_PASSWORD in .env}
+      # RETRO_TOOLBOX_PORT: "8444"
+      # RETRO_TOOLBOX_MEMORY_LIMIT_MB: "2048"
+    volumes:
+      - retro-toolbox-data:/data
+      # Every host folder goes under /storage/<name> (shown in File Explorer and the pickers);
+      # it must be writable by uid 1000.
+      - /srv/roms:/storage/roms
+
+volumes:
+  retro-toolbox-data:

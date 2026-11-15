@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/update_provider.dart';
 import 'package:retro_toolbox/services/update_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// About's update status, in the InfoCard style. [currentVersion] is null
@@ -48,7 +50,11 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
       UpdatePhase.upToDate => ('Up to date', 'Version ${widget.currentVersion ?? '-'} is the latest'),
       UpdatePhase.available => (
           'Version ${release?.version} available',
-          state.asset == null ? 'Download it from the release page' : formatBytes(state.asset!.size),
+          state.asset != null
+              ? formatBytes(state.asset!.size)
+              : ServerMode.current
+                  ? 'Update the Docker image: $_pullCommand'
+                  : 'Download it from the release page',
         ),
       UpdatePhase.downloading => ('Downloading ${release?.version}…', '${(state.progress * 100).round()}%'),
       UpdatePhase.ready => notifier.handheld
@@ -60,6 +66,10 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
     };
 
     final (String label, VoidCallback? onPressed) = switch (state.phase) {
+      UpdatePhase.available when state.asset == null && ServerMode.current => (
+          'Copy command',
+          () => Clipboard.setData(const ClipboardData(text: _pullCommand)),
+        ),
       UpdatePhase.available when state.asset == null => ('Open release page', () => _openPage(release!.htmlUrl)),
       UpdatePhase.available => ('Download update', notifier.download),
       UpdatePhase.ready when notifier.handheld => ('Close app', () => exit(0)),
@@ -161,6 +171,8 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
       ),
     );
   }
+
+  static const _pullCommand = 'docker compose pull && docker compose up -d';
 
   static Future<void> _openPage(String url) => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 }

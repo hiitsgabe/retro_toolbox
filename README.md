@@ -16,8 +16,8 @@ that usually take a PC, a terminal and five different programs into one app:
 - **Convert and tidy your game files**: CHD, M3U playlists, RAR/ZIP, NSZ, 3DS to CIA, duplicate and junk cleanup.
 - **Run it on the handheld itself**: an ARM64 Linux build for PortMaster, fully driven by the gamepad.
 
-It runs on Android, macOS, Windows, Linux and ARM64 Linux handhelds (Knulli, muOS, ROCKNIX and
-other PortMaster firmwares).
+It runs on Android, macOS, Windows, Linux, ARM64 Linux handhelds (Knulli, muOS, ROCKNIX and
+other PortMaster firmwares) and, headless, as a Docker image you open in the browser.
 
 ---
 
@@ -168,10 +168,16 @@ Download the file for your device from the [latest release](https://github.com/h
 | Windows x64 | `retro_toolbox_windows_x64.zip` |
 | Linux x64 | `retro_toolbox_linux_x64.tar.gz` |
 | Linux handhelds (ARM64, PortMaster, glibc 2.34+) | `retro_toolbox_handheld_arm64.zip` |
+| Server (Docker, Linux x64) | `ghcr.io/hiitsgabe/retro_toolbox-server` |
 
 On Android, allow installs from your browser or file manager. For the handheld, unzip into your
 `ports/` folder and start **Retro Toolbox** from the Ports menu; details in
 [`linux/handheld/README.md`](linux/handheld/README.md).
+
+### Server (Docker)
+
+The Linux build also ships as a headless Docker image: run it on a home server and use the app from
+any browser. Setup and options are in [`server/README.md`](server/README.md).
 
 ## Building
 

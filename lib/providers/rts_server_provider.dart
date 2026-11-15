@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/models/rts_folder_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
@@ -77,6 +78,8 @@ class RtsServerNotifier extends StateNotifier<RtsServerState> {
         ? <RtsFolder>[]
         : (jsonDecode(raw) as List).map((e) => RtsFolder.fromJson(Map<String, dynamic>.from(e))).toList();
     if (mounted) state = state.copyWith(port: port ?? state.port, folders: folders, forwardLibrary: prefs.getBool(_forwardKey) ?? false);
+    // Restore after forwardLibrary is loaded: enable() reads it.
+    if (mounted && ServerMode.shouldRestore(prefs, 'rts')) enable();
   }
 
   Future<void> _saveFolders() async {
@@ -155,6 +158,7 @@ class RtsServerNotifier extends StateNotifier<RtsServerState> {
           callback: rtsKeepAliveCallback,
         );
       }
+      await ServerMode.remember('rts', true);
     } catch (e) {
       state = state.copyWith(running: false, error: '$e');
     }
@@ -164,6 +168,7 @@ class RtsServerNotifier extends StateNotifier<RtsServerState> {
     await _service.stop();
     if (Platform.isAndroid) await FlutterForegroundTask.stopService();
     state = state.copyWith(running: false, addresses: const []);
+    await ServerMode.remember('rts', false);
   }
 
   @override

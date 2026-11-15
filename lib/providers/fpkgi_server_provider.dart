@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -53,6 +54,12 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
     SharedPreferences.getInstance().then((prefs) {
       final port = prefs.getInt(_portKey);
       if (port != null && mounted) state = state.copyWith(port: port);
+      if (mounted && ServerMode.shouldRestore(prefs, 'fpkgi')) {
+        // Catalog servers read settings (auth, paths); wait for them.
+        _ref.read(settingsProvider.notifier).loaded.then((_) {
+          if (mounted) enable();
+        });
+      }
     });
   }
 
@@ -95,6 +102,7 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
           callback: fpkgiKeepAliveCallback,
         );
       }
+      await ServerMode.remember('fpkgi', true);
     } catch (e) {
       state = state.copyWith(running: false, error: '$e');
     }
@@ -104,6 +112,7 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
     await _service.stop();
     if (Platform.isAndroid) await FlutterForegroundTask.stopService();
     state = state.copyWith(running: false, addresses: const []);
+    await ServerMode.remember('fpkgi', false);
   }
 
   Future<void> setPort(int port) async {

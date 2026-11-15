@@ -8,12 +8,14 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
-/// Handhelds (no native dialog, not d-pad friendly) use the in-app
-/// [PathBrowser] for folders; Android, desktop and iOS the system picker
-/// (on Android a folder pick copies nothing, unlike a file pick).
-bool get _useBrowser => Handheld.current;
+/// Handhelds (no native dialog, not d-pad friendly) and the headless server
+/// (no D-Bus portal) use the in-app [PathBrowser]; Android, desktop and iOS
+/// the system picker (on Android a folder pick copies nothing, unlike a file
+/// pick).
+bool get _useBrowser => Handheld.current || ServerMode.current;
 
 Future<String> _startDir() async {
   if (Handheld.current) {
@@ -42,7 +44,7 @@ Future<String?> pickFile(
   bool androidNative = false,
   @visibleForTesting bool? useBrowser,
 }) async {
-  final browser = useBrowser ?? (Handheld.current || (Platform.isAndroid && !androidNative));
+  final browser = useBrowser ?? (_useBrowser || (Platform.isAndroid && !androidNative));
   if (browser) {
     final dir = initialDir ?? await _startDir();
     if (!context.mounted) return null;
@@ -157,7 +159,7 @@ String? docPath(String? authority, String? docId, String primary) {
   return rel.isEmpty ? root : p.posix.join(root, rel);
 }
 
-/// Native pickers can throw (e.g. Linux without zenity); treat as a cancel.
+/// Native pickers can throw (e.g. Linux without a portal); treat as a cancel.
 Future<String?> _native(Future<String?> Function() pick) async {
   try {
     return await pick();
