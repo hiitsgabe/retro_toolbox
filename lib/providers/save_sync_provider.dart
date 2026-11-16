@@ -171,7 +171,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     DriveTransport? driveTransport,
     RecipeIndex Function(String base)? catalogIndex,
   })  : _paths = paths,
-        _store = store ?? RecipeStore(),
+        _store = store ?? const RecipeStore(),
         _google = google ?? PluginGoogleAuth(),
         _transport = driveTransport,
         _catalogIndex = catalogIndex,
@@ -474,19 +474,19 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       };
       state = state.copyWith(access: access);
       var problems = state.recipeProblems;
-      if (_recipes.isEmpty) {
-        final load = await _store.loadBundled();
-        for (final r in load.recipes) {
-          _recipes[r.id] = (r, 'bundled');
-        }
-        // Written here, so they win: somebody described this app's saves by
-        // hand, which says more than any published copy can.
-        final mine = await _store.loadUser(Directory(p.join(_paths.saveSync, 'recipes')));
-        for (final r in mine.recipes) {
-          _recipes[r.id] = (r, 'user');
-        }
-        problems = {...mine.rejected, ...load.rejected, for (final f in load.tooNew) f: 'needs a newer Retro Toolbox'};
+      // Written here, so they win: somebody described this app's saves by
+      // hand, which says more than any published copy can. Read every
+      // refresh, since the recipe wizard writes here while the app runs.
+      final mine = await _store.loadUser(Directory(p.join(_paths.saveSync, 'recipes')));
+      for (final r in mine.recipes) {
+        _recipes[r.id] = (r, 'user');
       }
+      problems = {
+        for (final e in problems.entries)
+          if (e.key.startsWith('hub: ') || e.key.startsWith('repo: ')) e.key: e.value,
+        ...mine.rejected,
+        for (final f in mine.tooNew) f: 'needs a newer Retro Toolbox',
+      };
       // Recipes another hub published, and their problems, do not belong to this one.
       void leaveHub(String? id) {
         if (id == _hubId) return;
@@ -513,6 +513,15 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       // minting a second hub over a card that is simply not in the slot.
       await hub.open(deviceId: deviceId, create: _creatingHub);
       _creatingHub = false;
+      // Recipes another source published, and their problems, do not belong
+      // to this one. Checked here rather than when the setting changes, so a
+      // refresh already running cannot bring the old source's back.
+      final base = await catalogBase();
+      if (base != _repoBase) {
+        _recipes.removeWhere((_, r) => r.$2 == 'repo');
+        problems = {for (final e in problems.entries) if (!e.key.startsWith('repo: ')) e.key: e.value};
+        _repoBase = base;
+      }
       for (final e in (await hub.recipes()).entries) {
         final known = _recipes[e.key];
         if (known != null && known.$2 != 'hub') continue;
@@ -523,15 +532,6 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         }
       }
       var config = await hub.config();
-      // Recipes another source published, and their problems, do not belong
-      // to this one. Checked here rather than when the setting changes, so a
-      // refresh already running cannot bring the old source's back.
-      final base = await catalogBase();
-      if (base != _repoBase) {
-        _recipes.removeWhere((_, r) => r.$2 == 'repo');
-        problems = {for (final e in problems.entries) if (!e.key.startsWith('repo: ')) e.key: e.value};
-        _repoBase = base;
-      }
       // The catalog's copy of every chosen app's recipe, matching its index.
       // A device that upgraded from a build that bundled the recipe has only
       // the hub's older copy and must not stay on it. Collected first and

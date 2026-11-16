@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 
 class RecipeLoad {
@@ -41,9 +40,7 @@ RecipeLoad parseRecipeFiles(Map<String, String> files) {
 }
 
 class RecipeStore {
-  RecipeStore({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
-
-  final AssetBundle _bundle;
+  const RecipeStore();
 
   /// Recipes written on this device, which win over every other layer: a
   /// person who sat down and described their own app's saves has said more
@@ -55,12 +52,5 @@ class RecipeStore {
       if (e is File && e.path.endsWith('.json')) files[e.uri.pathSegments.last] = await e.readAsString();
     }
     return parseRecipeFiles(files);
-  }
-
-  /// The recipes shipped inside the app (`save_recipes/` in the repo).
-  Future<RecipeLoad> loadBundled() async {
-    final manifest = await AssetManifest.loadFromAssetBundle(_bundle);
-    final paths = manifest.listAssets().where((a) => a.startsWith('save_recipes/') && a.endsWith('.json'));
-    return parseRecipeFiles({for (final a in paths) a.substring('save_recipes/'.length): await _bundle.loadString(a)});
   }
 }

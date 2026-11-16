@@ -24,8 +24,10 @@ void main() {
     expect(load.tooNew, ['future.json']);
   });
 
-  test('pubspec bundles the folder', () {
-    expect(File('pubspec.yaml').readAsStringSync(), contains('    - save_recipes/\n'));
+  // The folder is the published catalog, read over HTTPS; shipping it in the
+  // APK is what used to make every new recipe wait for a build.
+  test('pubspec no longer bundles the folder', () {
+    expect(File('pubspec.yaml').readAsStringSync(), isNot(contains('save_recipes/')));
   });
 
   test('Recipe parse of the bundled Stardew file keeps every field', () {
