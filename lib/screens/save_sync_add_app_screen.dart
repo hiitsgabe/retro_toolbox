@@ -16,10 +16,10 @@ class SaveSyncAddAppScreen extends ConsumerStatefulWidget {
   /// again.
   final Set<String> already;
 
-  /// Package to the recipe this app already knows for it — what the build
-  /// ships, what a hub published, what was written here. Consulted before the
-  /// catalog, because a recipe already in hand beats one that has to be
-  /// fetched.
+  /// Package to the recipe this app already knows for it: what a hub
+  /// published, what was written here, what the catalog already brought.
+  /// Consulted before the catalog, because a recipe already in hand beats one
+  /// that has to be fetched.
   final Map<String, String> known;
 
   /// The published catalog, when one could be read. Null means it was never

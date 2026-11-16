@@ -304,8 +304,8 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   }
 
   /// Package to the recipe this app already knows for it, whatever layer it
-  /// came from. The picker needs this: an app the build ships a recipe for
-  /// must not read as one nothing has been written for.
+  /// came from. The picker needs this: an app a hub or the catalog already
+  /// brought a recipe for must not read as one nothing has been written for.
   Map<String, String> get knownRecipeByPackage => {
         for (final (recipe, _) in _recipes.values)
           for (final pkg in recipe.packages) pkg: recipe.id,
@@ -599,8 +599,8 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         if (adopt.isNotEmpty && await hub.putConfig(adopt, deviceId: deviceId, now: at)) config = await hub.config();
       }
       await publish(config.packages);
-      // Membership is the configuration: a recipe the app happens to ship is
-      // a candidate to add, not a row.
+      // Membership is the configuration: a recipe this device knows, from
+      // the catalog, the hub or written here, is a candidate to add, not a row.
       final games = config.isEmpty ? all : [for (final g in all) if (config.packages.contains(g.recipe.packages.first)) g];
       // The engine is published with the games it produced: until then the catch below sees no engine and clears them.
       _engine = engine;

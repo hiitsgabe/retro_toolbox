@@ -377,6 +377,14 @@ void main() {
     expect(find.textContaining('Nothing here is set up to sync yet'), findsOneWidget);
   });
 
+  // Recipes are not bundled and the list is opt-in, so a fresh hub has no
+  // rows at all: point at the one button that adds one.
+  testWidgets('with no apps chosen the list points at Add an app', (t) async {
+    await pump(t, const SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: []));
+    expect(find.text('No apps yet. Use Add an app to choose which games sync.'), findsOneWidget);
+    expect(find.textContaining('No recipes loaded'), findsNothing);
+  });
+
   testWidgets('Check opens a dialog with every line', (t) async {
     await pump(
       t,

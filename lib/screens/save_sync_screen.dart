@@ -450,7 +450,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 child: Column(children: [
                   Icon(Icons.inbox, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(height: 8),
-                  Text(s.games.isEmpty ? 'No recipes loaded.' : 'Nothing here is set up to sync yet.'),
+                  Text(s.games.isEmpty ? 'No apps yet. Use Add an app to choose which games sync.' : 'Nothing here is set up to sync yet.'),
                 ]),
               ),
             // Not hidden, just folded away: a game that vanished from the list
