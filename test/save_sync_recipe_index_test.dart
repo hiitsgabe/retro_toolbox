@@ -21,6 +21,9 @@ class FakeCatalog {
   /// Recipe id to the file served at `<base>/<id>.json`.
   final bodies = <String, String>{'alpha': jsonEncode({'schema': 1, 'id': 'alpha'})};
 
+  /// Recipe id to exact bytes served at `<base>/<id>.json`, ahead of [bodies].
+  final rawBodies = <String, List<int>>{};
+
   /// Recipe id to the sha256 the index claims, when it should lie.
   final claimed = <String, String>{};
 
@@ -57,7 +60,15 @@ class FakeCatalog {
         await r.response.close();
         return;
       }
-      final body = name.endsWith('.json') ? fake.bodies[name.substring(0, name.length - 5)] : null;
+      final id = name.endsWith('.json') ? name.substring(0, name.length - 5) : null;
+      final raw = fake.rawBodies[id];
+      if (raw != null) {
+        fake.bodyHits++;
+        r.response.add(raw);
+        await r.response.close();
+        return;
+      }
+      final body = fake.bodies[id];
       if (body != null) {
         fake.bodyHits++;
         r.response.write(body);
@@ -171,5 +182,32 @@ void main() {
   test('junk where the index should be is empty, never a crash', () async {
     fake.rawIndex = 'not json at all';
     expect((await index().load()).isEmpty, isTrue);
+  });
+
+  // A broken publish answers 200 with a new ETag. Taking it would wipe the
+  // good copy, and the next conditional ask would then match the junk.
+  test('a junk index never replaces the cached one or its ETag', () async {
+    await index().load();
+    fake.rawIndex = 'not json at all';
+    fake.etag = 'v2';
+    final c = await index().load();
+    expect(c.entries, hasLength(2));
+    expect(c.fromCache, isTrue);
+    expect(File(p.join(tmp.path, 'save_sync', 'index.etag')).readAsStringSync(), 'v1');
+  });
+
+  // A recipe saved by an editor that writes a BOM is hashed by the builder
+  // over its exact bytes, so the app must hash the same bytes.
+  test('a body with a leading BOM matches the sha256 of its exact bytes and is kept', () async {
+    final bytes = [0xEF, 0xBB, 0xBF, ...utf8.encode(jsonEncode({'schema': 1, 'id': 'alpha'}))];
+    fake.rawBodies['alpha'] = bytes;
+    fake.claimed['alpha'] = sha256.convert(bytes).toString();
+    final i = index();
+    final entry = (await i.load()).byPackage['com.example.alpha']!;
+    expect((await i.ensureBody(entry))?['id'], 'alpha');
+    final kept = File(p.join(tmp.path, 'save_sync', 'alpha.json'));
+    expect(kept.readAsBytesSync(), bytes);
+    expect((await i.ensureBody(entry))?['id'], 'alpha');
+    expect(fake.bodyHits, 1, reason: 'the kept copy with the BOM matches the index and is used as is');
   });
 }

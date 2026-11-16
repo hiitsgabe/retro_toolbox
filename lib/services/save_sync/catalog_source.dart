@@ -7,12 +7,16 @@ import 'package:crypto/crypto.dart';
 /// own folder, read raw from main.
 const defaultCatalogBase = 'https://raw.githubusercontent.com/hiitsgabe/retro_toolbox/main/save_recipes/';
 
-/// [raw] as a catalog base: trimmed, https only, ending in a slash. Null when
-/// it cannot be one, so an invalid value is never stored or used.
+/// [raw] as a catalog base: trimmed, https only, no query or fragment, ending
+/// in a slash. Null when it cannot be one, so an invalid value is never
+/// stored or used.
 String? normalizeCatalogUrl(String raw) {
   final t = raw.trim();
   final u = Uri.tryParse(t);
   if (u == null || u.scheme != 'https' || u.host.isEmpty) return null;
+  // `<id>.json` is appended to the base, so a query or a fragment would
+  // swallow the file name.
+  if (u.hasQuery || u.hasFragment) return null;
   return t.endsWith('/') ? t : '$t/';
 }
 

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
@@ -86,19 +87,25 @@ class RecipeIndex {
   Future<RecipeCatalog> load({DateTime? now}) async {
     final cached = await _readCache();
     try {
-      final (body, etag) = await _fetch('index.json', etag: cached == null ? null : await _readEtag());
-      if (body == null) {
+      final (bytes, etag) = await _fetch('index.json', etag: cached == null ? null : await _readEtag());
+      if (bytes == null) {
         // 304: what is cached is still current.
         await _touch();
-        return _parse(cached?.$1 ?? '{}', fetchedAt: now ?? DateTime.now(), fromCache: false);
+        final at = now ?? DateTime.now();
+        return _parse(cached?.$1 ?? '', fetchedAt: at, fromCache: false) ?? RecipeCatalog(const [], fetchedAt: at);
       }
+      final body = utf8.decode(bytes);
+      final fresh = _parse(body, fetchedAt: now ?? DateTime.now(), fromCache: false);
+      // A 200 that is not an index is a broken publish, not an empty
+      // catalog: it must not wipe the good copy or its ETag.
+      if (fresh == null) throw const FormatException('not a recipe index');
       await cacheDir.create(recursive: true);
       await _indexFile.writeAsString(body);
       if (etag != null) await _etagFile.writeAsString(etag);
-      return _parse(body, fetchedAt: now ?? DateTime.now(), fromCache: false);
+      return fresh;
     } catch (_) {
       if (cached == null) return RecipeCatalog.empty;
-      return _parse(cached.$1, fetchedAt: cached.$2, fromCache: true);
+      return _parse(cached.$1, fetchedAt: cached.$2, fromCache: true) ?? RecipeCatalog(const [], fetchedAt: cached.$2, fromCache: true);
     }
   }
 
@@ -109,13 +116,13 @@ class RecipeIndex {
   /// whatever was kept; null when nothing was.
   Future<Map<String, dynamic>?> ensureBody(IndexEntry entry) async {
     final file = File('${cacheDir.path}/${entry.id}.json');
-    final kept = await file.exists() ? await file.readAsString() : null;
+    final kept = await file.exists() ? await file.readAsBytes() : null;
     if (kept != null && entry.sha256 != null && _sha(kept) == entry.sha256) return _object(kept);
     try {
       final (body, _) = await _fetch('${entry.id}.json');
       if (body != null && (entry.sha256 == null || _sha(body) == entry.sha256)) {
         await cacheDir.create(recursive: true);
-        await file.writeAsString(body);
+        await file.writeAsBytes(body);
         return _object(body);
       }
     } catch (_) {
@@ -124,11 +131,15 @@ class RecipeIndex {
     return kept == null ? null : _object(kept);
   }
 
-  static String _sha(String text) => sha256.convert(utf8.encode(text)).toString();
+  /// Over the exact bytes, as the index builder hashes them: decoding first
+  /// would drop a leading BOM and the hash would never match.
+  static String _sha(List<int> bytes) => sha256.convert(bytes).toString();
 
-  static Map<String, dynamic>? _object(String text) {
+  /// [bytes] as a JSON object. The UTF-8 decoder drops a leading BOM, which
+  /// jsonDecode would refuse.
+  static Map<String, dynamic>? _object(List<int> bytes) {
     try {
-      final j = jsonDecode(text);
+      final j = jsonDecode(utf8.decode(bytes));
       return j is Map<String, dynamic> ? j : null;
     } catch (_) {
       return null;
@@ -139,8 +150,9 @@ class RecipeIndex {
   /// the request and never answers would otherwise hold the caller forever.
   static const _answerTimeout = Duration(seconds: 10);
 
-  /// Body text, or null for a 304. Throws when the fetch itself fails or stalls.
-  Future<(String?, String?)> _fetch(String path, {String? etag}) async {
+  /// Body bytes, exactly as served, or null for a 304. Throws when the fetch
+  /// itself fails or stalls.
+  Future<(List<int>?, String?)> _fetch(String path, {String? etag}) async {
     final client = _client();
     try {
       final request = await client.getUrl(Uri.parse('${baseUrl.endsWith('/') ? baseUrl : '$baseUrl/'}$path'));
@@ -154,7 +166,10 @@ class RecipeIndex {
         await response.drain<void>();
         throw HttpException('${response.statusCode} for $path');
       }
-      return (await response.transform(utf8.decoder).join().timeout(_answerTimeout), response.headers.value(HttpHeaders.etagHeader));
+      final bytes = await response
+          .fold(BytesBuilder(copy: false), (b, chunk) => b..add(chunk))
+          .timeout(_answerTimeout);
+      return (bytes.takeBytes(), response.headers.value(HttpHeaders.etagHeader));
     } finally {
       client.close(force: true);
     }
@@ -171,18 +186,20 @@ class RecipeIndex {
     if (await _indexFile.exists()) await _indexFile.setLastModified(DateTime.now());
   }
 
-  RecipeCatalog _parse(String body, {DateTime? fetchedAt, required bool fromCache}) {
+  /// [body] as a catalog, or null when it is not an index at all: not JSON,
+  /// not an object, or no `recipes` list.
+  RecipeCatalog? _parse(String body, {DateTime? fetchedAt, required bool fromCache}) {
     try {
       final j = jsonDecode(body);
       final list = j is Map ? j['recipes'] : null;
-      if (list is! List) return RecipeCatalog(const [], fetchedAt: fetchedAt, fromCache: fromCache);
+      if (list is! List) return null;
       return RecipeCatalog(
         [for (final e in list) if (IndexEntry.parse(e) case final parsed?) parsed],
         fetchedAt: fetchedAt,
         fromCache: fromCache,
       );
     } catch (_) {
-      return RecipeCatalog(const [], fetchedAt: fetchedAt, fromCache: fromCache);
+      return null;
     }
   }
 }

@@ -18,6 +18,15 @@ void main() {
       expect(normalizeCatalogUrl('https://'), isNull);
       expect(normalizeCatalogUrl(''), isNull);
     });
+
+    // The base gets `<id>.json` appended, so a query or fragment would
+    // swallow the file name.
+    test('an address with a query or a fragment is refused', () {
+      expect(normalizeCatalogUrl('https://example.com/r?ref=main'), isNull);
+      expect(normalizeCatalogUrl('https://example.com/r/?'), isNull);
+      expect(normalizeCatalogUrl('https://example.com/r#top'), isNull);
+      expect(normalizeCatalogUrl('https://example.com/r/#'), isNull);
+    });
   });
 
   group('resolveCatalogBase', () {
