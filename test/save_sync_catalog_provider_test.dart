@@ -53,6 +53,9 @@ class Catalog {
 
 const stardewPkg = 'com.chucklefish.stardewvalley';
 
+/// A package and id the APK bundles no recipe for.
+const catalogOnlyPkg = 'com.example.catalogonly';
+
 /// The Stardew recipe from the repo folder, renamed so a test can tell copies apart.
 String recipe({String id = 'stardew-valley', required String name, List<String>? packages}) {
   final j = jsonDecode(File('save_recipes/stardew-valley.json').readAsStringSync()) as Map<String, dynamic>;
@@ -68,9 +71,14 @@ void main() {
   late Catalog catalog;
   late String hubPath;
 
+  /// The catalog served for a recipe source; a test that switches sources
+  /// points this somewhere else.
+  late Catalog Function(String base) serving;
+
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('rt-catalog-');
     catalog = await Catalog.start();
+    serving = (_) => catalog;
     hubPath = '${tmp.path}/hub';
     SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.withData({'save_sync_hub_folder': hubPath});
     // No Shizuku and no root: rows come straight from the recipes, no engine.
@@ -102,7 +110,10 @@ void main() {
     final c = ProviderContainer(overrides: [
       saveSyncProvider.overrideWith((ref) => SaveSyncNotifier(
             paths: DevicePaths(sdcard: tmp.path),
-            catalogIndex: (_) => RecipeIndex(baseUrl: catalog.base, cacheDir: Directory('${tmp.path}/cache')),
+            catalogIndex: (base) {
+              final served = serving(base);
+              return RecipeIndex(baseUrl: served.base, cacheDir: Directory('${tmp.path}/cache-${served.server.port}'));
+            },
           )),
     ]);
     addTearDown(c.dispose);
@@ -112,17 +123,19 @@ void main() {
   // The case that matters for devices already in the field: their recipe came
   // from the APK, so nothing from the catalog is cached yet, and the hub holds
   // an older copy. They must end on the catalog's.
+  // The id is one the APK does not bundle, so the hub copy is really loaded
+  // and the catalog has to beat it, not a bundled one.
   test('a device with only an older hub copy ends on the catalog body', () async {
-    final hub = await seedHub({stardewPkg: 'stardew-valley'});
-    await hub.publishRecipe(jsonDecode(recipe(name: 'Stardew (hub copy)')) as Map<String, dynamic>,
+    final hub = await seedHub({catalogOnlyPkg: 'catalog-only'});
+    await hub.publishRecipe(jsonDecode(recipe(id: 'catalog-only', name: 'Catalog Only (hub copy)', packages: [catalogOnlyPkg])) as Map<String, dynamic>,
         source: 'bundled', deviceId: 'odin-02c4', now: DateTime.utc(2026, 11, 12));
-    catalog.bodies['stardew-valley'] = recipe(name: 'Stardew (catalog)');
+    catalog.bodies['catalog-only'] = recipe(id: 'catalog-only', name: 'Catalog Only (catalog)', packages: [catalogOnlyPkg]);
     final c = container();
 
     await c.read(saveSyncProvider.notifier).refresh();
 
     final g = c.read(saveSyncProvider).games.single;
-    expect(g.recipe.name, 'Stardew (catalog)');
+    expect(g.recipe.name, 'Catalog Only (catalog)');
     expect(g.source, 'repo');
   });
 
@@ -154,8 +167,8 @@ void main() {
   });
 
   test('an unreachable catalog is no error and the row still shows', () async {
-    final hub = await seedHub({stardewPkg: 'stardew-valley'});
-    await hub.publishRecipe(jsonDecode(recipe(name: 'Stardew (hub copy)')) as Map<String, dynamic>,
+    final hub = await seedHub({catalogOnlyPkg: 'catalog-only'});
+    await hub.publishRecipe(jsonDecode(recipe(id: 'catalog-only', name: 'Catalog Only (hub copy)', packages: [catalogOnlyPkg])) as Map<String, dynamic>,
         source: 'bundled', deviceId: 'odin-02c4', now: DateTime.utc(2026, 11, 12));
     await catalog.server.close(force: true);
     final c = container();
@@ -165,6 +178,37 @@ void main() {
     final s = c.read(saveSyncProvider);
     expect(s.error, isNull);
     expect(s.games, hasLength(1));
+    expect(s.games.single.source, 'hub');
+  });
+
+  // Recipes from the old source must not outlive it, and the refresh that
+  // follows the switch is the one that drops them.
+  test('switching the recipe source drops what the old one brought', () async {
+    await seedHub({catalogOnlyPkg: 'catalog-only'});
+    catalog.bodies['catalog-only'] = recipe(id: 'catalog-only', name: 'Catalog Only', packages: [catalogOnlyPkg]);
+    final empty = await Catalog.start();
+    addTearDown(() => empty.server.close(force: true));
+    serving = (base) => base == 'https://example.com/other/' ? empty : catalog;
+    final c = container();
+    final n = c.read(saveSyncProvider.notifier);
+    await n.refresh();
+    expect(c.read(saveSyncProvider).games.single.source, 'repo');
+
+    expect(await n.setCatalogSetting('https://example.com/other'), isTrue);
+
+    expect(c.read(saveSyncProvider).games.where((g) => g.recipe.id == 'catalog-only'), isEmpty);
+  });
+
+  // The configuration names the recipe; the catalog publishing another one
+  // for the same package must not slip in under it.
+  test('a catalog recipe with another id than the chosen one is not brought in', () async {
+    await seedHub({catalogOnlyPkg: 'someone-elses'});
+    catalog.bodies['catalog-only'] = recipe(id: 'catalog-only', name: 'Catalog Only', packages: [catalogOnlyPkg]);
+    final c = container();
+
+    await c.read(saveSyncProvider.notifier).refresh();
+
+    expect(c.read(saveSyncProvider).games, isEmpty);
   });
 
   // Before this change the id was written to the hub configuration and no row

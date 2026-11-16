@@ -189,6 +189,9 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   /// The backend id the hub recipes in [_recipes] came from.
   String? _hubId;
 
+  /// The catalog base the repo recipes in [_recipes] came from.
+  String? _repoBase;
+
   /// Recipe id to (recipe, source).
   final _recipes = <String, (Recipe, String)>{};
 
@@ -217,8 +220,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     final normalized = url == null ? null : normalizeCatalogUrl(url);
     if (url != null && normalized == null) return false;
     await (await _sync()).setCatalogUrl(normalized);
-    // Recipes from the old source must not outlive it.
-    _recipes.removeWhere((_, r) => r.$2 == 'repo');
+    // The refresh sees the new base and drops what the old source brought.
     await refresh();
     return true;
   }
@@ -228,9 +230,13 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     final base = await catalogBase();
     final open = _index;
     if (open != null && _indexBase == base) return open;
-    _indexBase = base;
     final make = _catalogIndex;
-    return _index = make != null ? make(base) : RecipeIndex(baseUrl: base, cacheDir: catalogCacheDir((await getApplicationSupportDirectory()).path, base));
+    final index = make != null ? make(base) : RecipeIndex(baseUrl: base, cacheDir: catalogCacheDir((await getApplicationSupportDirectory()).path, base));
+    // Set together after the last await, so a caller never sees one base's
+    // reader filed under another base.
+    _index = index;
+    _indexBase = base;
+    return index;
   }
 
   /// The published catalog, for the picker. Null only when there is no place
@@ -244,19 +250,23 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     }
   }
 
-  /// The catalog's recipe for each of [packages] it publishes, each body
-  /// matching the index's sha256. Ids a recipe written here already owns are
-  /// skipped. A catalog that cannot be read gives nothing and no error: the
-  /// hub still carries the bodies.
-  Future<({Map<String, Recipe> recipes, Map<String, String> problems})> _repoRecipes(Iterable<String> packages) async {
+  /// The catalog's recipe for each chosen app it publishes, each body
+  /// matching the index's sha256. [chosen] is the hub configuration, package
+  /// to entry; removed apps are skipped, and so is a catalog recipe whose id
+  /// is not the one the configuration names. Ids a recipe written here
+  /// already owns are skipped. A catalog that cannot be read gives nothing
+  /// and no error: the hub still carries the bodies.
+  Future<({Map<String, Recipe> recipes, Map<String, String> problems})> _repoRecipes(Map<String, ConfigEntry> chosen) async {
     final recipes = <String, Recipe>{};
     final problems = <String, String>{};
     try {
       final index = await _openIndex();
       final published = await index.load();
-      for (final pkg in packages) {
+      for (final MapEntry(key: pkg, value: wanted) in chosen.entries) {
+        if (wanted.removed) continue;
         final entry = published.byPackage[pkg];
-        if (entry == null || recipes.containsKey(entry.id) || _recipes[entry.id]?.$2 == 'user') continue;
+        if (entry == null || (wanted.recipe != null && wanted.recipe != entry.id)) continue;
+        if (recipes.containsKey(entry.id) || _recipes[entry.id]?.$2 == 'user') continue;
         final body = await index.ensureBody(entry);
         if (body == null) continue;
         try {
@@ -513,11 +523,20 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         }
       }
       var config = await hub.config();
+      // Recipes another source published, and their problems, do not belong
+      // to this one. Checked here rather than when the setting changes, so a
+      // refresh already running cannot bring the old source's back.
+      final base = await catalogBase();
+      if (base != _repoBase) {
+        _recipes.removeWhere((_, r) => r.$2 == 'repo');
+        problems = {for (final e in problems.entries) if (!e.key.startsWith('repo: ')) e.key: e.value};
+        _repoBase = base;
+      }
       // The catalog's copy of every chosen app's recipe, matching its index.
       // A device that upgraded from a build that bundled the recipe has only
       // the hub's older copy and must not stay on it. Collected first and
       // applied here, so a slow catalog that times out changes nothing later.
-      final repo = await _repoRecipes(config.packages).timeout(
+      final repo = await _repoRecipes(config.entries).timeout(
         const Duration(seconds: 20),
         onTimeout: () => (recipes: const <String, Recipe>{}, problems: const <String, String>{}),
       );
@@ -532,7 +551,8 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       // The recipe body travels with the decision, so a device adopting this
       // configuration needs neither the network nor a catalog of its own.
       Future<void> publish(Iterable<String> packages) async {
-        for (final (recipe, source) in _recipes.values) {
+        // A snapshot: an add can put a recipe in while this awaits the hub.
+        for (final (recipe, source) in _recipes.values.toList()) {
           if (source == 'hub' || !packages.contains(recipe.packages.first)) continue;
           try {
             await hub.publishRecipe(recipe.raw, source: source, deviceId: deviceId);
@@ -549,7 +569,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
           loading: false,
           recipeProblems: problems,
           games: [
-            for (final (recipe, source) in _recipes.values)
+            for (final (recipe, source) in _recipes.values.toList())
               if (config.packages.contains(recipe.packages.first)) GameStatus(recipe, source, const NotInstalled()),
           ],
         );
@@ -565,7 +585,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         model: model,
         appVersion: (await PackageInfo.fromPlatform()).version,
       );
-      final all = await gameStatuses(_recipes.values, (r, source) => engine.status(r, source: source));
+      final all = await gameStatuses(_recipes.values.toList(), (r, source) => engine.status(r, source: source));
       // An existing hub has no configuration folder, and one nobody has added
       // apps to has nothing in it. Either way this device writes one from the
       // games it actually has, so the list it shows travels to the next

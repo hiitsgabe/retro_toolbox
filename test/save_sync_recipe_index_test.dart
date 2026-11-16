@@ -155,6 +155,19 @@ void main() {
     expect(File(p.join(tmp.path, 'save_sync', 'alpha.json')).existsSync(), isFalse);
   });
 
+  // A network that takes the request and never answers must not hold the
+  // refresh forever: the fetch gives up and the cache, here none, is used.
+  test('a server that never answers is given up on, not waited for', () async {
+    final silent = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => silent.close(force: true));
+    silent.listen((_) {}); // takes the request, never writes or closes the response
+    final i = RecipeIndex(baseUrl: 'http://${silent.address.host}:${silent.port}', cacheDir: Directory(p.join(tmp.path, 'silent')));
+    final clock = Stopwatch()..start();
+    final c = await i.load();
+    expect(c.isEmpty, isTrue);
+    expect(clock.elapsed, lessThan(const Duration(seconds: 15)));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('junk where the index should be is empty, never a crash', () async {
     fake.rawIndex = 'not json at all';
     expect((await index().load()).isEmpty, isTrue);

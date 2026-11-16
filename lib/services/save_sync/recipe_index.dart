@@ -135,13 +135,17 @@ class RecipeIndex {
     }
   }
 
-  /// Body text, or null for a 304. Throws when the fetch itself fails.
+  /// How long the answer and then its body may take. A network that takes
+  /// the request and never answers would otherwise hold the caller forever.
+  static const _answerTimeout = Duration(seconds: 10);
+
+  /// Body text, or null for a 304. Throws when the fetch itself fails or stalls.
   Future<(String?, String?)> _fetch(String path, {String? etag}) async {
     final client = _client();
     try {
       final request = await client.getUrl(Uri.parse('${baseUrl.endsWith('/') ? baseUrl : '$baseUrl/'}$path'));
       if (etag != null) request.headers.set(HttpHeaders.ifNoneMatchHeader, etag);
-      final response = await request.close();
+      final response = await request.close().timeout(_answerTimeout);
       if (response.statusCode == HttpStatus.notModified) {
         await response.drain<void>();
         return (null, etag);
@@ -150,7 +154,7 @@ class RecipeIndex {
         await response.drain<void>();
         throw HttpException('${response.statusCode} for $path');
       }
-      return (await response.transform(utf8.decoder).join(), response.headers.value(HttpHeaders.etagHeader));
+      return (await response.transform(utf8.decoder).join().timeout(_answerTimeout), response.headers.value(HttpHeaders.etagHeader));
     } finally {
       client.close(force: true);
     }
