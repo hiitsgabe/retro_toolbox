@@ -1,0 +1,48 @@
+name: Save recipes index
+
+# A recipe added or fixed on main reaches every device through index.json, so
+# the index is rebuilt here instead of by hand. A recipe that does not parse
+# fails this job and the index stays as it was.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "save_recipes/**.json"
+      - "!save_recipes/index.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: "3.35.7"
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: dart run tool/save_recipe_index.dart
+
+      # A push made with GITHUB_TOKEN starts no other workflow, so this commit
+      # cannot loop back into this job or start a release.
+      - name: Commit the index when it changed
+        run: |
+          if git diff --quiet -- save_recipes/index.json; then
+            echo "index.json is current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add save_recipes/index.json
+          git commit -m "chore(save-recipes): regenerate index.json"
+          git push
