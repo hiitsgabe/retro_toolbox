@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
+import 'package:retro_toolbox/services/save_sync/catalog_source.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/drive_api.dart';
 import 'package:retro_toolbox/services/save_sync/drive_backend.dart';
@@ -163,16 +164,25 @@ Future<List<GameStatus>> gameStatuses(Iterable<(Recipe, String)> recipes, Future
 }
 
 class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
-  SaveSyncNotifier({DevicePaths paths = const DevicePaths(), RecipeStore? store, GoogleAuth? google, DriveTransport? driveTransport})
-      : _paths = paths,
+  SaveSyncNotifier({
+    DevicePaths paths = const DevicePaths(),
+    RecipeStore? store,
+    GoogleAuth? google,
+    DriveTransport? driveTransport,
+    RecipeIndex Function(String base)? catalogIndex,
+  })  : _paths = paths,
         _store = store ?? RecipeStore(),
         _google = google ?? PluginGoogleAuth(),
         _transport = driveTransport,
+        _catalogIndex = catalogIndex,
         super(const SaveSyncState());
 
   final DevicePaths _paths;
   final RecipeStore _store;
   final GoogleAuth _google;
+
+  /// Tests hand in their own catalog; null builds the real one.
+  final RecipeIndex Function(String base)? _catalogIndex;
   DriveTransport? _transport;
   SaveSyncEngine? _engine;
 
@@ -190,16 +200,77 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   /// game the device cannot show is not asked about on every refresh.
   static final _appInfo = <String, AppInfo?>{};
 
-  RecipeIndex? _index;
+  static const _define = String.fromEnvironment('SAVE_SYNC_CATALOG_URL');
 
-  /// The published catalog, read only when somebody is about to choose an app.
-  /// Null when this build was seeded with nowhere to look, which changes what
-  /// the picker can offer and nothing else.
+  RecipeIndex? _index;
+  String? _indexBase;
+
+  /// The owner's recipe source, or null when the default is in use.
+  Future<String?> catalogSetting() async => (await _sync()).catalogUrl;
+
+  /// Where recipes are read from right now.
+  Future<String> catalogBase() async => resolveCatalogBase(setting: await catalogSetting(), define: _define);
+
+  /// Makes [url] the recipe source; null goes back to the default. False,
+  /// storing nothing, for a value that is not an https address.
+  Future<bool> setCatalogSetting(String? url) async {
+    final normalized = url == null ? null : normalizeCatalogUrl(url);
+    if (url != null && normalized == null) return false;
+    await (await _sync()).setCatalogUrl(normalized);
+    // Recipes from the old source must not outlive it.
+    _recipes.removeWhere((_, r) => r.$2 == 'repo');
+    await refresh();
+    return true;
+  }
+
+  /// The catalog reader for the current source, rebuilt when the source changes.
+  Future<RecipeIndex> _openIndex() async {
+    final base = await catalogBase();
+    final open = _index;
+    if (open != null && _indexBase == base) return open;
+    _indexBase = base;
+    final make = _catalogIndex;
+    return _index = make != null ? make(base) : RecipeIndex(baseUrl: base, cacheDir: catalogCacheDir((await getApplicationSupportDirectory()).path, base));
+  }
+
+  /// The published catalog, for the picker. Null only when there is no place
+  /// to keep it (no support directory), which changes what the picker can
+  /// offer and nothing else.
   Future<RecipeCatalog?> catalog() async {
-    final base = const String.fromEnvironment('SAVE_SYNC_CATALOG_URL');
-    if (base.isEmpty) return null;
-    _index ??= RecipeIndex(baseUrl: base, cacheDir: Directory('${(await getApplicationSupportDirectory()).path}/save_sync'));
-    return _index!.load();
+    try {
+      return await (await _openIndex()).load();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The catalog's recipe for each of [packages] it publishes, each body
+  /// matching the index's sha256. Ids a recipe written here already owns are
+  /// skipped. A catalog that cannot be read gives nothing and no error: the
+  /// hub still carries the bodies.
+  Future<({Map<String, Recipe> recipes, Map<String, String> problems})> _repoRecipes(Iterable<String> packages) async {
+    final recipes = <String, Recipe>{};
+    final problems = <String, String>{};
+    try {
+      final index = await _openIndex();
+      final published = await index.load();
+      for (final pkg in packages) {
+        final entry = published.byPackage[pkg];
+        if (entry == null || recipes.containsKey(entry.id) || _recipes[entry.id]?.$2 == 'user') continue;
+        final body = await index.ensureBody(entry);
+        if (body == null) continue;
+        try {
+          recipes[entry.id] = Recipe.parse(body);
+        } on RecipeTooNew {
+          problems['repo: ${entry.id}'] = 'needs a newer Retro Toolbox';
+        } catch (e) {
+          problems['repo: ${entry.id}'] = '$e';
+        }
+      }
+    } catch (_) {
+      // No support directory or no network: the hub still has the bodies.
+    }
+    return (recipes: recipes, problems: problems);
   }
 
   /// Where this device keeps its own save-sync files.
@@ -256,11 +327,34 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
   /// Adds apps to the hub's configuration, so the choice reaches every other
   /// device. Writing only the change is what keeps two handhelds from
   /// colliding when they add different apps at the same time.
-  Future<void> addApps(Map<String, String?> packageToRecipe) async {
-    if (packageToRecipe.isEmpty) return;
+  ///
+  /// A recipe only the catalog has is downloaded first, so its row appears at
+  /// once. One that cannot be downloaded or does not parse stops the whole
+  /// add, writes nothing, and comes back as the reason.
+  Future<String?> addApps(Map<String, String?> packageToRecipe) async {
+    if (packageToRecipe.isEmpty) return null;
+    final fetched = <String, Recipe>{};
+    RecipeCatalog? published;
+    for (final e in packageToRecipe.entries) {
+      final id = e.value;
+      if (id == null || _recipes.containsKey(id)) continue;
+      published ??= await catalog();
+      final entry = published?.byPackage[e.key];
+      if (entry == null || entry.id != id) continue;
+      final body = await (await _openIndex()).ensureBody(entry);
+      if (body == null) return 'Could not download the recipe for ${e.key}';
+      try {
+        fetched[id] = Recipe.parse(body);
+      } catch (err) {
+        return 'The recipe for ${e.key} is not valid: $err';
+      }
+    }
     final sync = await _sync();
     final choice = sync.hubChoice;
-    if (choice == null) return;
+    if (choice == null) return null;
+    for (final e in fetched.entries) {
+      _recipes[e.key] = (e.value, 'repo');
+    }
     final at = DateTime.now().toUtc();
     final deviceId = await sync.deviceId(await _deviceModel());
     final hub = Hub(_backend(choice));
@@ -271,6 +365,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       now: at,
     );
     await refresh();
+    return null;
   }
 
   /// Asks Android for the icon and label of any package not asked about yet.
@@ -418,6 +513,22 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         }
       }
       var config = await hub.config();
+      // The catalog's copy of every chosen app's recipe, matching its index.
+      // A device that upgraded from a build that bundled the recipe has only
+      // the hub's older copy and must not stay on it. Collected first and
+      // applied here, so a slow catalog that times out changes nothing later.
+      final repo = await _repoRecipes(config.packages).timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => (recipes: const <String, Recipe>{}, problems: const <String, String>{}),
+      );
+      for (final e in repo.recipes.entries) {
+        if (_recipes[e.key]?.$2 != 'user') _recipes[e.key] = (e.value, 'repo');
+      }
+      problems = {
+        for (final e in problems.entries)
+          if (!e.key.startsWith('repo: ')) e.key: e.value,
+        ...repo.problems,
+      };
       // The recipe body travels with the decision, so a device adopting this
       // configuration needs neither the network nor a catalog of its own.
       Future<void> publish(Iterable<String> packages) async {
