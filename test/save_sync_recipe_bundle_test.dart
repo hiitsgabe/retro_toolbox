@@ -121,6 +121,24 @@ void main() {
         'BBBBBBBBBBBBBBB2': ['BBBBBBBBBBBBBBB2/save.meta', 'BBBBBBBBBBBBBBB2/slot00/file01/main.bin'],
       },
     ),
+    // One save folder per game. The app's own restore copy (.work), the
+    // console-bound device save (_device) and the lock file stay put.
+    'banana-native': (
+      'banana-native',
+      [
+        'AAAAAAAAAAAAAAA1.lock',
+        'AAAAAAAAAAAAAAA1/0/progress.sav',
+        'AAAAAAAAAAAAAAA1/config.sav',
+        'AAAAAAAAAAAAAAA1.work/0/progress.sav',
+        'AAAAAAAAAAAAAAA1.work/config.sav',
+        'AAAAAAAAAAAAAAA1_device/device.sav',
+        'BBBBBBBBBBBBBBB2/save.dat',
+      ],
+      {
+        'AAAAAAAAAAAAAAA1': ['AAAAAAAAAAAAAAA1/0/progress.sav', 'AAAAAAAAAAAAAAA1/config.sav'],
+        'BBBBBBBBBBBBBBB2': ['BBBBBBBBBBBBBBB2/save.dat'],
+      },
+    ),
     'minecraft-bedrock': (
       'minecraft-bedrock',
       ['AbCdEf==/db/000003.log', 'AbCdEf==/level.dat', 'GhIjKl==/level.dat'],

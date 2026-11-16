@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "id": "banana-native",
+  "name": "Banana Native",
+  "status": "draft",
+  "packages": [
+    "dev.bananative.android"
+  ],
+  "locations": [
+    {
+      "area": "androidData",
+      "root": "files/saves"
+    }
+  ],
+  "unit": "folder",
+  "include": [
+    "*/**"
+  ],
+  "deviceLocal": [
+    "*.work/**",
+    "*_device/**"
+  ],
+  "nativeCloud": null
+}
