@@ -18,6 +18,7 @@ import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/widgets/settings/save_recipes_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
@@ -185,6 +186,14 @@ class SettingsContent extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
             ],
+            _section(
+              context,
+              icon: Icons.sync_alt,
+              title: 'Save Recipes Source',
+              subtitle: 'Where Save Sync reads game recipes from. Leave empty for the repo on GitHub.',
+              child: const SaveRecipesSourceSetting(),
+            ),
+            const SizedBox(height: 8),
             if (!Handheld.current) ...[
               // The Linux handheld always has it on.
               _section(
