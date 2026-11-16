@@ -28,10 +28,11 @@
     {
       "id": "eden",
       "packages": [
-        "dev.eden.eden_emulator"
+        "dev.eden.eden_emulator",
+        "dev.igawa6.edenduo"
       ],
       "status": "draft",
-      "sha256": "702baa916bf1b5720af5c36e0cccc5294653b2650dc89bd2819bb7c3de9810e9"
+      "sha256": "d0699adb2aece765fa9e06ecdd88cf3fce052f684428ab042e7a267bfa01ce92"
     },
     {
       "id": "hollow-knight",
