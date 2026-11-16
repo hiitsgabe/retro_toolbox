@@ -12,6 +12,7 @@ import hashlib
 import itertools
 import math
 import os
+import re
 import struct
 import sys
 import zlib
@@ -40,7 +41,7 @@ def parse_args() -> argparse.Namespace:
         '-b', '--boot9',
         metavar='path-to-boot9',
         default=os.environ.get('BOOT9_PATH'),
-        help='Path to dump of ARM9 bootROM, protected or full'
+        help='Path to dump of ARM9 bootROM (protected or full) or Citra/Azahar aes_keys.txt'
     )
 
     parser.add_argument(
@@ -267,9 +268,16 @@ if pyaes_found:
             keys_offset += 0x400
         with open(boot9_file, 'rb') as f:
             global keys_set, orig_ncch_key
-            # get Original NCCH (slot 0x2C key X)
-            f.seek(0x59D0 + keys_offset)
-            key = f.read(0x10)
+            # get Original NCCH (slot 0x2C key X); a Citra/Azahar
+            # aes_keys.txt carries the same key as "slot0x2CKeyX=<hex>"
+            m = re.search(rb'^\s*slot0x2CKeyX\s*=\s*([0-9A-Fa-f]{32})\s*$',
+                          f.read(0x100000), re.M | re.I)
+            if m:
+                print_v('slot0x2CKeyX found, ', end='')
+                key = bytes.fromhex(m.group(1).decode())
+            else:
+                f.seek(0x59D0 + keys_offset)
+                key = f.read(0x10)
             key_hash = hashlib.md5(key).hexdigest()
             correct_hash = ('49aa32c775608af6298ddc0fc6d18a7e' if args.dev_keys else
                             'e35bf88330f4f1b2bb6fd5b870a679ca')

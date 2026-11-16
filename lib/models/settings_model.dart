@@ -30,7 +30,7 @@ class AppSettings {
   final String? chdmanPath; // user-set path to a chdman binary, if any
   final String? catalogSourceUrl; // remote consoles JSON source, if the user pointed at a URL
   final String? preferredLocalIp; // LAN IP all servers advertise/use, if chosen
-  final String? boot9Path; // user-set boot9.bin for 3DS->CIA conversion
+  final String? boot9Path; // user-set boot9.bin or aes_keys.txt for 3DS->CIA conversion
   // Games Library and downloads, opt-in. Null until the first load decides it
   // (on when a user catalog already exists, see SettingsNotifier).
   final bool? libraryEnabled;

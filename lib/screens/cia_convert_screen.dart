@@ -15,7 +15,7 @@ import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
 /// Converts 3DS cartridge images (.3ds/.cci) to installable .cia via the
-/// bundled 3dsconv. Needs a boot9.bin for encrypted dumps — blocks with a
+/// bundled 3dsconv. Needs boot9.bin or aes_keys.txt for encrypted dumps — blocks with a
 /// picker card until one is set (decrypted dumps still work best with it).
 class CiaConvertScreen extends ConsumerStatefulWidget {
   const CiaConvertScreen({super.key});
@@ -36,7 +36,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
 
   Future<void> _pickBoot9() async {
     try {
-      final src = await pickFile(context, title: 'Select boot9.bin');
+      final src = await pickFile(context, title: 'Select boot9.bin or aes_keys.txt');
       if (src == null || !mounted) return;
       final supportDir = await getApplicationSupportDirectory();
       final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
@@ -109,7 +109,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
             const ToolDescription(
               icon: Icons.sd_card_outlined,
               text: 'Converts 3DS cartridge images (.3ds/.cci) into installable .cia — for use with the '
-                  'FBI Server or your own backups. Encrypted dumps need your console’s boot9.bin.',
+                  'FBI Server or your own backups. Encrypted dumps need your console’s boot9.bin or aes_keys.txt.',
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -203,14 +203,15 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
                       children: [
                         Icon(Icons.vpn_key_rounded, size: 40, color: scheme.primary),
                         const SizedBox(height: 12),
-                        Text('boot9.bin required', style: theme.textTheme.titleMedium),
+                        Text('3DS keys required', style: theme.textTheme.titleMedium),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Converting an encrypted 3DS dump needs the ARM9 bootROM (boot9.bin) from '
-                    'your own console. It is not distributed — dump it from your 3DS (e.g. with GodMode9).',
+                    'Converting an encrypted 3DS dump needs keys from your own console: the ARM9 bootROM '
+                    '(boot9.bin, dumped with e.g. GodMode9) or the aes_keys.txt from Citra/Azahar’s sysdata '
+                    'folder. They are not distributed.',
                     style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
@@ -237,7 +238,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
                   ),
                   const SizedBox(height: 20),
                   Center(
-                    child: FilledButton.icon(onPressed: _pickBoot9, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Select boot9.bin')),
+                    child: FilledButton.icon(onPressed: _pickBoot9, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Select key file')),
                   ),
                 ],
               ),
