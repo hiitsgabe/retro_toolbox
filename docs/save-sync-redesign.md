@@ -1,5 +1,7 @@
 # Save Sync — redesign
 
+> Superseded for the recipe catalog by docs/superpowers/specs/2026-11-16-save-recipes-from-github-design.md: the catalog layout is `<base>/<id>.json` beside `index.json`, the default base is the repo's `save_recipes/` folder on main, and recipes are no longer bundled with the app.
+
 **Spine: `wizard-first`** (two of three judges, and it owns the only hub change that is safe under concurrent edits). Everything below is that design with five grafts and two corrections the judges did not have.
 
 ## Grafts

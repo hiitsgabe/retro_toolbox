@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +20,7 @@ import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/widgets/settings/save_recipes_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
@@ -182,6 +185,17 @@ class SettingsContent extends ConsumerWidget {
                 title: 'Catalog Source',
                 subtitle: 'Import a console catalog JSON file or load one from a URL.',
                 child: const CatalogSourceSetting(),
+              ),
+              const SizedBox(height: 8),
+            ],
+            // Save Sync is Android only, as the Tools menu gates it.
+            if (Platform.isAndroid) ...[
+              _section(
+                context,
+                icon: Icons.sync_alt,
+                title: 'Save Recipes Source',
+                subtitle: 'Where Save Sync reads game recipes from. Leave empty for the repo on GitHub.',
+                child: const SaveRecipesSourceSetting(),
               ),
               const SizedBox(height: 8),
             ],

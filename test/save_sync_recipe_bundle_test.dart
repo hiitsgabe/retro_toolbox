@@ -5,7 +5,7 @@ import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 import 'package:retro_toolbox/services/save_sync/units.dart';
 
 Map<String, String> _bundle() {
-  final files = Directory('save_recipes').listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+  final files = Directory('save_recipes').listSync().whereType<File>().where((f) => f.path.endsWith('.json') && !f.path.endsWith('/index.json'));
   return {for (final f in files) f.uri.pathSegments.last: f.readAsStringSync()};
 }
 

@@ -207,9 +207,9 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     if (keep != null && mounted) await ref.read(saveSyncProvider.notifier).resolve(g.recipe.id, unit, keep: keep);
   }
 
-  /// Picks more apps for this set of handhelds. The catalog is read here
-  /// rather than on every refresh: it is wanted only when somebody is about
-  /// to choose, and it is never a precondition for anything else.
+  /// Picks more apps for this set of handhelds. The catalog is asked again
+  /// here, so the picker shows what was published a minute ago; it is never a
+  /// precondition for anything else.
   Future<void> _addApps() async {
     final n = ref.read(saveSyncProvider.notifier);
     final already = {for (final g in ref.read(saveSyncProvider).games) g.recipe.packages.first};
@@ -450,7 +450,7 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                 child: Column(children: [
                   Icon(Icons.inbox, size: 40, color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(height: 8),
-                  Text(s.games.isEmpty ? 'No recipes loaded.' : 'Nothing here is set up to sync yet.'),
+                  Text(s.games.isEmpty ? 'No apps yet. Use Add an app to choose which games sync.' : 'Nothing here is set up to sync yet.'),
                 ]),
               ),
             // Not hidden, just folded away: a game that vanished from the list

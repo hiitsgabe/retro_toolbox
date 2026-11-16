@@ -70,10 +70,13 @@ servers). Play asks for a purpose and a short video.
 ## Also required for the listing
 
 - A privacy policy URL (every app). A page on the project website is enough.
-- The Data safety form: the app contacts the release page for update checks
-  and whatever catalog sources the user adds; it sends no user data to the
-  developer. Save Sync can copy game saves to the user's own Google Drive when
-  they sign in; docs/google-cloud.md has what to declare for it.
+- The Data safety form: the app contacts the release page for update checks,
+  whatever catalog sources the user adds, and, for Save Sync, the recipe files
+  in the repo's `save_recipes/` folder on GitHub (or an address the user sets
+  in Settings), which say where each game keeps its saves and are fetched with
+  no personal data sent; it sends no user data to the developer. Save Sync can
+  copy game saves to the user's own Google Drive when they sign in;
+  docs/google-cloud.md has what to declare for it.
 - Store listing assets: icon (512 px), feature graphic, screenshots.
 
 ## Building on Expo Launch

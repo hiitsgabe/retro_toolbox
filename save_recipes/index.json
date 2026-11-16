@@ -1,0 +1,102 @@
+{
+  "format": 1,
+  "recipes": [
+    {
+      "id": "banana-native",
+      "packages": [
+        "dev.bananative.android"
+      ],
+      "status": "draft",
+      "sha256": "dbb40eb839f6f2ddd39a92c21af3658228667de373c7709cda19bf902f468cdc"
+    },
+    {
+      "id": "cuphead",
+      "packages": [
+        "com.SpanishFreddy.Cuphead"
+      ],
+      "status": "draft",
+      "sha256": "43ecf61f14f647b88ee94564ef0d3111238f443ea5cb282d362f4ad9c5df5ef1"
+    },
+    {
+      "id": "dredge",
+      "packages": [
+        "com.BlackSaltGames.DREDGE"
+      ],
+      "status": "draft",
+      "sha256": "41258c476c2a6610365a16f3389d8055c4871aaef79de560b832a40d8d3e1edc"
+    },
+    {
+      "id": "eden",
+      "packages": [
+        "dev.eden.eden_emulator"
+      ],
+      "status": "draft",
+      "sha256": "702baa916bf1b5720af5c36e0cccc5294653b2650dc89bd2819bb7c3de9810e9"
+    },
+    {
+      "id": "hollow-knight",
+      "packages": [
+        "com.TeamCherry.HollowKnight"
+      ],
+      "status": "draft",
+      "sha256": "a3471090ca48ae410d8d9011ad393aab513b9a0bfa7afc6bcbc58ac464b58053"
+    },
+    {
+      "id": "minecraft-bedrock",
+      "packages": [
+        "com.mojang.minecraftpe"
+      ],
+      "status": "draft",
+      "sha256": "85fda79b686845b0dd3afa6b0b6ecca6bf9c69f0e85f89cec05480f4292d2e15"
+    },
+    {
+      "id": "papers-please",
+      "packages": [
+        "com.llc3909.papersplease"
+      ],
+      "status": "draft",
+      "sha256": "e4d58047e09e5f620508efe29067dfc5f82167b167d04c5504b367b71916e4a8"
+    },
+    {
+      "id": "sea-of-stars",
+      "packages": [
+        "com.playdigious.seaofstars"
+      ],
+      "status": "draft",
+      "sha256": "b23f9f3a5a5915f1713aa68c90278b7089efc25cdd0a67c3b53b5ccb89cafa73"
+    },
+    {
+      "id": "silksong",
+      "packages": [
+        "com.game.silksong",
+        "com.jakobkhansen.silksong"
+      ],
+      "status": "draft",
+      "sha256": "00e58346a800126fc7eb6a847e5dc79841c07748b0f84e2a0c7a900dcf64be2a"
+    },
+    {
+      "id": "stardew-valley",
+      "packages": [
+        "com.chucklefish.stardewvalley"
+      ],
+      "status": "verified",
+      "sha256": "361fac8412103fb2a2e72cffdb0523f90495199574fe026f505a90c3a968ede8"
+    },
+    {
+      "id": "toem",
+      "packages": [
+        "com.snapbreak.toem"
+      ],
+      "status": "draft",
+      "sha256": "3ef6f7b7d5cde62cfa1470028aa19d894bca8c228b6f5224b760251c19597df4"
+    },
+    {
+      "id": "yuzu",
+      "packages": [
+        "org.yuzu.yuzu_emu.ea"
+      ],
+      "status": "draft",
+      "sha256": "536ecd9497377119403468e0876f32a12e4ef4c039a0fc9587817daa14b80102"
+    }
+  ]
+}
