@@ -63,6 +63,7 @@ void main() {
     test('old details JSON without the new fields still loads', () {
       final d = GameDetails.fromJson({'boxart': 'https://host.example/a.png'});
       expect((d.boxart, d.releaseDate, d.popularity), ('https://host.example/a.png', null, null));
+      expect((d.launchboxId, d.rating, d.ratingCount, d.genres.isEmpty), (null, null, null, true));
     });
   });
 
