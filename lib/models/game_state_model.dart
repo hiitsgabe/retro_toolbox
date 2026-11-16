@@ -50,6 +50,10 @@ class GameState {
   /// Where a transfer writes its file, when known (lets a finished archive offer Extract).
   final String? outputPath;
 
+  /// A finished download being copied from the downloader's staging file to
+  /// the download dir; [currentProgress] is then the copy progress.
+  final bool movingToDestination;
+
   const GameState({
     required this.game,
     this.status = GameStatus.init,
@@ -65,6 +69,7 @@ class GameState {
     this.hasJustCompleted = false,
     this.isTransfer = false,
     this.outputPath,
+    this.movingToDestination = false,
   });
 
   GameState copyWith({
@@ -80,6 +85,7 @@ class GameState {
     double? currentProgress,
     String? errorMessage,
     bool? hasJustCompleted,
+    bool? movingToDestination,
   }) {
     return GameState(
       game: game,
@@ -97,6 +103,7 @@ class GameState {
       hasJustCompleted: hasJustCompleted ?? this.hasJustCompleted,
       isTransfer: isTransfer,
       outputPath: outputPath,
+      movingToDestination: movingToDestination ?? this.movingToDestination,
     );
   }
 

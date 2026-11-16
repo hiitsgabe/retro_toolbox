@@ -73,6 +73,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
         showProgressBar: true,
         isInteractable: false,
         availableActions: {GameAction.pause, GameAction.cancel},
+        movingToDestination: false,
       );
     } else if (status == TaskStatus.paused) {
       updated = current.copyWith(
@@ -93,6 +94,23 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     if (updated != null && updated != current) {
       state = {...state, gameId: updated};
     }
+  }
+
+  /// A running download whose bytes all arrived and are now being copied to
+  /// the download dir; [fraction] is that copy's progress.
+  void updateMovingProgress(String gameId, double fraction) {
+    final current = state[gameId];
+    if (current == null || current.status != GameStatus.downloading) return;
+    state = {
+      ...state,
+      gameId: current.copyWith(
+        downloadProgress: fraction,
+        currentProgress: fraction,
+        networkSpeed: 0.0,
+        timeRemaining: Duration.zero,
+        movingToDestination: true,
+      ),
+    };
   }
 
   void updateExtractionState(String gameId, ExtractionStatus status, double progress, {String? error}) {

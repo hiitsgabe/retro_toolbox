@@ -59,6 +59,7 @@ class GameProgressBar extends StatelessWidget {
   String _getProgressText(GameState gameState) {
     switch (gameState.status) {
       case GameStatus.downloading:
+        if (gameState.movingToDestination) return 'Moving to destination...';
         final speed = formatNetworkSpeed(gameState.networkSpeed);
         final timeLeft = formatTimeRemaining(gameState.timeRemaining);
         if (timeLeft.isNotEmpty) {

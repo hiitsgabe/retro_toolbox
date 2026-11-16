@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/widgets/download/buzzheavier_verify_screen.dart';
@@ -12,6 +13,7 @@ import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/download_service.dart';
+import 'package:retro_toolbox/services/download_staging.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -32,6 +34,8 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
   final Ref _ref;
   final Map<String, DownloadTask> _tasks = {};
   StreamSubscription<TaskUpdate>? _updateSubscription;
+  Timer? _movingPoll;
+  bool _polling = false;
 
   final DownloadService downloadService = DownloadService();
   final CatalogNotifier catalogNotifier;
@@ -65,6 +69,51 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     await _syncWithBackgroundTasks();
 
     await _cleanupInterruptedNsz();
+
+    await _sweepStagingIfIdle();
+  }
+
+  /// Frees the staging files crashed or killed downloads left in internal
+  /// storage (see [sweepDownloaderTemps]). Runs at startup and whenever the
+  /// last download ends, and only while the downloader has no task at all.
+  /// allTasks lists only unfinished work, and a paused task's work has
+  /// finished, so the paused records are checked too: they own their file.
+  Future<void> _sweepStagingIfIdle() async {
+    if (!Platform.isAndroid) return;
+    try {
+      if ((await FileDownloader().allTasks(allGroups: true)).isNotEmpty) return;
+      if ((await FileDownloader().database.allRecordsWithStatus(TaskStatus.paused)).isNotEmpty) return;
+      final dirs = [(await getApplicationSupportDirectory()).path, (await getTemporaryDirectory()).path];
+      final freed = await sweepDownloaderTemps(dirs);
+      if (freed > 0) debugPrint('Freed $freed bytes of orphaned download staging files');
+    } catch (e) {
+      debugPrint('Download staging sweep failed: $e');
+    }
+  }
+
+  /// The downloader holds a finished download just short of 100% while it
+  /// copies it out of staging, with no updates. Watch the destination file
+  /// grow instead, so the row says it is moving rather than looking stuck.
+  Future<void> _pollMoving() async {
+    if (_polling) return;
+    _polling = true;
+    try {
+      for (final entry in state.taskStatus.entries) {
+        if (entry.value != TaskStatus.running) continue;
+        final last = state.taskProgress[entry.key];
+        final task = _tasks[entry.key];
+        // The last tick before the copy lands within a few % of the end; a
+        // lower one means bytes are still arriving.
+        if (last == null || task == null || !last.hasExpectedFileSize || last.progress < 0.9) continue;
+        try {
+          final dest = File(await task.filePath());
+          final fraction = movingFraction(expectedSize: last.expectedFileSize, destLength: dest.existsSync() ? dest.lengthSync() : null);
+          if (fraction != null) gameStateManager.updateMovingProgress(entry.key, fraction);
+        } catch (_) {}
+      }
+    } finally {
+      _polling = false;
+    }
   }
 
   /// On startup, clean up after a decompression a crash/kill interrupted: drop
@@ -224,6 +273,13 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     if (state.downloading != hasActiveDownloads) {
       state = state.copyWith(downloading: hasActiveDownloads);
+      if (hasActiveDownloads) {
+        _movingPoll ??= Timer.periodic(const Duration(seconds: 1), (_) => _pollMoving());
+      } else {
+        _movingPoll?.cancel();
+        _movingPoll = null;
+        unawaited(_sweepStagingIfIdle());
+      }
     }
   }
 
@@ -570,6 +626,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
   @override
   void dispose() {
     _updateSubscription?.cancel();
+    _movingPoll?.cancel();
     super.dispose();
   }
 }
