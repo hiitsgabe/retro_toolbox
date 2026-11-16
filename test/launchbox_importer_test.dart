@@ -52,6 +52,18 @@ List<int> metadataZip() {
   );
 }
 
+/// The fixture plus a few hundred KB of other games, stored uncompressed so
+/// the parse reads it in many chunks and reports fractions on the way.
+List<int> storedZip() {
+  final filler = StringBuffer();
+  for (var i = 100; i < 1100; i++) {
+    filler.write('  <Game><Name>Filler $i</Name><DatabaseID>$i</DatabaseID><Platform>Sony Playstation</Platform>'
+        '<Overview>${'Nothing to see here. ' * 20}</Overview></Game>\n');
+  }
+  final xml = utf8.encode(fixture.replaceFirst('</LaunchBox>', '$filler</LaunchBox>'));
+  return ZipEncoder().encodeBytes(Archive()..addFile(ArchiveFile.noCompress('Metadata.xml', xml.length, xml)));
+}
+
 class FakeLaunchbox {
   FakeLaunchbox(this.server);
 
@@ -203,15 +215,53 @@ void main() {
     expect(await store.readManifest(), isNull);
   });
 
-  test('an onProgress that throws during the parse cancels it and leaves no zip', () async {
+  test('a cancel during the parse lands between the download and the end, and leaves no zip', () async {
+    fake.body = storedZip();
+    int? cancelledAt;
     await expectLater(
       run({snes, genesis}, (done, total) {
-        if (done > 500) throw const FileSystemException('cancelled');
+        if (done <= 500) return;
+        cancelledAt = done;
+        throw const FileSystemException('cancelled');
       }),
       throwsA(isA<FileSystemException>()),
     );
+    expect(cancelledAt, inExclusiveRange(500, 1000));
     expect(cacheLeftovers(), isEmpty);
     expect(await store.readManifest(), isNull);
+  });
+
+  test('a cancel at 1000 throws and leaves the previous import as it was', () async {
+    await run({snes, genesis});
+    final before = snapshot();
+    fake.etag = '"lb-2"';
+
+    await expectLater(
+      run({snes, genesis}, (done, total) {
+        if (done == 1000) throw const FileSystemException('cancelled');
+      }),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(snapshot(), before);
+    expect(cacheLeftovers(), isEmpty);
+  });
+
+  // The parse's last report comes before the isolate has encoded its result;
+  // a cancel pressed while it encodes must still be seen before any write.
+  test('a cancel pressed after the parse\'s last report still stops the writes', () async {
+    await run({snes, genesis});
+    final before = snapshot();
+    fake.etag = '"lb-2"';
+
+    var pressed = false;
+    await expectLater(
+      run({snes, genesis}, (done, total) {
+        if (pressed) throw const FileSystemException('cancelled');
+        if (done >= 990) pressed = true;
+      }),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(snapshot(), before);
   });
 
   test('progress only goes up, in permille, and ends at (1000, 1000)', () async {

@@ -1,6 +1,8 @@
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 
+export 'launchbox_slug.dart';
+
 /// LaunchBox platform name per Batocera system id. Names are exactly as
 /// LaunchBox's Metadata.xml spells them.
 const launchboxPlatformById = {
@@ -66,7 +68,3 @@ String? launchboxPlatformFor(Console console) {
   if (own != null && own.isNotEmpty) return own;
   return launchboxPlatformById[console.resolvedPlatform];
 }
-
-/// File-safe name for a platform: "Sony Playstation 2" -> "sony_playstation_2".
-String launchboxPlatformSlug(String platform) =>
-    platform.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');

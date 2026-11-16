@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'launchbox_models.dart';
-import 'launchbox_platforms.dart';
+import 'launchbox_slug.dart';
 
 /// What the last finished import holds. Written after every platform file,
 /// so a manifest on disk always describes complete files.

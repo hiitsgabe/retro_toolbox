@@ -47,7 +47,8 @@ class LaunchboxImporter {
       if (etag != null && manifest!.platforms.containsAll(platforms)) {
         request.headers.set(HttpHeaders.ifNoneMatchHeader, etag);
       }
-      final response = await request.close();
+      // A captive portal can accept the connection and never answer.
+      final response = await request.close().timeout(const Duration(seconds: 60));
       if (response.statusCode == HttpStatus.notModified) return LaunchboxImportResult.upToDate;
       if (response.statusCode != HttpStatus.ok) throw HttpException('LaunchBox answered HTTP ${response.statusCode}');
 
@@ -76,8 +77,11 @@ class LaunchboxImporter {
         if (parsed.isCompleted) return;
         try {
           switch (message) {
+            // Up to 990: the isolate still encodes after its last report, so
+            // the 1000 below is a separate call and the last cancel point
+            // before anything is written.
             case double fraction:
-              report(500 + (fraction * 500).floor());
+              report(500 + (fraction * 490).floor());
             case Map<String, List<int>> result:
               parsed.complete(result);
             case [final Object error, final String? stack]:

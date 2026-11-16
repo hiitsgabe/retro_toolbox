@@ -104,6 +104,16 @@ void main() {
     expect((await store.readManifest())!.etag, 'e');
   });
 
+  test('a write that fails leaves the previous file whole', () async {
+    await store.writePlatform(snes, games);
+    final before = store.platformFile(snes).readAsBytesSync();
+    // A directory where the temp file goes, so the write cannot finish.
+    Directory('${store.platformFile(snes).path}.tmp').createSync();
+
+    await expectLater(store.writePlatform(snes, games.take(1).toList()), throwsA(isA<FileSystemException>()));
+    expect(store.platformFile(snes).readAsBytesSync(), before);
+  });
+
   test('deleteAll removes the root', () async {
     await store.writePlatform(snes, games);
     await store.writeManifest(LaunchboxManifest(etag: 'e', importedAt: DateTime.utc(2026), platforms: {snes}));
