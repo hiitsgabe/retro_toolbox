@@ -77,13 +77,17 @@ Future<Map<String, List<LaunchboxGame>>> parseLaunchboxXml(Stream<List<int>> xml
   // Depth 1 elements are the records, depth 2 their fields, and the text
   // inside a field is at depth 3. Records of other kinds are skipped whole.
   var depth = 0;
+  var rootClosed = false;
   String? kind;
   String? field;
   var fields = <String, String>{};
   final text = StringBuffer();
-  final events = xml.transform(utf8.decoder).toXmlEvents().normalizeEvents().flatten();
+  // bind, not transform: File.openRead is a Stream<Uint8List>, which
+  // transform() rejects for a List<int> decoder.
+  final events = utf8.decoder.bind(xml).toXmlEvents().normalizeEvents().flatten();
   await for (final e in events) {
     if (e is XmlStartElementEvent) {
+      if (depth == 0 && e.name != 'LaunchBox') throw FormatException('Not a LaunchBox Metadata.xml', e.name);
       if (depth == 1) {
         kind = const {'Game', 'GameAlternateName', 'GameImage'}.contains(e.name) ? e.name : null;
         fields = {};
@@ -106,9 +110,14 @@ Future<Map<String, List<LaunchboxGame>>> parseLaunchboxXml(Stream<List<int>> xml
       } else if (depth == 1 && kind != null) {
         record(kind, fields);
         kind = null;
+      } else if (depth == 0) {
+        rootClosed = true;
       }
     }
   }
+  // The event parser does not complain about input that just stops, and a
+  // partial result would replace good per-platform files.
+  if (!rootClosed) throw const FormatException('Metadata.xml ended before </LaunchBox>');
 
   return {
     for (final MapEntry(key: platform, value: list) in games.entries)

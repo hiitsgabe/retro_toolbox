@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -144,6 +145,21 @@ void main() {
   test('overview keeps its newlines and decodes &amp;', () async {
     final r = await parseLaunchboxXml(bytesOf(fixture), kept);
     expect(r[snes]!.single.overview, 'Samus returns.\nShe explores Zebes & fights Ridley.');
+  });
+
+  test('reads a Stream<Uint8List>, as File.openRead gives', () async {
+    final r = await parseLaunchboxXml(Stream<Uint8List>.value(utf8.encode(fixture)), kept);
+    expect(r[snes]!.single.name, 'Super Metroid');
+  });
+
+  group('input that is not a whole LaunchBox file throws FormatException', () {
+    Future<void> rejects(String xml) => expectLater(parseLaunchboxXml(bytesOf(xml), kept), throwsFormatException);
+
+    test('cut after the first game', () => rejects(fixture.substring(0, fixture.indexOf('</Game>') + '</Game>'.length)));
+    test('cut inside a field', () => rejects(fixture.substring(0, fixture.indexOf('Zebes'))));
+    test('not XML', () => rejects('Not a LaunchBox file, just some words.'));
+    test('empty', () => rejects(''));
+    test('another root element', () => rejects(fixture.replaceAll('LaunchBox>', 'Catalog>')));
   });
 
   group('zip', () {

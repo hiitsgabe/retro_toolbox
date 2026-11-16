@@ -54,6 +54,7 @@ Future<ZipEntryInfo> findZipEntry(String zipPath, String name) async {
       final extraLen = dir.getUint16(p + 30, Endian.little);
       final commentLen = dir.getUint16(p + 32, Endian.little);
       final local = dir.getUint32(p + 42, Endian.little);
+      if (p + 46 + nameLen > dirSize) throw FormatException('Broken zip directory', zipPath);
       final entryName = utf8.decode(dirBytes.sublist(p + 46, p + 46 + nameLen), allowMalformed: true);
       p += 46 + nameLen + extraLen + commentLen;
       if (entryName != name) continue;
@@ -80,14 +81,25 @@ Future<ZipEntryInfo> findZipEntry(String zipPath, String name) async {
 
 /// The entry's uncompressed bytes as a stream. [onCompressedRead] gets the
 /// running count of compressed bytes read, for progress.
-Stream<List<int>> zipEntryStream(String zipPath, ZipEntryInfo entry, {void Function(int read)? onCompressedRead}) {
+///
+/// Ends with a FormatException when the output is not exactly
+/// [ZipEntryInfo.uncompressedSize] bytes: a cut deflate stream just stops
+/// early, and a short file would otherwise pass as a smaller one.
+Stream<List<int>> zipEntryStream(String zipPath, ZipEntryInfo entry, {void Function(int read)? onCompressedRead}) async* {
   var read = 0;
   final raw = File(zipPath).openRead(entry.dataOffset, entry.dataOffset + entry.compressedSize).map((chunk) {
     read += chunk.length;
     onCompressedRead?.call(read);
     return chunk;
   });
-  return entry.method == 8 ? raw.transform(ZLibDecoder(raw: true)) : raw;
+  var written = 0;
+  await for (final chunk in entry.method == 8 ? raw.transform(ZLibDecoder(raw: true)) : raw) {
+    written += chunk.length;
+    yield chunk;
+  }
+  if (written != entry.uncompressedSize) {
+    throw FormatException('Zip entry gave $written bytes, expected ${entry.uncompressedSize}', zipPath);
+  }
 }
 
 ByteData _le(Uint8List bytes) => ByteData.sublistView(bytes);
