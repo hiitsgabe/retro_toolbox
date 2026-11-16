@@ -42,7 +42,7 @@ void main() {
     await pump(
       t,
       catalog: RecipeCatalog([
-        const IndexEntry(id: 'catalog', packages: ['com.example.catalog'], status: 'verified', updated: null),
+        const IndexEntry(id: 'catalog', packages: ['com.example.catalog'], status: 'verified'),
       ]),
     );
     expect(find.textContaining('Recipe available'), findsOneWidget);
