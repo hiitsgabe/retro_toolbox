@@ -91,6 +91,16 @@ class SyncState {
   static const _lastKey = 'save_sync_last';
   static const _hubKindKey = 'save_sync_hub_kind';
   static const _googleKey = 'save_sync_google_account';
+  static const _catalogKey = 'save_sync_catalog_url';
+
+  /// The owner's recipe source, or null when the default is in use. The store
+  /// cannot remove a key, so cleared is stored as ''.
+  String? get catalogUrl {
+    final v = _store.get(_catalogKey);
+    return v == null || v.isEmpty ? null : v;
+  }
+
+  Future<void> setCatalogUrl(String? url) => _store.set(_catalogKey, url ?? '');
 
   Future<String> deviceId(String model, {Random? random}) async {
     final have = _store.get(_deviceKey);
