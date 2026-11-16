@@ -186,4 +186,22 @@ void main() {
     expect(find.byType(PathBrowser), findsOneWidget);
     expect(fake.title, isNull);
   });
+
+  group('matchesExtensions (the system picker cannot filter by extension)', () {
+    test('null or empty allows any file', () {
+      expect(matchesExtensions('/x/prod.keys', null), isTrue);
+      expect(matchesExtensions('/x/noext', const []), isTrue);
+    });
+
+    test('matches the extension, case-insensitively', () {
+      expect(matchesExtensions('/x/Logo.PNG', ['png']), isTrue);
+      expect(matchesExtensions('/x/a.cia', ['cia', '3ds', 'zip']), isTrue);
+    });
+
+    test('rejects other extensions and names with none', () {
+      expect(matchesExtensions('/x/a.jpg', ['png']), isFalse);
+      expect(matchesExtensions('/x/png', ['png']), isFalse);
+      expect(matchesExtensions('/x/a.png.txt', ['png']), isFalse);
+    });
+  });
 }

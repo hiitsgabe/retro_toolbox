@@ -556,13 +556,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   }
 
   Future<void> _pickRom() async {
-    // Android's system picker (SAF) for the ROM: one file, so its cache copy
-    // is fine. Handhelds keep the in-app browser (no native dialog, d-pad).
     final path = await pickFile(
       context,
       title: 'Select the ROM to patch',
       initialDir: _romPath != null ? p.dirname(_romPath!) : null,
-      androidNative: true,
     );
     if (path == null || !mounted) return;
     // Format only: the extension the game takes, and a zip must hold a file

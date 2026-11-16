@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
@@ -13,8 +13,9 @@ import 'package:retro_toolbox/widgets/common/path_browser.dart';
 
 /// Handhelds (no native dialog, not d-pad friendly) and the headless server
 /// (no D-Bus portal) use the in-app [PathBrowser]; Android, desktop and iOS
-/// the system picker (on Android a folder pick copies nothing, unlike a file
-/// pick).
+/// the system picker. On Android a picked file resolves to its real path;
+/// only one with no path on disk (Drive, some Downloads entries) is copied
+/// into the cache.
 bool get _useBrowser => Handheld.current || ServerMode.current;
 
 Future<String> _startDir() async {
@@ -33,24 +34,29 @@ Future<String> _startDir() async {
 }
 
 /// [extensions]: lowercase, no leading dot; null allows any file.
-/// [androidNative]: on Android use the system picker (SAF) instead of the
-/// in-app browser (the ROM pick; a file with no path on disk gets copied).
 /// [useBrowser] only overrides the platform check in tests.
 Future<String?> pickFile(
   BuildContext context, {
   required String title,
   List<String>? extensions,
   String? initialDir,
-  bool androidNative = false,
   @visibleForTesting bool? useBrowser,
 }) async {
-  final browser = useBrowser ?? (_useBrowser || (Platform.isAndroid && !androidNative));
-  if (browser) {
+  if (useBrowser ?? _useBrowser) {
     final dir = initialDir ?? await _startDir();
     if (!context.mounted) return null;
     return PathBrowser.show(context, title: title, initialDir: dir, allowedExtensions: extensions);
   }
-  if (Platform.isAndroid) return _androidPick(dir: false, initialDir: initialDir);
+  if (Platform.isAndroid) {
+    // The system picker filters by MIME type only, and .keys/.cia/.nsz have
+    // none it knows, so it shows every file: check the extension afterwards.
+    final path = await _androidPick(dir: false, initialDir: initialDir);
+    if (path == null || matchesExtensions(path, extensions)) return path;
+    if (context.mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Pick a ${extensions!.map((e) => '.$e').join(' / ')} file')));
+    }
+    return null;
+  }
   return _native(() async {
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: title,
@@ -97,6 +103,15 @@ Future<String?> pickSavePath(
     return dir == null ? null : p.join(dir, fileName);
   }
   return _native(() => FilePicker.platform.saveFile(dialogTitle: title, fileName: fileName, bytes: bytes, initialDirectory: initialDir));
+}
+
+/// Whether [path] ends in one of [extensions] (lowercase, no dot); null or
+/// empty allows any file.
+@visibleForTesting
+bool matchesExtensions(String path, List<String>? extensions) {
+  if (extensions == null || extensions.isEmpty) return true;
+  final ext = p.extension(path).toLowerCase();
+  return ext.length > 1 && extensions.contains(ext.substring(1));
 }
 
 const _pickChannel = MethodChannel('retro_toolbox/pick');
