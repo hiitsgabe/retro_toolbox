@@ -6,7 +6,7 @@ import 'package:retro_toolbox/services/save_sync/recipe_store.dart';
 
 void main() {
   test('every bundled recipe parses and its id matches the file name', () {
-    final files = Directory('save_recipes').listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+    final files = Directory('save_recipes').listSync().whereType<File>().where((f) => f.path.endsWith('.json') && !f.path.endsWith('/index.json'));
     final load = parseRecipeFiles({for (final f in files) f.uri.pathSegments.last: f.readAsStringSync()});
     expect(load.rejected, isEmpty);
     expect(load.recipes.map((r) => r.id), containsAll(['stardew-valley', 'sea-of-stars']));
