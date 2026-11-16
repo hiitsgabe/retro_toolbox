@@ -131,6 +131,14 @@ void main() {
     ),
   };
 
+  // Two Android ports share files/default, but each reports its own app
+  // version, so a package version rule would refuse every save crossing them.
+  test('silksong accepts both ports and checks no package version', () {
+    final r = byId['silksong']!;
+    expect(r.packages, ['com.game.silksong', 'com.jakobkhansen.silksong']);
+    expect(r.version, isNull);
+  });
+
   cases.forEach((label, c) {
     test('$label groups the files a device really has', () {
       final r = byId[c.$1];

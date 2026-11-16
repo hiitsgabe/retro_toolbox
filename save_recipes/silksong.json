@@ -4,7 +4,8 @@
   "name": "Hollow Knight: Silksong",
   "status": "draft",
   "packages": [
-    "com.game.silksong"
+    "com.game.silksong",
+    "com.jakobkhansen.silksong"
   ],
   "locations": [
     {
@@ -22,9 +23,5 @@
     "*.bak*",
     "Restore_Points*/**"
   ],
-  "version": {
-    "from": "package",
-    "rule": "receiverAtLeastSave"
-  },
   "nativeCloud": null
 }
