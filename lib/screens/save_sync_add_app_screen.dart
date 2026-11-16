@@ -36,6 +36,7 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
   final _picked = <String>{};
   String _filter = '';
   bool _adding = false;
+  String? _error;
 
   @override
   void initState() {
@@ -129,13 +130,20 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: _picked.isEmpty || _adding ? null : _add,
-                  child: Text(_picked.isEmpty ? 'Add' : 'Add ${_picked.length}'),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _picked.isEmpty || _adding ? null : _add,
+                    child: Text(_picked.isEmpty ? 'Add' : 'Add ${_picked.length}'),
+                  ),
                 ),
-              ),
+              ]),
             ),
           ),
         ]),
@@ -153,14 +161,25 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
   }
 
   Future<void> _add() async {
-    setState(() => _adding = true);
+    setState(() {
+      _adding = true;
+      _error = null;
+    });
     final catalog = widget.catalog;
     // The recipe a catalog names is recorded with the choice; an app with
     // none is recorded all the same, so the intent reaches the other devices
     // and a recipe can land later.
     final chosen = {for (final p in _picked) p: widget.known[p] ?? catalog?.byPackage[p]?.id};
-    await ref.read(saveSyncProvider.notifier).addApps(chosen);
-    if (mounted) Navigator.of(context).pop(true);
+    final error = await ref.read(saveSyncProvider.notifier).addApps(chosen);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _adding = false;
+        _error = error;
+      });
+      return;
+    }
+    Navigator.of(context).pop(true);
   }
 
   String _ago(DateTime t) {

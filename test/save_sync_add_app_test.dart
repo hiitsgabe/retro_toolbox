@@ -13,6 +13,11 @@ class FakeNotifier extends SaveSyncNotifier {
   @override
   Future<void> refresh() async {}
 
+  String? addError;
+
+  @override
+  Future<String?> addApps(Map<String, String?> packageToRecipe) async => addError;
+
   @override
   Future<List<({String package, AppInfo info})>> launchableApps() async => const [
         (package: 'com.example.known', info: AppInfo('Known App', null)),
@@ -52,5 +57,34 @@ void main() {
   testWidgets('with nothing anywhere, every app still offers to be described', (t) async {
     await pump(t);
     expect(find.textContaining('No recipe yet'), findsNWidgets(3));
+  });
+
+  testWidgets('an add whose recipe cannot be fetched says why and stays open', (t) async {
+    final fake = FakeNotifier()..addError = 'Could not download the recipe for com.example.catalog';
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<bool>(
+              builder: (_) => SaveSyncAddAppScreen(
+                already: const {},
+                catalog: RecipeCatalog([const IndexEntry(id: 'catalog', packages: ['com.example.catalog'], status: 'draft')]),
+              ),
+            )),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('open'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Catalog App'));
+    await t.pump();
+    await t.tap(find.text('Add 1'));
+    await t.pumpAndSettle();
+
+    expect(find.text('Could not download the recipe for com.example.catalog'), findsOneWidget);
+    expect(find.text('Add an app'), findsOneWidget, reason: 'the screen must not close on a failed add');
   });
 }
