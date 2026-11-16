@@ -26,9 +26,19 @@ class FakeNotifier extends SaveSyncNotifier {
   }
 }
 
+/// A store that cannot be reached, as on a platform with no preferences
+/// backend: every read and write throws.
+class ThrowingNotifier extends FakeNotifier {
+  @override
+  Future<String?> catalogSetting() async => throw StateError('no store');
+
+  @override
+  Future<bool> setCatalogSetting(String? url) async => throw StateError('no store');
+}
+
 void main() {
-  Future<FakeNotifier> pump(WidgetTester t) async {
-    final fake = FakeNotifier();
+  Future<FakeNotifier> pump(WidgetTester t, [FakeNotifier? notifier]) async {
+    final fake = notifier ?? FakeNotifier();
     await t.pumpWidget(ProviderScope(
       overrides: [saveSyncProvider.overrideWith((ref) => fake)],
       child: const MaterialApp(home: Scaffold(body: SaveRecipesSourceSetting())),
@@ -63,5 +73,19 @@ void main() {
     await t.pumpAndSettle();
     expect(fake.stored, isNull);
     expect(find.text('Reading from: $defaultCatalogBase'), findsOneWidget);
+  });
+
+  testWidgets('a store that throws neither escapes nor leaves the buttons dead', (t) async {
+    await pump(t, ThrowingNotifier());
+    expect(t.takeException(), isNull);
+
+    await t.enterText(find.byType(TextField), 'https://example.com/r');
+    await t.tap(find.text('Save'));
+    await t.pumpAndSettle();
+
+    expect(t.takeException(), isNull);
+    expect(find.textContaining('no store'), findsOneWidget);
+    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed, isNotNull);
+    expect(t.widget<TextField>(find.byType(TextField)).enabled, isTrue);
   });
 }

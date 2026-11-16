@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
@@ -186,14 +188,17 @@ class SettingsContent extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
             ],
-            _section(
-              context,
-              icon: Icons.sync_alt,
-              title: 'Save Recipes Source',
-              subtitle: 'Where Save Sync reads game recipes from. Leave empty for the repo on GitHub.',
-              child: const SaveRecipesSourceSetting(),
-            ),
-            const SizedBox(height: 8),
+            // Save Sync is Android only, as the Tools menu gates it.
+            if (Platform.isAndroid) ...[
+              _section(
+                context,
+                icon: Icons.sync_alt,
+                title: 'Save Recipes Source',
+                subtitle: 'Where Save Sync reads game recipes from. Leave empty for the repo on GitHub.',
+                child: const SaveRecipesSourceSetting(),
+              ),
+              const SizedBox(height: 8),
+            ],
             if (!Handheld.current) ...[
               // The Linux handheld always has it on.
               _section(

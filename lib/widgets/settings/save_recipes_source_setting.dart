@@ -30,10 +30,19 @@ class _SaveRecipesSourceSettingState extends ConsumerState<SaveRecipesSourceSett
     super.dispose();
   }
 
+  /// Shows what is stored and what is used. A store that cannot be read
+  /// leaves the field as it is: this runs from initState, where a throw would
+  /// escape into the framework.
   Future<void> _load() async {
-    final n = ref.read(saveSyncProvider.notifier);
-    final mine = await n.catalogSetting();
-    final base = await n.catalogBase();
+    final String? mine;
+    final String base;
+    try {
+      final n = ref.read(saveSyncProvider.notifier);
+      mine = await n.catalogSetting();
+      base = await n.catalogBase();
+    } catch (_) {
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _controller.text = mine ?? '';
@@ -46,17 +55,22 @@ class _SaveRecipesSourceSettingState extends ConsumerState<SaveRecipesSourceSett
       _busy = true;
       _error = null;
     });
-    final ok = await ref.read(saveSyncProvider.notifier).setCatalogSetting(url);
-    if (!mounted) return;
-    if (!ok) {
-      setState(() {
-        _busy = false;
-        _error = 'Use an https:// address';
-      });
-      return;
+    String? error;
+    try {
+      final ok = await ref.read(saveSyncProvider.notifier).setCatalogSetting(url);
+      if (!ok) {
+        error = 'Use an https:// address';
+      } else {
+        await _load();
+      }
+    } catch (e) {
+      error = 'Could not save: $e';
     }
-    await _load();
-    if (mounted) setState(() => _busy = false);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = error;
+    });
   }
 
   @override
