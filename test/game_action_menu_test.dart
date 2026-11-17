@@ -5,12 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
@@ -42,6 +46,17 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class _FakeLaunchbox extends LaunchboxService {
+  final asked = <(String, int)>[];
+  final record = Completer<LaunchboxGame?>();
+
+  @override
+  Future<LaunchboxGame?> lookup(String platform, int id) {
+    asked.add((platform, id));
+    return record.future;
+  }
+}
+
 const _game = Game(
   title: 'A Very Long Sample Game Title That Would Be Cut Off In The List Row',
   url: 'https://example.com/files/sample.zip',
@@ -59,10 +74,14 @@ void main() {
     catalog = _FakeCatalog();
     ran = [];
     debugRunGameAction = (ref, context, game, state, action) async => ran.add((game, action));
+    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url));
   });
-  tearDown(() => debugRunGameAction = null);
+  tearDown(() {
+    debugRunGameAction = null;
+    GameDetailsPage.debugImageBuilder = null;
+  });
 
-  Future<void> pump(WidgetTester t, Widget card, {GameState? state}) async {
+  Future<void> pump(WidgetTester t, Widget card, {GameState? state, List<Override> overrides = const []}) async {
     final nav = GlobalKey<NavigatorState>();
     final gs = state ??
         const GameState(
@@ -75,6 +94,7 @@ void main() {
         gameStateProvider.overrideWith((ref, game) => gs),
         favoritesProvider.overrideWith((ref) => favorites),
         catalogProvider.overrideWith((ref) => catalog),
+        ...overrides,
       ],
       child: MaterialApp(
         navigatorKey: nav,
@@ -90,7 +110,7 @@ void main() {
     await t.pump();
   }
 
-  Finder inSheet(Finder f) => find.descendant(of: find.byType(BottomSheet), matching: f);
+  Finder inPage(Finder f) => find.descendant(of: find.byType(GameDetailsPage), matching: f);
 
   bool onCard(WidgetTester t, Type card) {
     final ctx = FocusManager.instance.primaryFocus?.context;
@@ -132,18 +152,18 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
 
-    expect(inSheet(find.text(_game.title)), findsOneWidget);
-    expect(inSheet(find.text('Ready')), findsOneWidget);
-    expect(inSheet(find.text('Download')), findsOneWidget);
-    expect(inSheet(find.text('Add to favourites')), findsOneWidget);
-    expect(inSheet(find.text('Select')), findsOneWidget);
+    expect(inPage(find.text(_game.title)), findsOneWidget);
+    expect(inPage(find.text('Ready')), findsOneWidget);
+    expect(inPage(find.text('Download')), findsOneWidget);
+    expect(inPage(find.text('Add to favourites')), findsOneWidget);
+    expect(inPage(find.text('Select')), findsOneWidget);
 
-    // First action tile is focused.
-    expect(Focus.of(t.element(inSheet(find.text('Download')))).hasFocus, isTrue);
+    // First action button is focused.
+    expect(Focus.of(t.element(inPage(find.text('Download')))).hasFocus, isTrue);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
 
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
     expect(ran, [(_game, GameAction.download)]);
     expect(onCard(t, GameRow), isTrue);
   });
@@ -168,12 +188,12 @@ void main() {
     await t.pump();
     expect(find.byType(GameRow), findsNothing);
 
-    await t.tap(inSheet(find.text('Download')));
+    await t.tap(inPage(find.text('Download')));
     await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     expect(ran, [(_game, GameAction.download)]);
     expect(read, hasLength(1));
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
   });
 
   testWidgets('actions are listed in availableActions order', (t) async {
@@ -186,29 +206,29 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(t.getTopLeft(inSheet(find.text('Cancel'))).dy, lessThan(t.getTopLeft(inSheet(find.text('Pause'))).dy));
+    expect(t.getTopLeft(inPage(find.text('Cancel'))).dx, lessThan(t.getTopLeft(inPage(find.text('Pause'))).dx));
   });
 
-  testWidgets('favourite and select tiles use the providers', (t) async {
+  testWidgets('favourite and select buttons use the providers', (t) async {
     await pump(t, const GameRow(game: _game));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    await t.tap(inSheet(find.text('Add to favourites')));
+    await t.tap(inPage(find.text('Add to favourites')));
     await t.pumpAndSettle();
     expect(favorites.toggled, [_game.gameId]);
-    await t.tap(inSheet(find.text('Select')));
+    await t.tap(inPage(find.text('Select')));
     await t.pumpAndSettle();
     expect(catalog.toggled, [_game.gameId]);
   });
 
-  testWidgets('selectable: false has no Select tile', (t) async {
+  testWidgets('selectable: false has no Select button', (t) async {
     await pump(t, const GameRow(game: _game, selectable: false));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(inSheet(find.text('Download')), findsOneWidget);
-    expect(inSheet(find.text('Select')), findsNothing);
+    expect(inPage(find.text('Download')), findsOneWidget);
+    expect(inPage(find.text('Select')), findsNothing);
   });
 
   testWidgets('escape closes the menu and focus returns to the card', (t) async {
@@ -216,10 +236,10 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
     expect(onCard(t, GameRow), isTrue);
   });
 
@@ -227,7 +247,7 @@ void main() {
     await pump(t, const GameRow(game: _game));
     await t.tap(find.text('Ready').first, warnIfMissed: false);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
   testWidgets('holding Enter on a card opens the menu once and runs nothing', (t) async {
@@ -241,29 +261,29 @@ void main() {
     }
     await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
     expect(ran, isEmpty);
   });
 
-  testWidgets('focus stays in the sheet when the focused Select tile disappears', (t) async {
+  testWidgets('focus stays on the page when the focused Select button disappears', (t) async {
     catalog.state = CatalogState(selectedGames: {_game.gameId});
     await pump(t, const GameRow(game: _game),
         state: const GameState(game: _game, status: GameStatus.ready, isInteractable: false, availableActions: {GameAction.download}));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // favourites
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown); // Unselect
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight); // favourites
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight); // Unselect
     await t.pump();
-    expect(Focus.of(t.element(inSheet(find.text('Unselect')))).hasFocus, isTrue);
+    expect(Focus.of(t.element(inPage(find.text('Unselect')))).hasFocus, isTrue);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(inSheet(find.text('Unselect')), findsNothing);
-    expect(inSheet(find.text('Select')), findsNothing);
+    expect(inPage(find.text('Unselect')), findsNothing);
+    expect(inPage(find.text('Select')), findsNothing);
     final node = FocusManager.instance.primaryFocus;
     expect(node, isNot(isA<FocusScopeNode>()));
-    expect(node?.context?.findAncestorWidgetOfExactType<BottomSheet>(), isNotNull);
-    expect(Focus.of(t.element(inSheet(find.text('Filters')))).hasFocus, isTrue); // the tile that moved up
+    expect(node?.context?.findAncestorWidgetOfExactType<GameDetailsPage>(), isNotNull);
+    expect(Focus.of(t.element(inPage(find.text('Filters')))).hasFocus, isTrue); // the button that moved into its place
   });
 
   testWidgets('escape while an action runs does not drop it', (t) async {
@@ -276,14 +296,52 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    await t.tap(inSheet(find.text('Download')));
+    await t.tap(inPage(find.text('Download')));
     await t.pump();
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
     gate.complete();
     await t.pumpAndSettle();
     expect(ran, [(_game, GameAction.download)]);
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
+  });
+
+  testWidgets('a game without LaunchBox data shows its title and looks nothing up', (t) async {
+    final lb = _FakeLaunchbox();
+    await pump(t, const GameRow(game: _game), overrides: [launchboxServiceProvider.overrideWithValue(lb)]);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(inPage(find.text(_game.title)), findsOneWidget);
+    expect(lb.asked, isEmpty);
+  });
+
+  testWidgets('a matched game shows at once, then the overview when its record arrives', (t) async {
+    const matched = Game(
+      title: 'Sonic The Hedgehog',
+      url: 'https://example.com/files/sonic.zip',
+      size: 1024,
+      consoleId: 'md',
+      details: GameDetails(launchboxId: 7, launchboxPlatform: 'Sega Genesis'),
+    );
+    const overview = 'Sonic races through Green Hill Zone.';
+    final lb = _FakeLaunchbox();
+    await pump(t, const GameRow(game: matched),
+        state: const GameState(game: matched, status: GameStatus.ready, availableActions: {GameAction.download}),
+        overrides: [launchboxServiceProvider.overrideWithValue(lb)]);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(lb.asked, [('Sega Genesis', 7)]);
+    expect(inPage(find.text(matched.title)), findsOneWidget);
+    expect(find.text('About'), findsNothing);
+
+    lb.record.complete(const LaunchboxGame(id: 7, name: 'Sonic the Hedgehog', overview: overview, developer: 'Sonic Team'));
+    await t.pumpAndSettle();
+    await t.drag(inPage(find.byType(CustomScrollView)), const Offset(0, -2000));
+    await t.pumpAndSettle();
+    expect(inPage(find.text(overview)), findsOneWidget);
+    expect(inPage(find.text('Sonic Team')), findsOneWidget);
   });
 }

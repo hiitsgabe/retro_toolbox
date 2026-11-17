@@ -9,6 +9,11 @@ import 'package:retro_toolbox/utils/image_memory.dart';
 Future<void> showBoxartViewer(BuildContext context, Game game) {
   final boxart = game.boxart;
   if (boxart == null) return Future.value();
+  return showImageViewer(context, boxart, game: game);
+}
+
+/// Full-screen zoomable image; [game] adds its title and size at the bottom.
+Future<void> showImageViewer(BuildContext context, String url, {Game? game}) {
   return showDialog(
     context: context,
     builder: (_) => Dialog(
@@ -17,19 +22,20 @@ Future<void> showBoxartViewer(BuildContext context, Game game) {
       child: Stack(
         children: [
           PhotoView(
-            imageProvider: CachedNetworkImageProvider(boxart),
+            imageProvider: CachedNetworkImageProvider(url),
             backgroundDecoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
             minScale: PhotoViewComputedScale.contained,
             maxScale: PhotoViewComputedScale.covered * 3.0,
             onTapUp: (context, details, controllerValue) => Navigator.of(context).pop(),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            // IgnorePointer so taps still reach PhotoView to dismiss.
-            child: IgnorePointer(child: _boxartInfoOverlay(game)),
-          ),
+          if (game != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              // IgnorePointer so taps still reach PhotoView to dismiss.
+              child: IgnorePointer(child: _boxartInfoOverlay(game)),
+            ),
         ],
       ),
     ),

@@ -1,0 +1,624 @@
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
+import 'package:retro_toolbox/utils/formatters.dart';
+import 'package:retro_toolbox/utils/image_memory.dart';
+import 'package:retro_toolbox/widgets/game_details/launchbox_images.dart';
+
+/// Builds one image of the page; [fallback] stands in while it loads and when
+/// it fails.
+typedef DetailsImageBuilder = Widget Function(BuildContext context, String url, {BoxFit fit, Widget? fallback});
+
+/// A game's details: a hero the size of the screen, then a sheet with
+/// everything else. Takes its data in and renders, so the second screen can
+/// host it without the page around it. Works with only what the catalog
+/// knows; [launchbox] adds the rest.
+class GameDetailsView extends StatelessWidget {
+  const GameDetailsView({
+    super.key,
+    required this.game,
+    this.launchbox,
+    this.actions,
+    this.status,
+    this.imageBuilder,
+    this.onOpenImage,
+    this.scrollController,
+  });
+
+  final Game game;
+  final LaunchboxGame? launchbox;
+
+  /// Buttons under the title; null shows none (the second screen).
+  final List<Widget>? actions;
+
+  /// A line above [actions]: download state, an error.
+  final Widget? status;
+
+  /// Null: [CachedNetworkImage], with the fallback as its placeholder and
+  /// error widget.
+  final DetailsImageBuilder? imageBuilder;
+
+  /// Tap on the cover, a screenshot or the back cover; null: not tappable.
+  final ValueChanged<String>? onOpenImage;
+  final ScrollController? scrollController;
+
+  /// The hero's height in a viewport of [viewport]: the first screen, within
+  /// reason.
+  static double heroHeight(double viewport) => viewport.clamp(320.0, 720.0);
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _Info(game, launchbox);
+    final image = imageBuilder ?? _networkImage;
+    return LayoutBuilder(builder: (context, box) {
+      final width = box.maxWidth;
+      final gutter = width >= 1200
+          ? 64.0
+          : width >= 600
+              ? 40.0
+              : 20.0;
+      return CustomScrollView(
+        controller: scrollController,
+        slivers: [
+          SliverToBoxAdapter(
+            child: _Hero(
+              info: info,
+              image: image,
+              height: heroHeight(box.maxHeight),
+              gutter: gutter,
+              narrow: width < 600,
+              actions: actions,
+              status: status,
+              onOpenImage: onOpenImage,
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 48 + MediaQuery.paddingOf(context).bottom),
+            sliver: SliverList.list(children: _sheet(context, info, image, wide: width - 2 * gutter >= 1000)),
+          ),
+        ],
+      );
+    });
+  }
+
+  /// [wide]: the table and the text side by side, so a wide screen is not
+  /// half empty. The screenshots stay full width under them: the d-pad goes
+  /// down from the actions to whatever is below the first one, and a strip in
+  /// a right-hand column would be skipped.
+  List<Widget> _sheet(BuildContext context, _Info info, DetailsImageBuilder image, {required bool wide}) {
+    final region = game.region;
+    final shots = [
+      ...launchboxImagesOf(info.images, LaunchboxImageType.screenshot, region),
+      ...launchboxImagesOf(info.images, LaunchboxImageType.titleScreen, region),
+    ];
+    final back = pickLaunchboxImage(info.images, LaunchboxImageType.boxBack, region);
+    final rows = info.rows;
+    final overview = launchbox?.overview;
+    final details = rows.isEmpty ? null : _Section(title: 'Details', child: _DetailsTable(rows: rows));
+    final screenshots = shots.isEmpty
+        ? null
+        : _Section(
+            title: 'Screenshots',
+            child: SizedBox(
+              height: _Thumb.width * 9 / 16,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: shots.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, i) => _Thumb(url: shots[i].url, image: image, onOpen: onOpenImage),
+              ),
+            ),
+          );
+    final about = overview == null
+        ? null
+        : _Section(
+            title: 'About',
+            // Long lines are hard to read on a wide screen.
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
+                child: Text(overview, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5)),
+              ),
+            ),
+          );
+    return [
+      if (wide && details != null && about != null) ...[
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 440, child: details),
+            const SizedBox(width: 64),
+            Expanded(child: about),
+          ],
+        ),
+        if (screenshots != null) screenshots,
+      ] else ...[
+        if (details != null) details,
+        if (screenshots != null) screenshots,
+        if (about != null) about,
+      ],
+      if (back != null)
+        _Section(
+          title: 'Back of the box',
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: _Tappable(
+              url: back.url,
+              onOpen: onOpenImage,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: image(context, back.url, fit: BoxFit.contain, fallback: const _Missing(height: 360)),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+}
+
+/// What the page shows, from the LaunchBox record when it is there and the
+/// catalog's copy of its fields when it is not (the record loads after the
+/// page opens).
+class _Info {
+  _Info(this.game, this.lb);
+
+  final Game game;
+  final LaunchboxGame? lb;
+
+  List<LaunchboxImage> get images => lb?.images ?? const [];
+
+  int? get releaseDate => game.details?.releaseDate ?? lb?.releaseDate;
+  int? get year => switch (releaseDate) { final d? when d >= 10000 => d ~/ 10000, _ => null };
+
+  List<String> get genres => lb?.genres.isNotEmpty == true ? lb!.genres : game.details?.genres ?? const [];
+
+  int? get maxPlayers => lb?.maxPlayers ?? game.details?.maxPlayers;
+  bool? get cooperative => lb != null ? lb!.cooperative : game.details?.cooperative;
+
+  // LaunchBox writes 0 with 0 votes for a game nobody rated.
+  bool get _lbRated => lb?.rating != null && !(lb!.rating == 0 && (lb!.ratingCount ?? 0) == 0);
+  double? get rating => game.details?.rating ?? (_lbRated ? lb!.rating : null);
+  int? get votes => game.details?.rating != null ? game.details!.ratingCount : (_lbRated ? lb!.ratingCount : null);
+
+  String? get players => switch (maxPlayers) {
+        null || < 1 => null,
+        1 => '1 player',
+        final n => '1-$n players',
+      };
+
+  String get summary => [
+        if (year != null) '$year',
+        if (lb?.publisher != null) lb!.publisher!,
+        if (genres.isNotEmpty) genres.first,
+      ].join(' · ');
+
+  List<(String, String)> get rows => [
+        if (lb?.developer != null) ('Developer', lb!.developer!),
+        if (lb?.publisher != null) ('Publisher', lb!.publisher!),
+        if (releaseDate case final d? when d >= 10000) ('Release date', _date(d)),
+        if (players != null) ('Players', players!),
+        if (cooperative != null) ('Co-op', cooperative! ? 'Yes' : 'No'),
+        if (lb?.esrb != null) ('ESRB', lb!.esrb!),
+        if (game.region.isNotEmpty) ('Region', game.region),
+        if (game.size > 0) ('Size', formatBytes(game.size)),
+        if (genres.isNotEmpty) ('Genres', genres.join(', ')),
+      ];
+
+  /// yyyymmdd as yyyy-mm-dd; an unknown month or day is left off.
+  static String _date(int d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final y = d ~/ 10000, m = d ~/ 100 % 100, day = d % 100;
+    if (m == 0) return '$y';
+    return day == 0 ? '$y-${two(m)}' : '$y-${two(m)}-${two(day)}';
+  }
+}
+
+/// The first screen: background art, the logo or title, the summary, the
+/// rating, the cover and the actions.
+class _Hero extends StatelessWidget {
+  const _Hero({
+    required this.info,
+    required this.image,
+    required this.height,
+    required this.gutter,
+    required this.narrow,
+    this.actions,
+    this.status,
+    this.onOpenImage,
+  });
+
+  final _Info info;
+  final DetailsImageBuilder image;
+  final double height;
+  final double gutter;
+  final bool narrow;
+  final List<Widget>? actions;
+  final Widget? status;
+  final ValueChanged<String>? onOpenImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final game = info.game;
+    final region = game.region;
+    final bg = heroBackground(info.lb, region, game.boxart);
+    final front = pickLaunchboxImage(info.images, LaunchboxImageType.boxFront, region)?.url;
+    final cover = front ?? game.boxart;
+
+    // Dimmed: blown up and blurred, a cover is mostly bright flat colour.
+    Widget blurred(String url) => DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: const BoxDecoration(color: Colors.black38),
+          child: ImageFiltered(
+            // clamp: decal fades the edges to transparent, a dark frame.
+            imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24, tileMode: TileMode.clamp),
+            child: image(context, url),
+          ),
+        );
+
+    Widget? background;
+    if (bg != null) {
+      // Art that fails to load falls back to the blurred box art.
+      background = bg.blur ? blurred(bg.url) : image(context, bg.url, fallback: game.boxart == null ? null : blurred(game.boxart!));
+    }
+
+    final text = _HeroText(info: info, image: image, actions: actions, status: status);
+    final coverArt = cover == null
+        ? null
+        : _Tappable(
+            url: cover,
+            onOpen: onOpenImage,
+            child: _Cover(
+              child: image(
+                context,
+                cover,
+                fit: BoxFit.contain,
+                // A LaunchBox front that fails shows the catalog's box art.
+                fallback: front != null && game.boxart != null
+                    ? image(context, game.boxart!, fit: BoxFit.contain, fallback: const _Missing(height: 120))
+                    : const _Missing(height: 120),
+              ),
+            ),
+          );
+
+    final top = MediaQuery.paddingOf(context).top + kToolbarHeight;
+    // Coming back up from the sheet, show the whole first screen again: just
+    // scrolling the button into view leaves it under the app bar.
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (inside) {
+        final position = Scrollable.maybeOf(context)?.position;
+        if (inside && position != null && position.pixels > 0) position.jumpTo(0);
+      },
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: height),
+        child: Stack(
+          alignment: AlignmentDirectional.bottomStart,
+          children: [
+            // The art stops short of the bottom, where the gradient is opaque:
+            // at a fractional scroll offset both edges are antialiased and a
+            // line of art would show through.
+            Positioned.fill(bottom: 2, child: ColoredBox(color: theme.colorScheme.surface)),
+            // The blur would spill onto the sheet below.
+            if (background != null) Positioned.fill(bottom: 2, child: ClipRect(child: background)),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    // Dark under the app bar too, so the back button reads on bright art.
+                    colors: [
+                      Colors.black.withValues(alpha: 0.45),
+                      Colors.transparent,
+                      theme.scaffoldBackgroundColor.withValues(alpha: 0.75),
+                      theme.scaffoldBackgroundColor,
+                    ],
+                    stops: const [0, 0.25, 0.7, 1],
+                  ),
+                ),
+              ),
+            ),
+            // Wide, the text runs over the middle of the art: shade its side.
+            if (!narrow)
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [theme.scaffoldBackgroundColor.withValues(alpha: 0.7), theme.scaffoldBackgroundColor.withValues(alpha: 0)],
+                      stops: const [0, 0.6],
+                    ),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(gutter, top + 16, gutter, 24),
+              child: narrow
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (coverArt != null) ...[coverArt, const SizedBox(height: 20)],
+                        text,
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(child: text),
+                        if (coverArt != null) ...[const SizedBox(width: 32), coverArt],
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroText extends StatelessWidget {
+  const _HeroText({required this.info, required this.image, this.actions, this.status});
+
+  final _Info info;
+  final DetailsImageBuilder image;
+  final List<Widget>? actions;
+  final Widget? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final title = Text(
+      info.game.displayTitle,
+      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+    final logo = pickLaunchboxImage(info.images, LaunchboxImageType.clearLogo, info.game.region);
+    final summary = info.summary;
+    final rating = info.rating;
+    final players = info.players == null ? null : [info.players!, if (info.cooperative == true) 'Co-op'].join(' · ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (logo == null)
+          title
+        else
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 96, maxWidth: 420),
+              child: image(context, logo.url, fit: BoxFit.contain, fallback: title),
+            ),
+          ),
+        if (summary.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(summary, style: theme.textTheme.titleMedium?.copyWith(color: muted)),
+        ],
+        if (rating != null || players != null) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (rating != null) ...[
+                _Stars(rating: rating),
+                Text(
+                  info.votes == null ? rating.toStringAsFixed(1) : '${rating.toStringAsFixed(1)} (${info.votes} ${info.votes == 1 ? 'vote' : 'votes'})',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+                ),
+              ],
+              if (rating != null && players != null) Text('·', style: TextStyle(color: muted)),
+              if (players != null) Text(players, style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
+            ],
+          ),
+        ],
+        if (status != null) ...[
+          const SizedBox(height: 20),
+          DefaultTextStyle.merge(style: theme.textTheme.bodySmall?.copyWith(color: muted), child: status!),
+        ],
+        if (actions != null && actions!.isNotEmpty) ...[
+          SizedBox(height: status != null ? 8 : 24),
+          Wrap(spacing: 12, runSpacing: 12, children: actions!),
+        ],
+      ],
+    );
+  }
+}
+
+/// Five stars filled to [rating] (0..5), in halves.
+class _Stars extends StatelessWidget {
+  const _Stars({required this.rating});
+
+  final double rating;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.tertiary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 5; i++)
+          Icon(
+            switch (rating - i) {
+              >= 0.75 => Icons.star_rounded,
+              >= 0.25 => Icons.star_half_rounded,
+              _ => Icons.star_outline_rounded,
+            },
+            size: 20,
+            color: color,
+          ),
+      ],
+    );
+  }
+}
+
+/// The front cover: a fixed height, the width the art asks for.
+class _Cover extends StatelessWidget {
+  const _Cover({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 6))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(height: 120, child: child),
+      ),
+    );
+  }
+}
+
+/// Stands in for a cover that is loading or failed: art sized by the image
+/// would be zero wide, an invisible focus stop for the d-pad.
+class _Missing extends StatelessWidget {
+  const _Missing({required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: height * 0.7,
+      height: height,
+      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(8)),
+      child: Icon(Icons.image_not_supported_outlined, size: math.min(48, height * 0.3), color: scheme.outline),
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailsTable extends StatelessWidget {
+  const _DetailsTable({required this.rows});
+
+  final List<(String, String)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final value = theme.textTheme.bodyMedium;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Table(
+          columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
+          defaultVerticalAlignment: TableCellVerticalAlignment.top,
+          border: TableBorder(horizontalInside: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4))),
+          children: [
+            for (final (l, v) in rows)
+              TableRow(children: [
+                Padding(padding: const EdgeInsets.fromLTRB(0, 8, 32, 8), child: Text(l, style: label)),
+                Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(v, style: value)),
+              ]),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One 16:9 screenshot of the strip.
+class _Thumb extends StatelessWidget {
+  const _Thumb({required this.url, required this.image, this.onOpen});
+
+  static const width = 180.0;
+
+  final String url;
+  final DetailsImageBuilder image;
+  final ValueChanged<String>? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Tappable(
+      url: url,
+      onOpen: onOpen,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          child: SizedBox(width: width, height: width * 9 / 16, child: image(context, url)),
+        ),
+      ),
+    );
+  }
+}
+
+/// [child] opens [url] on tap and is a focus stop for the d-pad, when
+/// [onOpen] is given; otherwise just [child].
+class _Tappable extends StatelessWidget {
+  const _Tappable({required this.url, required this.onOpen, required this.child});
+
+  final String url;
+  final ValueChanged<String>? onOpen;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onOpen == null) return child;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => onOpen!(url),
+      child: child,
+    );
+  }
+}
+
+/// Decodes at the size it is laid out at, like the grid's covers: LaunchBox
+/// fanart and screenshots are full size.
+Widget _networkImage(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
+  return LayoutBuilder(builder: (context, box) {
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
+    final w = box.hasBoundedWidth ? box.maxWidth : null;
+    final h = box.hasBoundedHeight ? box.maxHeight : null;
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      fadeInDuration: const Duration(milliseconds: 200),
+      memCacheWidth: w != null && h != null ? thumbnailDecodeWidth(w, h, dpr) : null,
+      memCacheHeight: w == null && h != null ? math.max(1, (h * dpr).ceil()) : null,
+      // The fallback also covers the load: the title until the logo is in,
+      // the blurred box art until the fanart is.
+      placeholder: (context, url) => fallback ?? const SizedBox.shrink(),
+      errorWidget: (context, url, error) => fallback ?? const SizedBox.shrink(),
+      errorListener: (e) => debugPrint('Details image failed: $e'),
+    );
+  });
+}
