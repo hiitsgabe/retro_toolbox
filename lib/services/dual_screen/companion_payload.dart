@@ -7,18 +7,15 @@ Map<String, dynamic> detailsPayload(Game game) => {'mode': 'details', 'game': ga
 
 const _maxTaskRows = 30;
 
-/// The Task Manager in short: active, queued, failed and just completed rows
-/// in that order (use classifyTasks), each {title, status, progress (0..1 or
+/// The Task Manager in short: running, queued, failed and just completed rows
+/// in that order (from classifyTasks), each {title, status, progress (0..1 or
 /// null), state ('active'|'queued'|'failed'|'done')}. At most 30 rows.
 Map<String, dynamic> tasksPayload(Iterable<GameState> states) {
   final tabs = classifyTasks(states);
-  final seen = <String>{};
   final rows = <Map<String, dynamic>>[];
   void add(List<GameState> bucket, String state) {
     for (final s in bucket) {
       if (rows.length == _maxTaskRows) return;
-      // A queued download is in the downloading tab too: keep its first place.
-      if (!seen.add(s.game.gameId)) continue;
       rows.add({
         'title': s.game.displayTitle,
         'status': s.statusText,
@@ -28,7 +25,9 @@ Map<String, dynamic> tasksPayload(Iterable<GameState> states) {
     }
   }
 
-  add([...tabs.downloading, ...tabs.extracting], 'active');
+  // The downloading and extracting tabs list queued tasks too; here they are queued.
+  final queued = tabs.queued.toSet();
+  add([...tabs.downloading, ...tabs.extracting].where((s) => !queued.contains(s)).toList(), 'active');
   add(tabs.queued, 'queued');
   add(tabs.failed, 'failed');
   add(tabs.completed, 'done');

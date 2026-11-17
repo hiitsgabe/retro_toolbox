@@ -14,7 +14,7 @@ import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 /// Gamepad buttons for a focused game card: X marks it (where the checkbox
 /// would work), Y opens its page, holding A opens its box art. Focus here also
 /// tells the second screen which game to show.
-class GameCardActions extends ConsumerWidget {
+class GameCardActions extends ConsumerStatefulWidget {
   const GameCardActions({super.key, required this.game, required this.selectable, required this.child});
 
   final Game game;
@@ -22,7 +22,35 @@ class GameCardActions extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GameCardActions> createState() => _GameCardActionsState();
+}
+
+class _GameCardActionsState extends ConsumerState<GameCardActions> {
+  final _focus = FocusNode(canRequestFocus: false, skipTraversal: true);
+
+  void _report() => ref.read(focusedGameProvider.notifier).state = widget.game;
+
+  // Cover flow keeps its one focus stop and swaps the centre game under it,
+  // so focus never moves: the new game has to be reported here.
+  @override
+  void didUpdateWidget(GameCardActions oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.game.gameId != widget.game.gameId && _focus.hasFocus) {
+      Future.microtask(() {
+        if (mounted) _report();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final game = widget.game, selectable = widget.selectable, child = widget.child;
     final actions = Actions(
       actions: {
         MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) {
@@ -38,10 +66,9 @@ class GameCardActions extends ConsumerWidget {
       child: game.boxart == null ? child : _HoldForBoxart(game: game, child: child),
     );
     return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
+      focusNode: _focus,
       onFocusChange: (focused) {
-        if (focused) ref.read(focusedGameProvider.notifier).state = game;
+        if (focused) _report();
       },
       child: actions,
     );
@@ -107,12 +134,18 @@ class _HoldForBoxartState extends State<_HoldForBoxart> {
   Widget build(BuildContext context) => Focus(canRequestFocus: false, skipTraversal: true, onKeyEvent: _onKey, child: widget.child);
 }
 
+/// The details page's route name: the games screen still counts as up under it.
+const gameDetailsRouteName = 'game-details';
+
 /// The page a card opens: the game's details, with everything the row's
 /// small buttons and checkbox do as buttons.
 Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectable = true}) {
   // A tap opens the page without moving focus to the card.
   ProviderScope.containerOf(context, listen: false).read(focusedGameProvider.notifier).state = game;
   return Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => GameDetailsPage(game: game, selectable: selectable)),
+    MaterialPageRoute(
+      settings: const RouteSettings(name: gameDetailsRouteName),
+      builder: (_) => GameDetailsPage(game: game, selectable: selectable),
+    ),
   );
 }

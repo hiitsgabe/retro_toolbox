@@ -30,9 +30,9 @@ void main() {
       st('ready', GameStatus.ready),
       st('dl', GameStatus.downloading),
     ]);
-    expect([for (final x in r) x['title']], ['waiting', 'dl', 'unzip', 'failed', 'done']);
-    expect([for (final x in r) x['state']], ['active', 'active', 'active', 'failed', 'done']);
-    expect(r[0]['status'], 'Dl. Queued');
+    expect([for (final x in r) x['title']], ['dl', 'unzip', 'waiting', 'failed', 'done']);
+    expect([for (final x in r) x['state']], ['active', 'active', 'queued', 'failed', 'done']);
+    expect(r[2]['status'], 'Dl. Queued');
     expect(r[3]['status'], 'Download Failed');
   });
 

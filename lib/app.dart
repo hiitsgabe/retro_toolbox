@@ -5,6 +5,7 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
@@ -59,7 +60,7 @@ class RetroToolboxApp extends ConsumerWidget {
     final builtInKeyboard = ref.watch(settingsProvider.select((s) => s.useOnScreenKeyboard));
     final app = MaterialApp(
       navigatorKey: navigatorKey,
-      navigatorObservers: [DpadScope.routeObserver],
+      navigatorObservers: [DpadScope.routeObserver, HomeScreen.routeObserver],
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
       theme: appTheme(),

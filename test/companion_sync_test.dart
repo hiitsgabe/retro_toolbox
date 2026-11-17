@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
@@ -17,9 +19,11 @@ import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
+import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 
 class _FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
   _FakeApp() : super(const AppState());
+  void pick(String id) => state = AppState(selectedConsole: Console(id: id, name: id, urls: const []));
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -36,6 +40,13 @@ class _FakeDownloads extends StateNotifier<DownloadState> implements DownloadNot
   bool hasDownloadableSelectedGames() => false;
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _Pushes extends NavigatorObserver {
+  _Pushes(this.routes);
+  final List<Route<dynamic>> routes;
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => routes.add(route);
 }
 
 class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
@@ -220,7 +231,31 @@ void main() {
       expect(container.read(focusedGameProvider)?.title, 'Mario');
     });
 
-    testWidgets('a game list on screen for as long as it is mounted', (t) async {
+    testWidgets('the centre game as cover flow browses under its one focus stop', (t) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final games = [game('A'), game('B'), game('C')];
+      await t.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: CoverFlow(aspectRatio: 0.72, items: [
+              for (final g in games) CoverFlowItem(face: Text(g.title), label: g.title, wrapFocus: (f) => GameCardActions(game: g, selectable: true, child: f)),
+            ]),
+          ),
+        ),
+      ));
+      await t.pumpAndSettle();
+      expect(container.read(focusedGameProvider)?.title, 'A');
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.pumpAndSettle();
+      expect(container.read(focusedGameProvider)?.title, 'B');
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.pumpAndSettle();
+      expect(container.read(focusedGameProvider)?.title, 'C');
+    });
+
+    ProviderContainer homeContainer() {
       final container = ProviderContainer(overrides: [
         appStateProvider.overrideWith((ref) => _FakeApp()),
         catalogProvider.overrideWith((ref) => _FakeCatalog()),
@@ -229,6 +264,78 @@ void main() {
         downloadProvider.overrideWith((ref) => _FakeDownloads()),
       ]);
       addTearDown(container.dispose);
+      return container;
+    }
+
+    testWidgets('a game list only while no other page covers it', (t) async {
+      final container = homeContainer();
+      final nav = GlobalKey<NavigatorState>();
+      await t.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(navigatorKey: nav, navigatorObservers: [HomeScreen.routeObserver], home: const HomeScreen()),
+      ));
+      await t.pump();
+      bool active() => container.read(gamesScreenActiveProvider);
+      expect(active(), isTrue);
+      container.read(focusedGameProvider.notifier).state = game('Zelda');
+
+      nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Settings'))));
+      await t.pumpAndSettle();
+      expect(active(), isFalse);
+      expect(container.read(focusedGameProvider)?.title, 'Zelda', reason: 'kept for the way back');
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(active(), isTrue);
+
+      // Popups (the task manager, filters, dialogs) keep the details.
+      showModalBottomSheet<void>(context: nav.currentContext!, builder: (_) => const Text('Tasks'));
+      await t.pumpAndSettle();
+      expect(active(), isTrue);
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
+
+      // The game's own page shows the same game.
+      nav.currentState!
+          .push(MaterialPageRoute<void>(settings: const RouteSettings(name: gameDetailsRouteName), builder: (_) => const Scaffold(body: Text('Details'))));
+      await t.pumpAndSettle();
+      expect(active(), isTrue);
+      nav.currentState!.pop();
+      await t.pumpAndSettle();
+      expect(active(), isTrue);
+    });
+
+    testWidgets('a game page opened from a card is named for the observer', (t) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final routes = <Route<dynamic>>[];
+      await t.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          navigatorObservers: [_Pushes(routes)],
+          home: Builder(builder: (c) => TextButton(onPressed: () => showGameActionMenu(c, game('Mario')), child: const Text('Mario'))),
+        ),
+      ));
+      showGameActionMenu(t.element(find.text('Mario')), game('Mario'));
+      expect(routes.last.settings.name, gameDetailsRouteName);
+    });
+
+    testWidgets('no game from the last console', (t) async {
+      final container = homeContainer();
+      await t.pumpWidget(UncontrolledProviderScope(container: container, child: const MaterialApp(home: HomeScreen())));
+      await t.pump();
+      (container.read(appStateProvider.notifier) as _FakeApp).pick('snes');
+      await t.pump();
+      container.read(focusedGameProvider.notifier).state = game('Zelda');
+      (container.read(appStateProvider.notifier) as _FakeApp).pick('snes');
+      await t.pump();
+      expect(container.read(focusedGameProvider)?.title, 'Zelda', reason: 'same console');
+      (container.read(appStateProvider.notifier) as _FakeApp).pick('gba');
+      await t.pump();
+      expect(container.read(focusedGameProvider), isNull);
+    });
+
+    testWidgets('a game list on screen for as long as it is mounted', (t) async {
+      final container = homeContainer();
       Widget app(Widget home) => UncontrolledProviderScope(container: container, child: MaterialApp(home: home));
 
       await t.pumpWidget(app(const HomeScreen()));

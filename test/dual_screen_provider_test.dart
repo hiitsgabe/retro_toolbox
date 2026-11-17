@@ -215,4 +215,69 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(methods(), ['displays', 'closeCompanion']);
   });
+
+  Future<void> displaysChanged() =>
+      messenger.handlePlatformMessage(_channel.name, const StandardMethodCodec().encodeMethodCall(const MethodCall('displaysChanged')), (_) {});
+
+  test('in the background a display change only closes, and a pending one is dropped', () async {
+    SharedPreferences.setMockInitialValues({'dual_screen_mode': 'mainOnTop'});
+    final n = notifier();
+    await n.init();
+    await displaysChanged(); // pending when the app leaves
+    n.onLifecycle(AppLifecycleState.paused);
+    await pumpEventQueue();
+    calls.clear();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(calls, isEmpty);
+
+    await displaysChanged();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(methods(), ['closeCompanion']);
+    expect(n.state.companionOpen, isFalse);
+
+    calls.clear();
+    n.onLifecycle(AppLifecycleState.resumed);
+    await pumpEventQueue();
+    expect(methods(), ['displays', 'openCompanion', 'send']);
+  });
+
+  test('a move that does not land is tried once, then the app stays single screen', () async {
+    SharedPreferences.setMockInitialValues({'dual_screen_mode': 'mainOnBottom'});
+    await notifier().init(); // asks Android to move to 4
+    final restarted = notifier(); // comes back up on 0 all the same
+    await restarted.init();
+    expect(methods().where((m) => m == 'moveMain'), hasLength(1));
+    expect(restarted.state.error, 'Second screen unavailable');
+    expect(restarted.state.companionOpen, isFalse);
+    expect(methods().last, 'closeCompanion');
+  });
+
+  test('a move that lands clears the attempt, and so does choosing a mode', () async {
+    SharedPreferences.setMockInitialValues({'dual_screen_mode': 'mainOnBottom'});
+    await notifier().init();
+    current = 4; // relaunched on the bottom panel
+    await notifier().init();
+    expect((await SharedPreferences.getInstance()).containsKey('dual_screen_moved_to'), isFalse);
+
+    current = 0;
+    await notifier().init(); // moved back to the top by hand: may move again
+    expect(methods().where((m) => m == 'moveMain'), hasLength(2));
+
+    final n = notifier();
+    await n.init(); // stuck on 0
+    expect(n.state.error, isNotNull);
+    await n.setMode(DualScreenMode.mainOnBottom);
+    expect(methods().where((m) => m == 'moveMain'), hasLength(3));
+  });
+
+  test('a malformed displays reply is a failure too', () async {
+    messenger.setMockMethodCallHandler(_channel, (call) async {
+      calls.add(call);
+      return call.method == 'displays' ? {'current': 'zero', 'displays': displays} : null;
+    });
+    final n = notifier();
+    await n.setMode(DualScreenMode.mainOnTop);
+    expect(n.state.error, 'Second screen unavailable');
+    expect(methods(), ['displays', 'closeCompanion']);
+  });
 }

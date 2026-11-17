@@ -9,6 +9,9 @@ import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _modeKey = 'dual_screen_mode';
+
+/// The display the last move asked for, until the app comes up there.
+const _movedToKey = 'dual_screen_moved_to';
 const unavailableMessage = 'Second screen unavailable';
 
 class DualScreenState {
@@ -50,6 +53,7 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
 
   CompanionSync? _sync;
   Timer? _displaysChanged;
+  bool _foreground = true;
 
   // Every channel job runs after the previous one finishes.
   Future<void> _queue = Future.value();
@@ -72,7 +76,10 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
   Future<void> setMode(DualScreenMode mode) async {
     if (!_enabled) return;
     state = state.copyWith(mode: mode);
-    await (await _prefs()).setString(_modeKey, mode.name);
+    final prefs = await _prefs();
+    await prefs.setString(_modeKey, mode.name);
+    // A choice made by hand gets a fresh move even after one that failed.
+    await prefs.remove(_movedToKey);
     await apply();
   }
 
@@ -90,8 +97,11 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
     if (!_enabled) return;
     switch (s) {
       case AppLifecycleState.resumed:
+        _foreground = true;
         apply();
       case AppLifecycleState.paused || AppLifecycleState.hidden || AppLifecycleState.detached:
+        _foreground = false;
+        _displaysChanged?.cancel();
         _enqueue(_close);
       // Launching the companion makes the main activity briefly inactive.
       case AppLifecycleState.inactive:
@@ -106,6 +116,8 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
 
   Future<void> _applyNow() async {
     try {
+      // Nothing opens or moves behind another app's back; resumed applies again.
+      if (!_foreground) return await _close();
       final r = await _channel.invokeMapMethod<String, Object?>('displays');
       final current = r?['current'] as int?;
       final displays = [for (final d in (r?['displays'] as List?) ?? const []) DisplayInfo.fromJson(d as Map)];
@@ -115,24 +127,30 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
       if (plan == null) {
         await _close();
       } else if (current != plan.mainDisplay) {
-        // The app restarts on the other display and plans again there.
+        // The app restarts on the other display and plans again there. A
+        // restart that lands here again would loop for ever, never letting the
+        // user reach Settings: the second try gives up.
+        final prefs = await _prefs();
+        if (prefs.getInt(_movedToKey) == plan.mainDisplay) return await _fail('the move to display ${plan.mainDisplay} did not land');
+        await prefs.setInt(_movedToKey, plan.mainDisplay);
         _stopSync();
         await _channel.invokeMethod<void>('moveMain', {'displayId': plan.mainDisplay});
       } else {
+        final prefs = await _prefs();
+        if (prefs.containsKey(_movedToKey)) await prefs.remove(_movedToKey);
         await _channel.invokeMethod<void>('openCompanion', {'displayId': plan.companionDisplay});
         if (!mounted) return;
         _sync ??= CompanionSync(_ref.container, _send)..start();
       }
       // A run that gets this far clears the last failure.
       if (mounted) state = DualScreenState(mode: state.mode, hasSecondDisplay: hasSecond, companionOpen: _sync != null);
-    } on PlatformException catch (e) {
-      await _fail(e);
-    } on MissingPluginException catch (e) {
+    } catch (e) {
+      // PlatformException and MissingPluginException, but a malformed reply too.
       await _fail(e);
     }
   }
 
-  Future<void> _fail(Exception e) async {
+  Future<void> _fail(Object e) async {
     debugPrint('Dual screen: $e');
     try {
       await _close();
