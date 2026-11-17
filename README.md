@@ -141,6 +141,12 @@ downloads them in parallel, in the background, with automatic extraction, box ar
 filters and favorites. With it on, two extras appear: **New Catalog Source** (add one console from a
 URL) and **Tinfoil Server** (lets Tinfoil on a Switch install from that library).
 
+Each game opens a details page with its actions. **LaunchBox metadata** (opt-in, in Settings or the
+first-run setup; about 110 MB, downloaded once and indexed on the device) fills it with ratings,
+genres, descriptions and artwork, and adds a **Top rated** sort and genre, player and rating filters.
+On Android handhelds with two screens (AYN Thor style), **Dual screen** puts the focused game's
+details, or the task list, on the second screen.
+
 The app does not host or distribute any games. Point it only at sources you have the right to use,
 and only download files you legally own.
 
@@ -255,6 +261,7 @@ docs/            # Catalog format guides
 - **[libarchive](https://www.libarchive.org)** (BSD-2-Clause): RAR extraction on Linux desktop and handheld. The handheld package also bundles libarchive's own dependencies where the firmware lacks them (among them nettle and acl, LGPL), as unmodified shared libraries.
 - **[flutter-pi](https://github.com/ardera/flutter-pi)**: runs the handheld build
 - Console logos from **[EmulationStation Carbon](https://github.com/RetroPie/es-theme-carbon)** by Rookervik and **[Art Book Next](https://github.com/anthonycaccese/es-theme-art-book-next)** by Anthony Caccese (CC-BY-NC-SA). These are third-party, trademarked marks bundled for personal use; review their licenses before any commercial distribution.
+- Game ratings, genres, descriptions and artwork from **[LaunchBox's games database](https://gamesdb.launchbox-app.com)**, downloaded only when LaunchBox metadata is turned on
 - UI font: **[Chakra Petch](https://fonts.google.com/specimen/Chakra+Petch)** by Cadson Demak (SIL Open Font License)
 
 ## License
