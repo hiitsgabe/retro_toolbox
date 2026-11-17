@@ -25,6 +25,9 @@ void main() {
     test('USA picks North America, or United States', () {
       expect(pickLaunchboxImage(all, _front, 'USA')?.file, 'na.jpg');
       expect(pickLaunchboxImage([_img('any.jpg', 'Germany'), _img('us.jpg', 'United States')], _front, 'USA')?.file, 'us.jpg');
+      // Both are the game's own region, so file order decides; were North
+      // America only the fallback, United States would win.
+      expect(pickLaunchboxImage([_img('na.jpg', 'North America'), _img('us.jpg', 'United States')], _front, 'USA')?.file, 'na.jpg');
     });
 
     test('then North America, then World, then no region, then any', () {

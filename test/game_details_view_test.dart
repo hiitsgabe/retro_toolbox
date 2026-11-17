@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,7 +8,10 @@ import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
+import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:photo_view/photo_view.dart';
 
 const _box = 'https://thumbnails.libretro.com/sonic.png';
 
@@ -198,5 +202,193 @@ void main() {
     await t.pumpAndSettle();
     expect(Focus.of(t.element(find.text('Download'))).hasPrimaryFocus, isTrue);
     expect(position.pixels, 0);
+  });
+
+  testWidgets('the d-pad reads a long overview to its end, reaches the back cover and comes back up, every stop on screen', (t) async {
+    const longTitle = Game(
+      title: 'zelda.zip',
+      url: 'https://example.com/zelda.zip',
+      size: 1024,
+      consoleId: 'snes',
+      metadata: GameMetadata(displayTitle: 'The Legend of Zelda: A Link to the Past and Four Swords Anniversary Edition', regions: ['USA']),
+      details: GameDetails(boxart: _box),
+    );
+    final lb = LaunchboxGame(
+      id: 1,
+      name: 'Zelda',
+      overview: List.filled(800, 'lorem').join(' '),
+      images: const [_front, _back, _shot1, _shot2, _title],
+    );
+    // Narrow and short: the cover sits above the text and the hero is taller
+    // than the screen.
+    const screen = Size(560, 360);
+    final nav = GlobalKey<NavigatorState>();
+    t.view.physicalSize = screen;
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      theme: appTheme(),
+      builder: (context, child) => DpadScope(navigatorKey: nav, child: child!),
+      home: Scaffold(
+        body: GameDetailsView(
+          game: longTitle,
+          launchbox: lb,
+          status: const Text('Ready'),
+          onOpenImage: (_) {},
+          imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 120),
+          actions: [
+            for (final l in ['Download', 'Add to favourites', 'Select', 'View box art', 'Filters'])
+              FilledButton(autofocus: l == 'Download', onPressed: () {}, child: Text(l)),
+          ],
+        ),
+      ),
+    ));
+    await t.pumpAndSettle();
+    final position = t.state<ScrollableState>(find.byType(Scrollable).first).position;
+    const bar = kToolbarHeight; // no status bar in a test
+    final overview = find.text(lb.overview!);
+    bool inHero(FocusNode n) => n.context!.findAncestorWidgetOfExactType<FilledButton>() != null;
+
+    // The image each stop holds, read on arrival: the sheet is built lazily.
+    final stops = <String?>[];
+    void arrived(String step) {
+      final node = FocusManager.instance.primaryFocus!;
+      String? url;
+      void walk(Element e) {
+        if (e.widget.key case ValueKey<String>(:final value)) url ??= value;
+        e.visitChildElements(walk);
+      }
+
+      (node.context! as Element).visitChildElements(walk);
+      stops.add(url);
+      final r = node.rect;
+      expect(r.top, greaterThanOrEqualTo(bar), reason: '$step: $r under the app bar');
+      // The overview is taller than the screen: only its top has to show.
+      if (r.height < screen.height - bar) expect(r.bottom, lessThanOrEqualTo(screen.height), reason: '$step: $r below the screen');
+    }
+
+    arrived('open');
+    expect(position.pixels, greaterThan(0), reason: 'the first button sits below the screen at offset 0');
+    var backInHero = false;
+    for (final key in [LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowUp]) {
+      for (var i = 0; i < 80; i++) {
+        final (node, pixels) = (FocusManager.instance.primaryFocus!, position.pixels);
+        final leaving = overview.evaluate().isNotEmpty ? t.getRect(overview) : null;
+        final wasReading = leaving != null && node.rect.overlaps(leaving);
+        await t.sendKeyEvent(key);
+        await t.pumpAndSettle();
+        final now = FocusManager.instance.primaryFocus!;
+        if (now == node) {
+          if (position.pixels == pixels) break;
+          continue;
+        }
+        // Moving on from the overview only once its far end was in view: no
+        // line is scrolled past unread.
+        if (wasReading) {
+          if (key == LogicalKeyboardKey.arrowDown) {
+            expect(leaving.bottom, lessThanOrEqualTo(screen.height), reason: 'left the overview before its end');
+          } else {
+            expect(leaving.top, greaterThanOrEqualTo(bar), reason: 'left the overview before its start');
+          }
+        }
+        arrived('$key $i');
+        if (key == LogicalKeyboardKey.arrowUp && !backInHero && inHero(now)) {
+          backInHero = true;
+          // Back in the hero: shown from as high up as the button allows.
+          expect(now.rect.bottom, greaterThan(screen.height - 20), reason: 'hero not shown from its top: ${now.rect}');
+        }
+      }
+    }
+    expect(stops, containsAllInOrder([_shot1.url, _back.url]));
+    // And up again through the strip (whichever shot is nearest).
+    final shots = {_shot1.url, _shot2.url, _title.url};
+    expect(stops.skip(stops.indexOf(_back.url)).where(shots.contains), isNotEmpty);
+    expect(backInHero, isTrue);
+  });
+
+  testWidgets('the record arriving after focus was placed keeps the focused button on screen', (t) async {
+    t.view.physicalSize = const Size(560, 360);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    Widget view(LaunchboxGame? lb) => MaterialApp(
+          theme: appTheme(),
+          home: Scaffold(
+            body: GameDetailsView(
+              game: _game,
+              launchbox: lb,
+              imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 96),
+              actions: [
+                for (final l in ['Download', 'Add to favourites', 'Select']) FilledButton(autofocus: l == 'Download', onPressed: () {}, child: Text(l)),
+              ],
+            ),
+          ),
+        );
+    await t.pumpWidget(view(null));
+    await t.pumpAndSettle();
+    final download = Focus.of(t.element(find.text('Download')));
+    expect(download.hasPrimaryFocus, isTrue);
+    expect(download.rect.bottom, lessThanOrEqualTo(360));
+
+    // Logo, summary and rating rows push the buttons down.
+    await t.pumpWidget(view(_lb));
+    await t.pumpAndSettle();
+    expect(download.hasPrimaryFocus, isTrue);
+    expect(download.rect.bottom, lessThanOrEqualTo(360));
+  });
+
+  testWidgets('contained art decodes by its height, not the page width', (t) async {
+    t.view.physicalSize = const Size(2400, 6000);
+    t.view.devicePixelRatio = 2;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: appTheme(),
+      home: Scaffold(body: GameDetailsView(game: _game, launchbox: _lb)),
+    ));
+    CachedNetworkImage net(String url) => t.widget<CachedNetworkImage>(find.byWidgetPredicate((w) => w is CachedNetworkImage && w.imageUrl == url).last);
+    expect((net(_back.url).memCacheWidth, net(_back.url).memCacheHeight), (null, 720));
+    expect((net(_logo.url).memCacheWidth, net(_logo.url).memCacheHeight), (null, 192));
+    expect((net(_front.url).memCacheWidth, net(_front.url).memCacheHeight), (null, 240));
+    // Screenshots fill their box: by the box. The last one is the strip's;
+    // the hero shows it too, behind the fanart while that loads.
+    expect(net(_shot1.url).memCacheWidth, 384);
+    t.takeException(); // the image cache has no plugin in tests
+  });
+
+  testWidgets('failed art: the background falls to a screenshot, a thumbnail to a placeholder', (t) async {
+    t.view.physicalSize = const Size(1240, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: appTheme(),
+      home: Scaffold(
+        body: GameDetailsView(
+          game: _game,
+          launchbox: _lb,
+          imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) =>
+              url == _fanart.url || url == _shot2.url ? fallback ?? const SizedBox() : SizedBox(key: ValueKey(url)),
+        ),
+      ),
+    ));
+    // In the hero and in the strip.
+    expect(_url(_shot1.url), findsNWidgets(2));
+    expect(find.byType(ImageFiltered), findsNothing);
+    expect(find.byIcon(Icons.image_not_supported_outlined), findsOneWidget);
+  });
+
+  testWidgets('the zoom viewer decodes at twice the screen, not the scan', (t) async {
+    t.view.physicalSize = const Size(1920, 1080);
+    t.view.devicePixelRatio = 1.5;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      home: Builder(builder: (context) => TextButton(onPressed: () => showImageViewer(context, _back.url), child: const Text('open'))),
+    ));
+    await t.tap(find.text('open'));
+    await t.pump();
+    final provider = t.widget<PhotoView>(find.byType(PhotoView)).imageProvider;
+    expect(provider, isA<ResizeImage>());
+    provider as ResizeImage;
+    expect((provider.width, provider.height, provider.policy), (3840, 2160, ResizeImagePolicy.fit));
+    t.takeException(); // the image cache has no plugin in tests
   });
 }

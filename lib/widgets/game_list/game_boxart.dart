@@ -14,6 +14,9 @@ Future<void> showBoxartViewer(BuildContext context, Game game) {
 
 /// Full-screen zoomable image; [game] adds its title and size at the bottom.
 Future<void> showImageViewer(BuildContext context, String url, {Game? game}) {
+  // A LaunchBox scan can be 3000x4000, 48 MB decoded: twice the screen is
+  // enough to zoom into.
+  final screen = MediaQuery.sizeOf(context) * MediaQuery.devicePixelRatioOf(context) * 2;
   return showDialog(
     context: context,
     builder: (_) => Dialog(
@@ -22,7 +25,12 @@ Future<void> showImageViewer(BuildContext context, String url, {Game? game}) {
       child: Stack(
         children: [
           PhotoView(
-            imageProvider: CachedNetworkImageProvider(url),
+            imageProvider: ResizeImage(
+              CachedNetworkImageProvider(url),
+              width: screen.width.round(),
+              height: screen.height.round(),
+              policy: ResizeImagePolicy.fit,
+            ),
             backgroundDecoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.4)),
             minScale: PhotoViewComputedScale.contained,
             maxScale: PhotoViewComputedScale.covered * 3.0,

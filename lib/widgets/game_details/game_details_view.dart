@@ -3,6 +3,8 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_images.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
@@ -61,26 +63,29 @@ class GameDetailsView extends StatelessWidget {
           : width >= 600
               ? 40.0
               : 20.0;
-      return CustomScrollView(
-        controller: scrollController,
-        slivers: [
-          SliverToBoxAdapter(
-            child: _Hero(
-              info: info,
-              image: image,
-              height: heroHeight(box.maxHeight),
-              gutter: gutter,
-              narrow: width < 600,
-              actions: actions,
-              status: status,
-              onOpenImage: onOpenImage,
+      return _FollowFocus(
+        launchbox: launchbox,
+        child: CustomScrollView(
+          controller: scrollController,
+          slivers: [
+            SliverToBoxAdapter(
+              child: _Hero(
+                info: info,
+                image: image,
+                height: heroHeight(box.maxHeight),
+                gutter: gutter,
+                narrow: width < 600,
+                actions: actions,
+                status: status,
+                onOpenImage: onOpenImage,
+              ),
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 48 + MediaQuery.paddingOf(context).bottom),
-            sliver: SliverList.list(children: _sheet(context, info, image, wide: width - 2 * gutter >= 1000)),
-          ),
-        ],
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 48 + MediaQuery.paddingOf(context).bottom),
+              sliver: SliverList.list(children: _sheet(context, info, image, wide: width - 2 * gutter >= 1000)),
+            ),
+          ],
+        ),
       );
     });
   }
@@ -122,7 +127,7 @@ class GameDetailsView extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 820),
-                child: Text(overview, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5)),
+                child: _Reading(child: Text(overview, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.5))),
               ),
             ),
           );
@@ -263,8 +268,12 @@ class _Hero extends StatelessWidget {
 
     Widget? background;
     if (bg != null) {
-      // Art that fails to load falls back to the blurred box art.
-      background = bg.blur ? blurred(bg.url) : image(context, bg.url, fallback: game.boxart == null ? null : blurred(game.boxart!));
+      // Art that fails to load falls down the same chain: a screenshot after
+      // the fanart, then the blurred box art.
+      final boxart = game.boxart == null ? null : blurred(game.boxart!);
+      final shot = pickLaunchboxImage(info.images, LaunchboxImageType.screenshot, region)?.url;
+      final next = shot == null || shot == bg.url ? boxart : image(context, shot, fallback: boxart);
+      background = bg.blur ? blurred(bg.url) : image(context, bg.url, fallback: next);
     }
 
     final text = _HeroText(info: info, image: image, actions: actions, status: status);
@@ -287,76 +296,66 @@ class _Hero extends StatelessWidget {
           );
 
     final top = MediaQuery.paddingOf(context).top + kToolbarHeight;
-    // Coming back up from the sheet, show the whole first screen again: just
-    // scrolling the button into view leaves it under the app bar.
-    return Focus(
-      canRequestFocus: false,
-      skipTraversal: true,
-      onFocusChange: (inside) {
-        final position = Scrollable.maybeOf(context)?.position;
-        if (inside && position != null && position.pixels > 0) position.jumpTo(0);
-      },
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: height),
-        child: Stack(
-          alignment: AlignmentDirectional.bottomStart,
-          children: [
-            // The art stops short of the bottom, where the gradient is opaque:
-            // at a fractional scroll offset both edges are antialiased and a
-            // line of art would show through.
-            Positioned.fill(bottom: 2, child: ColoredBox(color: theme.colorScheme.surface)),
-            // The blur would spill onto the sheet below.
-            if (background != null) Positioned.fill(bottom: 2, child: ClipRect(child: background)),
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height),
+      child: Stack(
+        alignment: AlignmentDirectional.bottomStart,
+        children: [
+          // The art stops short of the bottom, where the gradient is opaque:
+          // at a fractional scroll offset both edges are antialiased and a
+          // line of art would show through.
+          Positioned.fill(bottom: 2, child: ColoredBox(color: theme.colorScheme.surface)),
+          // The blur would spill onto the sheet below.
+          if (background != null) Positioned.fill(bottom: 2, child: ClipRect(child: background)),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  // Dark under the app bar too, so the back button reads on bright art.
+                  colors: [
+                    Colors.black.withValues(alpha: 0.45),
+                    Colors.transparent,
+                    theme.scaffoldBackgroundColor.withValues(alpha: 0.75),
+                    theme.scaffoldBackgroundColor,
+                  ],
+                  stops: const [0, 0.25, 0.7, 1],
+                ),
+              ),
+            ),
+          ),
+          // Wide, the text runs over the middle of the art: shade its side.
+          if (!narrow)
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    // Dark under the app bar too, so the back button reads on bright art.
-                    colors: [
-                      Colors.black.withValues(alpha: 0.45),
-                      Colors.transparent,
-                      theme.scaffoldBackgroundColor.withValues(alpha: 0.75),
-                      theme.scaffoldBackgroundColor,
+                    colors: [theme.scaffoldBackgroundColor.withValues(alpha: 0.7), theme.scaffoldBackgroundColor.withValues(alpha: 0)],
+                    stops: const [0, 0.6],
+                  ),
+                ),
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(gutter, top + 16, gutter, 24),
+            child: narrow
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (coverArt != null) ...[coverArt, const SizedBox(height: 20)],
+                      text,
                     ],
-                    stops: const [0, 0.25, 0.7, 1],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(child: text),
+                      if (coverArt != null) ...[const SizedBox(width: 32), coverArt],
+                    ],
                   ),
-                ),
-              ),
-            ),
-            // Wide, the text runs over the middle of the art: shade its side.
-            if (!narrow)
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [theme.scaffoldBackgroundColor.withValues(alpha: 0.7), theme.scaffoldBackgroundColor.withValues(alpha: 0)],
-                      stops: const [0, 0.6],
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(gutter, top + 16, gutter, 24),
-              child: narrow
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (coverArt != null) ...[coverArt, const SizedBox(height: 20)],
-                        text,
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(child: text),
-                        if (coverArt != null) ...[const SizedBox(width: 32), coverArt],
-                      ],
-                    ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -392,11 +391,16 @@ class _HeroText extends StatelessWidget {
         if (logo == null)
           title
         else
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 96, maxWidth: 420),
-              child: image(context, logo.url, fit: BoxFit.contain, fallback: title),
+          // Its full height from the start: the buttons below must not move
+          // when the logo comes in, under a d-pad focus already placed.
+          SizedBox(
+            height: 96,
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: image(context, logo.url, fit: BoxFit.contain, fallback: title),
+              ),
             ),
           ),
         if (summary.isNotEmpty) ...[
@@ -486,15 +490,18 @@ class _Cover extends StatelessWidget {
 /// Stands in for a cover that is loading or failed: art sized by the image
 /// would be zero wide, an invisible focus stop for the d-pad.
 class _Missing extends StatelessWidget {
-  const _Missing({required this.height});
+  const _Missing({required this.height, this.width});
 
   final double height;
+
+  /// Null: a cover's 0.7.
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: height * 0.7,
+      width: width ?? height * 0.7,
       height: height,
       decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(8)),
       child: Icon(Icons.image_not_supported_outlined, size: math.min(48, height * 0.3), color: scheme.outline),
@@ -574,7 +581,11 @@ class _Thumb extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: ColoredBox(
           color: Theme.of(context).colorScheme.surfaceContainerHigh,
-          child: SizedBox(width: width, height: width * 9 / 16, child: image(context, url)),
+          child: SizedBox(
+            width: width,
+            height: width * 9 / 16,
+            child: image(context, url, fallback: const _Missing(width: width, height: width * 9 / 16)),
+          ),
         ),
       ),
     );
@@ -601,6 +612,127 @@ class _Tappable extends StatelessWidget {
   }
 }
 
+const _margin = 12.0;
+
+/// The page's vertical scroll around [context], and the scroll offsets that
+/// put its box's top just under the app bar ([top]) and its bottom just above
+/// the screen's edge ([bottom]). Null outside a page.
+({ScrollableState scrollable, double top, double bottom})? _placeIn(BuildContext context) {
+  var s = Scrollable.maybeOf(context);
+  while (s != null && axisDirectionToAxis(s.axisDirection) != Axis.vertical) {
+    s = Scrollable.maybeOf(s.context);
+  }
+  final box = context.findRenderObject();
+  if (s == null || box is! RenderBox || !box.attached || !box.hasSize) return null;
+  // The page's own viewport, not the screenshot strip's. Offsets come from
+  // it: right after the d-pad scrolled, the box's paint position is stale.
+  RenderObject? viewport = box.parent;
+  while (viewport != null && !(viewport is RenderViewportBase && viewport.axis == Axis.vertical)) {
+    viewport = viewport.parent;
+  }
+  if (viewport is! RenderViewportBase) return null;
+  final clear = MediaQuery.paddingOf(context).top + kToolbarHeight + _margin;
+  return (
+    scrollable: s,
+    top: viewport.getOffsetToReveal(box, 0).offset - clear,
+    bottom: viewport.getOffsetToReveal(box, 1).offset + _margin,
+  );
+}
+
+/// The overview as one d-pad stop that reads like a page: up and down scroll
+/// through it a third of the screen at a time and only move on at its ends.
+/// Without it a long text has nothing to focus, and the d-pad keeps
+/// scrolling with focus on a control far off screen, from where it can no
+/// longer find the next one.
+class _Reading extends StatelessWidget {
+  const _Reading({required this.child});
+
+  final Widget child;
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    final down = e.logicalKey == LogicalKeyboardKey.arrowDown;
+    if (e is KeyUpEvent || (!down && e.logicalKey != LogicalKeyboardKey.arrowUp)) return KeyEventResult.ignored;
+    final place = _placeIn(node.context!);
+    if (place == null) return KeyEventResult.ignored;
+    final position = place.scrollable.position;
+    final step = position.viewportDimension / 3;
+    final edge = (down ? place.bottom : place.top).clamp(position.minScrollExtent, position.maxScrollExtent);
+    if (down ? position.pixels >= edge - 0.5 : position.pixels <= edge + 0.5) return KeyEventResult.ignored;
+    position.jumpTo(down ? math.min(position.pixels + step, edge) : math.max(position.pixels - step, edge));
+    return KeyEventResult.handled;
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(onKeyEvent: _onKey, child: child);
+}
+
+/// Keeps the focused control on screen and clear of the app bar the page lays
+/// over the view, which the d-pad's own scrolling knows nothing about: it
+/// leaves a control at the very top, under the bar, and in a hero taller than
+/// the screen it can leave one below the bottom. Focus coming back into the
+/// hero shows it from the top again.
+class _FollowFocus extends StatefulWidget {
+  const _FollowFocus({required this.launchbox, required this.child});
+
+  /// The record arriving after focus was placed adds rows above the buttons.
+  final LaunchboxGame? launchbox;
+  final Widget child;
+
+  @override
+  State<_FollowFocus> createState() => _FollowFocusState();
+}
+
+class _FollowFocusState extends State<_FollowFocus> {
+  bool _inHero = false;
+
+  @override
+  void initState() {
+    super.initState();
+    FocusManager.instance.addListener(_follow);
+  }
+
+  @override
+  void didUpdateWidget(_FollowFocus old) {
+    super.didUpdateWidget(old);
+    // Only then: other rebuilds (download progress) would pull a reader
+    // back to the buttons.
+    if (widget.launchbox != old.launchbox) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _follow();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_follow);
+    super.dispose();
+  }
+
+  // Runs once focus has moved, after the traversal's own ensureVisible.
+  void _follow() {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (ctx == null || !ctx.mounted) return;
+    final place = _placeIn(ctx);
+    // Focus on another page (a dialog over this one, the list below).
+    if (place == null || place.scrollable.context.findAncestorStateOfType<_FollowFocusState>() != this) return;
+
+    final hero = ctx.findAncestorWidgetOfExactType<_Hero>() != null;
+    final entering = hero && !_inHero;
+    _inHero = hero;
+    final position = place.scrollable.position;
+    var target = entering ? 0.0 : position.pixels;
+    if (target < place.bottom) target = place.bottom;
+    // Its top wins over its bottom when it is taller than the space.
+    if (target > place.top) target = place.top;
+    target = target.clamp(position.minScrollExtent, position.maxScrollExtent);
+    if ((target - position.pixels).abs() > 0.5) position.jumpTo(target);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 /// Decodes at the size it is laid out at, like the grid's covers: LaunchBox
 /// fanart and screenshots are full size.
 Widget _networkImage(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
@@ -608,12 +740,15 @@ Widget _networkImage(BuildContext context, String url, {BoxFit fit = BoxFit.cove
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
     final w = box.hasBoundedWidth ? box.maxWidth : null;
     final h = box.hasBoundedHeight ? box.maxHeight : null;
+    // Contained art is as tall as its box at most: decode by the height. The
+    // box's width is the page's for the back cover and the logo.
+    final byHeight = h != null && (w == null || fit == BoxFit.contain);
     return CachedNetworkImage(
       imageUrl: url,
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 200),
-      memCacheWidth: w != null && h != null ? thumbnailDecodeWidth(w, h, dpr) : null,
-      memCacheHeight: w == null && h != null ? math.max(1, (h * dpr).ceil()) : null,
+      memCacheWidth: !byHeight && w != null && h != null ? thumbnailDecodeWidth(w, h, dpr) : null,
+      memCacheHeight: byHeight ? math.max(1, (h * dpr).ceil()) : null,
       // The fallback also covers the load: the title until the logo is in,
       // the blurred box art until the fanart is.
       placeholder: (context, url) => fallback ?? const SizedBox.shrink(),

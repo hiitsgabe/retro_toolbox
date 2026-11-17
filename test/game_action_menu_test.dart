@@ -18,6 +18,7 @@ import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
+import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 
 class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifier {
   _FakeFavorites() : super(Favorites(lastUpdated: DateTime(2020)));
@@ -343,5 +344,77 @@ void main() {
     await t.pumpAndSettle();
     expect(inPage(find.text(overview)), findsOneWidget);
     expect(inPage(find.text('Sonic Team')), findsOneWidget);
+  });
+
+  testWidgets('with no game actions the favourite button takes focus', (t) async {
+    await pump(t, const GameRow(game: _game), state: const GameState(game: _game, status: GameStatus.extracted));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    expect(Focus.of(t.element(inPage(find.text('Add to favourites')))).hasPrimaryFocus, isTrue);
+  });
+
+  testWidgets('Filters closes the page and opens the filters', (t) async {
+    await pump(t, const GameRow(game: _game));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    await t.tap(inPage(find.text('Filters')));
+    await t.pumpAndSettle();
+    expect(find.byType(GameDetailsPage), findsNothing);
+    expect(find.byType(FilterModal), findsOneWidget);
+  });
+
+  testWidgets('the d-pad walks a long overview down to the back cover, never via the back button', (t) async {
+    const matched = Game(
+      title: 'Sonic The Hedgehog',
+      url: 'https://example.com/files/sonic.zip',
+      size: 1024,
+      consoleId: 'md',
+      details: GameDetails(launchboxId: 7, launchboxPlatform: 'Sega Genesis'),
+    );
+    const back = LaunchboxImage(LaunchboxImageType.boxBack, 'back.png');
+    final lb = _FakeLaunchbox()
+      ..record.complete(LaunchboxGame(
+        id: 7,
+        name: 'Sonic the Hedgehog',
+        overview: List.filled(800, 'lorem').join(' '),
+        images: [
+          for (var i = 0; i < 10; i++) LaunchboxImage(LaunchboxImageType.screenshot, 'shot$i.png'),
+          back,
+        ],
+      ));
+    // Sized like real art: an empty box is no place for focus to land.
+    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 180, height: 240);
+    await pump(t, const GameRow(game: matched),
+        state: const GameState(game: matched, status: GameStatus.ready, availableActions: {GameAction.download}),
+        overrides: [launchboxServiceProvider.overrideWithValue(lb)]);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+
+    bool focusIn(Finder f) => f.evaluate().isNotEmpty && Focus.of(t.element(f)).hasPrimaryFocus;
+    var onBackButton = false;
+    for (var i = 0; i < 60 && !focusIn(find.byKey(ValueKey(back.url))); i++) {
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.pumpAndSettle();
+      onBackButton |= FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<BackButton>() != null;
+    }
+    expect(onBackButton, isFalse);
+    expect(focusIn(find.byKey(ValueKey(back.url))), isTrue);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
+  });
+
+  testWidgets('the back button is not a d-pad stop: A there would close the page', (t) async {
+    await pump(t, const GameRow(game: _game));
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.pumpAndSettle();
+    for (var i = 0; i < 4; i++) {
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await t.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<BackButton>(), isNull);
+    }
+    expect(inPage(find.byType(BackButton)), findsOneWidget);
   });
 }

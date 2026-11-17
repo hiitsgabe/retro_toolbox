@@ -124,6 +124,10 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
           child: ValueListenableBuilder<bool>(
             valueListenable: _pastHero,
             builder: (context, past, _) => AppBar(
+              // Not a focus stop: once the focused control scrolls off the top,
+              // Down would land on it and the rest of the page is unreachable.
+              // B and touch still go back.
+              leading: const ExcludeFocus(child: BackButton()),
               backgroundColor: past ? Theme.of(context).scaffoldBackgroundColor : null,
               title: past ? Text(game.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
             ),
