@@ -1,5 +1,6 @@
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_update_model.dart';
 
 class Game {
@@ -22,6 +23,10 @@ class Game {
   /// console's updates folder, with the console's choices for updates.
   final bool isUpdate;
 
+  /// The game this entry stands for, with its versions and extras. Set by
+  /// the list's grouping, never saved.
+  final GameGroup? group;
+
   const Game({
     required this.title,
     required this.url,
@@ -32,6 +37,7 @@ class Game {
     this.discs = const [],
     this.updates = const [],
     this.isUpdate = false,
+    this.group,
   });
 
   Game copyWith({
@@ -44,6 +50,7 @@ class Game {
     List<Game>? discs,
     List<GameUpdate>? updates,
     bool? isUpdate,
+    GameGroup? group,
   }) {
     return Game(
       title: title ?? this.title,
@@ -55,6 +62,7 @@ class Game {
       discs: discs ?? this.discs,
       updates: updates ?? this.updates,
       isUpdate: isUpdate ?? this.isUpdate,
+      group: group ?? this.group,
     );
   }
 
@@ -125,7 +133,8 @@ class Game {
 
   String get gameId => '$consoleId/$filename';
 
-  String get displayTitle => metadata?.displayTitle ?? title;
+  /// A box set shows as the box; anything else by its parsed title.
+  String get displayTitle => group?.isBoxSet == true ? group!.title : metadata?.displayTitle ?? title;
 
   String get region => metadata?.regions.firstOrNull ?? '';
 
