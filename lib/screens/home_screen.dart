@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_list.dart';
@@ -21,6 +23,31 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late final StateController<bool> _gamesScreen;
+  late final StateController<Game?> _focusedGame;
+
+  // Tells the second screen a game list is up. Providers must not change
+  // while the tree builds or unmounts, hence the microtasks.
+  @override
+  void initState() {
+    super.initState();
+    _gamesScreen = ref.read(gamesScreenActiveProvider.notifier);
+    _focusedGame = ref.read(focusedGameProvider.notifier);
+    Future.microtask(() {
+      if (_gamesScreen.mounted) _gamesScreen.state = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    final gamesScreen = _gamesScreen, focusedGame = _focusedGame;
+    Future.microtask(() {
+      if (gamesScreen.mounted) gamesScreen.state = false;
+      if (focusedGame.mounted) focusedGame.state = null;
+    });
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);

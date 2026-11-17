@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -54,7 +57,7 @@ class RetroToolboxApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final builtInKeyboard = ref.watch(settingsProvider.select((s) => s.useOnScreenKeyboard));
-    return MaterialApp(
+    final app = MaterialApp(
       navigatorKey: navigatorKey,
       navigatorObservers: [DpadScope.routeObserver],
       title: 'Retro Toolbox',
@@ -72,5 +75,39 @@ class RetroToolboxApp extends ConsumerWidget {
       ),
       home: const MenuScreen(),
     );
+    return Platform.isAndroid ? _DualScreenLifecycle(child: app) : app;
   }
+}
+
+/// Starts the second screen once the app is up and closes or reopens it as
+/// the app goes to the background and comes back.
+class _DualScreenLifecycle extends ConsumerStatefulWidget {
+  const _DualScreenLifecycle({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_DualScreenLifecycle> createState() => _DualScreenLifecycleState();
+}
+
+class _DualScreenLifecycleState extends ConsumerState<_DualScreenLifecycle> {
+  late final DualScreenNotifier _dualScreen;
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _dualScreen = ref.read(dualScreenProvider.notifier);
+    _lifecycle = AppLifecycleListener(onStateChange: _dualScreen.onLifecycle);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _dualScreen.init());
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

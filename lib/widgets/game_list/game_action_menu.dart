@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
 /// Gamepad buttons for a focused game card: X marks it (where the checkbox
-/// would work), Y opens its page, holding A opens its box art.
+/// would work), Y opens its page, holding A opens its box art. Focus here also
+/// tells the second screen which game to show.
 class GameCardActions extends ConsumerWidget {
   const GameCardActions({super.key, required this.game, required this.selectable, required this.child});
 
@@ -21,7 +23,7 @@ class GameCardActions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Actions(
+    final actions = Actions(
       actions: {
         MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) {
           if (selectable && (ref.read(gameStateProvider(game)).isInteractable || ref.read(gameSelectionProvider(game.gameId)))) {
@@ -34,6 +36,14 @@ class GameCardActions extends ConsumerWidget {
         ),
       },
       child: game.boxart == null ? child : _HoldForBoxart(game: game, child: child),
+    );
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (focused) {
+        if (focused) ref.read(focusedGameProvider.notifier).state = game;
+      },
+      child: actions,
     );
   }
 }
@@ -100,6 +110,8 @@ class _HoldForBoxartState extends State<_HoldForBoxart> {
 /// The page a card opens: the game's details, with everything the row's
 /// small buttons and checkbox do as buttons.
 Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectable = true}) {
+  // A tap opens the page without moving focus to the card.
+  ProviderScope.containerOf(context, listen: false).read(focusedGameProvider.notifier).state = game;
   return Navigator.of(context).push<void>(
     MaterialPageRoute(builder: (_) => GameDetailsPage(game: game, selectable: selectable)),
   );
