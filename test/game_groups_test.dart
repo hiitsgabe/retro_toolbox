@@ -24,6 +24,8 @@ void main() {
     expect(g.extras, hasLength(5));
   });
 
+  // Known limitation: the USA Arcade Mode and Simulation Mode files carry no
+  // disc number in their names, so they stay separate versions.
   test('Gran Turismo 2: a bonus CD and beta discs are extras', () {
     final g = buildGameGroups(psxGames(['Gran Turismo 2'])).single;
     expect(g.versions, hasLength(8));
@@ -104,5 +106,125 @@ void main() {
     final mgs = buildGameGroups(psxGames(['Metal Gear Solid'])).single;
     expect(pickMainVersion(mgs.versions, defaultRegionOrder)!.first.title, 'Metal Gear Solid (USA) (Disc 1) (Rev 1).zip');
     expect(pickMainVersion(const [], defaultRegionOrder), isNull);
+  });
+
+  test('a game whose name holds tags mid-title keeps them in its title (Euro Demo, Slotter Mania 6)', () {
+    final euro = buildGameGroups([for (final g in psxGamesStartingWith('Euro Demo (')) g]);
+    expect(euro, hasLength(15));
+    expect(euro.every((g) => g.versions.length == 1 && g.versions.single.discs.length == 1), isTrue);
+    expect(_titles(euro), contains('Euro Demo (Future) 94'));
+    final slotter = buildGameGroups(psxGamesStartingWith('Slotter Mania 6')).single;
+    expect(slotter.title, 'Slotter Mania 6 - Bakuretsu Sairai! Wadatsumi (2 Types) & Blue Lagoon');
+    expect(_labels(slotter), ['Japan']);
+  });
+
+  test('an unnumbered file next to numbered ones is a version of its own (Dungeon Creator)', () {
+    final g = buildGameGroups(psxGamesStartingWith('Dungeon Creator (')).single;
+    expect(_labels(g), unorderedEquals(['Japan', 'Japan · 2 discs']));
+  });
+
+  test('an edition tag on a disc 4 does not split the set (SD Gundam - GGeneration-F)', () {
+    final g = buildGameGroups(psxGamesStartingWith('SD Gundam - GGeneration-F (')).single;
+    expect(_labels(g), contains('Japan · 4 discs'));
+    expect(_labels(g), contains('Japan · Tokubetsu-ban · 4 discs'));
+    final plain = g.versions.firstWhere((v) => v.label == 'Japan · 4 discs');
+    expect(plain.discs.last.title, 'SD Gundam - GGeneration-F (Japan) (Disc 4) (Premium Disc).zip');
+  });
+
+  test('disc names that follow two different disc numbers are editions only per version (Rival Schools)', () {
+    final g = buildGameGroups(psxGamesStartingWith('Rival Schools - United by Fate')).single;
+    expect(_labels(g), unorderedEquals(['Europe · 2 discs', 'USA · 2 discs']));
+  });
+
+  test('a version whose discs are not 1 to n says which (lone Disc 2)', () {
+    final g = buildGameGroups(psxGamesStartingWith('Syphon Filter 2 (')).single;
+    expect(_labels(g), contains('Europe · Disc 2'));
+    expect(_labels(g), contains('Europe · Rev 1 · 2 discs'));
+    final gt = buildGameGroups(psxGames(['Gran Turismo 2'])).single;
+    expect(_labels(gt), contains('Japan · Gran Turismo · Rev 1 · Disc 2'));
+  });
+
+  test('a missing part counts as zero', () {
+    expect(compareRevisions('1', '1.1'), lessThan(0));
+  });
+
+
+  test('in one region with no revision or Alt, the shortest name', () {
+    final spyro = buildGameGroups(psxGames(['Spyro the Dragon'])).single;
+    expect(pickMainVersion(spyro.versions, ['Japan'])!.first.title, 'Spyro the Dragon (Japan).zip');
+  });
+
+
+  test('a version entry carries its disc set, a single disc carries none', () {
+    final mgs = buildGameGroups(psxGames(['Metal Gear Solid'])).single;
+    expect([for (final d in pickMainVersion(mgs.versions, defaultRegionOrder)!.entry.discs) d.title],
+        ['Metal Gear Solid (USA) (Disc 1) (Rev 1).zip', 'Metal Gear Solid (USA) (Disc 2) (Rev 1).zip']);
+    final tekken = buildGameGroups(psxGames(['Tekken 3'])).single;
+    expect(pickMainVersion(tekken.versions, defaultRegionOrder)!.entry.discs, isEmpty);
+  });
+
+
+  test('a box set lists its members files', () {
+    final box = buildGameGroups(psxGamesStartingWith('Arc the Lad Collection - ')).single;
+    expect(box.files, hasLength(10));
+  });
+
+
+  test('a box word on one base title is not a box', () {
+    final g = buildGameGroups([psxGame('Die Hard Trilogy 2 - Viva Las Vegas (USA)')]).single;
+    expect(g.isBoxSet, isFalse);
+    expect(g.title, 'Die Hard Trilogy 2 - Viva Las Vegas');
+  });
+
+
+  test('an undated Beta is an extra', () {
+    expect(isExtra(psxGame('Spyro the Dragon (USA) (Beta)')), isTrue);
+  });
+
+
+  test('a dated file with no Beta tag is an extra', () {
+    expect(isExtra(psxGame('Pocket PowerStation PlayStation Cheats CD (UK) (Unl) (2001-02-19)')), isTrue);
+  });
+
+
+  test('a numbered Special Disc stays in its set', () {
+    final g = buildGameGroups([
+      psxGame('Neorude (Japan) (Disc 1) (Game Disc)'),
+      psxGame('Neorude (Japan) (Disc 2) (Special Disc)'),
+    ]).single;
+    expect(_labels(g), ['Japan · 2 discs']);
+    expect(g.extras, isEmpty);
+  });
+
+
+  test('discs are ordered by number whatever the input order', () {
+    final mgs = buildGameGroups(psxGames(['Metal Gear Solid']).reversed.toList()).single;
+    expect([for (final d in pickMainVersion(mgs.versions, defaultRegionOrder)!.discs) d.title],
+        ['Metal Gear Solid (USA) (Disc 1) (Rev 1).zip', 'Metal Gear Solid (USA) (Disc 2) (Rev 1).zip']);
+  });
+
+
+  test('a joined group is named after its main version', () {
+    final bases = ['Crash Bandicoot - Warped', 'Crash Bandicoot 3 - Warped'];
+    final g = buildGameGroups(psxGames(bases, launchboxId: 7).reversed.toList()).single;
+    expect(g.title, 'Crash Bandicoot - Warped');
+  });
+
+
+  test('M groupEntry: text, filter, box discs, and a filtered-out group never falls back to an extra', () {
+    final mgs = buildGameGroups(psxGames(['Metal Gear Solid'])).single;
+    expect(groupEntry(mgs, (_) => true, text: 'spyro'), isNull);
+    expect(groupEntry(mgs, (_) => true, text: 'premium package'), isNotNull);
+    final tekken = buildGameGroups(psxGames(['Tekken 3'])).single;
+    expect(groupEntry(tekken, (g) => !g.title.contains('(USA)'))!.title, 'Tekken 3 (Europe, Australia).zip');
+    final box = buildGameGroups(psxGamesStartingWith('Arc the Lad Collection - ')).single;
+    final entry = groupEntry(box, (g) => g.title.contains('Arc the Lad III'))!;
+    expect(entry.title, 'Arc the Lad Collection - Arc the Lad III (USA) (Disc 1).zip');
+    expect(entry.discs, isEmpty);
+    expect(entry.group, same(box));
+    final spyro = buildGameGroups(psxGames(['Spyro the Dragon'])).single;
+    expect(groupEntry(spyro, (g) => g.title.contains('(Demo')), isNull);
+    final ancient = buildGameGroups(psxGames(['Ancient Roman Extra'])).single;
+    expect(groupEntry(ancient, (_) => true)!.group, same(ancient));
   });
 }

@@ -15,19 +15,22 @@ final _boxWord = RegExp(r'\b(?:Collection|Anthology|Trilogy)\b');
 
 String _name(Game g) => g.title.replaceFirst(_extension, '');
 
-/// The No-Intro title: the name before its first " (".
+/// The name's trailing run of tags: "Euro Demo (Future) 94 (Europe)" has only
+/// "(Europe)". Tags before plain words belong to the title.
+final _trailingTags = RegExp(r'^(.*?)((?: \([^)]*\))+)$');
+
+/// The No-Intro title: the name minus its trailing run of tags.
 String baseTitleOf(Game g) {
   final n = _name(g);
-  final cut = n.indexOf(' (');
-  return (cut < 0 ? n : n.substring(0, cut)).trim();
+  final m = _trailingTags.firstMatch(n);
+  return (m == null ? n : m.group(1)!).trim();
 }
 
-/// The name's tags in parentheses, in order.
+/// The name's trailing tags in parentheses, in order.
 List<String> tagsOf(Game g) {
-  final n = _name(g);
-  final cut = n.indexOf(' (');
-  if (cut < 0) return const [];
-  return [for (final m in _tag.allMatches(n.substring(cut))) m.group(1)!.trim()];
+  final m = _trailingTags.firstMatch(_name(g));
+  if (m == null) return const [];
+  return [for (final t in _tag.allMatches(m.group(2)!)) t.group(1)!.trim()];
 }
 
 /// A demo, preview, sampler, beta or prototype, or a bonus disc that is not
@@ -40,8 +43,8 @@ bool isExtra(Game g) {
 
 /// The tags that tell versions apart: all but the disc number and, unless
 /// [keepDiscName], the disc's own name (the tag right after the number,
-/// when it is not a revision: "(Disc 1) (Ichi)").
-List<String> versionTags(Game g, {bool keepDiscName = false}) {
+/// when it is not a revision and not one of [editions]: "(Disc 1) (Ichi)").
+List<String> versionTags(Game g, {bool keepDiscName = false, Set<String> editions = const {}}) {
   final tags = tagsOf(g);
   final out = <String>[];
   var nameAt = -1;
@@ -51,7 +54,7 @@ List<String> versionTags(Game g, {bool keepDiscName = false}) {
       nameAt = i + 1;
       continue;
     }
-    if (i == nameAt && !keepDiscName && !_revisionTag.hasMatch(t)) continue;
+    if (i == nameAt && !keepDiscName && !_revisionTag.hasMatch(t) && !editions.contains(t)) continue;
     out.add(t);
   }
   return out;
@@ -122,18 +125,68 @@ GameGroup _group(List<Game> files) {
   return GameGroup(title: baseTitleOf(main?.first ?? extras.first), versions: versions, extras: extras);
 }
 
-/// Files with the same base title and version tags are one version. Where
-/// that gives a version two discs with one number (or numbered and
-/// unnumbered files together), the disc names were edition names: those
-/// files are keyed again with them.
+/// The tags in name position (right after "Disc N") that are editions, not
+/// disc names. In [group] (one first-pass version) an edition follows two
+/// different disc numbers; or, anywhere in [base] (every file of the title),
+/// it also sits on a numbered file outside the name position.
+Set<String> _editionsOf(List<Game> group, List<Game> base) {
+  final after = <String, Set<int>>{};
+  for (final f in group) {
+    final tags = tagsOf(f);
+    final n = discNumber(f);
+    if (n == 0) continue;
+    for (var i = 1; i < tags.length; i++) {
+      if (_discTag.hasMatch(tags[i - 1])) (after[tags[i]] ??= {}).add(n);
+    }
+  }
+  final elsewhere = <String>{};
+  for (final f in base) {
+    if (discNumber(f) == 0) continue;
+    final tags = tagsOf(f);
+    for (var i = 0; i < tags.length; i++) {
+      if (i == 0 || !_discTag.hasMatch(tags[i - 1])) elsewhere.add(tags[i]);
+    }
+  }
+  return {
+    for (final e in after.entries)
+      if (e.value.length > 1 || elsewhere.contains(e.key)) e.key,
+  };
+}
+
+/// Files with the same base title and version tags are one version, in
+/// passes:
+/// 1. key on the tags without disc names;
+/// 2. key again with the edition tags of each first-pass group kept;
+/// 3. an unnumbered file in a key with other files is a version of its own;
+/// 4. where a version still has two discs with one number, the disc names
+///    were edition names: those files are keyed again with them.
 List<GameVersion> _versions(List<Game> files) {
-  String key(Game f, {bool keepDiscName = false}) => '${baseTitleOf(f)}|${versionTags(f, keepDiscName: keepDiscName).join('|')}';
+  final byBase = <String, List<Game>>{};
+  for (final f in files) {
+    byBase.putIfAbsent(baseTitleOf(f), () => []).add(f);
+  }
+  String key(Game f, {bool keepDiscName = false, Set<String> editions = const {}}) =>
+      '${baseTitleOf(f)}|${versionTags(f, keepDiscName: keepDiscName, editions: editions).join('|')}';
   final first = <String, List<Game>>{};
   for (final f in files) {
     first.putIfAbsent(key(f), () => []).add(f);
   }
+  final second = <String, List<Game>>{};
+  for (final g in first.values) {
+    final editions = _editionsOf(g, byBase[baseTitleOf(g.first)]!);
+    for (final f in g) {
+      second.putIfAbsent(key(f, editions: editions), () => []).add(f);
+    }
+  }
+  final third = <String, List<Game>>{};
+  for (final e in second.entries) {
+    final mixed = e.value.length > 1 && e.value.any((f) => discNumber(f) == 0);
+    for (final f in e.value) {
+      third.putIfAbsent(mixed && discNumber(f) == 0 ? 'file:${f.title}' : e.key, () => []).add(f);
+    }
+  }
   final sets = <String, List<Game>>{};
-  for (final e in first.entries) {
+  for (final e in third.entries) {
     final clean = _discsConsistent(e.value);
     for (final f in e.value) {
       sets.putIfAbsent(clean ? e.key : key(f, keepDiscName: true), () => []).add(f);

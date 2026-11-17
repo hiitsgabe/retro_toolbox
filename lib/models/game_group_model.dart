@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/disc_sets.dart';
 import 'package:retro_toolbox/utils/title_metadata_parser.dart';
 
 /// The regions a main version is looked for in when no region filter is on.
@@ -30,8 +31,16 @@ class GameVersion {
   /// when it has two or more.
   Game get entry => discs.length >= 2 ? first.copyWith(discs: discs) : first;
 
-  /// "USA · Rev 1 · 2 discs".
-  String get label => [...tags, if (discs.length >= 2) '${discs.length} discs'].join(' · ');
+  /// "USA · Rev 1 · 2 discs"; when the disc numbers are not 1 to n, they are
+  /// named: "Europe · Disc 2".
+  String get label => [...tags, if (_discPart != null) _discPart!].join(' · ');
+
+  String? get _discPart {
+    final numbers = [for (final d in discs) discNumber(d)];
+    final complete = numbers.every((n) => n > 0) && [for (var i = 1; i <= numbers.length; i++) i].toString() == numbers.toString();
+    if (numbers.every((n) => n > 0) && !complete) return 'Disc ${numbers.join(', ')}';
+    return discs.length >= 2 ? '${discs.length} discs' : null;
+  }
 }
 
 /// A game with everything the catalog has of it: its versions and extras
