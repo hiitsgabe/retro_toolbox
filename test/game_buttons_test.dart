@@ -22,7 +22,6 @@ import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
-import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 
 class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifier {
@@ -201,16 +200,6 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart); // Start again presses "Download"
     await t.pumpAndSettle();
     expect(started.single.$1, [_a]);
-  });
-
-  testWidgets('the Y menu opens the filters', (t) async {
-    await pump(t, const GameRow(game: _a));
-    await focusCard(t);
-    await t.sendKeyEvent(LogicalKeyboardKey.f3);
-    await t.pumpAndSettle();
-    await t.tap(find.text('Filters'));
-    await t.pumpAndSettle();
-    expect(find.byType(FilterModal), findsOneWidget);
   });
 
   testWidgets('holding A opens the box art; a tap still presses the card', (t) async {

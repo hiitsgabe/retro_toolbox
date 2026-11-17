@@ -56,6 +56,7 @@ class _CompanionScreenState extends State<CompanionScreen> {
   /// Null with [_tasks] showing.
   Game? _game;
   LaunchboxGame? _launchbox;
+  bool _lookingUp = false;
   List<CompanionTask> _tasks = const [];
 
   /// The LaunchBox import the last details came from (see detailsPayload).
@@ -111,15 +112,24 @@ class _CompanionScreenState extends State<CompanionScreen> {
   void _showGame(Game game, {bool reimported = false}) {
     final payload = ++_shown;
     final same = game.gameId == _game?.gameId && !reimported;
+    final platform = game.details?.launchboxPlatform;
+    final id = game.details?.launchboxId;
+    final lookUp = platform != null && id != null && !(same && _launchbox != null);
     setState(() {
       _game = game;
       if (!same) _launchbox = null;
+      _lookingUp = lookUp;
     });
-    final platform = game.details?.launchboxPlatform;
-    final id = game.details?.launchboxId;
-    if (platform == null || id == null || (same && _launchbox != null)) return;
+    if (!lookUp) return;
     (widget.lookup ?? LaunchboxService.instance.lookup)(platform, id).then((lb) {
-      if (mounted && payload == _shown && lb != null) setState(() => _launchbox = lb);
+      if (!mounted || payload != _shown) return;
+      setState(() {
+        if (lb != null) _launchbox = lb;
+        _lookingUp = false;
+      });
+    }, onError: (Object e) {
+      debugPrint('Companion LaunchBox lookup failed: $e');
+      if (mounted && payload == _shown) setState(() => _lookingUp = false);
     });
   }
 
@@ -136,6 +146,7 @@ class _CompanionScreenState extends State<CompanionScreen> {
                 key: ValueKey(game.gameId),
                 game: game,
                 launchbox: _launchbox,
+                launchboxPending: _lookingUp,
                 imageBuilder: CompanionScreen.debugImageBuilder,
                 onOpenImage: (url) => showImageViewer(context, url),
               ),

@@ -10,7 +10,6 @@ import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
-import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 
 const _labels = {
   GameAction.download: 'Download',
@@ -53,6 +52,7 @@ class GameDetailsPage extends ConsumerStatefulWidget {
 
 class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   LaunchboxGame? _launchbox;
+  bool _lookingUp = false;
   bool _busy = false;
   final _scroll = ScrollController();
 
@@ -74,8 +74,16 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     final platform = details?.launchboxPlatform;
     final id = details?.launchboxId;
     if (platform != null && id != null) {
+      _lookingUp = true;
       ref.read(launchboxServiceProvider).lookup(platform, id).then((lb) {
-        if (mounted && lb != null) setState(() => _launchbox = lb);
+        if (!mounted) return;
+        setState(() {
+          _launchbox = lb;
+          _lookingUp = false;
+        });
+      }, onError: (Object e) {
+        debugPrint('LaunchBox lookup failed: $e');
+        if (mounted) setState(() => _lookingUp = false);
       });
     }
   }
@@ -136,6 +144,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         body: GameDetailsView(
           game: game,
           launchbox: _launchbox,
+          launchboxPending: _lookingUp,
           scrollController: _scroll,
           imageBuilder: GameDetailsPage.debugImageBuilder,
           onOpenImage: (url) => showImageViewer(context, url),
@@ -161,12 +170,6 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
                 () => ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId),
               ),
             if (game.boxart != null) button('View box art', Icons.image_outlined, () => showBoxartViewer(context, game)),
-            if (widget.selectable)
-              button('Filters', Icons.filter_list_rounded, () {
-                final nav = Navigator.of(context);
-                nav.pop();
-                FilterModal.show(nav.context);
-              }),
           ],
         ),
       ),

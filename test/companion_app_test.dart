@@ -37,7 +37,7 @@ const _streetsLb = LaunchboxGame(
   overview: 'Axel and Blaze take back the city from Mr. X.',
 );
 
-Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) => SizedBox(key: ValueKey(url));
+Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Alignment alignment = Alignment.center, Widget? placeholder, Widget? fallback}) => SizedBox(key: ValueKey(url));
 
 void main() {
   late List<String> sent;
