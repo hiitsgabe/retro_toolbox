@@ -23,6 +23,10 @@ object CompanionBridge {
     /// Told when a companion comes up, so the main side can plan again.
     var onAttached: (() -> Unit)? = null
 
+    /// Set by the DualScreenHost of the activity running the app: takes a
+    /// request from the companion's buttons (JSON) to its engine.
+    var onAction: ((String) -> Unit)? = null
+
     /// The MainActivity whose engine runs the app, set by its DualScreenHost:
     /// a key that reaches the companion belongs to it.
     var mainActivity: MainActivity? = null
@@ -53,11 +57,17 @@ object CompanionBridge {
         engine.plugins.add(SqflitePlugin())
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "retro_toolbox/companion").also { ch ->
             ch.setMethodCallHandler { call, result ->
-                if (call.method == "ready") {
-                    lastJson?.let { ch.invokeMethod("update", it) }
-                    result.success(null)
-                } else {
-                    result.notImplemented()
+                when (call.method) {
+                    "ready" -> {
+                        lastJson?.let { ch.invokeMethod("update", it) }
+                        result.success(null)
+                    }
+                    // A button pressed on the companion: the main engine runs it.
+                    "action" -> {
+                        (call.arguments as? String)?.let { json -> onAction?.invoke(json) }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
             }
         }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -34,6 +35,24 @@ class DualScreenState {
       );
 }
 
+/// A request from the companion screen (see gameActionRequest in
+/// companion_payload.dart), numbered so the same request twice still notifies.
+class CompanionRequest {
+  const CompanionRequest(this.seq, this.json);
+
+  final int seq;
+  final Map<String, dynamic> json;
+}
+
+/// The companion's last request. CompanionActionListener runs it: that needs a
+/// WidgetRef and a context under the app's Navigator, which this notifier has not.
+final companionRequestProvider = StateProvider<CompanionRequest?>((ref) => null);
+
+/// The game with this id is the one the second screen shows: the companion
+/// is open and the game has the games screen's focus (or was last tapped).
+final shownOnSecondScreenProvider = Provider.family<bool, String>((ref, gameId) =>
+    ref.watch(dualScreenProvider.select((s) => s.companionOpen)) && ref.watch(focusedGameProvider.select((g) => g?.gameId == gameId)));
+
 final dualScreenProvider = StateNotifierProvider<DualScreenNotifier, DualScreenState>((ref) => DualScreenNotifier(ref));
 
 /// Puts the app and the companion on the screens the mode asks for, through
@@ -65,12 +84,27 @@ class DualScreenNotifier extends StateNotifier<DualScreenState> {
     if (!mounted) return;
     state = state.copyWith(mode: DualScreenMode.values.asNameMap()[saved] ?? DualScreenMode.off);
     _channel.setMethodCallHandler((call) async {
-      if (call.method != 'displaysChanged') return;
-      // A panel turning on or off can report several changes in a row.
-      _displaysChanged?.cancel();
-      _displaysChanged = Timer(const Duration(milliseconds: 300), apply);
+      switch (call.method) {
+        case 'displaysChanged':
+          // A panel turning on or off can report several changes in a row.
+          _displaysChanged?.cancel();
+          _displaysChanged = Timer(const Duration(milliseconds: 300), apply);
+        case 'companionAction':
+          _onCompanionRequest(call.arguments);
+      }
     });
     await apply();
+  }
+
+  int _requests = 0;
+
+  void _onCompanionRequest(Object? arguments) {
+    try {
+      final json = jsonDecode(arguments as String) as Map<String, dynamic>;
+      _ref.read(companionRequestProvider.notifier).state = CompanionRequest(++_requests, json);
+    } catch (e) {
+      debugPrint('Dual screen ignored a companion request: $e');
+    }
   }
 
   Future<void> setMode(DualScreenMode mode) async {

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
@@ -42,6 +43,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
     final gameState = ref.watch(gameStateProvider(game));
     final isSelected = ref.watch(gameSelectionProvider(game.gameId));
     final isActive = gameState.isActive;
+    final shown = widget.selectable && ref.watch(shownOnSecondScreenProvider(game.gameId));
 
     Color? borderColor;
     if (isSelected || isActive) {
@@ -69,8 +71,12 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
           borderRadius: BorderRadius.circular(4),
-          onTap: () => showGameActionMenu(context, game, selectable: widget.selectable),
-          child: _card(context, game, aspectRatio, catalogNotifier, gameState, isSelected, borderColor),
+          onTap: () => tapGameCard(context, ref, game, selectable: widget.selectable, focus: jumpFocus),
+          child: SecondScreenHighlight(
+            shown: shown,
+            radius: 4,
+            child: _card(context, game, aspectRatio, catalogNotifier, gameState, isSelected, borderColor),
+          ),
         ),
       ),
     );

@@ -13,26 +13,6 @@ import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 
-const _labels = {
-  GameAction.download: 'Download',
-  GameAction.pause: 'Pause',
-  GameAction.resume: 'Resume',
-  GameAction.cancel: 'Cancel',
-  GameAction.extract: 'Extract',
-  GameAction.retryDownload: 'Retry download',
-  GameAction.retryExtraction: 'Retry extraction',
-};
-
-const _icons = {
-  GameAction.download: Icons.download_rounded,
-  GameAction.pause: Icons.pause_rounded,
-  GameAction.resume: Icons.play_arrow_rounded,
-  GameAction.cancel: Icons.close_rounded,
-  GameAction.extract: Icons.unarchive_outlined,
-  GameAction.retryDownload: Icons.refresh_rounded,
-  GameAction.retryExtraction: Icons.refresh_rounded,
-};
-
 /// A game's page: its details plus everything the card can do, as buttons.
 /// Actions run with the page's own ref and context (the card may unmount
 /// while the page is open) and the page closes once they finish. Back is
@@ -115,7 +95,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     final isSelected = ref.watch(gameSelectionProvider(game.gameId));
     final actions = [
       for (final a in gameState.availableActions)
-        if (_labels.containsKey(a)) a,
+        if (gameActionLabels.containsKey(a)) a,
     ];
 
     // All one button type, unkeyed: when Select goes away the next button
@@ -159,7 +139,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
           ),
           discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
           actions: [
-            for (final a in actions) button(_labels[a]!, _icons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
+            for (final a in actions) button(gameActionLabels[a]!, gameActionIcons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
             button(
               isFavorite ? 'Remove from favourites' : 'Add to favourites',
               isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -229,8 +209,8 @@ class _DiscRow extends ConsumerWidget {
           if (action != null)
             FilledButton.tonalIcon(
               onPressed: () => runGameAction(ref, context, disc, state, action),
-              icon: Icon(_icons[action]),
-              label: Text(_labels[action]!),
+              icon: Icon(gameActionIcons[action]),
+              label: Text(gameActionLabels[action]!),
             ),
         ],
       ),

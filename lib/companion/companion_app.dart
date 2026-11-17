@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/companion/companion_tasks_view.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_payload.dart';
+import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
@@ -29,7 +33,8 @@ class CompanionApp extends StatelessWidget {
 
 /// The focused game's details, or the Task Manager, as the main app's
 /// payloads say (see companion_payload.dart). Touch scrolls and opens images;
-/// nothing here changes the app.
+/// the buttons send their press to the main app, which runs it as if pressed
+/// there and sends the new state back.
 class CompanionScreen extends StatefulWidget {
   const CompanionScreen({super.key, this.channel, this.lookup, this.invalidate});
 
@@ -57,7 +62,8 @@ class _CompanionScreenState extends State<CompanionScreen> {
   Game? _game;
   LaunchboxGame? _launchbox;
   bool _lookingUp = false;
-  List<CompanionTask> _tasks = const [];
+  GameState? _state;
+  List<List<CompanionTask>> _taskTabs = [for (final _ in taskTabs) const <CompanionTask>[]];
 
   /// The LaunchBox import the last details came from (see detailsPayload).
   String? _launchboxVersion;
@@ -86,6 +92,8 @@ class _CompanionScreenState extends State<CompanionScreen> {
       switch (payload['mode']) {
         case 'details':
           final game = Game.fromJson(payload['game'] as Map<String, dynamic>);
+          final state = payload['state'] as Map<String, dynamic>?;
+          _state = state == null ? null : gameStateFromJson(state);
           final version = payload['launchbox'] as String?;
           final reimported = version != _launchboxVersion;
           if (reimported) {
@@ -96,17 +104,21 @@ class _CompanionScreenState extends State<CompanionScreen> {
           }
           _showGame(game, reimported: reimported);
         case 'tasks':
-          final tasks = [for (final row in payload['tasks'] as List) CompanionTask.fromJson(row as Map<String, dynamic>)];
+          final tabs = companionTaskTabs(payload);
           _shown++;
           setState(() {
             _game = null;
-            _tasks = tasks;
+            _taskTabs = tabs;
           });
       }
     } catch (e) {
       // A bad payload must not blank the screen: keep what is there.
       debugPrint('Companion ignored a payload: $e');
     }
+  }
+
+  void _request(Map<String, dynamic> request) {
+    _channel.invokeMethod<void>('action', jsonEncode(request)).catchError((Object e) => debugPrint('Companion request failed: $e'));
   }
 
   void _showGame(Game game, {bool reimported = false}) {
@@ -133,6 +145,43 @@ class _CompanionScreenState extends State<CompanionScreen> {
     });
   }
 
+  /// The page's status line, as GameDetailsPage shows it.
+  Widget? _status(BuildContext context, GameState? state) {
+    if (state == null) return null;
+    final error = state.errorMessage;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(state.statusText),
+        if (error != null) Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      ],
+    );
+  }
+
+  /// The page's action buttons (not favourites or selection, which belong to
+  /// the list on the main screen).
+  List<Widget>? _actions(Game game, GameState? state) {
+    if (state == null) return null;
+    final actions = [
+      for (final a in state.availableActions)
+        if (gameActionLabels.containsKey(a)) a,
+    ];
+    return [
+      for (final a in actions)
+        a == actions.first
+            ? FilledButton.icon(
+                onPressed: () => _request(gameActionRequest(game.gameId, a)),
+                icon: Icon(gameActionIcons[a]),
+                label: Text(gameActionLabels[a]!),
+              )
+            : FilledButton.tonalIcon(
+                onPressed: () => _request(gameActionRequest(game.gameId, a)),
+                icon: Icon(gameActionIcons[a]),
+                label: Text(gameActionLabels[a]!),
+              ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final game = _game;
@@ -141,7 +190,7 @@ class _CompanionScreenState extends State<CompanionScreen> {
         duration: const Duration(milliseconds: 200),
         // A new key per game: a new scroll position, so it opens at the top.
         child: game == null
-            ? CompanionTasksView(key: const ValueKey('tasks'), tasks: _tasks)
+            ? CompanionTasksView(key: const ValueKey('tasks'), tabs: _taskTabs, onRequest: _request)
             : GameDetailsView(
                 key: ValueKey(game.gameId),
                 game: game,
@@ -149,6 +198,8 @@ class _CompanionScreenState extends State<CompanionScreen> {
                 launchboxPending: _lookingUp,
                 imageBuilder: CompanionScreen.debugImageBuilder,
                 onOpenImage: (url) => showImageViewer(context, url),
+                status: _status(context, _state),
+                actions: _actions(game, _state),
               ),
       ),
     );

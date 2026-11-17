@@ -280,4 +280,25 @@ void main() {
     expect(n.state.error, 'Second screen unavailable');
     expect(methods(), ['displays', 'closeCompanion']);
   });
+
+  test('a companionAction from native becomes a numbered request; a malformed one is ignored', () async {
+    final n = notifier();
+    await n.init();
+    final c = containers.last;
+    Future<void> action(Object? args) =>
+        messenger.handlePlatformMessage(_channel.name, const StandardMethodCodec().encodeMethodCall(MethodCall('companionAction', args)), (_) {});
+
+    await action('{"kind":"game","gameId":"snes/a.zip","action":"download"}');
+    final first = c.read(companionRequestProvider)!;
+    expect(first.json, {'kind': 'game', 'gameId': 'snes/a.zip', 'action': 'download'});
+
+    // The same press again is a new request, so a listener hears it.
+    await action('{"kind":"game","gameId":"snes/a.zip","action":"download"}');
+    expect(c.read(companionRequestProvider)!.seq, greaterThan(first.seq));
+
+    final last = c.read(companionRequestProvider);
+    await action('{not json');
+    await action(42);
+    expect(c.read(companionRequestProvider), same(last));
+  });
 }

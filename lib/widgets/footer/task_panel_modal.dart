@@ -55,13 +55,55 @@ class TaskPanelModal extends ConsumerStatefulWidget {
   ConsumerState<TaskPanelModal> createState() => _TaskPanelModalState();
 }
 
-class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTickerProviderStateMixin {
+class _TaskPanelModalState extends ConsumerState<TaskPanelModal> {
+  @override
+  Widget build(BuildContext context) {
+    final tabs = classifyTasks(ref.watch(gameStateManagerProvider).values);
+    return TaskPanelFrame(
+      onClose: () => Navigator.of(context).pop(),
+      counts: [tabs.downloading.length, tabs.extracting.length, tabs.queued.length, tabs.completed.length, tabs.failed.length],
+      tabs: [
+        TaskListView(games: tabs.downloading, emptyMessage: taskTabs[0].empty, emptyIcon: taskTabs[0].emptyIcon),
+        TaskListView(games: tabs.extracting, emptyMessage: taskTabs[1].empty, emptyIcon: taskTabs[1].emptyIcon),
+        TaskListView(games: tabs.queued, emptyMessage: taskTabs[2].empty, emptyIcon: taskTabs[2].emptyIcon),
+        TaskListView(games: tabs.completed, emptyMessage: taskTabs[3].empty, emptyIcon: taskTabs[3].emptyIcon),
+        TaskListView(games: tabs.failed, emptyMessage: taskTabs[4].empty, emptyIcon: taskTabs[4].emptyIcon),
+      ],
+    );
+  }
+}
+
+/// The Task Manager's tabs, in order, and what each shows when empty.
+const taskTabs = [
+  (label: 'Downloads', icon: Icons.download, empty: 'No active downloads', emptyIcon: Icons.download_outlined),
+  (label: 'Extractions', icon: Icons.archive, empty: 'No active extractions', emptyIcon: Icons.archive_outlined),
+  (label: 'Queue', icon: Icons.queue, empty: 'No queued tasks', emptyIcon: Icons.queue_outlined),
+  (label: 'Completed', icon: Icons.history, empty: 'No completed tasks', emptyIcon: Icons.history_outlined),
+  (label: 'Failed', icon: Icons.error, empty: 'No failed tasks', emptyIcon: Icons.error_outline),
+];
+
+/// The Task Manager's look: its header, the [taskTabs] buttons with their
+/// [counts], and one list per tab in [tabs]. The main screen's sheet and the
+/// second screen both draw it, each with its own rows. [onClose] null: no
+/// close button (the second screen has nothing to close to).
+class TaskPanelFrame extends StatefulWidget {
+  const TaskPanelFrame({super.key, required this.counts, required this.tabs, this.onClose});
+
+  final List<int> counts;
+  final List<Widget> tabs;
+  final VoidCallback? onClose;
+
+  @override
+  State<TaskPanelFrame> createState() => _TaskPanelFrameState();
+}
+
+class _TaskPanelFrameState extends State<TaskPanelFrame> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: taskTabs.length, vsync: this);
     _tabController.addListener(() {
       setState(() {});
     });
@@ -75,15 +117,6 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    final gameStateManager = ref.watch(gameStateManagerProvider);
-
-    final tabs = classifyTasks(gameStateManager.values);
-    final downloadingGames = tabs.downloading;
-    final extractingGames = tabs.extracting;
-    final queuedGames = tabs.queued;
-    final completedGames = tabs.completed;
-    final failedGames = tabs.failed;
-
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
@@ -115,12 +148,13 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.of(context).pop(),
-                  constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-                  padding: EdgeInsets.zero,
-                ),
+                if (widget.onClose != null)
+                  IconButton(
+                    icon: Icon(Icons.close, size: 20),
+                    onPressed: widget.onClose,
+                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
               ],
             ),
           ),
@@ -131,15 +165,10 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildTabButton(0, 'Downloads', Icons.download, downloadingGames.length),
-                  SizedBox(width: 6),
-                  _buildTabButton(1, 'Extractions', Icons.archive, extractingGames.length),
-                  SizedBox(width: 6),
-                  _buildTabButton(2, 'Queue', Icons.queue, queuedGames.length),
-                  SizedBox(width: 6),
-                  _buildTabButton(3, 'Completed', Icons.history, completedGames.length),
-                  SizedBox(width: 6),
-                  _buildTabButton(4, 'Failed', Icons.error, failedGames.length),
+                  for (var i = 0; i < taskTabs.length; i++) ...[
+                    if (i > 0) SizedBox(width: 6),
+                    _buildTabButton(i, taskTabs[i].label, taskTabs[i].icon, widget.counts[i]),
+                  ],
                 ],
               ),
             ),
@@ -147,33 +176,7 @@ class _TaskPanelModalState extends ConsumerState<TaskPanelModal> with SingleTick
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                TaskListView(
-                  games: downloadingGames,
-                  emptyMessage: 'No active downloads',
-                  emptyIcon: Icons.download_outlined,
-                ),
-                TaskListView(
-                  games: extractingGames,
-                  emptyMessage: 'No active extractions',
-                  emptyIcon: Icons.archive_outlined,
-                ),
-                TaskListView(
-                  games: queuedGames,
-                  emptyMessage: 'No queued tasks',
-                  emptyIcon: Icons.queue_outlined,
-                ),
-                TaskListView(
-                  games: completedGames,
-                  emptyMessage: 'No completed tasks',
-                  emptyIcon: Icons.history_outlined,
-                ),
-                TaskListView(
-                  games: failedGames,
-                  emptyMessage: 'No failed tasks',
-                  emptyIcon: Icons.error_outline,
-                ),
-              ],
+              children: widget.tabs,
             ),
           ),
         ],

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
+import 'package:retro_toolbox/widgets/dual_screen/companion_action_listener.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -110,5 +111,8 @@ class _DualScreenLifecycleState extends ConsumerState<_DualScreenLifecycle> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) => CompanionActionListener(
+        navigatorContext: () => navigatorKey.currentContext,
+        child: widget.child,
+      );
 }
