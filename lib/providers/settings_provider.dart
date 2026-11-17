@@ -275,6 +275,20 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return getSetting(AppSettings.autoExtract, consoleId) ?? true;
   }
 
+  /// Whether [game]'s download is unpacked on arrival: an update whose
+  /// console chose an unpacking does it whatever "Extract archives" says;
+  /// anything else follows that setting.
+  bool shouldUnpack(Game game) {
+    if (game.isUpdate) {
+      final saved = getConsoleSetting<String>(game.consoleId, AppSettings.updateDecompress);
+      if (saved != null) {
+        final d = Decompress.fromId(saved);
+        return d != Decompress.none && d.matches(game.filename);
+      }
+    }
+    return getAutoExtract(game.consoleId);
+  }
+
   /// When true, archives extract into a per-game subfolder. Defaults to the
   /// console config's extract_contents (true = extract into the download
   /// directory root, matching console_utils semantics).

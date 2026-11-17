@@ -40,9 +40,6 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     _ref.listen(settingWatcherProvider(AppSettings.downloadDir), (prev, next) {
       if (prev != next) _resetStates();
     });
-    _ref.listen(settingWatcherProvider(AppSettings.updatesDir), (prev, next) {
-      if (prev != next) _resetStates();
-    });
     _ref.listen(catalogProvider, (prev, next) {
       if (prev?.games != next.games) _initGames(next.games);
     });

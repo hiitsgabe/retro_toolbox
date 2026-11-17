@@ -99,4 +99,22 @@ void main() {
     expect(n.changedKeys('switch'), isEmpty);
     expect(n.updatesDir('switch'), p.join('/roms', 'updates'));
   });
+
+  test('shouldUnpack: an explicit update unpacking works with Extract archives off, nothing else does', () async {
+    final base = {'autoExtract': false};
+    var n = await settings({
+      'switch': {...base, 'updateDecompress': 'unzip'},
+    });
+    final zip = _update.toGame(_game).copyWith(title: 'u.zip', url: 'https://api.example.com/u.zip');
+    expect(n.shouldUnpack(zip), isTrue);
+    expect(n.shouldUnpack(_game), isFalse);
+    n = await settings({
+      'switch': {...base},
+    });
+    expect(n.shouldUnpack(zip), isFalse);
+    n = await settings({
+      'switch': {...base, 'updateDecompress': 'none'},
+    });
+    expect(n.shouldUnpack(zip), isFalse);
+  });
 }

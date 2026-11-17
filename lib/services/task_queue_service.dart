@@ -29,9 +29,8 @@ class TaskQueueService {
     }
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    if (settingsNotifier.activeHandler(console.id) == GameHandler.nszDecompress &&
-        (settingsNotifier.getNszKeysPath() ?? '').isEmpty &&
-        games.any((g) => g.filename.toLowerCase().endsWith('.nsz'))) {
+    if ((settingsNotifier.getNszKeysPath() ?? '').isEmpty &&
+        games.any((g) => settingsNotifier.activeHandlerFor(g) == GameHandler.nszDecompress && g.filename.toLowerCase().endsWith('.nsz'))) {
       return 'NSZ decompression is enabled but no keys file is set. Add them in Settings > Keys (or keep the files for this console).';
     }
 

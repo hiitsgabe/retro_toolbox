@@ -125,8 +125,11 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       final consoles = await CatalogService().getConsoles();
       final scanned = <String>{};
 
+      final dirs = <String>[];
       for (final consoleId in consoles.keys) {
-        final dir = settings.getDownloadDir(consoleId);
+        dirs.addAll({settings.getDownloadDir(consoleId), settings.updatesDir(consoleId)});
+      }
+      for (final dir in dirs) {
         if (dir.isEmpty || !scanned.add(dir)) continue;
         final directory = Directory(dir);
         if (!await directory.exists()) continue;
@@ -293,7 +296,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     // Decompress first when the catalog asks for it; the handler then runs on
     // the extracted files (see ExtractionNotifier._updateCompleted).
-    if (settingsNotifier.getAutoExtract(game.consoleId) && decompress.matches(game.filename)) {
+    if (settingsNotifier.shouldUnpack(game) && decompress.matches(game.filename)) {
       debugPrint('Auto-extracting for task: $taskId');
       final queueNotifier = _ref.read(taskQueueProvider.notifier);
       Future.microtask(() => queueNotifier.enqueue(taskId, TaskType.extraction, {'taskId': taskId}));
