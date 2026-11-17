@@ -40,6 +40,7 @@ class MainActivity : FlutterActivity() {
     private var pickResult: MethodChannel.Result? = null
     private var pickingDir = false
     private var shizuku: ShizukuBridge? = null
+    private var dualScreen: DualScreenHost? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -204,11 +205,14 @@ class MainActivity : FlutterActivity() {
                 }
             }
         shizuku = ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
+        dualScreen = DualScreenHost(this, flutterEngine)
     }
 
     override fun onDestroy() {
         shizuku?.dispose()
         shizuku = null
+        dualScreen?.dispose()
+        dualScreen = null
         super.onDestroy()
     }
 

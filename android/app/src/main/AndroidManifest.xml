@@ -28,6 +28,18 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The second screen (DualScreenHost): its own task, so it can sit on
+             another display, and kept out of recents. -->
+        <activity
+            android:name=".CompanionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="${applicationId}.companion"
+            android:resizeableActivity="true"
+            android:theme="@style/NormalTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize" />
         <!-- This service is used by the BackgroundDownloader to run background tasks.
              It is required for the BackgroundDownloader to function properly. -->
         <service
