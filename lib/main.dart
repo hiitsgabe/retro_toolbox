@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/app.dart';
+// Not used here: importing it puts companionMain in the AOT snapshot, where
+// the second screen's engine looks it up by name.
+// ignore: unused_import
+import 'package:retro_toolbox/companion/companion_main.dart';
 import 'package:retro_toolbox/providers/fbi_server_provider.dart';
 import 'package:retro_toolbox/providers/fpkgi_server_provider.dart';
 import 'package:retro_toolbox/providers/ftp_provider.dart';
