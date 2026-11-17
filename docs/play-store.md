@@ -77,8 +77,10 @@ servers). Play asks for a purpose and a short video.
   no personal data sent; and, only when the user turns on Game metadata
   (LaunchBox) in Settings, LaunchBox's metadata zip from
   `gamesdb.launchbox-app.com` and game images from `images.launchbox-app.com`,
-  also with no personal data sent. It sends no user data to the developer. Save Sync can
-  copy game saves to the user's own Google Drive when they sign in;
+  whose requests carry only the name of the file asked for. The index built
+  from the zip (tens of MB) stays on the device and is deleted when the setting
+  is turned off. It sends no user data to the developer. Save Sync can copy
+  game saves to the user's own Google Drive when they sign in;
   docs/google-cloud.md has what to declare for it.
 - Store listing assets: icon (512 px), feature graphic, screenshots.
 

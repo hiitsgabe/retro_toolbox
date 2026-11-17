@@ -7,8 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/extraction_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_importer.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/utils/remote_tree.dart';
@@ -47,6 +55,53 @@ class FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
+  FakeSettings() : super(const AppSettings());
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Holds rows without running them. A cancel drops the row and its Task
+/// Manager state, as the real queue does.
+class FakeQueue extends StateNotifier<TaskQueueState> implements TaskQueueNotifier {
+  FakeQueue(this.ref) : super(const TaskQueueState());
+  final Ref ref;
+  final cancelled = <String>[];
+
+  void add(String id) => state = TaskQueueState(tasks: [...state.tasks, QueuedTask(id: id, type: TaskType.remoteTransfer, createdAt: DateTime.now())]);
+
+  void markRunning(String id) =>
+      state = TaskQueueState(tasks: [for (final t in state.tasks) t.id == id ? t.copyWith(status: TaskQueueStatus.running) : t]);
+
+  @override
+  void cancelQueuedTask(String taskId) {
+    cancelled.add(taskId);
+    state = TaskQueueState(tasks: [for (final t in state.tasks) if (t.id != taskId) t]);
+    ref.read(gameStateManagerProvider.notifier).resetAfterCancel(taskId);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Stops a running job the way fileTask does: its next progress report throws.
+class FakeExtraction extends StateNotifier<ExtractionState> implements ExtractionNotifier {
+  FakeExtraction() : super(const ExtractionState());
+  final cancelled = <String>{};
+
+  @override
+  void cancel(String taskId) => cancelled.add(taskId);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class ThrowingStore extends LaunchboxStore {
+  ThrowingStore(super.root);
+  @override
+  Future<void> deleteAll() async => throw const FileSystemException('Permission denied');
+}
+
 /// The fake enqueue never touches them.
 class NoRef implements WidgetRef {
   @override
@@ -63,6 +118,7 @@ class NoContext implements BuildContext {
 class CountingNotifier extends LaunchboxNotifier {
   CountingNotifier(super.ref, {super.store, super.consoles});
   int imports = 0;
+  int cancels = 0;
   Future<void>? turningOff;
 
   @override
@@ -70,6 +126,9 @@ class CountingNotifier extends LaunchboxNotifier {
 
   @override
   Future<void> turnOff() => turningOff = super.turnOff();
+
+  @override
+  void cancelImport() => cancels++;
 
   void showImporting(String lastMessage) => state = state.copyWith(importing: true, message: lastMessage);
 }
@@ -89,26 +148,41 @@ void main() {
 
   group('notifier', () {
     late FakeCatalog catalog;
+    late FakeQueue queue;
+    late FakeExtraction extraction;
     late List<TransferJob> jobs;
     late List<String> titles;
+    late List<String> ids;
 
-    ProviderContainer container(Outcome outcome, {Future<Iterable<Console>> Function()? consoleSource}) {
+    ProviderContainer container(Outcome outcome, {Future<Iterable<Console>> Function()? consoleSource, LaunchboxStore? storeOverride}) {
       catalog = FakeCatalog();
+      extraction = FakeExtraction();
       jobs = [];
       titles = [];
-      final c = ProviderContainer(overrides: [
+      ids = [];
+      late ProviderContainer c;
+      c = ProviderContainer(overrides: [
         catalogProvider.overrideWith((ref) => catalog),
+        settingsProvider.overrideWith((ref) => FakeSettings()),
+        taskQueueProvider.overrideWith((ref) => queue = FakeQueue(ref)),
+        extractionProvider.overrideWith((ref) => extraction),
         launchboxProvider.overrideWith(
           (ref) => LaunchboxNotifier(
             ref,
-            store: store,
+            store: storeOverride ?? store,
             consoles: consoleSource ?? () async => consoles,
             importer: (store, cacheDir) => FakeImporter(store, cacheDir, outcome),
             cacheDir: () async => tmp,
+            // What enqueueTransfer does, minus the WidgetRef: a Task Manager
+            // state and a waiting row.
             enqueue: (ref, context, {required title, required source, required verb, required label, required run, outputPath}) {
               titles.add('$title: $verb $label ($source)');
               jobs.add(run);
-              return 'task-${jobs.length}';
+              final game = Game(title: title, url: 'https://manual/net-${jobs.length}.task', size: 0, consoleId: 'manual');
+              c.read(gameStateManagerProvider.notifier).registerTransientGame(game, isTransfer: true);
+              (c.read(taskQueueProvider.notifier) as FakeQueue).add(game.gameId);
+              ids.add(game.gameId);
+              return game.gameId;
             },
           ),
         ),
@@ -151,6 +225,118 @@ void main() {
       answers[0].complete(consoles);
       await older;
       expect(c.read(launchboxProvider).wanted, {snes});
+    });
+
+    test('a waiting row cancelled from the Task Manager unlocks the card', () async {
+      final c = container((_, __, ___) async => LaunchboxImportResult.updated);
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      n.startImport(NoRef(), NoContext());
+      expect(c.read(launchboxProvider).importing, isTrue);
+
+      queue.cancelQueuedTask(ids.single);
+      final s = c.read(launchboxProvider);
+      expect(s.importing, isFalse);
+      expect(s.message, 'Cancelled');
+      n.startImport(NoRef(), NoContext());
+      expect(jobs, hasLength(2), reason: 'a new import can start');
+    });
+
+    test('Cancel on a waiting import takes it out of the queue', () async {
+      final c = container((_, __, ___) async => LaunchboxImportResult.updated);
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      n.startImport(NoRef(), NoContext());
+      n.cancelImport();
+      expect(queue.cancelled, ids);
+      expect(extraction.cancelled, isEmpty);
+      expect(c.read(launchboxProvider).importing, isFalse);
+      expect(c.read(launchboxProvider).message, 'Cancelled');
+    });
+
+    test('Cancel on a running import stops the job, which says Cancelled', () async {
+      final atGate = Completer<void>();
+      final gate = Completer<void>();
+      final c = container((store, platforms, onProgress) async {
+        onProgress(0, 1000);
+        atGate.complete();
+        await gate.future;
+        onProgress(500, 1000);
+        return LaunchboxImportResult.updated;
+      });
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      n.startImport(NoRef(), NoContext());
+      final id = ids.single;
+      queue.markRunning(id);
+      // The job's progress callback as fileTask builds it.
+      final job = jobs.single((done, total) {
+        if (extraction.cancelled.contains(id)) throw const TaskCancelledException();
+      });
+      await atGate.future;
+
+      n.cancelImport();
+      expect(extraction.cancelled, {id});
+      expect(queue.cancelled, isEmpty);
+      expect(c.read(launchboxProvider).importing, isTrue, reason: 'still unwinding');
+      // The real cancel also drops the row; the job, not the row watch, reports it.
+      queue.cancelQueuedTask(id);
+      expect(c.read(launchboxProvider).importing, isTrue);
+
+      gate.complete();
+      await expectLater(job, throwsA(isA<TaskCancelledException>()));
+      final s = c.read(launchboxProvider);
+      expect(s.importing, isFalse);
+      expect(s.message, 'Cancelled');
+      expect(catalog.reapplied, 0);
+    });
+
+    test('a retried job imports the consoles of when it runs', () async {
+      var round = 0;
+      final asked = <Set<String>>[];
+      final c = container((_, platforms, __) async {
+        asked.add(platforms);
+        if (round++ == 0) throw const HttpException('offline');
+        return LaunchboxImportResult.updated;
+      }, consoleSource: () async => round == 0 ? consoles : [consoles.first]);
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      n.startImport(NoRef(), NoContext());
+      await expectLater(jobs.single((_, __) {}), throwsA(isA<HttpException>()));
+      await n.refresh();
+      expect(c.read(launchboxProvider).importing, isFalse);
+
+      // Retry runs the same job again, without startImport.
+      final retry = jobs.single((_, __) {});
+      expect(c.read(launchboxProvider).importing, isTrue, reason: 'a retried job locks the card too');
+      await retry;
+      expect(asked, [
+        {snes, nes, 'My Platform'},
+        {snes},
+      ]);
+    });
+
+    test('with no console LaunchBox knows, nothing is downloaded', () async {
+      final c = container((_, __, ___) async => LaunchboxImportResult.updated, consoleSource: () async => [consoles[2]]);
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      expect(c.read(launchboxProvider).wanted, isEmpty);
+      n.startImport(NoRef(), NoContext());
+      expect(jobs, isEmpty);
+      expect(c.read(launchboxProvider).importing, isFalse);
+      expect(c.read(launchboxProvider).message, noLaunchboxConsolesMessage);
+    });
+
+    test('a delete that fails is reported and the card shows what is left', () async {
+      await writeManifest({snes}, DateTime.utc(2026, 11, 16));
+      final c = container((_, __, ___) async => LaunchboxImportResult.updated, storeOverride: ThrowingStore(store.root));
+      final n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      await n.turnOff();
+      final s = c.read(launchboxProvider);
+      expect(s.message, contains('Permission denied'));
+      expect(s.manifest, isNotNull, reason: 'refreshed: the files are still there');
+      expect(catalog.reapplied, 1);
     });
 
     test('the queued job reports progress as counts and ends with Updated', () async {
@@ -359,6 +545,22 @@ void main() {
       expect(find.text('Update'), findsNothing);
     });
 
+    testWidgets('off with no console LaunchBox knows: says so and cannot be turned on', (t) async {
+      await t.runAsync(() async {
+        await t.pumpWidget(ProviderScope(
+          overrides: [
+            catalogProvider.overrideWith((ref) => FakeCatalog()),
+            launchboxProvider.overrideWith((ref) => notifier = CountingNotifier(ref, store: store, consoles: () async => [consoles[2]])),
+          ],
+          child: const MaterialApp(home: Scaffold(body: LaunchboxSetting())),
+        ));
+        await notifier.refresh();
+      });
+      await t.pump();
+      expect(find.text(noLaunchboxConsolesMessage), findsOneWidget);
+      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
+    });
+
     testWidgets('while importing the card points at the Task Manager', (t) async {
       await t.runAsync(() => writeManifest({snes}, DateTime.utc(2026, 11, 16, 12)));
       await pump(t);
@@ -367,6 +569,9 @@ void main() {
       expect(find.text('Importing, see the Task Manager'), findsOneWidget);
       expect(find.text('Update'), findsNothing);
       expect(find.text('Updated'), findsOneWidget);
+      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
+      await t.tap(find.text('Cancel'));
+      expect(notifier.cancels, 1);
     });
   });
 }

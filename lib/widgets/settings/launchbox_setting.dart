@@ -69,6 +69,8 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
     final manifest = s.manifest;
     final count = manifest?.platforms.length ?? 0;
     final missing = s.missing.toList()..sort();
+    // Off with nothing to import: turning it on would keep no platform.
+    final nothingToImport = manifest == null && s.wanted.isEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
@@ -78,15 +80,22 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
             : 'Updated ${_date(manifest.importedAt)} · $count platform${count == 1 ? '' : 's'}'),
         value: manifest != null,
         // Deleting under a running import would only have it write the files back.
-        onChanged: s.importing ? null : (on) => on ? _turnOn() : _turnOff(),
+        onChanged: s.importing || nothingToImport ? null : (on) => on ? _turnOn() : _turnOff(),
       ),
+      if (nothingToImport && !s.importing && s.message != noLaunchboxConsolesMessage) const Text(noLaunchboxConsolesMessage),
       if (missing.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text('New consoles need an update: ${missing.join(', ')}', style: TextStyle(color: theme.colorScheme.error)),
         ),
       if (s.importing)
-        const Text('Importing, see the Task Manager')
+        Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          const Text('Importing, see the Task Manager'),
+          TextButton(
+            onPressed: () => ref.read(launchboxProvider.notifier).cancelImport(),
+            child: const Text('Cancel'),
+          ),
+        ])
       else if (manifest != null)
         FilledButton(
           onPressed: () => ref.read(launchboxProvider.notifier).startImport(ref, context),

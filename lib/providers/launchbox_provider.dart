@@ -4,7 +4,11 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/file_ops.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_importer.dart';
@@ -13,6 +17,9 @@ import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/utils/remote_tree.dart';
+
+/// Shown instead of starting an import that would keep no platform.
+const noLaunchboxConsolesMessage = 'None of your consoles has LaunchBox data yet';
 
 typedef LaunchboxImporterFactory = LaunchboxImporter Function(LaunchboxStore store, Directory cacheDir);
 
@@ -95,6 +102,14 @@ class LaunchboxNotifier extends StateNotifier<LaunchboxState> {
   /// read from before an import or a delete cannot land after it.
   int _refreshes = 0;
 
+  /// The import's Task Manager row, kept for Retry and Cancel.
+  String? _taskId;
+
+  /// Whether the job is running: until then a row that leaves the queue
+  /// means the job never will.
+  bool _running = false;
+  ProviderSubscription<bool>? _rowWatch;
+
   static Future<Iterable<Console>> _catalogConsoles() async => (await CatalogService().getConsoles()).values;
 
   Future<LaunchboxStore> _store() async => _givenStore ?? await LaunchboxService.instance.store();
@@ -123,30 +138,60 @@ class LaunchboxNotifier extends StateNotifier<LaunchboxState> {
   /// Queues an import of [LaunchboxState.wanted] as a Task Manager row.
   void startImport(WidgetRef ref, BuildContext context) {
     if (state.importing) return;
+    // 110 MB for an index of nothing.
+    if (state.wanted.isEmpty) {
+      state = state.copyWith(message: noLaunchboxConsolesMessage);
+      return;
+    }
     state = state.copyWith(importing: true, clearMessage: true);
-    final platforms = state.wanted;
-    _enqueue(
+    final id = _taskId = _enqueue(
       ref,
       context,
       title: 'LaunchBox metadata',
       source: 'launchbox',
       verb: 'Updating',
       label: 'LaunchBox metadata',
-      run: (onProgress) => _import(platforms, onProgress),
+      // Read when the job runs, so a Retry imports the consoles of then.
+      run: (onProgress) => _import(state.wanted, onProgress),
     );
+    _rowWatch?.close();
+    // A waiting row cancelled from the Task Manager is just dropped: the job
+    // never runs to say so.
+    _rowWatch = _ref.listen<bool>(gameStateManagerProvider.select((games) => games.containsKey(id)), (_, present) {
+      if (present || id != _taskId) return;
+      _rowWatch?.close();
+      _rowWatch = null;
+      if (!_running && state.importing) state = state.copyWith(importing: false, message: 'Cancelled');
+    });
+  }
+
+  /// Stops the import: a running job at its next progress report, a waiting
+  /// one by taking it out of the queue, as the file browsers' Cancel does.
+  void cancelImport() {
+    final id = _taskId;
+    if (id == null || !state.importing) return;
+    final row = _ref.read(taskQueueProvider).tasks.where((t) => t.id == id).lastOrNull;
+    if (row?.status == TaskQueueStatus.running) {
+      _ref.read(extractionProvider.notifier).cancel(id);
+    } else {
+      _ref.read(taskQueueProvider.notifier).cancelQueuedTask(id);
+    }
   }
 
   /// The task's job. Rethrows so the row shows the failure too. Also runs
   /// again from the Task Manager's Retry, so it marks itself importing.
   Future<void> _import(Set<String> platforms, FileOpsProgress onProgress) async {
+    _running = true;
     if (mounted) state = state.copyWith(importing: true, clearMessage: true);
     final LaunchboxImportResult result;
     try {
       final importer = _importer(await _store(), await _cacheDir());
       result = await importer.run(platforms, onProgress: onProgress);
     } catch (e) {
-      if (mounted) state = state.copyWith(importing: false, message: '$e');
+      if (mounted) state = state.copyWith(importing: false, message: e is TaskCancelledException ? 'Cancelled' : '$e');
       rethrow;
+    } finally {
+      _running = false;
     }
     if (mounted) {
       state = state.copyWith(importing: false, message: result == LaunchboxImportResult.updated ? 'Updated' : 'Already up to date');
@@ -158,9 +203,15 @@ class LaunchboxNotifier extends StateNotifier<LaunchboxState> {
 
   /// Deletes every imported file, the match caches with them.
   Future<void> turnOff() async {
-    await (await _store()).deleteAll();
+    String? error;
+    try {
+      await (await _store()).deleteAll();
+    } catch (e) {
+      // Some files may be gone already; the refresh shows what is left.
+      error = 'Could not delete the metadata: $e';
+    }
     LaunchboxService.instance.invalidate();
-    if (mounted) state = state.copyWith(clearMessage: true);
+    if (mounted) state = state.copyWith(message: error, clearMessage: error == null);
     await refresh();
     if (mounted) await _ref.read(catalogProvider.notifier).reapplyLaunchbox();
   }
