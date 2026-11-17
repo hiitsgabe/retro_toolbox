@@ -1,0 +1,39 @@
+[
+  {
+    "name": "Nintendo Switch",
+    "platform": "switch",
+    "url": [
+      "https://api.example.com/games/?limit=1000&offset=0",
+      "https://api.example.com/games/?limit=1000&offset=1000",
+      "https://api.example.com/games/?limit=1000&offset=2000",
+      "https://api.example.com/games/?limit=1000&offset=3000",
+      "https://api.example.com/games/?limit=1000&offset=4000"
+    ],
+    "original_format": [
+      ".nsz"
+    ],
+    "additional_handler": "nsz_decompress",
+    "regex": "\"(?P<id>[A-F0-9]{16})\"\\s*:\\s*\\{\"title_id\"(?:[^\"]|\"(?![0-9A-F]{16}\"\\s*:\\s*\\{))*?\"files\"\\s*:\\s*\\{[^{}]*?\"base_size\"\\s*:\\s*(?P<size>\\d+)(?:[^\"]|\"(?![0-9A-F]{16}\"\\s*:\\s*\\{))*?\"name\"\\s*:\\s*\\{[^{}]*?\"(?:en|default)\"\\s*:\\s*\"(?P<text>(?:[^\"\\\\]|\\\\.)+)\"(?:(?:[^\"]|\"(?![0-9A-F]{16}\"\\s*:\\s*\\{))*?\"icon_url\"\\s*:\\s*\"(?P<banner_url>[^\"]+)\")?(?:(?:[^\"]|\"(?![0-9A-F]{16}\"\\s*:\\s*\\{))*?\"release_date\"\\s*:\\s*(?P<date>\\d+))?(?:(?:[^\"]|\"(?![0-9A-F]{16}\"\\s*:\\s*\\{))*?\"rating\"\\s*:\\s*\\{[^{}]*?\"count\"\\s*:\\s*(?P<popularity>\\d+))?",
+    "roms_folder": "switch",
+    "download_url": "https://api.example.com/games/download/<id>/base",
+    "usa_regex": "(USA)",
+    "ignore_extension_filtering": true,
+    "should_filter_usa": false,
+    "update_regex": "\"has_update\"\\s*:\\s*true(?=(?:(?!\"has_base\").)*?\"update_size\"\\s*:\\s*(?P<size>\\d+))(?=(?:(?!\"has_base\").)*?\"update_version\"\\s*:\\s*\"(?P<label>[^\"]+)\")",
+    "update_download_url": "https://api.example.com/games/download/<id>/update",
+    "id": "switch"
+  },
+  {
+    "name": "Nintendo Switch 2",
+    "platform": "switch2",
+    "url": "https://files.catbox.moe/woxxgp.json",
+    "original_format": [
+      ".nup"
+    ],
+    "regex": "\"name\": \"(?P<text>[^\"]+)\"(?:(?!\\n    \\}).)*?\"grid\": \"(?P<banner_url>[^\"]*)\"(?:(?!\\n    \\}).)*?(?:\"fileSize\": \"(?P<size>[^\"]+)\"|\"fileSize\": \"\"(?:(?!\\n    \\}).)*?\"base\": \\[\\s*\\{(?:(?!\\n    \\}).)*?\"size\": \"(?P<basesize>[^\"]+)\")(?:(?!\\n    \\}).)*?https://files\\.example\\.com/(?P<id>[A-Za-z0-9]+)",
+    "download_url": "https://files.example.com/<id>",
+    "roms_folder": "switch2",
+    "update_regex": "\\{\\s*\"label\"\\s*:\\s*\"(?P<label>[^\"]*)\"\\s*,\\s*\"size\"\\s*:\\s*\"(?P<size>[^\"]*)\"\\s*,\\s*\"url\"\\s*:\\s*\"(?P<url>https?://[^\"]+)\"\\s*\\}(?=(?:(?!\"(?:base|updates)\"\\s*:).)*?\"dlc\"\\s*:)",
+    "id": "switch2"
+  }
+]

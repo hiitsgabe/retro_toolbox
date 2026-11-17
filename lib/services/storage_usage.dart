@@ -58,7 +58,7 @@ StorageUsage measureStorage({required String cacheDir, required String supportDi
     try {
       for (final e in dir.listSync(followLinks: false)) {
         final name = p.basename(e.path);
-        if (e is File && (name.startsWith('catalog_v2_') || name.startsWith('boxarts_'))) catalog += _fileSize(e.path);
+        if (e is File && (RegExp(r'^catalog_v\d+_').hasMatch(name) || name.startsWith('boxarts_'))) catalog += _fileSize(e.path);
       }
     } catch (_) {}
   }

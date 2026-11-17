@@ -503,6 +503,11 @@ List<Map<String, dynamic>> _parseJsonListing(String body, Console console, Strin
   return out;
 }
 
+/// [_parseHtmlIsolate] for tests: [console] is a Console.toJson map.
+@visibleForTesting
+List<Map<String, dynamic>> parseRegexListing(String body, Map<String, dynamic> console, String baseUrl) =>
+    _parseHtmlIsolate([body, console, baseUrl]);
+
 List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
   final html = args[0] as String;
   final console = args[1] as Map<String, dynamic>;
@@ -525,10 +530,14 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     multiLine: true,
     dotAll: true,
   );
-  final matches = regExp.allMatches(html);
+  final matches = regExp.allMatches(html).toList();
+  final updateSource = console['update_regex'] as String?;
+  final updateExp = updateSource == null ? null : RegExp(updateSource.replaceAll('(?P<', '(?<'), multiLine: true, dotAll: true);
+  final updateUrlTemplate = console['update_download_url'] as String?;
+  final updateFormat = console['update_format'] as String? ?? (fileFormats.isEmpty ? '' : fileFormats.first);
   final out = <Map<String, dynamic>>[];
 
-  for (final match in matches) {
+  for (final (i, match) in matches.indexed) {
     // Resolve the download URL — prefer id+template, fall back to href.
     String? fullUrl;
     final idGroup = _tryNamedGroup(match, 'id');
@@ -573,6 +582,19 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       'releaseDate': _parseReleaseDate(_tryNamedGroup(match, 'date')),
       'popularity': int.tryParse(_tryNamedGroup(match, 'popularity') ?? ''),
     }..removeWhere((_, v) => v == null);
+    // A game's updates are in its part of the feed: from its match to the
+    // next game's.
+    final updates = updateExp == null
+        ? const <Map<String, dynamic>>[]
+        : _updatesIn(
+            html.substring(match.start, i + 1 < matches.length ? matches[i + 1].start : html.length),
+            updateExp,
+            gameId: idGroup,
+            urlTemplate: updateUrlTemplate,
+            stem: _stem(title, fileFormats),
+            format: updateFormat,
+            baseUrl: baseUrl,
+          );
     out.add({
       'title': title,
       'url': fullUrl,
@@ -580,6 +602,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       'consoleId': console['id'],
       'metadata': metadata,
       if (details.isNotEmpty) 'details': details,
+      if (updates.isNotEmpty) 'updates': updates,
     });
   }
 
@@ -594,6 +617,45 @@ String? _tryNamedGroup(RegExpMatch match, String name) {
   } catch (_) {
     return null;
   }
+}
+
+/// [title] without the format the listing appended to it.
+String _stem(String title, List<String> formats) {
+  final lower = title.toLowerCase();
+  for (final f in formats) {
+    if (f.isNotEmpty && lower.endsWith(f.toLowerCase())) return title.substring(0, title.length - f.length);
+  }
+  return title;
+}
+
+/// Every match of [exp] in [block] as an update map (GameUpdate.toJson).
+List<Map<String, dynamic>> _updatesIn(
+  String block,
+  RegExp exp, {
+  required String? gameId,
+  required String? urlTemplate,
+  required String stem,
+  required String format,
+  required String baseUrl,
+}) {
+  final out = <Map<String, dynamic>>[];
+  for (final m in exp.allMatches(block)) {
+    final label = _tryNamedGroup(m, 'label') ?? '';
+    final href = _tryNamedGroup(m, 'url');
+    final id = _tryNamedGroup(m, 'id') ?? gameId;
+    final url = href != null && href.isNotEmpty
+        ? (href.startsWith('http') ? href : Uri.parse(baseUrl).resolve(href).toString())
+        : (urlTemplate != null && id != null ? urlTemplate.replaceAll('<id>', id) : null);
+    if (url == null) continue;
+    final size = _tryNamedGroup(m, 'size');
+    out.add({
+      'label': label,
+      'size': size == null ? 0 : _parseSizeBytesIsolate(size),
+      'url': url,
+      'fileName': '$stem [${label.isEmpty ? 'update' : label}]$format',
+    });
+  }
+  return out;
 }
 
 /// A date group's digits as yyyymmdd: 8 digits as is, yyyymm and yyyy padded

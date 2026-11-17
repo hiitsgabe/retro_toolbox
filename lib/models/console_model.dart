@@ -28,6 +28,14 @@ class Console {
   final String? usaRegex;
   final bool ignoreExtensionFiltering;
   final String? downloadUrl;
+  /// Run over each game's part of the feed; every match is one update
+  /// (named groups label, size, url or id).
+  final String? updateRegex;
+  /// An update's link when its match has no url: `<id>` is the update's id
+  /// group, else the game's.
+  final String? updateDownloadUrl;
+  /// The update file's extension; null uses the first original_format.
+  final String? updateFormat;
   final Map<String, dynamic>? auth;
   final String? listUrl;
   final String listJsonFileLocation;
@@ -54,6 +62,9 @@ class Console {
     this.usaRegex,
     this.ignoreExtensionFiltering = false,
     this.downloadUrl,
+    this.updateRegex,
+    this.updateDownloadUrl,
+    this.updateFormat,
     this.auth,
     this.listUrl,
     this.listJsonFileLocation = 'files',
@@ -71,6 +82,8 @@ class Console {
         if (h == additionalHandler || h.inputs.any(formats.contains)) h,
     ];
   }
+
+  bool get hasUpdates => updateRegex != null;
 
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
   String get url => urls.isNotEmpty ? urls.first : '';
@@ -145,6 +158,9 @@ class Console {
       usaRegex: json['usa_regex'] as String?,
       ignoreExtensionFiltering: json['ignore_extension_filtering'] as bool? ?? false,
       downloadUrl: json['download_url'] as String?,
+      updateRegex: json['update_regex'] as String?,
+      updateDownloadUrl: json['update_download_url'] as String?,
+      updateFormat: json['update_format'] as String?,
       auth: json['auth'] as Map<String, dynamic>?,
       listUrl: json['list_url'] as String?,
       listJsonFileLocation: json['list_json_file_location'] as String? ?? 'files',
@@ -174,6 +190,9 @@ class Console {
       if (usaRegex != null) 'usa_regex': usaRegex,
       'ignore_extension_filtering': ignoreExtensionFiltering,
       if (downloadUrl != null) 'download_url': downloadUrl,
+      if (updateRegex != null) 'update_regex': updateRegex,
+      if (updateDownloadUrl != null) 'update_download_url': updateDownloadUrl,
+      if (updateFormat != null) 'update_format': updateFormat,
       if (auth != null) 'auth': auth,
       if (listUrl != null) 'list_url': listUrl,
       'list_json_file_location': listJsonFileLocation,
@@ -188,8 +207,8 @@ class Console {
   String get defaultRegex =>
       '<tr><td class="link"><a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a></td><td class="size">(?<size>[^<]+)</td><td class="date">[^<]*</td></tr>';
 
-  // v2: games saved with box art from the fixed matcher; older files (no
-  // version) are ignored, so the first load after the update re-fetches.
+  // v3: games saved with their updates (update_regex); older files are
+  // ignored, so the first load after the update re-fetches.
   // ponytail: the old files stay behind in the cache dir until it is cleared.
-  String get cacheFile => 'catalog_v2_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
+  String get cacheFile => 'catalog_v3_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
 }

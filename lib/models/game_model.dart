@@ -1,5 +1,6 @@
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_update_model.dart';
 
 class Game {
   final String title;
@@ -13,6 +14,10 @@ class Game {
   /// empty otherwise. Set by the list's grouping, never saved.
   final List<Game> discs;
 
+  /// Updates the catalog lists for this game, newest last as the feed has
+  /// them; empty when it lists none.
+  final List<GameUpdate> updates;
+
   const Game({
     required this.title,
     required this.url,
@@ -21,6 +26,7 @@ class Game {
     this.metadata,
     this.details,
     this.discs = const [],
+    this.updates = const [],
   });
 
   Game copyWith({
@@ -31,6 +37,7 @@ class Game {
     GameMetadata? metadata,
     GameDetails? details,
     List<Game>? discs,
+    List<GameUpdate>? updates,
   }) {
     return Game(
       title: title ?? this.title,
@@ -40,6 +47,7 @@ class Game {
       metadata: metadata ?? this.metadata,
       details: details ?? this.details,
       discs: discs ?? this.discs,
+      updates: updates ?? this.updates,
     );
   }
 
@@ -65,6 +73,7 @@ class Game {
       consoleId: json['consoleId'],
       metadata: json['metadata'] != null ? GameMetadata.fromJson(json['metadata']) : null,
       details: json['details'] != null ? GameDetails.fromJson(json['details']) : null,
+      updates: [for (final u in (json['updates'] as List? ?? const [])) GameUpdate.fromJson(Map<String, dynamic>.from(u as Map))],
     );
   }
 
@@ -76,6 +85,7 @@ class Game {
       'consoleId': consoleId,
       'metadata': metadata?.toJson(),
       'details': details?.toJson(),
+      if (updates.isNotEmpty) 'updates': [for (final u in updates) u.toJson()],
     };
   }
 

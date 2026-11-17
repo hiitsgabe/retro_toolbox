@@ -1,0 +1,112 @@
+[
+    {
+        "id": "civilization-vii-switch-1-mig",
+        "name": "Civilization VII (Switch 1 MIG)",
+        "sgdbId": "5454366",
+        "grid": "https://cdn2.steamgriddb.com/grid/fe1b52dedacac0b79f7fc3048a6ba304.png",
+        "hero": "https://cdn2.steamgriddb.com/hero/e95331858326245cd9c9b75662dff574.png",
+        "logo": "https://cdn2.steamgriddb.com/logo/34ad4dfb2edd5ad3828a778d2a5dbb15.png",
+        "icon": "https://cdn2.steamgriddb.com/icon/0b7847b35fd120ca9bf92eec9f52b655.ico",
+        "uploadDate": "2026-11-03",
+        "fileSize": "5.00 GB",
+        "version": "",
+        "titleId": "0100C3601518C000",
+        "firmware": "",
+        "cartSerial": "",
+        "languages": "",
+        "region": "",
+        "downloadUrl": "https://files.example.com/8eae4bt1nyyz",
+        "downloads": {
+            "base": [
+                {
+                    "label": "XCI + Bins",
+                    "size": "5.00 GB",
+                    "url": "https://files.example.com/8eae4bt1nyyz"
+                }
+            ],
+            "updates": [],
+            "dlc": []
+        }
+    },
+    {
+        "id": "cyberpunk-2077-ultimate-edition",
+        "name": "Cyberpunk 2077: Ultimate Edition",
+        "sgdbId": "5209422",
+        "grid": "https://pisces.bbystatic.com/image2/BestBuy_US/images/products/cd957b50-84bc-43a0-8fe7-f47d6430ef3e.png",
+        "hero": "https://cdn2.steamgriddb.com/hero/e94e5b12366081b7bf9b371f9b94ebb7.png",
+        "logo": "https://cdn2.steamgriddb.com/logo/2b2e7393b05b5b52af65bf2ed7f4ad4f.png",
+        "icon": "https://cdn2.steamgriddb.com/icon/ac1c2b3ad86031575744ea1de5d4cddc.ico",
+        "uploadDate": "2026-11-02",
+        "fileSize": "125.41 GB",
+        "version": "2.2.1",
+        "titleId": "0400DDB020648000",
+        "firmware": "19.0.1.0",
+        "cartSerial": "LB-AAE7A-EUR-0",
+        "languages": "en,fr,de,it,es,pt,ru,zh,ko",
+        "region": "EUR",
+        "downloadUrl": "https://files.example.com/n02wk209icxk",
+        "downloads": {
+            "base": [
+                {
+                    "label": "1.0.0",
+                    "size": "125.41 GB",
+                    "url": "https://files.example.com/n02wk209icxk"
+                }
+            ],
+            "updates": [
+                {
+                    "label": "2.2.1 [393216]",
+                    "size": "64.90 GB",
+                    "url": "https://files.example.com/n02wk209icxk"
+                }
+            ],
+            "dlc": []
+        }
+    },
+    {
+        "id": "donkey-kong-bananza",
+        "name": "Donkey Kong Bananza",
+        "sgdbId": "5483961",
+        "grid": "https://cdn2.steamgriddb.com/grid/d7b79e5461d331146f28bf09e22dff13.png",
+        "hero": "https://cdn2.steamgriddb.com/hero/dadfab57415742158d615392eb2f9786.png",
+        "logo": "https://cdn2.steamgriddb.com/logo/af47fa64ad72a116818056dda3938b7b.png",
+        "icon": "https://cdn2.steamgriddb.com/icon/6dfeb40d5ed5f4cf8ed1836d86a3cca4.ico",
+        "uploadDate": "2026-11-03",
+        "fileSize": "8.56 GB",
+        "version": "3.2.0",
+        "titleId": "040074A01BF12000",
+        "firmware": "19.0.1.0",
+        "cartSerial": "LB-AAACA-EUR-0",
+        "languages": "en,fr,de,it,es,nl,pt,ru,ja,zh,ko",
+        "region": "EUR",
+        "downloadUrl": "https://files.example.com/6qzmhzje41l4",
+        "downloads": {
+            "base": [
+                {
+                    "label": "1.0.0",
+                    "size": "8.56 GB",
+                    "url": "https://files.example.com/6qzmhzje41l4"
+                }
+            ],
+            "updates": [
+                {
+                    "label": "3.1.0 [458752]",
+                    "size": "7.60 GB",
+                    "url": "https://files.example.com/p948laeaebm1"
+                },
+                {
+                    "label": "3.2.0",
+                    "size": "8.70 GB",
+                    "url": "https://files.example.com/6qzmhzje41l4"
+                }
+            ],
+            "dlc": [
+                {
+                    "label": "040074a01bf13001",
+                    "size": "913.8 MB",
+                    "url": ""
+                }
+            ]
+        }
+    }
+]
