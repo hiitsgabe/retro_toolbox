@@ -16,7 +16,7 @@ import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
-import 'package:retro_toolbox/widgets/settings/disc_grouping_setting.dart';
+import 'package:retro_toolbox/widgets/settings/version_grouping_setting.dart';
 
 /// Real resolution (console, then general) over an in-memory [AppSettings].
 class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
@@ -35,7 +35,7 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
   Future<void> setGeneralSetting<T>(String key, T value) => setSetting(key, value);
 
   @override
-  bool groupDiscs(String? consoleId) => getSetting<bool>(AppSettings.groupDiscs, consoleId) ?? false;
+  bool groupVersions(String? consoleId) => getSetting<bool>(AppSettings.groupVersions, consoleId) ?? true;
 
   @override
   bool downloadAllDiscs(String? consoleId) => getSetting<bool>(AppSettings.downloadAllDiscs, consoleId) ?? true;
@@ -78,7 +78,7 @@ final _grouped = groupDiscSets([_d1, _d2, _d3]).single;
 
 AppSettings _settings({bool? group, bool? all}) => AppSettings(
       consoleSettings: {
-        'psx': BaseSettings(groupDiscs: group, downloadAllDiscs: all),
+        'psx': BaseSettings(groupVersions: group, downloadAllDiscs: all),
       },
     );
 
@@ -166,7 +166,7 @@ void main() {
     });
 
     testWidgets('with grouping off, only what was selected', (t) async {
-      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      await pumpRef(t, _settings(group: false), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
       expect(find.text('Download 2 games?'), findsOneWidget);
       await t.tap(find.widgetWithText(FilledButton, 'Download'));
       await t.pumpAndSettle();
@@ -248,22 +248,20 @@ void main() {
       final fake = _FakeSettings(s);
       await t.pumpWidget(ProviderScope(
         overrides: [settingsProvider.overrideWith((ref) => fake)],
-        child: MaterialApp(home: Scaffold(body: const DiscGroupingSetting(console: null))),
+        child: MaterialApp(home: Scaffold(body: const VersionGroupingSetting(console: null))),
       ));
       return fake;
     }
 
     testWidgets('"Download every disc" shows only while grouping is on', (t) async {
       final fake = await pumpSetting(t, const AppSettings());
-      expect(find.text('Group multi-disc games'), findsOneWidget);
-      expect(find.text('Download every disc'), findsNothing);
+      expect(find.text('Group versions'), findsOneWidget);
+      expect(find.text('Download every disc'), findsOneWidget); // on by default
 
-      await t.tap(find.byType(Switch));
+      await t.tap(find.byType(Switch).first);
       await t.pump();
-      expect(fake.state.generalSettings.groupDiscs, isTrue);
-      expect(find.text('Download every disc'), findsOneWidget);
-      // On until turned off.
-      expect(t.widget<Switch>(find.byType(Switch).last).value, isTrue);
+      expect(fake.state.generalSettings.groupVersions, isFalse);
+      expect(find.text('Download every disc'), findsNothing);
     });
   });
 }

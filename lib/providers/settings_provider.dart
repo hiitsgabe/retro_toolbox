@@ -109,7 +109,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     AppSettings.downloadDir,
     AppSettings.autoExtract,
     AppSettings.extractToFolder,
-    AppSettings.groupDiscs,
+    AppSettings.groupVersions,
     AppSettings.downloadAllDiscs,
     AppSettings.additionalHandler,
     AppSettings.chdIsoAsCd,
@@ -123,7 +123,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   bool generalBool(String key, String consoleId) => switch (key) {
         AppSettings.autoExtract => getGeneralSetting<bool>(key) ?? true,
         AppSettings.extractToFolder => getGeneralSetting<bool>(key) ?? !(CatalogService.consoleByIdSync(consoleId)?.extractContents ?? true),
-        AppSettings.groupDiscs => getGeneralSetting<bool>(key) ?? false,
+        AppSettings.groupVersions => getGeneralSetting<bool>(key) ?? true,
         AppSettings.downloadAllDiscs => getGeneralSetting<bool>(key) ?? true,
         AppSettings.chdIsoAsCd => false,
         _ => throw ArgumentError('Not an on/off console setting: $key'),
@@ -265,8 +265,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setActiveHandler(String consoleId, GameHandler? handler) =>
       setConsoleSetting<String>(consoleId, AppSettings.additionalHandler, handler?.id ?? 'none');
 
-  /// Whether [consoleId]'s list shows a multi-disc game as one entry.
-  bool groupDiscs(String? consoleId) => getSetting<bool>(AppSettings.groupDiscs, consoleId) ?? false;
+  /// Whether [consoleId]'s list shows one entry per game.
+  bool groupVersions(String? consoleId) => getSetting<bool>(AppSettings.groupVersions, consoleId) ?? true;
 
   /// Whether Download on a grouped game gets all its discs.
   bool downloadAllDiscs(String? consoleId) => getSetting<bool>(AppSettings.downloadAllDiscs, consoleId) ?? true;

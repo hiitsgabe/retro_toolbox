@@ -400,12 +400,12 @@ void main() {
       final c = await pump(t, consoles: {'psx': psx}, section: SettingsSection.consoles);
       await t.tap(find.text('PlayStation'));
       await t.pumpAndSettle();
-      final row = find.ancestor(of: find.text('Group multi-disc games'), matching: find.byType(SettingsTile));
-      Focus.of(t.element(find.text('Group multi-disc games'))).requestFocus();
+      final row = find.ancestor(of: find.text('Group versions'), matching: find.byType(SettingsTile));
+      Focus.of(t.element(find.text('Group versions'))).requestFocus();
       await t.pump();
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
-      expect(c.read(settingsProvider.notifier).changedKeys('psx'), contains('groupDiscs'));
+      expect(c.read(settingsProvider.notifier).changedKeys('psx'), contains('groupVersions'));
       expect(find.descendant(of: row, matching: find.byType(ChangedChip)), findsOneWidget);
       expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<SettingsTile>(), t.widget(row));
     });

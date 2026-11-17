@@ -55,7 +55,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       }
     });
     // Grouping is a setting, per console or general: the list follows it.
-    _ref.listen<Map<String, dynamic>>(settingWatcherProvider(AppSettings.groupDiscs), (previous, current) {
+    _ref.listen<Map<String, dynamic>>(settingWatcherProvider(AppSettings.groupVersions), (previous, current) {
       if (!mapEquals(previous, current)) updateFilteredGames(immediate: true);
     });
   }
@@ -280,7 +280,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         limit: limit,
         favoriteGameIds: favs,
         inLibraryStatus: lib,
-        groupDiscs: _ref.read(settingsProvider.notifier).groupDiscs(state.games.firstOrNull?.consoleId),
+        groupVersions: _ref.read(settingsProvider.notifier).groupVersions(state.games.firstOrNull?.consoleId),
       ),
     );
   }

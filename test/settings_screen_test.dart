@@ -116,16 +116,16 @@ void main() {
 
   group('model', () {
     test('setting one key for a console leaves the others following the general ones', () {
-      final s = const BaseSettings().setSetting(AppSettings.groupDiscs, true);
-      expect(s.groupDiscs, isTrue);
+      final s = const BaseSettings().setSetting(AppSettings.groupVersions, true);
+      expect(s.groupVersions, isTrue);
       expect(s.autoExtract, isNull);
       expect(s.maxParallelDownloads, isNull);
       expect(s.getSetting<bool>(AppSettings.autoExtract), isNull);
     });
 
     test('cleared drops only that key', () {
-      final s = const BaseSettings(groupDiscs: true, downloadDir: '/x', authToken: 't').cleared(AppSettings.groupDiscs);
-      expect(s.groupDiscs, isNull);
+      final s = const BaseSettings(groupVersions: true, downloadDir: '/x', authToken: 't').cleared(AppSettings.groupVersions);
+      expect(s.groupVersions, isNull);
       expect(s.downloadDir, '/x');
       expect(s.authToken, 't');
     });
@@ -134,18 +134,18 @@ void main() {
       saved(general: {
         'autoExtract': false
       }, consoles: {
-        'psx': {'autoExtract': false, 'groupDiscs': true, 'downloadDir': '/roms/psx'},
+        'psx': {'autoExtract': false, 'groupVersions': false, 'downloadDir': '/roms/psx'},
         'snes': {'autoExtract': true},
       });
       final c = ProviderContainer();
       addTearDown(c.dispose);
       await t.runAsync(() => c.read(settingsProvider.notifier).loaded);
       final n = c.read(settingsProvider.notifier);
-      expect(n.changedKeys('psx'), [AppSettings.downloadDir, AppSettings.groupDiscs]);
+      expect(n.changedKeys('psx'), [AppSettings.downloadDir, AppSettings.groupVersions]);
       expect(n.changedKeys('snes'), [AppSettings.autoExtract]);
       await t.runAsync(() => n.resetConsoleSettings('psx', n.changedKeys('psx')));
       expect(n.changedKeys('psx'), isEmpty);
-      expect(c.read(settingsProvider).consoleSettings['psx']!.groupDiscs, isNull);
+      expect(c.read(settingsProvider).consoleSettings['psx']!.groupVersions, isNull);
       expect(c.read(settingsProvider).consoleSettings['psx']!.autoExtract, isFalse); // not a change: kept
     });
   });
@@ -264,20 +264,24 @@ void main() {
       await t.tap(rail('downloads'));
       await t.pumpAndSettle();
       expect(find.text('Extract into a subfolder'), findsOneWidget);
-      expect(find.text('Download every disc'), findsNothing);
 
       await t.tap(find.text('Extract archives'));
       await t.pump();
       expect(find.text('Extract into a subfolder'), findsNothing);
 
-      await t.tap(find.text('Group multi-disc games'));
-      await t.pump();
+      // Grouping lives in Library, on by default.
+      await t.tap(rail('library'));
+      await t.pumpAndSettle();
       expect(find.text('Download every disc'), findsOneWidget);
+
+      await t.tap(find.text('Group versions'));
+      await t.pump();
+      expect(find.text('Download every disc'), findsNothing);
     });
 
     testWidgets('Consoles lists the changed consoles first, with what they change', (t) async {
       saved(consoles: {
-        'psx': {'groupDiscs': true, 'downloadDir': '/roms/psx'},
+        'psx': {'groupVersions': false, 'downloadDir': '/roms/psx'},
       });
       await pump(t);
       await t.tap(rail('consoles'));
@@ -290,25 +294,25 @@ void main() {
 
     testWidgets("a console's page marks its changes with the default, and Reset follows Downloads again", (t) async {
       saved(consoles: {
-        'psx': {'groupDiscs': true, 'downloadDir': '/roms/psx'},
+        'psx': {'groupVersions': false, 'downloadDir': '/roms/psx'},
       });
       final c = await pump(t, consoleId: 'psx');
       expect(find.text('PlayStation'), findsWidgets);
       expect(find.byType(ChangedChip), findsNWidgets(2));
-      expect(find.text('Default: off'), findsOneWidget);
+      expect(find.text('Default: on'), findsOneWidget);
       expect(find.text(followingDownloadsText), findsWidgets);
 
-      final groupRow = find.ancestor(of: find.text('Group multi-disc games'), matching: find.byType(SettingsRowFrame));
+      final groupRow = find.ancestor(of: find.text('Group versions'), matching: find.byType(SettingsRowFrame));
       await t.tap(find.descendant(of: groupRow, matching: find.text('Reset')));
       await t.pump();
-      expect(c.read(settingsProvider).consoleSettings['psx']!.groupDiscs, isNull);
+      expect(c.read(settingsProvider).consoleSettings['psx']!.groupVersions, isNull);
       expect(find.byType(ChangedChip), findsOneWidget);
       expect(c.read(settingsProvider).consoleSettings['psx']!.downloadDir, '/roms/psx');
     });
 
     testWidgets('Reset all puts every change back', (t) async {
       saved(consoles: {
-        'psx': {'groupDiscs': true, 'downloadDir': '/roms/psx'},
+        'psx': {'groupVersions': false, 'downloadDir': '/roms/psx'},
       });
       final c = await pump(t, consoleId: 'psx');
       await t.tap(find.text('Reset all 2'));
@@ -319,14 +323,14 @@ void main() {
 
     testWidgets('X resets the focused row', (t) async {
       saved(consoles: {
-        'psx': {'groupDiscs': true, 'downloadDir': '/roms/psx'},
+        'psx': {'groupVersions': false, 'downloadDir': '/roms/psx'},
       });
       final c = await pump(t, consoleId: 'psx');
-      Focus.of(t.element(find.text('Group multi-disc games'))).requestFocus();
+      Focus.of(t.element(find.text('Group versions'))).requestFocus();
       await t.pump();
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
       await t.pump();
-      expect(c.read(settingsProvider).consoleSettings['psx']!.groupDiscs, isNull);
+      expect(c.read(settingsProvider).consoleSettings['psx']!.groupVersions, isNull);
       expect(c.read(settingsProvider).consoleSettings['psx']!.downloadDir, '/roms/psx');
     });
 
@@ -498,7 +502,7 @@ void main() {
 
     testWidgets("a console id opens that console's page", (t) async {
       saved(consoles: {
-        'psx': {'groupDiscs': true},
+        'psx': {'groupVersions': false},
       });
       await pump(t, size: const Size(400, 800), consoleId: 'psx');
       expect(find.widgetWithText(SettingsTopBar, 'PlayStation'), findsOneWidget);

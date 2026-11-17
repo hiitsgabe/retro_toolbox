@@ -7,7 +7,7 @@ class AppSettings {
   static const String autoApplyFormations = 'autoApplyFormations';
   static const String additionalHandler = 'additionalHandler';
   static const String chdIsoAsCd = 'chdIsoAsCd';
-  static const String groupDiscs = 'groupDiscs';
+  static const String groupVersions = 'groupVersions';
   static const String downloadAllDiscs = 'downloadAllDiscs';
   static const String updatesDir = 'updatesDir';
   static const String updateDecompress = 'updateDecompress';
@@ -22,7 +22,7 @@ class AppSettings {
     autoApplyFormations: bool,
     additionalHandler: String,
     chdIsoAsCd: bool,
-    groupDiscs: bool,
+    groupVersions: bool,
     downloadAllDiscs: bool,
     updatesDir: String,
     updateDecompress: String,
@@ -179,8 +179,8 @@ class BaseSettings {
   final String? additionalHandler;
   /// Per-console: the CHD handler packs an .iso as a CD CHD (AetherSX2) instead of a DVD one.
   final bool? chdIsoAsCd;
-  /// The game list shows Disc 1, Disc 2... of a game as one entry. Null = off.
-  final bool? groupDiscs;
+  /// The game list shows one entry per game (its versions, discs and extras inside). Null = on.
+  final bool? groupVersions;
   /// Download on a grouped game gets every disc. Null = on.
   final bool? downloadAllDiscs;
   /// Per console: where its updates go. Null = a folder named updates in its
@@ -203,7 +203,7 @@ class BaseSettings {
     this.autoApplyFormations,
     this.additionalHandler,
     this.chdIsoAsCd,
-    this.groupDiscs,
+    this.groupVersions,
     this.downloadAllDiscs,
     this.updatesDir,
     this.updateDecompress,
@@ -222,7 +222,7 @@ class BaseSettings {
     String? additionalHandler,
     bool clearAdditionalHandler = false,
     bool? chdIsoAsCd,
-    bool? groupDiscs,
+    bool? groupVersions,
     bool? downloadAllDiscs,
     String? updatesDir,
     String? updateDecompress,
@@ -238,7 +238,7 @@ class BaseSettings {
       autoApplyFormations: autoApplyFormations ?? this.autoApplyFormations ?? true,
       additionalHandler: clearAdditionalHandler ? null : (additionalHandler ?? this.additionalHandler),
       chdIsoAsCd: chdIsoAsCd ?? this.chdIsoAsCd,
-      groupDiscs: groupDiscs ?? this.groupDiscs,
+      groupVersions: groupVersions ?? this.groupVersions,
       downloadAllDiscs: downloadAllDiscs ?? this.downloadAllDiscs,
       updatesDir: updatesDir ?? this.updatesDir,
       updateDecompress: updateDecompress ?? this.updateDecompress,
@@ -257,7 +257,7 @@ class BaseSettings {
       if (autoApplyFormations != null) AppSettings.autoApplyFormations: autoApplyFormations,
       if (additionalHandler != null) AppSettings.additionalHandler: additionalHandler,
       if (chdIsoAsCd != null) AppSettings.chdIsoAsCd: chdIsoAsCd,
-      if (groupDiscs != null) AppSettings.groupDiscs: groupDiscs,
+      if (groupVersions != null) AppSettings.groupVersions: groupVersions,
       if (downloadAllDiscs != null) AppSettings.downloadAllDiscs: downloadAllDiscs,
       if (updatesDir != null) AppSettings.updatesDir: updatesDir,
       if (updateDecompress != null) AppSettings.updateDecompress: updateDecompress,
@@ -283,8 +283,8 @@ class BaseSettings {
         return additionalHandler as T?;
       case AppSettings.chdIsoAsCd:
         return chdIsoAsCd as T?;
-      case AppSettings.groupDiscs:
-        return groupDiscs as T?;
+      case AppSettings.groupVersions:
+        return groupVersions as T?;
       case AppSettings.downloadAllDiscs:
         return downloadAllDiscs as T?;
       case AppSettings.updatesDir:
@@ -313,7 +313,7 @@ class BaseSettings {
       autoApplyFormations: key == AppSettings.autoApplyFormations ? next.autoApplyFormations : autoApplyFormations,
       additionalHandler: next.additionalHandler,
       chdIsoAsCd: next.chdIsoAsCd,
-      groupDiscs: next.groupDiscs,
+      groupVersions: next.groupVersions,
       downloadAllDiscs: next.downloadAllDiscs,
       updatesDir: next.updatesDir,
       updateDecompress: next.updateDecompress,
@@ -346,8 +346,8 @@ class BaseSettings {
         return copyWith(additionalHandler: value as String?, clearAdditionalHandler: value == null);
       case AppSettings.chdIsoAsCd:
         return copyWith(chdIsoAsCd: value as bool?);
-      case AppSettings.groupDiscs:
-        return copyWith(groupDiscs: value as bool?);
+      case AppSettings.groupVersions:
+        return copyWith(groupVersions: value as bool?);
       case AppSettings.downloadAllDiscs:
         return copyWith(downloadAllDiscs: value as bool?);
       case AppSettings.updatesDir:
@@ -372,7 +372,8 @@ class BaseSettings {
       autoApplyFormations: json[AppSettings.autoApplyFormations] as bool?,
       additionalHandler: json[AppSettings.additionalHandler] as String?,
       chdIsoAsCd: json[AppSettings.chdIsoAsCd] as bool?,
-      groupDiscs: json[AppSettings.groupDiscs] as bool?,
+      // 'groupDiscs' is the key before grouping covered versions; a saved choice carries over.
+      groupVersions: (json[AppSettings.groupVersions] ?? json['groupDiscs']) as bool?,
       downloadAllDiscs: json[AppSettings.downloadAllDiscs] as bool?,
       updatesDir: json[AppSettings.updatesDir] as String?,
       updateDecompress: json[AppSettings.updateDecompress] as String?,

@@ -33,7 +33,7 @@ class FilteringService {
 
     // After the revisions, so a set is the discs of one revision; before the
     // sort and the page, so the count and the pages are of entries shown.
-    if (input.groupDiscs) allMatched = groupDiscSets(allMatched);
+    if (input.groupVersions) allMatched = groupDiscSets(allMatched);
 
     final key = _sortKey(filter.sort, games);
     if (key != null) {
@@ -235,8 +235,8 @@ class FilterInput {
   final Set<String>? favoriteGameIds;
   final Map<String, GameStatus>? inLibraryStatus;
 
-  /// Show each multi-disc set as one entry (see [groupDiscSets]).
-  final bool groupDiscs;
+  /// One entry per game (see buildGameGroups); until Task 6, per disc set.
+  final bool groupVersions;
 
   const FilterInput({
     required this.games,
@@ -246,7 +246,7 @@ class FilterInput {
     required this.limit,
     this.favoriteGameIds,
     this.inLibraryStatus,
-    this.groupDiscs = false,
+    this.groupVersions = false,
   });
 }
 

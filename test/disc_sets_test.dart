@@ -113,7 +113,7 @@ void main() {
           filterText: '',
           filter: const CatalogFilter(regions: {}, dumpQualities: {}, romTypes: {}, modifications: {}, distributionTypes: {}, showLatestRevisionOnly: false),
           limit: limit,
-          groupDiscs: group,
+          groupVersions: group,
         ));
 
     test('off: every disc is an entry', () {
@@ -141,25 +141,30 @@ void main() {
           filterText: '',
           filter: const CatalogFilter(regions: {}, dumpQualities: {}, romTypes: {}, modifications: {}, distributionTypes: {}),
           limit: 100,
-          groupDiscs: true));
+          groupVersions: true));
       expect(r.totalCount, 1);
       expect(r.games.single.discs.length, 2);
     });
   });
 
   group('settings', () {
-    test('BaseSettings round-trips groupDiscs and downloadAllDiscs, unset by default', () {
-      expect(const BaseSettings().getSetting<bool>(AppSettings.groupDiscs), isNull);
+    test('a choice saved under the old groupDiscs key is read as groupVersions', () {
+      expect(BaseSettings.fromJson({'groupDiscs': false}).groupVersions, isFalse);
+      expect(BaseSettings.fromJson({'groupDiscs': true, 'groupVersions': false}).groupVersions, isFalse);
+    });
+
+    test('BaseSettings round-trips groupVersions and downloadAllDiscs, unset by default', () {
+      expect(const BaseSettings().getSetting<bool>(AppSettings.groupVersions), isNull);
       expect(const BaseSettings().getSetting<bool>(AppSettings.downloadAllDiscs), isNull);
-      final set = const BaseSettings().setSetting(AppSettings.groupDiscs, true).setSetting(AppSettings.downloadAllDiscs, false);
+      final set = const BaseSettings().setSetting(AppSettings.groupVersions, true).setSetting(AppSettings.downloadAllDiscs, false);
       final back = BaseSettings.fromJson(set.toJson());
-      expect(back.getSetting<bool>(AppSettings.groupDiscs), isTrue);
+      expect(back.getSetting<bool>(AppSettings.groupVersions), isTrue);
       expect(back.getSetting<bool>(AppSettings.downloadAllDiscs), isFalse);
     });
 
     test('AppSettings keeps a per-console choice through JSON', () {
-      final s = AppSettings(consoleSettings: {'psx': const BaseSettings().setSetting(AppSettings.groupDiscs, true)});
-      expect(AppSettings.fromJson(s.toJson()).consoleSettings['psx']!.getSetting<bool>(AppSettings.groupDiscs), isTrue);
+      final s = AppSettings(consoleSettings: {'psx': const BaseSettings().setSetting(AppSettings.groupVersions, true)});
+      expect(AppSettings.fromJson(s.toJson()).consoleSettings['psx']!.getSetting<bool>(AppSettings.groupVersions), isTrue);
     });
   });
 }

@@ -16,7 +16,7 @@ import 'package:retro_toolbox/services/storage_usage.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_rows.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
-import 'package:retro_toolbox/widgets/settings/disc_grouping_setting.dart';
+import 'package:retro_toolbox/widgets/settings/version_grouping_setting.dart';
 import 'package:retro_toolbox/widgets/settings/dual_screen_setting.dart';
 import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/favorites_settings.dart';
@@ -75,7 +75,7 @@ String _changeName(String key, Console console, SettingsNotifier n) {
       return 'extraction';
     case AppSettings.extractToFolder:
       return 'subfolder';
-    case AppSettings.groupDiscs:
+    case AppSettings.groupVersions:
       return 'grouping';
     case AppSettings.downloadAllDiscs:
       return 'every disc';
@@ -121,6 +121,8 @@ List<Widget> settingsSectionRows(SettingsSection section, WidgetRef ref, {requir
         const LibrarySetting(),
         if (library) ...[
           const CatalogSourceRow(),
+          const SettingsHeader('Grouping'),
+          const VersionGroupingSetting(console: null),
           const SettingsHeader('Game metadata (LaunchBox)'),
           const LaunchboxSetting(),
           const SettingsHeader('Favorites'),
@@ -149,8 +151,6 @@ List<Widget> settingsSectionRows(SettingsSection section, WidgetRef ref, {requir
             subtitle: 'One folder per archive',
             indent: true,
           ),
-        const SettingsHeader('Multi-disc games'),
-        const DiscGroupingSetting(console: null),
         const SettingsHeader('Speed'),
         SettingsStepperRow(
           title: 'Parallel downloads',
@@ -354,7 +354,7 @@ List<Widget> consoleSettingsRows(Console console, WidgetRef ref, {VoidCallback? 
     BoolSettingRow(settingKey: AppSettings.autoExtract, defaultValue: true, title: 'Extract archives', console: console),
     if (notifier.getAutoExtract(console.id))
       BoolSettingRow(settingKey: AppSettings.extractToFolder, defaultValue: false, title: 'Extract into a subfolder', console: console, indent: true),
-    DiscGroupingSetting(console: console),
+    VersionGroupingSetting(console: console),
     if (console.applicableHandlers.isNotEmpty) ...[
       const SettingsHeader('Conversion', top: 14),
       HandlerSetting(console: console, onOpenKeys: onOpenKeys),

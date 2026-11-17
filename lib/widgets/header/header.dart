@@ -33,7 +33,7 @@ Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? conso
   final selected = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId));
   // A selected grouped game is its first disc here (the list is ungrouped):
   // its set comes along when grouping and "Download every disc" are on.
-  final grouped = consoleId != null && ref.read(settingsProvider.notifier).groupDiscs(consoleId);
+  final grouped = consoleId != null && ref.read(settingsProvider.notifier).groupVersions(consoleId);
   final seen = <String>{};
   final selectedGames = [
     for (final game in selected)

@@ -36,7 +36,7 @@ void main() {
   );
   tearDownAll(() => tmp.deleteSync(recursive: true));
 
-  test('turning grouping on or off for the console re-lists it at once', () async {
+  test('grouping is on by default, and turning it off or on for the console re-lists it at once', () async {
     SharedPreferences.setMockInitialValues({});
     const psx = Console(id: 'psx', name: 'PSX', urls: []);
     final container = ProviderContainer(overrides: [
@@ -54,7 +54,7 @@ void main() {
     await settings.loaded;
     final catalog = container.read(catalogProvider.notifier);
     await catalog.loadCatalog(psx);
-    expect(container.read(catalogProvider).paginatedFilteredGames, hasLength(4));
+    expect(container.read(catalogProvider).paginatedFilteredGames, hasLength(2)); // on by default
 
     // The re-list runs in compute: wait (bounded) for the count to change.
     Future<int> countAfter(Future<void> change) async {
@@ -69,10 +69,9 @@ void main() {
       return before;
     }
 
-    expect(await countAfter(settings.setSetting<bool>(AppSettings.groupDiscs, true, 'psx')), 2);
+    expect(await countAfter(settings.setSetting<bool>(AppSettings.groupVersions, false, 'psx')), 4);
+    expect(await countAfter(settings.setSetting<bool>(AppSettings.groupVersions, true, 'psx')), 2);
     final grouped = container.read(catalogProvider).paginatedFilteredGames;
     expect(grouped.firstWhere((g) => g.discs.isNotEmpty).discs, hasLength(3));
-
-    expect(await countAfter(settings.setSetting<bool>(AppSettings.groupDiscs, false, 'psx')), 4);
   });
 }

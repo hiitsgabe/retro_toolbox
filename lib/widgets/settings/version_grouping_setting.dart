@@ -5,26 +5,26 @@ import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/settings/setting_rows.dart';
 
-/// "Group multi-disc games", and under it, while it is on for this scope,
+/// "Group versions", and under it, while it is on for this scope,
 /// "Download every disc". [console] null: the general settings.
-class DiscGroupingSetting extends ConsumerWidget {
-  const DiscGroupingSetting({super.key, required this.console});
+class VersionGroupingSetting extends ConsumerWidget {
+  const VersionGroupingSetting({super.key, required this.console});
 
   final Console? console;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(settingsProvider);
-    final grouped = ref.read(settingsProvider.notifier).groupDiscs(console?.id);
+    final grouped = ref.read(settingsProvider.notifier).groupVersions(console?.id);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         BoolSettingRow(
-          settingKey: AppSettings.groupDiscs,
-          defaultValue: false,
-          title: 'Group multi-disc games',
-          subtitle: 'Show Disc 1, Disc 2... as one entry',
+          settingKey: AppSettings.groupVersions,
+          defaultValue: true,
+          title: 'Group versions',
+          subtitle: 'One entry per game, with its regions, revisions, discs and extras inside',
           console: console,
         ),
         if (grouped)
