@@ -1,4 +1,4 @@
-enum CatalogSort { name, sizeDesc, sizeAsc, newest, popular }
+enum CatalogSort { name, sizeDesc, sizeAsc, newest, popular, topRated }
 
 class CatalogFilter {
   final Set<String> regions;
@@ -13,6 +13,10 @@ class CatalogFilter {
   final bool showFavoritesOnly;
   final bool showInLibraryOnly;
   final CatalogSort sort;
+  // LaunchBox fields: a game without LaunchBox data fails any of these.
+  final Set<String> genres;
+  final Set<String> players; // '1', '2+', 'coop'
+  final double minRating; // 0 is off
 
   const CatalogFilter({
     this.regions = const {'USA'},
@@ -27,6 +31,9 @@ class CatalogFilter {
     this.showFavoritesOnly = false,
     this.showInLibraryOnly = false,
     this.sort = CatalogSort.name,
+    this.genres = const {},
+    this.players = const {},
+    this.minRating = 0,
   });
 
   CatalogFilter copyWith({
@@ -47,6 +54,9 @@ class CatalogFilter {
     String? version,
     int? minYear,
     int? maxYear,
+    Set<String>? genres,
+    Set<String>? players,
+    double? minRating,
   }) {
     return CatalogFilter(
       regions: regions ?? this.regions,
@@ -61,6 +71,9 @@ class CatalogFilter {
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       showInLibraryOnly: showInLibraryOnly ?? this.showInLibraryOnly,
       sort: sort ?? this.sort,
+      genres: genres ?? this.genres,
+      players: players ?? this.players,
+      minRating: minRating ?? this.minRating,
     );
   }
 
@@ -75,6 +88,9 @@ class CatalogFilter {
         distributionTypes.isNotEmpty ||
         showLatestRevisionOnly ||
         showFavoritesOnly ||
-        showInLibraryOnly;
+        showInLibraryOnly ||
+        genres.isNotEmpty ||
+        players.isNotEmpty ||
+        minRating > 0;
   }
 }

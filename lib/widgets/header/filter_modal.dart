@@ -23,13 +23,17 @@ class FilterModal extends ConsumerWidget {
     final filter = catalogState.filter;
     final games = catalogState.games;
     final hasSize = games.any((g) => g.size > 0);
+    final hasRating = games.any((g) => g.details?.rating != null);
+    final hasPlayers = games.any((g) => g.details?.maxPlayers != null || g.details?.cooperative != null);
     final sorts = {
       CatalogSort.name: 'Name',
       if (hasSize) CatalogSort.sizeDesc: 'Largest',
       if (hasSize) CatalogSort.sizeAsc: 'Smallest',
       if (games.any((g) => g.details?.releaseDate != null)) CatalogSort.newest: 'Newest',
       if (games.any((g) => g.details?.popularity != null)) CatalogSort.popular: 'Most popular',
+      if (hasRating) CatalogSort.topRated: 'Top rated',
     };
+    final minRatings = {0.0: 'Any', 3.0: '3+', 3.5: '3.5+', 4.0: '4+', 4.5: '4.5+'};
 
     return Container(
       constraints: BoxConstraints(
@@ -100,6 +104,38 @@ class FilterModal extends ConsumerWidget {
                     onToggle: (name) => catalogNotifier.setSort(CatalogSort.values.byName(name)),
                   ),
                   const SizedBox(height: 20),
+                  if (catalogState.availableGenres.isNotEmpty) ...[
+                    _FilterSection(
+                      title: 'Genres',
+                      icon: Icons.category,
+                      items: catalogState.availableGenres.toList()..sort(),
+                      selectedItems: filter.genres,
+                      onToggle: catalogNotifier.toggleGenreFilter,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (hasPlayers) ...[
+                    _FilterSection(
+                      title: 'Players',
+                      icon: Icons.people,
+                      items: const ['1', '2+', 'coop'],
+                      labels: const ['1 player', '2+ players', 'Co-op'],
+                      selectedItems: filter.players,
+                      onToggle: catalogNotifier.togglePlayersFilter,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  if (hasRating) ...[
+                    _FilterSection(
+                      title: 'Minimum rating',
+                      icon: Icons.star,
+                      items: [for (final rating in minRatings.keys) rating.toString()],
+                      labels: minRatings.values.toList(),
+                      selectedItems: {filter.minRating.toString()},
+                      onToggle: (rating) => catalogNotifier.setMinRating(double.parse(rating)),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                   if (catalogState.availableRegions.isNotEmpty) ...[
                     _FilterSection(
                       title: 'Regions',

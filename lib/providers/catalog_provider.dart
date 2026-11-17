@@ -7,11 +7,13 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -36,6 +38,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   // Incremented per loadCatalog call; awaited results from an older
   // generation are discarded so switching consoles mid-load takes effect.
   int _loadGeneration = 0;
+  // The console the games came from, for reapplyLaunchbox.
+  Console? _console;
 
   CatalogNotifier(this._ref, this.catalogService) : super(const CatalogState()) {
     _ref.listen<Favorites>(favoritesProvider, (previous, current) {
@@ -93,11 +97,16 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         return;
       }
 
+      state = state.copyWith(loadingStatus: 'Matching LaunchBox metadata');
+      final enriched = await _ref.read(launchboxServiceProvider).enrich(console, games);
+      if (gen != _loadGeneration || !mounted) return;
+      _console = console;
+
       Set<String> regions = <String>{};
       Set<String> languages = <String>{};
       Set<String> categories = <String>{};
 
-      for (final game in games) {
+      for (final game in enriched) {
         if (game.metadata != null) {
           if (game.metadata!.regions.isNotEmpty) {
             regions.addAll(game.metadata!.regions);
@@ -118,10 +127,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       });
 
       state = state.copyWith(
-        games: games,
+        games: enriched,
         availableRegions: regions,
         availableLanguages: languages,
         availableCategories: categories,
+        availableGenres: _genresOf(enriched),
       );
 
       await updateFilteredGames(immediate: true);
@@ -130,7 +140,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       // homebrew or non-USA sets. If it emptied a catalog that actually has
       // games, drop the filter so the user sees something instead of "0 games".
       if (gen == _loadGeneration && mounted &&
-          games.isNotEmpty && state.filteredGamesCount == 0) {
+          enriched.isNotEmpty && state.filteredGamesCount == 0) {
         state = state.copyWith(
           filter: CatalogFilter(
             regions: {},
@@ -143,6 +153,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             showFavoritesOnly: false,
             showInLibraryOnly: false,
             sort: state.filter.sort,
+            genres: {},
+            players: {},
+            minRating: 0,
           ),
         );
         await updateFilteredGames(immediate: true);
@@ -163,6 +176,30 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       );
     }
   }
+
+  /// Applies LaunchBox data again to the loaded list, after an import or after
+  /// metadata was turned off, without reloading the catalog.
+  Future<void> reapplyLaunchbox() async {
+    final console = _console;
+    final source = state.games;
+    if (console == null || source.isEmpty) return;
+    // Cleared first, so a game the new data no longer matches (or all of them,
+    // with metadata off) loses what it had.
+    final cleared = [for (final g in source) _withoutLaunchbox(g)];
+    final enriched = await _ref.read(launchboxServiceProvider).enrich(console, cleared);
+    // A catalog load started meanwhile: its list wins.
+    if (!mounted || !identical(state.games, source)) return;
+    state = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));
+    await updateFilteredGames(immediate: true);
+  }
+
+  static Game _withoutLaunchbox(Game game) {
+    final d = game.details;
+    if (d == null) return game;
+    return game.copyWith(details: GameDetails(boxart: d.boxart, releaseDate: d.releaseDate, popularity: d.popularity));
+  }
+
+  static Set<String> _genresOf(List<Game> games) => {for (final g in games) ...?g.details?.genres};
 
   Future<Map<String, GameStatus>> getLibraryStatus() async {
     final consoleId = state.games.isNotEmpty ? state.games.first.consoleId : null;
@@ -308,6 +345,32 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     updateFilter(newFilter);
   }
 
+  void toggleGenreFilter(String genre) async {
+    final genres = Set<String>.from(state.filter.genres);
+    if (genres.contains(genre)) {
+      genres.remove(genre);
+    } else {
+      genres.add(genre);
+    }
+    final newFilter = state.filter.copyWith(genres: genres);
+    updateFilter(newFilter);
+  }
+
+  void togglePlayersFilter(String players) async {
+    final selected = Set<String>.from(state.filter.players);
+    if (selected.contains(players)) {
+      selected.remove(players);
+    } else {
+      selected.add(players);
+    }
+    final newFilter = state.filter.copyWith(players: selected);
+    updateFilter(newFilter);
+  }
+
+  void setMinRating(double rating) {
+    updateFilter(state.filter.copyWith(minRating: rating));
+  }
+
   void toggleFlagFilter(String flagType, String flag) async {
     CatalogFilter newFilter;
     switch (flagType) {
@@ -388,6 +451,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       distributionTypes: {},
       showFavoritesOnly: false,
       showInLibraryOnly: false,
+      genres: {},
+      players: {},
+      minRating: 0,
     ));
   }
 
@@ -416,6 +482,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       availableRegions: {},
       availableLanguages: {},
       availableCategories: {},
+      availableGenres: {},
     );
     await loadCatalog(console);
   }

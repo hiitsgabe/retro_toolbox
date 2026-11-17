@@ -15,6 +15,7 @@ class CatalogState {
   final Set<String> availableRegions;
   final Set<String> availableLanguages;
   final Set<String> availableCategories;
+  final Set<String> availableGenres;
   final List<Game> _cachedFilteredGames;
   final int _cachedTotalCount;
   final bool _cachedHasMore;
@@ -31,6 +32,7 @@ class CatalogState {
     this.availableRegions = const {},
     this.availableLanguages = const {},
     this.availableCategories = const {},
+    this.availableGenres = const {},
     List<Game>? cachedFilteredGames,
     int? cachedTotalCount,
     bool? cachedHasMore,
@@ -50,6 +52,7 @@ class CatalogState {
     Set<String>? availableRegions,
     Set<String>? availableLanguages,
     Set<String>? availableCategories,
+    Set<String>? availableGenres,
     List<Game>? cachedFilteredGames,
     int? cachedTotalCount,
     bool? cachedHasMore,
@@ -66,6 +69,7 @@ class CatalogState {
       availableRegions: availableRegions ?? this.availableRegions,
       availableLanguages: availableLanguages ?? this.availableLanguages,
       availableCategories: availableCategories ?? this.availableCategories,
+      availableGenres: availableGenres ?? this.availableGenres,
       cachedFilteredGames: cachedFilteredGames ?? _cachedFilteredGames,
       cachedTotalCount: cachedTotalCount ?? _cachedTotalCount,
       cachedHasMore: cachedHasMore ?? _cachedHasMore,

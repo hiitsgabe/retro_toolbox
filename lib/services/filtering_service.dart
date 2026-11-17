@@ -1,6 +1,12 @@
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
+
+/// [rating] pulled toward [mean] as if [m] more people had voted the mean, so
+/// a 5.0 from one vote doesn't outrank a 4.5 from hundreds.
+double bayesianRating(double rating, int votes, double mean, {int m = 10}) =>
+    (votes / (votes + m)) * rating + (m / (votes + m)) * mean;
 
 class FilteringService {
   static FilterResult filterAndPaginate(FilterInput input) {
@@ -24,7 +30,7 @@ class FilteringService {
       allMatched = _filterLatestRevisions(allMatched);
     }
 
-    final key = _sortKey(filter.sort);
+    final key = _sortKey(filter.sort, allMatched);
     if (key != null) {
       // Games without the key go last; equal keys keep name order (the sort
       // isn't stable, so the name is compared explicitly).
@@ -48,14 +54,35 @@ class FilteringService {
     );
   }
 
-  /// The value [sort] orders by, largest first (null: a game lacks it), or
-  /// null for the name order the list already has.
-  static int? Function(Game)? _sortKey(CatalogSort sort) => switch (sort) {
+  /// The value [sort] orders [games] by, largest first (null: a game lacks
+  /// it), or null for the name order the list already has.
+  static int? Function(Game)? _sortKey(CatalogSort sort, List<Game> games) => switch (sort) {
         CatalogSort.name => null,
         CatalogSort.sizeDesc => (g) => g.size > 0 ? g.size : null,
         CatalogSort.sizeAsc => (g) => g.size > 0 ? -g.size : null,
         CatalogSort.newest => (g) => g.details?.releaseDate,
         CatalogSort.popular => (g) => g.details?.popularity,
+        CatalogSort.topRated => _ratingKey(games),
+      };
+
+  /// The Bayesian score against the mean of [games], scaled to an int to share
+  /// the comparator. A rating with no votes counts as no rating.
+  static int? Function(Game) _ratingKey(List<Game> games) {
+    double? rating(Game g) => (g.details?.ratingCount ?? 0) > 0 ? g.details?.rating : null;
+    final ratings = games.map(rating).whereType<double>().toList();
+    if (ratings.isEmpty) return (_) => null;
+    final mean = ratings.reduce((a, b) => a + b) / ratings.length;
+    return (g) {
+      final r = rating(g);
+      return r == null ? null : (bayesianRating(r, g.details!.ratingCount!, mean) * 1e6).round();
+    };
+  }
+
+  static bool _hasPlayers(GameDetails? details, String players) => switch (players) {
+        '1' => details?.maxPlayers == 1,
+        '2+' => (details?.maxPlayers ?? 0) >= 2,
+        'coop' => details?.cooperative == true,
+        _ => false,
       };
 
   static bool _matchesFilter(Game game, FilterInput input) {
@@ -78,6 +105,16 @@ class FilteringService {
       final titleMatch = game.displayTitle.toLowerCase().contains(filterText);
       final originalMatch = game.title.toLowerCase().contains(filterText);
       if (!titleMatch && !originalMatch) return false;
+    }
+
+    // LaunchBox data lives in the details, so these come before the DAT
+    // metadata check below.
+    final details = game.details;
+    if (filter.genres.isNotEmpty && !(details?.genres.any(filter.genres.contains) ?? false)) return false;
+    if (filter.players.isNotEmpty && !filter.players.any((p) => _hasPlayers(details, p))) return false;
+    if (filter.minRating > 0) {
+      final rating = details?.rating;
+      if (rating == null || rating < filter.minRating) return false;
     }
 
     final metadata = game.metadata;
