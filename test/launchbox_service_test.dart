@@ -16,6 +16,7 @@ const lbGames = [
   LaunchboxGame(
     id: 1,
     name: 'Super Metroid',
+    alternateNames: ['Metroid 3'],
     releaseDate: 19940319,
     overview: 'Samus returns.',
     maxPlayers: 1,
@@ -26,6 +27,8 @@ const lbGames = [
   ),
   LaunchboxGame(id: 2, name: 'Pilotwings', releaseDate: 19910821, maxPlayers: 2, cooperative: true, rating: 3.25, ratingCount: 12, genres: ['Flight Simulator']),
   LaunchboxGame(id: 3, name: 'Unrated Thing', rating: 0, ratingCount: 0),
+  LaunchboxGame(id: 4, name: 'Twin Name', ratingCount: 2),
+  LaunchboxGame(id: 5, name: 'Twin Name', ratingCount: 9),
 ];
 
 Game game(String file, {GameDetails? details}) =>
@@ -43,8 +46,8 @@ void main() {
     return matchLaunchboxIds(titles, games);
   }
 
-  Future<void> writeManifest(String? etag) =>
-      store.writeManifest(LaunchboxManifest(etag: etag, importedAt: DateTime.utc(2026, 11, 16), platforms: {snes}));
+  Future<void> writeManifest(String? etag, {DateTime? importedAt}) =>
+      store.writeManifest(LaunchboxManifest(etag: etag, importedAt: importedAt ?? DateTime.utc(2026, 11, 16), platforms: {snes}));
 
   setUp(() async {
     tmp = Directory.systemTemp.createTempSync('lb_service_');
@@ -111,7 +114,7 @@ void main() {
 
     final cache = File('${tmp.path}/launchbox/match_snes_usa.json');
     expect(jsonDecode(cache.readAsStringSync()), {
-      'etag': '"etag-1"',
+      'version': '"etag-1"',
       'platform': snes,
       'ids': {'Super Metroid (USA).sfc': 1, 'Pilotwings (USA).zip': 2},
     });
@@ -128,7 +131,25 @@ void main() {
     await writeManifest('"etag-2"');
     await again.enrich(console, games);
     expect(matcherCalls, 3, reason: 'a new import matches again');
-    expect(jsonDecode(cache.readAsStringSync())['etag'], '"etag-2"');
+    expect(jsonDecode(cache.readAsStringSync())['version'], '"etag-2"');
+  });
+
+  test('without an ETag the import date tells imports apart', () async {
+    final games = [game('Super Metroid (USA).sfc')];
+    await writeManifest(null, importedAt: DateTime.utc(2026, 11, 16));
+    await service.enrich(console, games);
+    await service.enrich(console, games);
+    expect(matcherCalls, 1);
+
+    await writeManifest(null, importedAt: DateTime.utc(2026, 11, 17));
+    await service.enrich(console, games);
+    expect(matcherCalls, 2, reason: 'a re-import without an ETag matches again');
+  });
+
+  test('the default matcher, in its isolate, sees alternate names and votes', () async {
+    final games = [game('Super Metroid (USA).sfc'), game('Metroid 3 (Japan).sfc'), game('Twin Name (USA).zip'), game('Pilotwings (USA).zip')];
+    final out = await LaunchboxService(supportDir: () async => tmp).enrich(console, games);
+    expect([for (final g in out) g.details?.launchboxId], [1, 1, 5, 2]);
   });
 
   test('a corrupt platform file leaves the games unchanged', () async {
@@ -145,6 +166,12 @@ void main() {
     ]);
     expect(await service.lookup(snes, 999), isNull);
     expect(await service.lookup('Nintendo 64', 1), isNull);
+  });
+
+  test('a platform that was not on disk is read again on the next call', () async {
+    expect(await service.lookup('Sega Genesis', 1), isNull);
+    await store.writePlatform('Sega Genesis', [const LaunchboxGame(id: 1, name: 'Sonic the Hedgehog')]);
+    expect((await service.lookup('Sega Genesis', 1))?.name, 'Sonic the Hedgehog');
   });
 
   test('invalidate drops the platform held in memory', () async {

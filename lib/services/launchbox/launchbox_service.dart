@@ -24,7 +24,7 @@ typedef LaunchboxMatcher = Future<List<int?>> Function(List<String> titles, List
 class LaunchboxService {
   LaunchboxService({Future<Directory> Function()? supportDir, @visibleForTesting LaunchboxMatcher? matcher})
       : _supportDir = supportDir ?? getApplicationSupportDirectory,
-        _matcher = matcher ?? matchLaunchboxIds;
+        _matcher = matcher ?? _matchInBackground;
 
   static final instance = LaunchboxService();
 
@@ -54,7 +54,9 @@ class LaunchboxService {
       final byId = await _platform(store, platform);
       if (byId == null) return games;
 
-      final ids = await _matchIds(store, console, platform, manifest.etag, games, byId);
+      // Without an ETag the import date tells one import from the next.
+      final version = manifest.etag ?? manifest.importedAt.toIso8601String();
+      final ids = await _matchIds(store, console, platform, version, games, byId);
       return [
         for (final g in games)
           if (byId[ids[g.title]] case final lb?) g.copyWith(details: _fill(g.details, lb, platform)) else g,
@@ -111,19 +113,19 @@ class LaunchboxService {
     LaunchboxStore store,
     Console console,
     String platform,
-    String? etag,
+    String version,
     List<Game> games,
     Map<int, LaunchboxGame> byId,
   ) async {
     final file = File(path.join(store.root.path, 'match_${launchboxPlatformSlug(console.id)}.json'));
-    final cached = await _readMatchFile(file, etag, platform);
+    final cached = await _readMatchFile(file, version, platform);
     if (cached != null && games.every((g) => cached.containsKey(g.title))) return cached;
 
     final matched = await _matcher([for (final g in games) path.basenameWithoutExtension(g.filename)], byId.values.toList());
     final ids = {for (var i = 0; i < games.length; i++) games[i].title: matched[i]};
     try {
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode({'etag': etag, 'platform': platform, 'ids': ids}));
+      await file.writeAsString(jsonEncode({'version': version, 'platform': platform, 'ids': ids}));
     } on FileSystemException catch (e) {
       // Matching again next time is the only cost.
       debugPrint('LaunchBox match cache write failed: $e');
@@ -132,10 +134,10 @@ class LaunchboxService {
   }
 
   /// Null when the file is missing, unreadable, or from another import.
-  static Future<Map<String, int?>?> _readMatchFile(File file, String? etag, String platform) async {
+  static Future<Map<String, int?>?> _readMatchFile(File file, String version, String platform) async {
     try {
       final json = jsonDecode(await file.readAsString());
-      if (json is! Map || json['etag'] != etag || json['platform'] != platform) return null;
+      if (json is! Map || json['version'] != version || json['platform'] != platform) return null;
       final ids = json['ids'];
       if (ids is! Map) return null;
       return {
@@ -167,3 +169,13 @@ class LaunchboxService {
 
 // Top-level so the isolate closure captures only the bytes.
 Future<List<LaunchboxGame>> _decode(List<int> bytes) => Isolate.run(() => LaunchboxStore.decodePlatform(bytes));
+
+/// [matchLaunchboxIds] off the UI isolate: building its key map alone takes
+/// tens of ms for a few thousand games. Only the fields it reads are copied
+/// in, since overviews and images are most of a platform's size.
+Future<List<int?>> _matchInBackground(List<String> titles, List<LaunchboxGame> games) {
+  final slim = [
+    for (final g in games) LaunchboxGame(id: g.id, name: g.name, alternateNames: g.alternateNames, ratingCount: g.ratingCount),
+  ];
+  return Isolate.run(() => matchLaunchboxIds(titles, slim));
+}
