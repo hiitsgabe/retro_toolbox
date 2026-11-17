@@ -28,7 +28,7 @@ class FilterModal extends ConsumerWidget {
       CatalogSort.name: 'Name',
       if (hasSize) CatalogSort.sizeDesc: 'Largest',
       if (hasSize) CatalogSort.sizeAsc: 'Smallest',
-      if (games.any((g) => g.details?.releaseDate != null)) CatalogSort.newest: 'Newest',
+      if (games.any((g) => (g.details?.releaseDate ?? g.details?.launchboxReleaseDate) != null)) CatalogSort.newest: 'Newest',
       if (games.any((g) => g.details?.popularity != null)) CatalogSort.popular: 'Most popular',
       if (hasRating) CatalogSort.topRated: 'Top rated',
     };

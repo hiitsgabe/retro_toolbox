@@ -70,7 +70,9 @@ class LaunchboxState {
   final Set<String> wanted;
   final bool importing;
 
-  /// The last import's outcome: "Already up to date", "Updated", or the error.
+  /// What the card last has to say: an import's outcome ("Already up to
+  /// date", "Updated", "Cancelled" or the error), [noLaunchboxConsolesMessage]
+  /// for an import with nothing to keep, or why a delete failed.
   final String? message;
 
   /// LaunchBox's front covers as game thumbnails, where it has one.
@@ -98,6 +100,12 @@ class LaunchboxState {
         useCovers: useCovers ?? this.useCovers,
       );
 }
+
+/// The import the main app's LaunchBox data comes from, for the companion
+/// engine, which keeps its own decoded copy. Null with metadata off, and until
+/// something first refreshes [launchboxProvider]: at worst the companion then
+/// drops a cache that was still good.
+final launchboxVersionProvider = Provider<String?>((ref) => ref.watch(launchboxProvider.select((s) => s.manifest?.version)));
 
 final launchboxProvider = StateNotifierProvider<LaunchboxNotifier, LaunchboxState>((ref) => LaunchboxNotifier(ref));
 

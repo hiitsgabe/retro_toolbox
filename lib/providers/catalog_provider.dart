@@ -13,6 +13,7 @@ import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_platforms.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
@@ -148,6 +149,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         availableGenres: _genresOf(enriched),
       );
       state = loaded.copyWith(filter: _offeredOnly(loaded));
+      _refocus(enriched);
 
       await updateFilteredGames(immediate: true);
 
@@ -200,14 +202,25 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final source = state.games;
     if (console == null || source.isEmpty) return;
     // Cleared first, so a game the new data no longer matches (or all of them,
-    // with metadata off) loses what it had, a LaunchBox cover included.
+    // with metadata off) loses what it had, a LaunchBox cover and release date
+    // included. The catalog's own fields stay.
     final cleared = [for (final g in source) _withoutLaunchbox(g)];
     final enriched = await _ref.read(launchboxServiceProvider).enrich(console, cleared, useCovers: await launchboxUseCovers());
     // A catalog load started meanwhile: its list wins.
     if (!mounted || launchboxGen != _launchboxGen || !identical(state.games, source)) return;
     final applied = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));
     state = applied.copyWith(filter: _offeredOnly(applied));
+    _refocus(enriched);
     await updateFilteredGames(immediate: true);
+  }
+
+  /// Points the focused game at its copy in [games]: the second screen shows
+  /// that object, and would keep the old LaunchBox data until focus moves.
+  void _refocus(List<Game> games) {
+    final focused = _ref.read(focusedGameProvider);
+    if (focused == null) return;
+    final fresh = games.where((g) => g.gameId == focused.gameId).firstOrNull;
+    if (fresh != null) _ref.read(focusedGameProvider.notifier).state = fresh;
   }
 
   static Game _withoutLaunchbox(Game game) {

@@ -13,7 +13,9 @@ import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
 /// Gamepad buttons for a focused game card: X marks it (where the checkbox
 /// would work), Y opens its page, holding A opens its box art. Focus here also
-/// tells the second screen which game to show.
+/// tells the second screen which game to show, except on a Task Manager row
+/// ([selectable] false): the games screen is still up under the sheet, and the
+/// row's game may be from another console.
 class GameCardActions extends ConsumerStatefulWidget {
   const GameCardActions({super.key, required this.game, required this.selectable, required this.child});
 
@@ -28,7 +30,9 @@ class GameCardActions extends ConsumerStatefulWidget {
 class _GameCardActionsState extends ConsumerState<GameCardActions> {
   final _focus = FocusNode(canRequestFocus: false, skipTraversal: true);
 
-  void _report() => ref.read(focusedGameProvider.notifier).state = widget.game;
+  void _report() {
+    if (widget.selectable) ref.read(focusedGameProvider.notifier).state = widget.game;
+  }
 
   // Cover flow keeps its one focus stop and swaps the centre game under it,
   // so focus never moves: the new game has to be reported here.
@@ -141,7 +145,7 @@ const gameDetailsRouteName = 'game-details';
 /// small buttons and checkbox do as buttons.
 Future<void> showGameActionMenu(BuildContext context, Game game, {bool selectable = true}) {
   // A tap opens the page without moving focus to the card.
-  ProviderScope.containerOf(context, listen: false).read(focusedGameProvider.notifier).state = game;
+  if (selectable) ProviderScope.containerOf(context, listen: false).read(focusedGameProvider.notifier).state = game;
   return Navigator.of(context).push<void>(
     MaterialPageRoute(
       settings: const RouteSettings(name: gameDetailsRouteName),

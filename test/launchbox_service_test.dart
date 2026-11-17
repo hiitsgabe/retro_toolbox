@@ -77,7 +77,7 @@ void main() {
     expect((await service.manifest())?.etag, '"etag-1"');
   });
 
-  test('enrich fills the LaunchBox fields and keeps a known release date', () async {
+  test('enrich fills the LaunchBox fields, its release date apart from the catalog\'s', () async {
     final games = [
       game('Super Metroid (Japan, USA) (En,Ja).sfc', details: const GameDetails(boxart: 'https://art/metroid.png')),
       game('Pilotwings (USA).zip', details: const GameDetails(releaseDate: 19901221)),
@@ -92,13 +92,13 @@ void main() {
       (1, snes, 4.5, 80, 1, false),
     );
     expect(metroid.genres, ['Action', 'Platform']);
-    expect(metroid.releaseDate, 19940319);
+    expect((metroid.releaseDate, metroid.launchboxReleaseDate), (null, 19940319));
     expect(metroid.boxart, 'https://art/metroid.png');
 
     final pilotwings = out[1].details!;
     expect((pilotwings.launchboxId, pilotwings.rating, pilotwings.ratingCount, pilotwings.maxPlayers, pilotwings.cooperative), (2, 3.25, 12, 2, true));
     expect(pilotwings.genres, ['Flight Simulator']);
-    expect(pilotwings.releaseDate, 19901221);
+    expect((pilotwings.releaseDate, pilotwings.launchboxReleaseDate), (19901221, 19910821));
 
     final unrated = out[2].details!;
     expect((unrated.launchboxId, unrated.rating, unrated.ratingCount), (3, null, null));
@@ -254,9 +254,11 @@ void main() {
         maxPlayers: 2,
         cooperative: true,
         launchboxCover: 'https://images.launchbox-app.com/a.jpg',
+        launchboxReleaseDate: 19940400,
       );
       final back = GameDetails.fromJson(jsonDecode(jsonEncode(d.toJson())));
       expect(back.launchboxCover, 'https://images.launchbox-app.com/a.jpg');
+      expect(back.launchboxReleaseDate, 19940400);
       expect(
         (back.boxart, back.releaseDate, back.launchboxId, back.launchboxPlatform, back.rating, back.ratingCount, back.maxPlayers, back.cooperative),
         ('https://art/a.png', 19940319, 7, snes, 4.25, 31, 2, true),
@@ -268,8 +270,8 @@ void main() {
       expect(const GameDetails(boxart: 'b').toJson(), {'boxart': 'b'});
       final old = GameDetails.fromJson({'boxart': 'b', 'releaseDate': 19990000});
       expect(
-        (old.launchboxId, old.launchboxPlatform, old.rating, old.ratingCount, old.maxPlayers, old.cooperative, old.launchboxCover),
-        (null, null, null, null, null, null, null),
+        (old.launchboxId, old.launchboxPlatform, old.rating, old.ratingCount, old.maxPlayers, old.cooperative, old.launchboxCover, old.launchboxReleaseDate),
+        (null, null, null, null, null, null, null, null),
       );
       expect(old.genres, isEmpty);
     });

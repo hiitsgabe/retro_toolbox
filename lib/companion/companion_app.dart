@@ -31,13 +31,16 @@ class CompanionApp extends StatelessWidget {
 /// payloads say (see companion_payload.dart). Touch scrolls and opens images;
 /// nothing here changes the app.
 class CompanionScreen extends StatefulWidget {
-  const CompanionScreen({super.key, this.channel, this.lookup});
+  const CompanionScreen({super.key, this.channel, this.lookup, this.invalidate});
 
   /// Null: `retro_toolbox/companion`.
   final MethodChannel? channel;
 
   /// Null: [LaunchboxService.lookup], which reads the imported files itself.
   final Future<LaunchboxGame?> Function(String platform, int id)? lookup;
+
+  /// Null: [LaunchboxService.invalidate].
+  final VoidCallback? invalidate;
 
   /// Test seam: images without the network or the image cache plugin.
   @visibleForTesting
@@ -54,6 +57,9 @@ class _CompanionScreenState extends State<CompanionScreen> {
   Game? _game;
   LaunchboxGame? _launchbox;
   List<CompanionTask> _tasks = const [];
+
+  /// The LaunchBox import the last details came from (see detailsPayload).
+  String? _launchboxVersion;
 
   /// Counts payloads: a lookup answers only the one it was started for.
   int _shown = 0;
@@ -78,7 +84,16 @@ class _CompanionScreenState extends State<CompanionScreen> {
       final payload = jsonDecode(call.arguments as String) as Map<String, dynamic>;
       switch (payload['mode']) {
         case 'details':
-          _showGame(Game.fromJson(payload['game'] as Map<String, dynamic>));
+          final game = Game.fromJson(payload['game'] as Map<String, dynamic>);
+          final version = payload['launchbox'] as String?;
+          final reimported = version != _launchboxVersion;
+          if (reimported) {
+            // Another import, or metadata turned off: what this engine
+            // decoded is from before.
+            _launchboxVersion = version;
+            (widget.invalidate ?? LaunchboxService.instance.invalidate)();
+          }
+          _showGame(game, reimported: reimported);
         case 'tasks':
           final tasks = [for (final row in payload['tasks'] as List) CompanionTask.fromJson(row as Map<String, dynamic>)];
           _shown++;
@@ -93,9 +108,9 @@ class _CompanionScreenState extends State<CompanionScreen> {
     }
   }
 
-  void _showGame(Game game) {
+  void _showGame(Game game, {bool reimported = false}) {
     final payload = ++_shown;
-    final same = game.gameId == _game?.gameId;
+    final same = game.gameId == _game?.gameId && !reimported;
     setState(() {
       _game = game;
       if (!same) _launchbox = null;

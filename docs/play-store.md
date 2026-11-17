@@ -75,7 +75,7 @@ servers). Play asks for a purpose and a short video.
   in the repo's `save_recipes/` folder on GitHub (or an address the user sets
   in Settings), which say where each game keeps its saves and are fetched with
   no personal data sent; and, only when the user turns on Game metadata
-  (LaunchBox) in Settings, LaunchBox's metadata zip from
+  (LaunchBox) in Settings or the first-run setup, LaunchBox's metadata zip from
   `gamesdb.launchbox-app.com` and game images from `images.launchbox-app.com`,
   whose requests carry only the name of the file asked for. The index built
   from the zip (tens of MB) stays on the device and is deleted when the setting

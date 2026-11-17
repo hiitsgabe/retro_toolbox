@@ -15,6 +15,9 @@ class GameDetails {
   /// LaunchBox's front cover, set only when Settings asks for LaunchBox
   /// covers; [boxart] keeps the catalog's so turning them off restores it.
   final String? launchboxCover;
+  /// LaunchBox's release date, apart from [releaseDate] (the catalog's) so
+  /// turning metadata off takes it away again. The catalog's wins where both are set.
+  final int? launchboxReleaseDate;
 
   const GameDetails({
     this.boxart,
@@ -28,6 +31,7 @@ class GameDetails {
     this.maxPlayers,
     this.cooperative,
     this.launchboxCover,
+    this.launchboxReleaseDate,
   });
 
   factory GameDetails.fromJson(Map<String, dynamic> json) {
@@ -43,6 +47,7 @@ class GameDetails {
       maxPlayers: json['maxPlayers'],
       cooperative: json['cooperative'],
       launchboxCover: json['launchboxCover'],
+      launchboxReleaseDate: json['launchboxReleaseDate'],
     );
   }
 
@@ -59,6 +64,7 @@ class GameDetails {
       if (maxPlayers != null) 'maxPlayers': maxPlayers,
       if (cooperative != null) 'cooperative': cooperative,
       if (launchboxCover != null) 'launchboxCover': launchboxCover,
+      if (launchboxReleaseDate != null) 'launchboxReleaseDate': launchboxReleaseDate,
     };
   }
 
@@ -74,6 +80,7 @@ class GameDetails {
     int? maxPlayers,
     bool? cooperative,
     String? launchboxCover,
+    int? launchboxReleaseDate,
   }) {
     return GameDetails(
       boxart: boxart ?? this.boxart,
@@ -87,6 +94,7 @@ class GameDetails {
       maxPlayers: maxPlayers ?? this.maxPlayers,
       cooperative: cooperative ?? this.cooperative,
       launchboxCover: launchboxCover ?? this.launchboxCover,
+      launchboxReleaseDate: launchboxReleaseDate ?? this.launchboxReleaseDate,
     );
   }
 }

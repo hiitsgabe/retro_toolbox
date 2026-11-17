@@ -61,7 +61,7 @@ class FilteringService {
         CatalogSort.name => null,
         CatalogSort.sizeDesc => (g) => g.size > 0 ? g.size : null,
         CatalogSort.sizeAsc => (g) => g.size > 0 ? -g.size : null,
-        CatalogSort.newest => (g) => g.details?.releaseDate,
+        CatalogSort.newest => (g) => g.details?.releaseDate ?? g.details?.launchboxReleaseDate,
         CatalogSort.popular => (g) => g.details?.popularity,
         CatalogSort.topRated => _ratingKey(games),
       };

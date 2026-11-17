@@ -64,14 +64,17 @@ void main() {
       child: MaterialApp(
         navigatorKey: key,
         builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
-        home: Builder(
-          builder: (ctx) => TextButton(
-            onPressed: () async {
-              await Navigator.of(ctx).push(
-                  MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
-              popped.add(true);
-            },
-            child: const Text('open'),
+        // A Scaffold, as the menu is, for what the wizard says as it closes.
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () async {
+                await Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
+                popped.add(true);
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       ),
@@ -186,6 +189,19 @@ void main() {
         {'Sega Genesis'}
       ]);
       expect(popped, [true]);
+    });
+
+    testWidgets('switched on with no console LaunchBox knows, Finish says so on the screen below', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      launchbox.platforms = {};
+      await tester.tap(tile);
+      await tester.pump();
+      await finish(tester);
+      expect(launchbox.imports, isEmpty);
+      expect(popped, [true]);
+      expect(find.text('open'), findsOneWidget);
+      expect(find.text(noLaunchboxConsolesMessage), findsOneWidget);
     });
 
     testWidgets('left off, Finish imports nothing', (tester) async {

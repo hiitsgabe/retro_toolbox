@@ -56,9 +56,7 @@ class LaunchboxService {
       final byId = await _platform(store, platform);
       if (byId == null) return games;
 
-      // Without an ETag the import date tells one import from the next.
-      final version = manifest.etag ?? manifest.importedAt.toIso8601String();
-      final ids = await _matchIds(store, console, platform, version, games, byId);
+      final ids = await _matchIds(store, console, platform, manifest.version, games, byId);
       return [
         for (final g in games)
           if (byId[ids[g.title]] case final lb?) g.copyWith(details: _fill(g.details, lb, platform, useCovers ? _cover(lb, g) : null)) else g,
@@ -166,7 +164,7 @@ class LaunchboxService {
       genres: lb.genres,
       maxPlayers: lb.maxPlayers,
       cooperative: lb.cooperative,
-      releaseDate: details?.releaseDate ?? lb.releaseDate,
+      launchboxReleaseDate: lb.releaseDate,
       launchboxCover: cover,
     );
   }

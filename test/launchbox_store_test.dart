@@ -61,6 +61,12 @@ void main() {
       });
     });
 
+    test('the version is the ETag, else the import date', () {
+      final at = DateTime.utc(2026, 11, 16, 12, 30);
+      expect(LaunchboxManifest(etag: '"abc"', importedAt: at, platforms: const {}).version, '"abc"');
+      expect(LaunchboxManifest(etag: null, importedAt: at, platforms: const {}).version, '2026-11-16T12:30:00.000Z');
+    });
+
     test('another format or junk reads as null', () {
       expect(LaunchboxManifest.fromJson({'format': 2, 'etag': 'x', 'importedAt': '2026-01-02T03:04:05.000Z', 'platforms': []}), isNull);
       expect(LaunchboxManifest.fromJson({'format': 1, 'importedAt': 'yesterday', 'platforms': []}), isNull);

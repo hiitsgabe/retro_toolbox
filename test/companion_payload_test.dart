@@ -18,6 +18,8 @@ void main() {
     final payload = jsonDecode(jsonEncode(detailsPayload(g))) as Map<String, dynamic>;
     expect(payload['mode'], 'details');
     expect(Game.fromJson(payload['game']).toJson(), g.toJson());
+    expect(payload['launchbox'], isNull);
+    expect(detailsPayload(g, launchboxVersion: '"e1"')['launchbox'], '"e1"');
   });
 
   test('tasks go active, queued, failed, done, each once', () {

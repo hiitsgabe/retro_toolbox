@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_payload.dart';
 
 /// The game card that last took focus (or was opened) on the games screen.
@@ -40,6 +41,7 @@ class CompanionSync {
     _subscriptions.addAll([
       _container.listen(focusedGameProvider, (_, __) => _chooseMode()),
       _container.listen(gamesScreenActiveProvider, (_, __) => _chooseMode()),
+      _container.listen(launchboxVersionProvider, (_, __) => _chooseMode()),
       _container.listen(gameStateManagerProvider, (_, __) => _onTasks()),
     ]);
     // Nothing is on the companion yet, so the task list must go out too.
@@ -64,7 +66,7 @@ class CompanionSync {
       _details?.cancel();
       _details = Timer(debounce, () {
         final game = _container.read(focusedGameProvider);
-        if (game != null) _emit(detailsPayload(game));
+        if (game != null) _emit(detailsPayload(game, launchboxVersion: _container.read(launchboxVersionProvider)));
       });
     } else {
       _details?.cancel();

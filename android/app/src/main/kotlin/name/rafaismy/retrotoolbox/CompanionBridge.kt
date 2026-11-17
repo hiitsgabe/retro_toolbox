@@ -23,6 +23,10 @@ object CompanionBridge {
     /// Told when a companion comes up, so the main side can plan again.
     var onAttached: (() -> Unit)? = null
 
+    /// The MainActivity whose engine runs the app, set by its DualScreenHost:
+    /// a key that reaches the companion belongs to it.
+    var mainActivity: MainActivity? = null
+
     // One launch in flight at a time. Starting the companion makes Dart plan
     // again (lifecycle, display changes) before it is created, and that open
     // must not start a second one; a close in that gap is kept for when it

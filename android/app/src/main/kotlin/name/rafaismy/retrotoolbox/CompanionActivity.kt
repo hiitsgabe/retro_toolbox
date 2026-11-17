@@ -2,6 +2,7 @@ package name.rafaismy.retrotoolbox
 
 import android.content.Context
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -22,6 +23,12 @@ class CompanionActivity : FlutterActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         CompanionBridge.attach(this)
     }
+
+    // Its window never takes focus, but should the system still route a key
+    // here (a controller press while this display is the focused one), it
+    // drives the main screen as any other would.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        CompanionBridge.mainActivity?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
 
     override fun provideFlutterEngine(context: Context): FlutterEngine = CompanionBridge.engine(context)
 

@@ -208,12 +208,14 @@ void main() {
       expect(s.wanted, {snes, nes, 'My Platform'});
       expect(s.manifest, isNull);
       expect(s.missing, isEmpty, reason: 'nothing is missing while metadata is off');
+      expect(c.read(launchboxVersionProvider), isNull);
 
       await writeManifest({snes, nes}, DateTime.utc(2026, 11, 16));
       await n.refresh();
       s = c.read(launchboxProvider);
       expect(s.manifest!.platforms, {snes, nes});
       expect(s.missing, {'My Platform'});
+      expect(c.read(launchboxVersionProvider), '"e1"');
     });
 
     test('a slow refresh that started first does not overwrite a newer one', () async {

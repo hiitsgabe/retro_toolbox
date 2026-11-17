@@ -37,7 +37,7 @@ class DualScreenState {
 final dualScreenProvider = StateNotifierProvider<DualScreenNotifier, DualScreenState>((ref) => DualScreenNotifier(ref));
 
 /// Puts the app and the companion on the screens the mode asks for, through
-/// MainActivity on `retro_toolbox/dual_screen`, and feeds the companion while
+/// DualScreenHost on `retro_toolbox/dual_screen`, and feeds the companion while
 /// it is open. Inert anywhere but Android.
 class DualScreenNotifier extends StateNotifier<DualScreenState> {
   DualScreenNotifier(this._ref, {MethodChannel? channel, bool? enabled, Future<SharedPreferences> Function()? prefs})

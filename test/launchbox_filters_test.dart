@@ -13,6 +13,7 @@ import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
@@ -60,7 +61,7 @@ class _OneGameService extends CatalogService {
   @override
   Future<List<Game>> loadCatalog(String consoleId,
           {String? iaAccessKey, String? iaSecretKey, String? authToken, void Function(int done, int total)? onProgress, void Function(String status)? onStatus}) async =>
-      [_game('one', const GameDetails(boxart: 'https://host.example/one.png', popularity: 7))];
+      [_game('one', const GameDetails(boxart: 'https://host.example/one.png', releaseDate: 19870000, popularity: 7))];
 }
 
 /// Gives every game what the fields hold when enrich is called, as reading
@@ -88,7 +89,7 @@ class _FakeLaunchbox extends LaunchboxService {
       for (final g in games)
         g.copyWith(
           details: (g.details ?? const GameDetails())
-              .copyWith(launchboxId: 1, rating: rating, ratingCount: rating == null ? null : 9, genres: genres, maxPlayers: maxPlayers, launchboxCover: useCovers ? 'https://lb.example/${g.title}.jpg' : null),
+              .copyWith(launchboxId: 1, rating: rating, ratingCount: rating == null ? null : 9, genres: genres, maxPlayers: maxPlayers, launchboxCover: useCovers ? 'https://lb.example/${g.title}.jpg' : null, launchboxReleaseDate: 19900000),
         ),
     ];
   }
@@ -303,6 +304,7 @@ void main() {
       expect(statuses, contains('Matching LaunchBox metadata'));
       expect(s.availableGenres, {'Shooter'});
       expect(s.paginatedFilteredGames.single.details?.genres, ['Shooter']);
+      expect(s.paginatedFilteredGames.single.details?.launchboxReleaseDate, 19900000);
 
       launchbox
         ..genres = const []
@@ -314,7 +316,8 @@ void main() {
       final d = s.paginatedFilteredGames.single.details!;
       expect((d.launchboxId, d.rating, d.ratingCount, d.maxPlayers), (null, null, null, null));
       expect(d.genres, isEmpty);
-      expect((d.boxart, d.popularity), ('https://host.example/one.png', 7));
+      // The catalog's own date stays; LaunchBox's goes with the rest.
+      expect((d.boxart, d.popularity, d.releaseDate, d.launchboxReleaseDate), ('https://host.example/one.png', 7, 19870000, null));
     });
 
     test('covers follow the setting, and turning them off restores the mapped box art', () async {
@@ -353,6 +356,28 @@ void main() {
       await load;
       expect(state().availableGenres, {'New'});
       expect(state().paginatedFilteredGames.single.details?.genres, ['New']);
+    });
+
+    test('the focused game is swapped for its copy from a reapply or a reload', () async {
+      Game? focused() => container.read(focusedGameProvider);
+      await notifier.loadCatalog(_nes);
+      container.read(focusedGameProvider.notifier).state = state().games.single;
+
+      launchbox.genres = const ['New'];
+      await notifier.reapplyLaunchbox();
+      expect(focused(), same(state().games.single));
+      expect(focused()?.details?.genres, ['New']);
+
+      launchbox.genres = const ['Reloaded'];
+      await notifier.loadCatalog(_nes);
+      expect(focused(), same(state().games.single));
+      expect(focused()?.details?.genres, ['Reloaded']);
+
+      // One the list does not have is left alone.
+      final other = _game('other');
+      container.read(focusedGameProvider.notifier).state = other;
+      await notifier.reapplyLaunchbox();
+      expect(focused(), same(other));
     });
 
     test('of two overlapping reapplies the later one wins', () async {

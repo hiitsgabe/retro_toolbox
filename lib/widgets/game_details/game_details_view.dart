@@ -177,7 +177,7 @@ class _Info {
 
   List<LaunchboxImage> get images => lb?.images ?? const [];
 
-  int? get releaseDate => game.details?.releaseDate ?? lb?.releaseDate;
+  int? get releaseDate => game.details?.releaseDate ?? game.details?.launchboxReleaseDate ?? lb?.releaseDate;
   int? get year => switch (releaseDate) { final d? when d >= 10000 => d ~/ 10000, _ => null };
 
   List<String> get genres => lb?.genres.isNotEmpty == true ? lb!.genres : game.details?.genres ?? const [];

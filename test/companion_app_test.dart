@@ -56,11 +56,14 @@ void main() {
     CompanionScreen.debugImageBuilder = null;
   });
 
-  Future<void> start(WidgetTester t, {Future<LaunchboxGame?> Function(String platform, int id)? lookup, Size size = const Size(1240, 1080)}) async {
+  Future<void> start(WidgetTester t,
+      {Future<LaunchboxGame?> Function(String platform, int id)? lookup, VoidCallback? invalidate, Size size = const Size(1240, 1080)}) async {
     t.view.physicalSize = size;
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
-    await t.pumpWidget(CompanionApp(home: CompanionScreen(channel: _channel, lookup: lookup ?? (_, __) async => null)));
+    await t.pumpWidget(CompanionApp(
+      home: CompanionScreen(channel: _channel, lookup: lookup ?? (_, __) async => null, invalidate: invalidate ?? () {}),
+    ));
   }
 
   /// The handler's reply, decoded: an error the handler threw comes back as a
@@ -124,6 +127,37 @@ void main() {
     expect(asked, [('Sega Genesis', 2)]);
     expect(find.text('Axel and Blaze take back the city from Mr. X.'), findsOneWidget);
     noActions();
+  });
+
+  testWidgets('another LaunchBox import drops the caches and looks the shown game up again', (t) async {
+    var invalidated = 0;
+    var overview = 'Before the import.';
+    final asked = <(String, int)>[];
+    await start(
+      t,
+      lookup: (p, id) async {
+        asked.add((p, id));
+        return LaunchboxGame(id: id, name: 'Streets of Rage 2', overview: overview);
+      },
+      invalidate: () => invalidated++,
+    );
+    await send(t, detailsPayload(_streets, launchboxVersion: '"e1"'));
+    expect(find.text('Before the import.'), findsOneWidget);
+    final atFirst = invalidated;
+    await send(t, detailsPayload(_streets, launchboxVersion: '"e1"'));
+    expect((invalidated, asked.length), (atFirst, 1), reason: 'same import, same game: nothing to do');
+
+    overview = 'After the import.';
+    await send(t, detailsPayload(_streets, launchboxVersion: '"e2"'));
+    expect(invalidated, atFirst + 1);
+    expect(asked, hasLength(2));
+    expect(find.text('After the import.'), findsOneWidget);
+
+    // Metadata off: the game comes without its LaunchBox id, and the old
+    // record must not stay on screen.
+    await send(t, detailsPayload(_streets.copyWith(details: const GameDetails()), launchboxVersion: null));
+    expect(invalidated, atFirst + 2);
+    expect(find.text('After the import.'), findsNothing);
   });
 
   testWidgets('a lookup that resolves after a newer payload does not replace the newer game', (t) async {

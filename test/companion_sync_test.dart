@@ -15,6 +15,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
@@ -66,6 +67,9 @@ class _FakeGames extends StateNotifier<Map<String, GameState>> implements GameSt
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+/// Stands for the LaunchBox import the main side has read.
+final _launchboxVersion = StateProvider<String?>((ref) => null);
+
 Game game(String title) => Game(title: title, url: 'https://x/$title.zip', size: 1, consoleId: 'snes');
 
 GameState downloading(String title, double p) => GameState(game: game(title), status: GameStatus.downloading, showProgressBar: true, currentProgress: p);
@@ -82,7 +86,10 @@ void main() {
   List<String?> titles() => [for (final p in sent) p['mode'] == 'details' ? p['game']['title'] : null];
 
   setUp(() {
-    container = ProviderContainer(overrides: [gameStateManagerProvider.overrideWith((ref) => _FakeGames())]);
+    container = ProviderContainer(overrides: [
+      gameStateManagerProvider.overrideWith((ref) => _FakeGames()),
+      launchboxVersionProvider.overrideWith((ref) => ref.watch(_launchboxVersion)),
+    ]);
     sent = [];
     sync = CompanionSync(container, (json) async => sent.add(jsonDecode(json) as Map<String, dynamic>));
   });
@@ -193,6 +200,17 @@ void main() {
     expect(sent, hasLength(before));
   });
 
+  syncTest('details carry the LaunchBox import, and a new one sends them again', (t) async {
+    onGamesScreen(true);
+    focus('Zelda');
+    sync.start();
+    await t.pump(const Duration(milliseconds: 150));
+    container.read(_launchboxVersion.notifier).state = '"e2"';
+    await t.pump(const Duration(milliseconds: 150));
+    expect(titles(), ['Zelda', 'Zelda']);
+    expect([for (final p in sent) p['launchbox']], [null, '"e2"']);
+  });
+
   syncTest('dispose stops every send', (t) async {
     onGamesScreen(true);
     sync.start();
@@ -229,6 +247,31 @@ void main() {
 
       showGameActionMenu(t.element(find.text('Mario')), game('Mario'));
       expect(container.read(focusedGameProvider)?.title, 'Mario');
+    });
+
+    testWidgets('no Task Manager row, focused or tapped', (t) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final task = game('Task');
+      await t.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Column(children: [
+              TextButton(autofocus: true, onPressed: () {}, child: const Text('Above')),
+              GameCardActions(game: task, selectable: false, child: TextButton(onPressed: () {}, child: const Text('Task'))),
+            ]),
+          ),
+        ),
+      ));
+      await t.pump();
+      container.read(focusedGameProvider.notifier).state = game('Zelda');
+      Focus.of(t.element(find.text('Task'))).requestFocus();
+      await t.pump();
+      expect(container.read(focusedGameProvider)?.title, 'Zelda');
+
+      showGameActionMenu(t.element(find.text('Task')), task, selectable: false);
+      expect(container.read(focusedGameProvider)?.title, 'Zelda');
     });
 
     testWidgets('the centre game as cover flow browses under its one focus stop', (t) async {

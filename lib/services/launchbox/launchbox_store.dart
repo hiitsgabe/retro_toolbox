@@ -9,6 +9,9 @@ import 'launchbox_slug.dart';
 class LaunchboxManifest {
   const LaunchboxManifest({required this.etag, required this.importedAt, required this.platforms});
 
+  /// Tells one import from the next: the ETag, or without one the import date.
+  String get version => etag ?? importedAt.toIso8601String();
+
   /// Of the Metadata.zip this came from; null when the server sent none.
   final String? etag;
   final DateTime importedAt;

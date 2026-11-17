@@ -22,10 +22,23 @@ import io.flutter.plugin.common.MethodChannel
 class DualScreenHost(private val activity: MainActivity, private val engine: FlutterEngine) {
     private val channel = MethodChannel(engine.dartExecutor.binaryMessenger, "retro_toolbox/dual_screen")
     private val displays = activity.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+    // Whether each display was on when Dart last heard. onDisplayChanged also
+    // fires for brightness, refresh rate and the like, often, and only on/off
+    // can change the plan.
+    private val wasOn = HashMap<Int, Boolean>()
     private val listener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) = changed()
-        override fun onDisplayRemoved(displayId: Int) = changed()
-        override fun onDisplayChanged(displayId: Int) = changed()
+        override fun onDisplayAdded(displayId: Int) {
+            wasOn[displayId] = isOn(displayId)
+            changed()
+        }
+        override fun onDisplayRemoved(displayId: Int) {
+            wasOn.remove(displayId)
+            changed()
+        }
+        override fun onDisplayChanged(displayId: Int) {
+            val on = isOn(displayId)
+            if (wasOn.put(displayId, on) != on) changed()
+        }
     }
     private val attached: () -> Unit = { changed() }
 
@@ -38,8 +51,10 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     private var refocusUntil = 0L
 
     init {
+        for (d in displays.displays) wasOn[d.displayId] = d.state == Display.STATE_ON
         displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
         CompanionBridge.onAttached = attached
+        CompanionBridge.mainActivity = activity
         channel.setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
@@ -76,6 +91,8 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     private fun changed() {
         channel.invokeMethod("displaysChanged", null)
     }
+
+    private fun isOn(displayId: Int): Boolean = displays.getDisplay(displayId)?.state == Display.STATE_ON
 
     /// The display this activity is on, which is not the default one once it
     /// has moved.
@@ -118,8 +135,8 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     /// the top focused one even though its window is not focusable (focus
     /// follows the activity, not the window flag), and with one focus for all
     /// displays the main screen is then left without key input. Bring this
-    /// task back to the front, once per launch so it can never loop. Whether
-    /// a device needs it is in docs/dual-screen-checklist.md.
+    /// task back to the front, once per launch so it can never loop. Item 2
+    /// of docs/dual-screen-checklist.md shows whether a device needs it.
     fun onFocusLost() {
         if (SystemClock.uptimeMillis() >= refocusUntil) return
         refocusUntil = 0L
@@ -147,6 +164,7 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
             throw e
         }
         moved = true
+        releaseKeys()
         activity.finish()
     }
 
@@ -154,7 +172,13 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
         displays.unregisterDisplayListener(listener)
         channel.setMethodCallHandler(null)
         if (CompanionBridge.onAttached === attached) CompanionBridge.onAttached = null
+        releaseKeys()
         closeCompanion()
+    }
+
+    /// This activity is going: the companion's keys wait for the next host.
+    private fun releaseKeys() {
+        if (CompanionBridge.mainActivity === activity) CompanionBridge.mainActivity = null
     }
 
     private companion object {

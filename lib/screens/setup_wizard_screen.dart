@@ -143,7 +143,16 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     // The catalog may have changed since the screen opened, and with it the
     // platforms to import.
     await launchbox.refresh();
-    if (mounted && ref.read(launchboxProvider).manifest == null) launchbox.startImport(ref, context);
+    if (!mounted) return;
+    final s = ref.read(launchboxProvider);
+    if (s.manifest != null) return;
+    if (s.wanted.isEmpty) {
+      // Nothing to import: say so. A SnackBar shown now stays up on the
+      // screen the wizard closes to.
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(noLaunchboxConsolesMessage)));
+      return;
+    }
+    launchbox.startImport(ref, context);
   }
 
   /// What Start does: the enabled primary nav action of this step.

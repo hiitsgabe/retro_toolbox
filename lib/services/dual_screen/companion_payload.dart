@@ -2,8 +2,11 @@ import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 
-/// What the companion screen shows: one of these, sent as JSON.
-Map<String, dynamic> detailsPayload(Game game) => {'mode': 'details', 'game': game.toJson()};
+/// What the companion screen shows: one of these, sent as JSON. Details also
+/// say which LaunchBox import the game's data came from (null with metadata
+/// off), so the companion knows when its own copy of that import is stale.
+Map<String, dynamic> detailsPayload(Game game, {String? launchboxVersion}) =>
+    {'mode': 'details', 'game': game.toJson(), 'launchbox': launchboxVersion};
 
 const _maxTaskRows = 30;
 

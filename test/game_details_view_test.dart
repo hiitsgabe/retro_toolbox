@@ -113,6 +113,13 @@ void main() {
     expect(_url(_back.url), findsOneWidget);
   });
 
+  testWidgets('the catalog\'s release date wins over LaunchBox\'s, which shows before the record loads', (t) async {
+    await pump(t, game: _game.copyWith(details: const GameDetails(boxart: _box, launchboxReleaseDate: 19990000)));
+    row(t, 'Release date', '1999');
+    await pump(t, game: _game.copyWith(details: const GameDetails(boxart: _box, releaseDate: 20000000, launchboxReleaseDate: 19990000)), lb: _lb);
+    row(t, 'Release date', '2000');
+  });
+
   testWidgets('a year-only date shows the year; co-op shows in the players', (t) async {
     await pump(t, lb: const LaunchboxGame(id: 2, name: 'G', releaseDate: 19990000, maxPlayers: 4, cooperative: true));
     row(t, 'Release date', '1999');
