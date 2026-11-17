@@ -102,6 +102,76 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     }
   }
 
+  /// The settings a console can change from the general ones, in the order
+  /// its page shows them.
+  static const consoleKeys = [
+    AppSettings.downloadDir,
+    AppSettings.autoExtract,
+    AppSettings.extractToFolder,
+    AppSettings.groupDiscs,
+    AppSettings.downloadAllDiscs,
+    AppSettings.additionalHandler,
+    AppSettings.chdIsoAsCd,
+  ];
+
+  /// What [key] (an on/off setting) is for [consoleId] when the console does
+  /// not change it: the general setting, else its default.
+  bool generalBool(String key, String consoleId) => switch (key) {
+        AppSettings.autoExtract => getGeneralSetting<bool>(key) ?? true,
+        AppSettings.extractToFolder => getGeneralSetting<bool>(key) ?? !(CatalogService.consoleByIdSync(consoleId)?.extractContents ?? true),
+        AppSettings.groupDiscs => getGeneralSetting<bool>(key) ?? false,
+        AppSettings.downloadAllDiscs => getGeneralSetting<bool>(key) ?? true,
+        AppSettings.chdIsoAsCd => false,
+        _ => throw ArgumentError('Not an on/off console setting: $key'),
+      };
+
+  /// The handler [consoleId] runs when it does not choose one: the catalog's.
+  GameHandler? defaultHandler(String consoleId) => resolveActiveHandler(
+        saved: null,
+        jsonDefault: CatalogService.consoleByIdSync(consoleId)?.additionalHandler,
+        nszEnabled: state.nszDecompressEnabled,
+      );
+
+  /// The [consoleKeys] [consoleId] changes, in that order. A value the console
+  /// saved counts only when it differs from what it would get anyway: older
+  /// versions saved the defaults with every change, and those change nothing.
+  List<String> changedKeys(String consoleId) {
+    final own = state.consoleSettings[consoleId];
+    if (own == null) return const [];
+    final changed = <String>[];
+    for (final key in consoleKeys) {
+      final bool differs;
+      switch (key) {
+        case AppSettings.downloadDir:
+          differs = own.downloadDir?.isNotEmpty ?? false;
+        case AppSettings.additionalHandler:
+          differs = own.additionalHandler != null && activeHandler(consoleId) != defaultHandler(consoleId);
+        case AppSettings.chdIsoAsCd:
+          differs = own.chdIsoAsCd == true && activeHandler(consoleId) == GameHandler.chdCompress;
+        default:
+          final v = own.getSetting<bool>(key);
+          differs = v != null && v != generalBool(key, consoleId);
+      }
+      if (differs) changed.add(key);
+    }
+    return changed;
+  }
+
+  /// [consoleId] follows the general [key] again.
+  Future<void> resetConsoleSetting(String consoleId, String key) => resetConsoleSettings(consoleId, [key]);
+
+  /// [consoleId] follows the general setting again for each of [keys].
+  Future<void> resetConsoleSettings(String consoleId, Iterable<String> keys) async {
+    var own = state.consoleSettings[consoleId];
+    if (own == null) return;
+    for (final key in keys) {
+      own = own!.cleared(key);
+    }
+    final newState = state.copyWith(consoleSettings: {...state.consoleSettings, consoleId: own!});
+    state = newState;
+    await _settingsService.saveSettings(newState);
+  }
+
   T? getGeneralSetting<T>(String key) {
     return _settingsService.getGeneralSetting<T>(state, key);
   }
@@ -119,8 +189,13 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     // roms_folder only nests under the general download directory.
     final override = consoleId != null ? getConsoleSetting<String>(consoleId, AppSettings.downloadDir) : null;
     if (override != null && override.isNotEmpty) return override;
+    return defaultDownloadDir(consoleId);
+  }
 
-    final base = getSetting(AppSettings.downloadDir, consoleId) ?? '';
+  /// Where [consoleId]'s games go when it does not choose a folder: the
+  /// general download folder, with the console's roms_folder under it.
+  String defaultDownloadDir(String? consoleId) {
+    final base = getGeneralSetting<String>(AppSettings.downloadDir) ?? '';
     final romsFolder = CatalogService.consoleByIdSync(consoleId)?.romsFolder;
     if (base.isEmpty || romsFolder == null || romsFolder.isEmpty) return base;
     return p.join(base, romsFolder);
@@ -174,9 +249,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setConsoleAuthToken(String consoleId, String token) async {
     final current = state.consoleSettings[consoleId] ?? const BaseSettings();
-    final updated = token.isEmpty
-        ? current.copyWith(clearAuthToken: true)
-        : current.copyWith(authToken: token);
+    // Not copyWith: it would pin this console's extraction to a default.
+    final updated = BaseSettings.fromJson({...current.toJson(), 'authToken': token.isEmpty ? null : token});
     final newState = state.copyWith(
       consoleSettings: {...state.consoleSettings, consoleId: updated},
     );

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
@@ -526,8 +528,8 @@ void main() {
       String? focused() {
         String? label;
         FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
-          if (e.widget case SwitchListTile(:final Text title)) label = title.data == 'Use LaunchBox metadata' ? 'switch' : 'covers';
-          if (e.widget is FilledButton) label = 'update';
+          if (e.widget case SettingsSwitchRow(:final title)) label = title == 'Use LaunchBox metadata' ? 'switch' : 'covers';
+          if (e.widget case SettingsActionRow(action: 'Update')) label = 'update';
           return label == null;
         });
         return label;
@@ -587,7 +589,7 @@ void main() {
       });
       await t.pump();
       expect(find.text(noLaunchboxConsolesMessage), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
+      expect(t.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow)).onChanged, isNull);
     });
 
     testWidgets('the covers switch shows only with metadata on, and sets the choice', (t) async {
@@ -602,7 +604,7 @@ void main() {
       await t.pump();
       expect(find.text(covers), findsOneWidget);
       expect(find.text("Instead of the catalog's box art, when LaunchBox has one"), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, covers)).value, isFalse);
+      expect(t.widget<SettingsSwitchRow>(find.widgetWithText(SettingsSwitchRow, covers)).value, isFalse);
 
       await t.tap(find.text(covers));
       await t.pump();
@@ -617,7 +619,7 @@ void main() {
       expect(find.text('Importing, see the Task Manager'), findsOneWidget);
       expect(find.text('Update'), findsNothing);
       expect(find.text('Updated'), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile).first).onChanged, isNull);
+      expect(t.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow).first).onChanged, isNull);
       await t.tap(find.text('Cancel'));
       expect(notifier.cancels, 1);
     });

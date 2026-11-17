@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +15,7 @@ void main() {
       child: MaterialApp(home: Scaffold(body: HandlerSetting(console: console))),
     ));
 
-    Switch chd() => t.widget<Switch>(find.descendant(of: find.widgetWithText(SwitchListTile, 'Convert to CHD'), matching: find.byType(Switch)));
+    Switch chd() => t.widget<Switch>(find.descendant(of: find.widgetWithText(SettingsSwitchRow, 'Convert to CHD'), matching: find.byType(Switch)));
     expect(find.text('Convert to CIA'), findsNothing);
     expect(chd().value, isFalse);
 
@@ -26,23 +28,21 @@ void main() {
     expect(chd().value, isFalse);
   });
 
-  testWidgets('with CHD on, Advanced picks the CHD type for .iso, DVD by default', (t) async {
+  testWidgets('with CHD on, the CHD type for .iso shows, DVD by default', (t) async {
     SharedPreferences.setMockInitialValues({});
     const console = Console(id: 'disc', name: 'Disc', urls: [], gameFilesFormat: ['.iso']);
     await t.pumpWidget(const ProviderScope(
       child: MaterialApp(home: Scaffold(body: SingleChildScrollView(child: HandlerSetting(console: console)))),
     ));
-    expect(find.text('Advanced'), findsNothing);
+    expect(find.text('CHD type for .iso'), findsNothing);
 
     await t.tap(find.text('Convert to CHD'));
     await t.pumpAndSettle();
-    await t.tap(find.text('Advanced'));
-    await t.pumpAndSettle();
-    Set<bool> selected() => t.widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>)).selected;
-    expect(selected(), {false});
+    bool selected() => t.widget<SettingsSegmentedRow<bool>>(find.byType(SettingsSegmentedRow<bool>)).selected;
+    expect(selected(), isFalse);
 
     await t.tap(find.text('CD (createcd)'));
     await t.pumpAndSettle();
-    expect(selected(), {true});
+    expect(selected(), isTrue);
   });
 }

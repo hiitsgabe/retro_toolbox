@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 
 /// Lets the user pin which local IP every server (Tinfoil, FBI, Retro Tools,
 /// FTP, JDKV) advertises, instead of each one guessing. "Automatic" keeps the
@@ -24,62 +26,37 @@ class _NetworkAddressSettingState extends ConsumerState<NetworkAddressSetting> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final selected = ref.watch(settingsProvider).preferredLocalIp;
     final notifier = ref.read(settingsProvider.notifier);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('The address servers share with your consoles and other devices.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 8),
-        FutureBuilder<List<String>>(
-          future: _addresses,
-          builder: (context, snap) {
-            final ips = snap.data ?? const [];
-            return RadioGroup<String?>(
-              groupValue: selected,
-              onChanged: (v) => notifier.setPreferredLocalIp(v),
-              child: Column(
-                children: [
-                  RadioListTile<String?>(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: const Text('Automatic'),
-                    subtitle: Text(ips.isNotEmpty ? 'Uses ${ips.first}' : 'Best guess', style: theme.textTheme.bodySmall),
-                    value: null,
-                  ),
-                  for (final ip in ips)
-                    RadioListTile<String?>(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      title: Text(ip, style: const TextStyle(fontFamily: 'monospace')),
-                      value: ip,
-                    ),
-                  // A previously-picked IP that's not currently up (different Wi-Fi).
-                  if (selected != null && !ips.contains(selected))
-                    RadioListTile<String?>(
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      title: Text(selected, style: const TextStyle(fontFamily: 'monospace')),
-                      subtitle: Text('Not on this network right now', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
-                      value: selected,
-                    ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => setState(() => _addresses = TinfoilServerService.localAddresses()),
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Refresh'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
+    return FutureBuilder<List<String>>(
+      future: _addresses,
+      builder: (context, snap) {
+        final ips = snap.data ?? const [];
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+          SettingsSegmentedRow<String?>(
+            title: 'Address the servers use',
+            subtitle: 'What Tinfoil, FBI, FTP and the others share with your consoles. '
+                '${ips.isNotEmpty ? 'Automatic uses ${ips.first}' : 'Automatic makes a best guess'}.',
+            stacked: true,
+            options: [
+              (null, 'Automatic'),
+              for (final ip in ips) (ip, ip),
+              // A previously-picked IP that's not currently up (different Wi-Fi).
+              if (selected != null && !ips.contains(selected)) (selected, '$selected (not on this network)'),
+            ],
+            selected: selected,
+            onChanged: notifier.setPreferredLocalIp,
+          ),
+          SettingsActionRow(
+            title: 'Look for addresses again',
+            subtitle: 'After joining another network',
+            action: 'Refresh',
+            indent: true,
+            onPressed: () => setState(() => _addresses = TinfoilServerService.localAddresses()),
+          ),
+        ]);
+      },
     );
   }
 }

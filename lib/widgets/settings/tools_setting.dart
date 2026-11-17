@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 
 class ToolsSetting extends ConsumerWidget {
   final Console? console;
@@ -15,21 +16,11 @@ class ToolsSetting extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final catalogNotifier = ref.read(catalogProvider.notifier);
 
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.delete_sweep),
-          title: const Text('Clear Catalog Cache'),
-          subtitle: console != null
-              ? const Text('Clear cache for this console')
-              : const Text('Clear cache for all consoles'),
-          trailing: IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: () => _showClearCacheDialog(context, catalogNotifier),
-          ),
-        ),
-      ],
+    return SettingsActionRow(
+      title: console != null ? 'Catalog cache for this console' : 'Catalog cache',
+      subtitle: console != null ? 'Rebuilt on the next load' : 'For every console, rebuilt on the next load',
+      action: 'Clear',
+      onPressed: () => _showClearCacheDialog(context, catalogNotifier),
     );
   }
 

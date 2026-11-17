@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/services/formation_cache_service.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 
-/// One button that wipes every sports cache: the ESPN fetch cache (rrp_cache)
-/// and the locally saved formations. Used in the general settings.
+/// One row that wipes every sports cache: the ESPN fetch cache (rrp_cache)
+/// and the locally saved formations. Settings, Storage.
 class SportsCacheSettings extends StatefulWidget {
   const SportsCacheSettings({super.key});
 
@@ -18,8 +19,7 @@ class _SportsCacheSettingsState extends State<SportsCacheSettings> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear sports caches'),
-        content: const Text(
-            'This removes all downloaded roster data (ESPN cache) and every locally saved formation. This cannot be undone.'),
+        content: const Text('This removes all downloaded roster data (ESPN cache) and every locally saved formation. This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear')),
@@ -46,15 +46,12 @@ class _SportsCacheSettingsState extends State<SportsCacheSettings> {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: FilledButton.tonalIcon(
-        onPressed: _busy ? null : _clear,
-        icon: _busy
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.delete_sweep_outlined),
-        label: const Text('Clear all sports caches'),
-      ),
+    return SettingsActionRow(
+      title: 'Sports caches',
+      subtitle: 'Downloaded rosters and saved formations',
+      action: 'Clear',
+      busy: _busy,
+      onPressed: _clear,
     );
   }
 }

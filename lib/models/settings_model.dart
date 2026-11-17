@@ -265,7 +265,34 @@ class BaseSettings {
     }
   }
 
+  /// A copy with [key] set to [value]. Unlike [copyWith], the other keys keep
+  /// a null (following the general setting) instead of taking a default, so
+  /// setting one thing for a console does not pin the rest.
   BaseSettings setSetting<T>(String key, T? value) {
+    final next = _set(key, value);
+    return BaseSettings(
+      downloadDir: next.downloadDir,
+      autoExtract: key == AppSettings.autoExtract ? next.autoExtract : autoExtract,
+      maxParallelDownloads: key == AppSettings.maxParallelDownloads ? next.maxParallelDownloads : maxParallelDownloads,
+      maxParallelExtractions: key == AppSettings.maxParallelExtractions ? next.maxParallelExtractions : maxParallelExtractions,
+      extractToFolder: next.extractToFolder,
+      authToken: next.authToken,
+      autoApplyFormations: key == AppSettings.autoApplyFormations ? next.autoApplyFormations : autoApplyFormations,
+      additionalHandler: next.additionalHandler,
+      chdIsoAsCd: next.chdIsoAsCd,
+      groupDiscs: next.groupDiscs,
+      downloadAllDiscs: next.downloadAllDiscs,
+    );
+  }
+
+  /// A copy without a value for [key]: a console's copy then follows the
+  /// general setting again.
+  BaseSettings cleared(String key) {
+    assert(AppSettings.settingsSchema.containsKey(key), 'Invalid setting key: $key');
+    return BaseSettings.fromJson(toJson()..remove(key));
+  }
+
+  BaseSettings _set<T>(String key, T? value) {
     switch (key) {
       case AppSettings.downloadDir:
         return copyWith(downloadDir: value as String?);

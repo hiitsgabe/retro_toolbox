@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:retro_toolbox/services/permission_service.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 
 class PermissionsSetting extends StatefulWidget {
   const PermissionsSetting({super.key});
@@ -83,98 +85,30 @@ class _PermissionsSettingState extends State<PermissionsSetting> {
   Widget _buildPermissionTile(Permission permission, PermissionStatus status) {
     final description = PermissionService.permissionDescriptions[permission] ?? permission.toString();
     final rationale = PermissionService.permissionRationales[permission];
-    final isGranted = status.isGranted;
-    final isPermanentlyDenied = status.isPermanentlyDenied;
-
-    return ListTile(
-      leading: Icon(
-        isGranted ? Icons.check_circle : Icons.error,
-        color: isGranted ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
-      ),
-      title: Text(description),
-      subtitle: rationale != null
-          ? Text(
-              rationale,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            )
-          : null,
-      trailing: !isGranted
-          ? FilledButton.tonal(
-              onPressed: _loading ? null : () => _requestPermission(permission),
-              child: Text(isPermanentlyDenied ? 'Settings' : 'Request'),
-            )
-          : Text(
-              'Granted',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+    if (status.isGranted) {
+      return SettingsValueRow(title: description, subtitle: rationale, value: 'Granted', onTap: null);
+    }
+    return SettingsActionRow(
+      title: description,
+      subtitle: rationale,
+      action: status.isPermanentlyDenied ? 'Settings' : 'Request',
+      onPressed: _loading ? null : () => _requestPermission(permission),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isAndroid) {
-      return const SizedBox.shrink();
-    }
-
+    if (!Platform.isAndroid) return const SizedBox.shrink();
     if (_loading && _permissionStatuses.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(Icons.security),
-              SizedBox(width: 12),
-              Text('Permissions'),
-              Spacer(),
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ],
-          ),
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Align(alignment: Alignment.centerLeft, child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
       );
     }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  const Icon(Icons.security),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Permissions',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const Spacer(),
-                  if (_loading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-            ),
-            ..._permissionStatuses.entries.map(
-              (entry) => _buildPermissionTile(entry.key, entry.value),
-            ),
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [for (final e in _permissionStatuses.entries) _buildPermissionTile(e.key, e.value)],
     );
   }
 }

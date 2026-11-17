@@ -29,6 +29,12 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
       (consoleId == null ? null : state.consoleSettings[consoleId]?.getSetting<T>(key)) ?? state.generalSettings.getSetting<T>(key);
 
   @override
+  T? getGeneralSetting<T>(String key) => state.generalSettings.getSetting<T>(key);
+
+  @override
+  Future<void> setGeneralSetting<T>(String key, T value) => setSetting(key, value);
+
+  @override
   bool groupDiscs(String? consoleId) => getSetting<bool>(AppSettings.groupDiscs, consoleId) ?? false;
 
   @override
@@ -242,7 +248,7 @@ void main() {
       final fake = _FakeSettings(s);
       await t.pumpWidget(ProviderScope(
         overrides: [settingsProvider.overrideWith((ref) => fake)],
-        child: MaterialApp(home: Scaffold(body: DiscGroupingSetting(console: null, settingsNotifier: fake))),
+        child: MaterialApp(home: Scaffold(body: const DiscGroupingSetting(console: null))),
       ));
       return fake;
     }

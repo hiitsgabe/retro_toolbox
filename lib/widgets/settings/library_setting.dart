@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/about/play_fair_card.dart';
+import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
 
 /// Opt-in switch for the Games Library and downloads. Turning it on shows the
 /// Play fair note for the user to accept; turning it off doesn't.
@@ -10,10 +11,9 @@ class LibrarySetting extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      title: const Text('Games Library & downloads'),
-      subtitle: const Text('Browse a catalog and download games to this device.'),
+    return SettingsSwitchRow(
+      title: 'Games Library & downloads',
+      subtitle: 'Browse a catalog and download games to this device',
       value: ref.watch(settingsProvider.select((s) => s.isLibraryEnabled)),
       onChanged: (v) async {
         if (v && await _confirm(context) != true) return;
