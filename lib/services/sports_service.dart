@@ -177,7 +177,7 @@ class SportsService {
   }) async {
     final out = _tmp('team');
     final data = await _runData(
-      tag: 'fetchteam_${gameId.hashCode.abs()}_${teamId}',
+      tag: 'fetchteam_${gameId.hashCode.abs()}_$teamId',
       job: {
         'type': 'sports_fetch_team',
         'game_id': gameId,

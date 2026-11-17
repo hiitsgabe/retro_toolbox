@@ -38,46 +38,44 @@ class _NetworkAddressSettingState extends ConsumerState<NetworkAddressSetting> {
           future: _addresses,
           builder: (context, snap) {
             final ips = snap.data ?? const [];
-            return Column(
-              children: [
-                RadioListTile<String?>(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: const Text('Automatic'),
-                  subtitle: Text(ips.isNotEmpty ? 'Uses ${ips.first}' : 'Best guess', style: theme.textTheme.bodySmall),
-                  value: null,
-                  groupValue: selected,
-                  onChanged: (v) => notifier.setPreferredLocalIp(v),
-                ),
-                for (final ip in ips)
+            return RadioGroup<String?>(
+              groupValue: selected,
+              onChanged: (v) => notifier.setPreferredLocalIp(v),
+              child: Column(
+                children: [
                   RadioListTile<String?>(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
-                    title: Text(ip, style: const TextStyle(fontFamily: 'monospace')),
-                    value: ip,
-                    groupValue: selected,
-                    onChanged: (v) => notifier.setPreferredLocalIp(v),
+                    title: const Text('Automatic'),
+                    subtitle: Text(ips.isNotEmpty ? 'Uses ${ips.first}' : 'Best guess', style: theme.textTheme.bodySmall),
+                    value: null,
                   ),
-                // A previously-picked IP that's not currently up (different Wi-Fi).
-                if (selected != null && !ips.contains(selected))
-                  RadioListTile<String?>(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    title: Text(selected, style: const TextStyle(fontFamily: 'monospace')),
-                    subtitle: Text('Not on this network right now', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
-                    value: selected,
-                    groupValue: selected,
-                    onChanged: (v) => notifier.setPreferredLocalIp(v),
+                  for (final ip in ips)
+                    RadioListTile<String?>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(ip, style: const TextStyle(fontFamily: 'monospace')),
+                      value: ip,
+                    ),
+                  // A previously-picked IP that's not currently up (different Wi-Fi).
+                  if (selected != null && !ips.contains(selected))
+                    RadioListTile<String?>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      title: Text(selected, style: const TextStyle(fontFamily: 'monospace')),
+                      subtitle: Text('Not on this network right now', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                      value: selected,
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => setState(() => _addresses = TinfoilServerService.localAddresses()),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Refresh'),
+                    ),
                   ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _addresses = TinfoilServerService.localAddresses()),
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: const Text('Refresh'),
-                  ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         ),

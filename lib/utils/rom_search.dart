@@ -2,6 +2,7 @@
 /// Ported from console_utilities' rom_finder: normalize (drop extension, region
 /// tags, punctuation), then score exact=100 / substring=80 / token-Jaccard×60.
 /// A score ≥ [kRomMatchThreshold] is a match.
+library;
 
 const int kRomMatchThreshold = 50;
 
