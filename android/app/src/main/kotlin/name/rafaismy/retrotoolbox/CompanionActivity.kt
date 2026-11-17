@@ -10,7 +10,15 @@ import io.flutter.embedding.engine.FlutterEngine
 /// main screen; touch still scrolls it.
 class CompanionActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Brought back by the system in a new process, which nothing asked
+        // for: the main app opens its own when it plans. A restart in this
+        // process finds the engine still cached and stays.
+        val restored = savedInstanceState != null && !CompanionBridge.hasEngine()
         super.onCreate(savedInstanceState)
+        if (restored) {
+            finish()
+            return
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
         CompanionBridge.attach(this)
     }
