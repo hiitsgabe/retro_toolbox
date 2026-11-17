@@ -337,12 +337,12 @@ void main() {
       await pump(t, size: const Size(400, 800));
       expect(rail('library'), findsNothing);
       expect(find.byKey(const ValueKey('section downloads')), findsOneWidget);
-      expect(find.text('Folder, extraction, discs'), findsOneWidget);
+      expect(find.text('No folder, extract on, 5 at a time'), findsOneWidget); // its live summary
 
       await t.tap(find.byKey(const ValueKey('section downloads')));
       await t.pumpAndSettle();
       expect(find.text('Parallel downloads'), findsOneWidget);
-      expect(find.widgetWithText(AppBar, 'Downloads'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTopBar, 'Downloads'), findsOneWidget);
     });
 
     testWidgets("a console id opens that console's page", (t) async {
@@ -350,11 +350,11 @@ void main() {
         'psx': {'groupDiscs': true},
       });
       await pump(t, size: const Size(400, 800), consoleId: 'psx');
-      expect(find.widgetWithText(AppBar, 'PlayStation'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTopBar, 'PlayStation'), findsOneWidget);
       expect(find.byType(ChangedChip), findsOneWidget);
       await t.pageBack();
       await t.pumpAndSettle();
-      expect(find.widgetWithText(AppBar, 'Consoles'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTopBar, 'Consoles'), findsOneWidget);
     });
   });
 }

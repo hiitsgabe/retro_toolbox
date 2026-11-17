@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
 
+const _segmentText = TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
+
 /// One of a few choices: left/right on the focused row picks the one before
-/// or after (no wrap), a tap picks any. [stacked] puts the choices under the
-/// title, for long or many labels.
+/// or after (no wrap), a tap picks any. The choices sit right of the title,
+/// or under it when they would leave the title too little room. A console's
+/// [changed] choice carries the chip; X resets it ([onReset]).
 class SettingsSegmentedRow<T> extends StatelessWidget {
   const SettingsSegmentedRow({
     super.key,
@@ -14,7 +17,6 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     this.indent = false,
-    this.stacked = false,
     this.changed = false,
     this.onReset,
   });
@@ -25,9 +27,22 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
   final T selected;
   final ValueChanged<T>? onChanged;
   final bool indent;
-  final bool stacked;
   final bool changed;
   final VoidCallback? onReset;
+
+  /// The choices' width on one line.
+  double _choicesWidth(BuildContext context) {
+    var w = 2.0;
+    for (final o in options) {
+      final tp = TextPainter(
+        text: TextSpan(text: o.$2, style: DefaultTextStyle.of(context).style.merge(_segmentText)),
+        textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      w += tp.width + 32;
+    }
+    return w;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,23 +52,18 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
 
     Widget segment((T, String) o) {
       final picked = o.$1 == selected;
-      return ExcludeFocus(
-        child: Material(
-          color: picked ? scheme.secondaryContainer : Colors.transparent,
-          child: InkWell(
-            canRequestFocus: false,
-            onTap: onChanged == null || picked ? null : () => onChanged!(o.$1),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 44),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Center(
-                  widthFactor: 1,
-                  child: Text(
-                    o.$2,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: picked ? scheme.onSecondaryContainer : scheme.onSurfaceVariant),
-                  ),
-                ),
+      return Material(
+        color: picked ? scheme.secondaryContainer : Colors.transparent,
+        child: InkWell(
+          canRequestFocus: false,
+          onTap: onChanged == null || picked ? null : () => onChanged!(o.$1),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                widthFactor: 1,
+                child: Text(o.$2, style: _segmentText.copyWith(color: picked ? scheme.onSecondaryContainer : scheme.onSurfaceVariant)),
               ),
             ),
           ),
@@ -61,21 +71,24 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
       );
     }
 
-    final choices = DecoratedBox(
-      decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(22)),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: stacked
-            ? Wrap(children: [for (final o in options) segment(o)])
-            : Row(mainAxisSize: MainAxisSize.min, children: [for (final o in options) segment(o)]),
-      ),
-    );
+    Widget choices({required bool wrap}) => ExcludeFocus(
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(22)),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: wrap
+                  ? Wrap(children: [for (final o in options) segment(o)])
+                  : IntrinsicHeight(child: Row(mainAxisSize: MainAxisSize.min, children: [for (final o in options) segment(o)])),
+            ),
+          ),
+        );
     final text = SettingsRowText(title: title, subtitle: subtitle, changed: changed, enabled: onChanged != null);
-    final resetPill = reset == null ? null : RowPill(label: 'Reset', filled: false, onPressed: reset);
 
     return SettingsRowFrame(
       indent: indent,
       onReset: reset,
+      minHeight: changed ? 72 : 64,
       onKeyEvent: (_, e) {
         final by = sideStep(e);
         if (by == null || onChanged == null) return KeyEventResult.ignored;
@@ -83,18 +96,22 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
         if (next != index) onChanged!(options[next].$1);
         return KeyEventResult.handled;
       },
-      child: stacked
-          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [Expanded(child: text), if (resetPill != null) resetPill]),
-              const SizedBox(height: 10),
-              choices,
-            ])
-          : Row(children: [
-              Expanded(child: text),
-              if (resetPill != null) ...[const SizedBox(width: 12), resetPill],
-              const SizedBox(width: 12),
-              choices,
-            ]),
+      child: LayoutBuilder(builder: (context, box) {
+        final wide = _choicesWidth(context);
+        // Under the title when the title would get less than 200 px.
+        if (box.maxWidth - wide - 16 < 200) {
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            text,
+            const SizedBox(height: 10),
+            choices(wrap: true),
+          ]);
+        }
+        return Row(children: [
+          Expanded(child: text),
+          const SizedBox(width: 16),
+          choices(wrap: false),
+        ]);
+      }),
     );
   }
 }

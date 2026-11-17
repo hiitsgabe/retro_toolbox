@@ -88,7 +88,6 @@ class DownloadFolderRow extends ConsumerWidget {
         title: 'Download folder',
         subtitle: 'Games land here, one folder per console',
         value: dir.isEmpty ? 'Not chosen' : dir,
-        monospace: dir.isNotEmpty,
         onTap: () => _pick(context, notifier),
       );
     }
@@ -99,7 +98,6 @@ class DownloadFolderRow extends ConsumerWidget {
       title: 'Download folder',
       subtitle: changed ? 'Default: ${fallback.isEmpty ? 'not chosen' : fallback}' : followingDownloads,
       value: dir.isEmpty ? 'Not chosen' : dir,
-      monospace: dir.isNotEmpty,
       onTap: () => _pick(context, notifier),
       changed: changed,
       onReset: () => notifier.resetConsoleSetting(console.id, AppSettings.downloadDir),

@@ -24,7 +24,7 @@ class DiscGroupingSetting extends ConsumerWidget {
           settingKey: AppSettings.groupDiscs,
           defaultValue: false,
           title: 'Group multi-disc games',
-          subtitle: 'Show Disc 1, Disc 2... of a game as one entry',
+          subtitle: 'Show Disc 1, Disc 2... as one entry',
           console: console,
         ),
         if (grouped)

@@ -32,13 +32,20 @@ class SettingsSwitchRow extends StatelessWidget {
     return SettingsRowFrame(
       indent: indent,
       autofocus: autofocus,
+      minHeight: changed ? 72 : 64,
       onTap: onChanged == null ? null : () => onChanged!(!value),
       onReset: reset,
       child: Row(children: [
         Expanded(child: SettingsRowText(title: title, subtitle: subtitle, changed: changed, enabled: onChanged != null)),
-        if (reset != null) ...[const SizedBox(width: 12), RowPill(label: 'Reset', filled: false, onPressed: reset)],
-        const SizedBox(width: 12),
-        ExcludeFocus(child: Switch(value: value, onChanged: onChanged)),
+        const SizedBox(width: 16),
+        ExcludeFocus(
+          child: Switch(
+            value: value,
+            onChanged: onChanged,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        if (reset != null) ...[const SizedBox(width: 16), ResetPill(onPressed: reset)],
       ]),
     );
   }

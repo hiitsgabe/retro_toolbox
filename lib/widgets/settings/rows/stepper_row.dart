@@ -10,6 +10,39 @@ int? sideStep(KeyEvent e) {
   return null;
 }
 
+/// A 44 px round outlined button inside a row; not a focus stop.
+class RoundRowButton extends StatelessWidget {
+  const RoundRowButton({super.key, required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ExcludeFocus(
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          type: MaterialType.transparency,
+          shape: CircleBorder(side: BorderSide(color: scheme.outlineVariant)),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            canRequestFocus: false,
+            onTap: onPressed,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(icon, size: 22, color: onPressed == null ? scheme.onSurface.withValues(alpha: 0.38) : scheme.onSurface),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A number from [min] to [max]: left/right on the focused row, or the two
 /// round buttons, step it by one.
 class SettingsStepperRow extends StatelessWidget {
@@ -39,14 +72,7 @@ class SettingsStepperRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget round(IconData icon, String tooltip, bool enabled, int by) => ExcludeFocus(
-          child: IconButton.outlined(
-            tooltip: tooltip,
-            onPressed: enabled ? () => _step(by) : null,
-            icon: Icon(icon),
-          ),
-        );
+    final scheme = Theme.of(context).colorScheme;
     return SettingsRowFrame(
       indent: indent,
       onKeyEvent: (_, e) {
@@ -57,13 +83,19 @@ class SettingsStepperRow extends StatelessWidget {
       },
       child: Row(children: [
         Expanded(child: SettingsRowText(title: title, subtitle: subtitle)),
-        const SizedBox(width: 12),
-        round(Icons.chevron_left, 'Less', value > min, -1),
+        const SizedBox(width: 16),
+        RoundRowButton(icon: Icons.chevron_left, tooltip: 'Less', onPressed: value > min ? () => _step(-1) : null),
+        const SizedBox(width: 4),
         SizedBox(
-          width: 44,
-          child: Text('$value', textAlign: TextAlign.center, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          width: 40,
+          child: Text(
+            '$value',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: scheme.onSurface, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
         ),
-        round(Icons.chevron_right, 'More', value < max, 1),
+        const SizedBox(width: 4),
+        RoundRowButton(icon: Icons.chevron_right, tooltip: 'More', onPressed: value < max ? () => _step(1) : null),
       ]),
     );
   }

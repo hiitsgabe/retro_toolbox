@@ -105,8 +105,8 @@ Servers advertise the local address you pick in Settings, and each port can be c
 - **M3U Playlists:** find multi-disc games in a folder and write `.m3u` playlists, so emulators show one entry and swap discs in-game.
 - **CHD Converter:** compress `.cue`/`.gdi`/`.iso` disc images to CHD to save space, or extract CHD back. `chdman` is bundled.
 - **Rar Decompress:** extract `.rar` and `.zip` archives to a folder (RAR on Android, macOS and Linux, including handhelds).
-- **NSZ Decompress:** turn Switch `.nsz` files back into installable `.nsp`. Needs your own `prod.keys`.
-- **3DS to CIA:** convert `.3ds`/`.cci` dumps to installable `.cia` on the device. Encrypted dumps need your own `boot9.bin`.
+- **NSZ Decompress:** turn Switch `.nsz` files back into installable `.nsp`. Needs your own `prod.keys` (Settings > Keys).
+- **3DS to CIA:** convert `.3ds`/`.cci` dumps to installable `.cia` on the device. Encrypted dumps need your own `boot9.bin` (Settings > Keys).
 - **Steam Shortcuts:** search the Steam store and write `.steam` shortcut files for launchers that run Steam games through GameHub or similar.
 
 ## On a handheld
@@ -135,7 +135,7 @@ PortMaster's catalog update through PortMaster).
 
 ## Games Library (optional)
 
-Off by default; turn it on in **Settings > Games Library**. It browses game files from an HTTP or
+Off by default; turn it on in **Settings > Library**. It browses game files from an HTTP or
 HTTPS file index you provide (HTML directory listings, JSON APIs or Internet Archive items) and
 downloads them in parallel, in the background, with automatic extraction, box art, search, region
 filters and favorites. With it on, two extras appear: **New Catalog Source** (add one console from a
@@ -152,7 +152,7 @@ and only download files you legally own.
 
 Provide a catalog in either of these ways:
 
-- **In the app:** Settings > *Catalog Source* > import a JSON file or load one from a URL.
+- **In the app:** Settings > Library > *Catalog source* > import a JSON file or load one from a URL.
 - **At build time:** put your catalog at `assets/catalog/consoles.json` before building (git-ignored).
 
 A fictional example is at [`docs/consoles.example.json`](docs/consoles.example.json) (it points at

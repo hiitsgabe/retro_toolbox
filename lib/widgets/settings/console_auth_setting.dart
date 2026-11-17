@@ -9,7 +9,11 @@ import 'package:url_launcher/url_launcher.dart';
 class ConsoleAuthSetting extends ConsumerStatefulWidget {
   final Console console;
 
-  const ConsoleAuthSetting({super.key, required this.console});
+  /// Every console the token is saved for: consoles that share one login
+  /// (Settings > Accounts) sign in together. Null: just [console].
+  final List<String>? applyTo;
+
+  const ConsoleAuthSetting({super.key, required this.console, this.applyTo});
 
   @override
   ConsumerState<ConsoleAuthSetting> createState() => _ConsoleAuthSettingState();
@@ -21,6 +25,15 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   bool _obscure = true;
   bool _dirty = false;
   bool _signingIn = false;
+
+  List<String> get _ids => widget.applyTo ?? [widget.console.id];
+
+  Future<void> _store(String token) async {
+    final n = ref.read(settingsProvider.notifier);
+    for (final id in _ids) {
+      await n.setConsoleAuthToken(id, token);
+    }
+  }
 
   List<String> get _signinParams => List<String>.from(widget.console.authSignin?['params'] as List? ?? const []);
 
@@ -50,7 +63,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
         widget.console.authSignin!,
         {for (final e in _signinControllers.entries) e.key: e.value.text.trim()},
       );
-      await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, token);
+      await _store(token);
       _tokenController.text = token;
       if (mounted) {
         setState(() => _dirty = false);
@@ -70,10 +83,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
   }
 
   Future<void> _save() async {
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(
-          widget.console.id,
-          _tokenController.text.trim(),
-        );
+    await _store(_tokenController.text.trim());
     setState(() => _dirty = false);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +94,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
 
   Future<void> _clear() async {
     _tokenController.clear();
-    await ref.read(settingsProvider.notifier).setConsoleAuthToken(widget.console.id, '');
+    await _store('');
     setState(() => _dirty = false);
   }
 
@@ -162,9 +172,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
               const Spacer(),
               FilledButton.icon(
                 onPressed: _signingIn ? null : _signin,
-                icon: _signingIn
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.login, size: 16),
+                icon: _signingIn ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login, size: 16),
                 label: const Text('Sign in'),
               ),
             ],
@@ -193,9 +201,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
           obscureText: _obscure,
           onChanged: (_) => setState(() => _dirty = true),
           decoration: InputDecoration(
-            labelText: widget.console.authUsesCookies
-                ? 'Cookie token (${widget.console.authCookieName})'
-                : 'Bearer token',
+            labelText: widget.console.authUsesCookies ? 'Cookie token (${widget.console.authCookieName})' : 'Bearer token',
             prefixIcon: const Icon(Icons.vpn_key_outlined),
             isDense: true,
             border: const OutlineInputBorder(),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/services/storage_usage.dart';
 import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
@@ -18,7 +19,10 @@ Future<void> confirmLaunchboxTurnOff(BuildContext context, WidgetRef ref) async 
       ],
     ),
   );
-  if (ok == true) await ref.read(launchboxProvider.notifier).turnOff();
+  if (ok == true) {
+    await ref.read(launchboxProvider.notifier).turnOff();
+    ref.invalidate(storageUsageProvider);
+  }
 }
 
 /// Turns LaunchBox metadata on (an import in the Task Manager), updates it
@@ -66,10 +70,12 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
 
   Future<void> _turnOff() => confirmLaunchboxTurnOff(context, ref);
 
+  static const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  /// "Nov 16".
   static String _date(DateTime t) {
     final l = t.toLocal();
-    String two(int n) => '$n'.padLeft(2, '0');
-    return '${l.year}-${two(l.month)}-${two(l.day)}';
+    return '${_months[l.month - 1]} ${l.day}';
   }
 
   @override
@@ -85,25 +91,34 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
       );
     }
     final manifest = s.manifest;
-    final count = manifest?.platforms.length ?? 0;
     final missing = s.missing.toList()..sort();
     // Off with nothing to import: turning it on would keep no platform.
     final nothingToImport = manifest == null && s.wanted.isEmpty;
+    final size = manifest == null ? null : ref.watch(storageUsageProvider).valueOrNull?.launchbox;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       SettingsSwitchRow(
         title: 'Use LaunchBox metadata',
         subtitle: manifest == null
-            ? "Adds ratings, genres, descriptions and artwork from LaunchBox's games database. Downloads about 110 MB once and indexes it on this device."
-            : 'Updated ${_date(manifest.importedAt)} · $count platform${count == 1 ? '' : 's'}',
+            ? 'Ratings, genres and artwork. Downloads about 110 MB once'
+            : 'Ratings, genres and artwork. ${size != null && size > 0 ? '${storageSize(size)}, updated' : 'Updated'} ${_date(manifest.importedAt)}',
         value: manifest != null,
         // Deleting under a running import would only have it write the files back.
         onChanged: s.importing || nothingToImport ? null : (on) => on ? _turnOn() : _turnOff(),
       ),
       if (nothingToImport && !s.importing && s.message != noLaunchboxConsolesMessage) const SettingsInfo(noLaunchboxConsolesMessage),
       if (missing.isNotEmpty) SettingsInfo('New consoles need an update: ${missing.join(', ')}', error: true),
+      if (manifest != null)
+        SettingsSwitchRow(
+          title: 'LaunchBox covers as thumbnails',
+          subtitle: 'Instead of the catalog box art, when LaunchBox has one',
+          indent: true,
+          value: s.useCovers,
+          onChanged: (on) => ref.read(launchboxProvider.notifier).setUseCovers(on),
+        ),
       if (s.importing)
         SettingsActionRow(
           title: 'Importing, see the Task Manager',
+          subtitle: 'Downloads only when LaunchBox changed',
           action: 'Cancel',
           indent: true,
           onPressed: () => ref.read(launchboxProvider.notifier).cancelImport(),
@@ -117,14 +132,6 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
           onPressed: () => ref.read(launchboxProvider.notifier).startImport(ref, context),
         ),
       if (s.message != null) SettingsInfo(s.message!, indent: true),
-      if (manifest != null)
-        SettingsSwitchRow(
-          title: 'Use LaunchBox covers for thumbnails',
-          subtitle: "Instead of the catalog's box art, when LaunchBox has one",
-          indent: true,
-          value: s.useCovers,
-          onChanged: (on) => ref.read(launchboxProvider.notifier).setUseCovers(on),
-        ),
     ]);
   }
 }

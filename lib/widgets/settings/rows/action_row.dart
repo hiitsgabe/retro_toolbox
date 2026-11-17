@@ -31,7 +31,7 @@ class SettingsActionRow extends StatelessWidget {
       onTap: enabled ? onPressed : null,
       child: Row(children: [
         Expanded(child: SettingsRowText(title: title, subtitle: subtitle, danger: danger, enabled: enabled || busy)),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         if (busy)
           const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
         else

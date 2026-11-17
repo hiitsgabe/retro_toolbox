@@ -32,8 +32,8 @@ void main() {
     expect(find.text('Off'), findsOneWidget);
     expect(find.text('Main on top'), findsOneWidget);
     expect(find.text('Main on bottom'), findsOneWidget);
-    expect(find.text('Games list on top, details or tasks below'), findsOneWidget);
-    expect(find.text('Changing which screen is the main one restarts the app on that screen.'), findsOneWidget);
+    expect(find.text('Only shown when a second display is found'), findsOneWidget);
+    expect(find.textContaining('Changing which screen is the main one restarts the app there.'), findsOneWidget);
     expect(tester.widget<SettingsSegmentedRow<DualScreenMode>>(find.byType(SettingsSegmentedRow<DualScreenMode>)).selected, DualScreenMode.mainOnTop);
   });
 
