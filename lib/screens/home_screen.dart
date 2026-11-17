@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_list/game_list.dart';
 import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid.dart';
@@ -13,17 +16,87 @@ import 'package:retro_toolbox/widgets/footer/footer.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
+/// Tells [HomeScreen] when a page covers it. Popups (sheets, dialogs, menus)
+/// are not page routes and leave it up, and neither does the game details page,
+/// which shows the game the second screen already shows. Its pop needs no
+/// filter: it only says the list is up again, which it never stopped being.
+class GamesRouteObserver extends RouteObserver<PageRoute<dynamic>> {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route.settings.name != gameDetailsRouteName) super.didPush(route, previousRoute);
+  }
+}
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
+
+  static final routeObserver = GamesRouteObserver();
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
+  late final StateController<bool> _gamesScreen;
+  late final StateController<Game?> _focusedGame;
+  PageRoute<dynamic>? _route;
+
+  @override
+  void initState() {
+    super.initState();
+    _gamesScreen = ref.read(gamesScreenActiveProvider.notifier);
+    _focusedGame = ref.read(focusedGameProvider.notifier);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (ModalRoute.of(context) case final PageRoute<dynamic> route when route != _route) {
+      if (_route != null) HomeScreen.routeObserver.unsubscribe(this);
+      _route = route;
+      HomeScreen.routeObserver.subscribe(this, route); // calls didPush
+    }
+  }
+
+  // Tells the second screen whether a game list is up. Providers must not
+  // change while the tree builds or unmounts, hence the microtasks.
+  void _setActive(bool active) {
+    final gamesScreen = _gamesScreen;
+    Future.microtask(() {
+      if (gamesScreen.mounted) gamesScreen.state = active;
+    });
+  }
+
+  @override
+  void didPush() => _setActive(true);
+
+  @override
+  void didPopNext() => _setActive(true);
+
+  // The focused game stays, so coming back shows its details again.
+  @override
+  void didPushNext() => _setActive(false);
+
+  @override
+  void dispose() {
+    HomeScreen.routeObserver.unsubscribe(this);
+    final focusedGame = _focusedGame;
+    _setActive(false);
+    Future.microtask(() {
+      if (focusedGame.mounted) focusedGame.state = null;
+    });
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
+    // A game from the last console must not stay on the second screen.
+    ref.listen(appStateProvider.select((s) => s.selectedConsole?.id), (_, __) {
+      Future.microtask(() {
+        if (_focusedGame.mounted) _focusedGame.state = null;
+      });
+    });
     final appStateNotifier = ref.read(appStateProvider.notifier);
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));

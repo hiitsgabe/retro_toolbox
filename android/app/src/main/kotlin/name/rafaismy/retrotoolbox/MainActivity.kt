@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -40,6 +41,22 @@ class MainActivity : FlutterActivity() {
     private var pickResult: MethodChannel.Result? = null
     private var pickingDir = false
     private var shizuku: ShizukuBridge? = null
+    private var dualScreen: DualScreenHost? = null
+
+    /// Set by DualScreenHost.moveMain: this activity's engine, and the Dart
+    /// work running in it, go on in the MainActivity on the other display.
+    var handingOver = false
+
+    // A handed-over engine is listed under ENGINE_ID. Once it is gone (the
+    // process died, or the last activity on it closed), the intent that named
+    // it starts a fresh engine as a launcher start does.
+    override fun getCachedEngineId(): String? =
+        super.getCachedEngineId()?.takeIf { FlutterEngineCache.getInstance().contains(it) }
+
+    // Kept while handing over: the embedding refuses to let another activity
+    // take an engine its host would destroy. Otherwise destroyed with this
+    // activity as usual, which the handed-over intent asks for too.
+    override fun shouldDestroyEngineWithHost(): Boolean = !handingOver && super.shouldDestroyEngineWithHost()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -203,13 +220,35 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        shizuku = ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
+        // A bridge handed over with the engine keeps its bound service and
+        // any call in flight; the embedding already skips plugin registration
+        // for an engine taken from the cache.
+        val parked = parkedShizuku
+        parkedShizuku = null
+        if (parked != null && parked.first !== flutterEngine) parked.second.dispose()
+        shizuku = parked?.takeIf { it.first === flutterEngine }?.second
+            ?: ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
+        dualScreen = DualScreenHost(this, flutterEngine)
     }
 
-    override fun onDestroy() {
-        shizuku?.dispose()
+    // Runs when this activity lets go of the engine: on destroy, or, after a
+    // move, when the MainActivity on the other display takes it, before that
+    // one configures it.
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        dualScreen?.dispose()
+        dualScreen = null
+        val bridge = shizuku
         shizuku = null
-        super.onDestroy()
+        if (handingOver && bridge != null) parkedShizuku = flutterEngine to bridge else bridge?.dispose()
+        // The picker reports back to this activity, which is going.
+        pickResult?.success(null)
+        pickResult = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) dualScreen?.onFocusLost()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -230,7 +269,12 @@ class MainActivity : FlutterActivity() {
         result.success(mapOf("uri" to uri.toString(), "authority" to uri.authority, "docId" to docId))
     }
 
-    private companion object {
-        const val PICK_REQUEST = 0x5AF
+    companion object {
+        private const val PICK_REQUEST = 0x5AF
+
+        /// FlutterEngineCache id of an engine handed to a new MainActivity.
+        const val ENGINE_ID = "main"
+
+        private var parkedShizuku: Pair<FlutterEngine, ShizukuBridge>? = null
     }
 }

@@ -10,12 +10,12 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 
-Game _game(String title, {int size = 0, int? date, int? pop}) => Game(
+Game _game(String title, {int size = 0, int? date, int? pop, int? lbDate}) => Game(
       title: title,
       url: 'https://host.example/$title',
       size: size,
       consoleId: 'con',
-      details: date == null && pop == null ? null : GameDetails(releaseDate: date, popularity: pop),
+      details: date == null && pop == null && lbDate == null ? null : GameDetails(releaseDate: date, popularity: pop, launchboxReleaseDate: lbDate),
     );
 
 class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier {
@@ -63,6 +63,7 @@ void main() {
     test('old details JSON without the new fields still loads', () {
       final d = GameDetails.fromJson({'boxart': 'https://host.example/a.png'});
       expect((d.boxart, d.releaseDate, d.popularity), ('https://host.example/a.png', null, null));
+      expect((d.launchboxId, d.rating, d.ratingCount, d.genres.isEmpty), (null, null, null, true));
     });
   });
 
@@ -91,6 +92,25 @@ void main() {
       expect(sorted(CatalogSort.newest), ['Charlie', 'Delta', 'Echo', 'Alpha', 'Bravo']);
       expect(sorted(CatalogSort.popular), ['Echo', 'Alpha', 'Charlie', 'Bravo', 'Delta']);
     });
+
+    test('newest takes LaunchBox\'s date where the catalog has none', () {
+      final games = [
+        _game('Alpha.bin', lbDate: 19950000),
+        _game('Bravo.bin', date: 19900000, lbDate: 20050000),
+        _game('Charlie.bin', date: 20000000),
+        _game('Delta.bin'),
+      ];
+      final order = [
+        for (final g in FilteringService.filterAndPaginate(FilterInput(
+          games: games,
+          filterText: '',
+          filter: const CatalogFilter(regions: {}, dumpQualities: {}, romTypes: {}, modifications: {}, distributionTypes: {}, sort: CatalogSort.newest),
+          limit: 100,
+        )).games)
+          g.title.split('.').first,
+      ];
+      expect(order, ['Charlie', 'Alpha', 'Bravo', 'Delta']);
+    });
   });
 
   group('filter modal', () {
@@ -117,6 +137,11 @@ void main() {
       expect(find.text('Smallest'), findsOneWidget);
       expect(find.text('Newest'), findsOneWidget);
       expect(find.text('Most popular'), findsNothing);
+    });
+
+    testWidgets('offers Newest for a LaunchBox date alone', (t) async {
+      await pump(t, [_game('Alpha.bin', lbDate: 19990000)]);
+      expect(find.text('Newest'), findsOneWidget);
     });
 
     testWidgets('picking an option sets the sort', (t) async {

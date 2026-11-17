@@ -25,6 +25,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/services/boxart_service.dart';
+import 'package:retro_toolbox/utils/image_memory.dart';
 import 'package:retro_toolbox/utils/rom_search.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
@@ -1826,6 +1827,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
               child: m.game.boxart != null
                   ? CachedNetworkImage(
                       imageUrl: m.game.boxart!,
+                      memCacheWidth: thumbnailDecodeWidth(56, 78, MediaQuery.devicePixelRatioOf(context)),
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => const Icon(Icons.videogame_asset),
                     )

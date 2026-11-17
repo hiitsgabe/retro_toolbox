@@ -105,5 +105,7 @@ class Game {
 
   String get language => metadata?.languages.firstOrNull ?? '';
 
-  String? get boxart => details?.boxart;
+  /// LaunchBox's cover when Settings chose it and LaunchBox has one, else the
+  /// catalog's box art.
+  String? get boxart => details?.launchboxCover ?? details?.boxart;
 }

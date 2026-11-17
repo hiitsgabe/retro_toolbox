@@ -88,6 +88,7 @@ footer a { color: var(--muted); margin: 0 10px; }
     <li><strong>Your files.</strong> The app reads and writes the files and folders you open in it (for example to extract an archive, convert a disc image or patch a game file you own). They are processed locally and never uploaded, except the game saves you sync to your own Google Drive with Save Sync (below).</li>
     <li><strong>Settings.</strong> Preferences such as your library folders, theme, the content sources you add and your server settings are stored in the app's private storage on the device. Save Sync also remembers this device's id, where its hub is (a folder, or the Google account you signed in with) and which save it last synced, in a private file that Android backups leave out.</li>
     <li><strong>Caches.</strong> Downloaded artwork and sports data are cached locally so they are not fetched again. Clearing the app's storage removes them.</li>
+    <li><strong>Game metadata.</strong> With Game metadata (LaunchBox) on, the index built from LaunchBox's database (tens of MB, for your consoles only) is kept in the app's private storage. Turning the setting off deletes it.</li>
   </ul>
 
   <h2>When the app connects to the internet</h2>
@@ -96,6 +97,7 @@ footer a { color: var(--muted); margin: 0 10px; }
     <li><strong>Update checks.</strong> The app asks the project's GitHub release page for the latest version. The Google Play version updates through Google Play instead.</li>
     <li><strong>Artwork.</strong> Box art and console logos are fetched from public artwork servers when a view needs them.</li>
     <li><strong>Save Sync recipes.</strong> Save Sync downloads recipe files, descriptions of where each game keeps its saves, from the project's GitHub repository, or from an address you set in Settings. Nothing about you or your saves is sent to get them.</li>
+    <li><strong>Game metadata.</strong> Only if you turn on Game metadata (LaunchBox), in Settings or in the first-run setup, the app downloads LaunchBox's public games database (Metadata.zip, about 110 MB, from gamesdb.launchbox-app.com) when you turn it on or tap Update, and indexes it on your device. Game artwork from that database is then loaded from images.launchbox-app.com when a view needs it. Each request carries only the name of the file asked for (so the image server can tell which artwork you viewed), and no name, account or identifier for you.</li>
     <li><strong>Sports rosters.</strong> The roster patcher downloads current teams and players from public sports data services (such as ESPN) for the season and league you choose.</li>
     <li><strong>Content sources you add.</strong> If you add your own catalog or source URLs in the app, the app contacts those servers on your behalf. Their privacy practices are their own.</li>
     <li><strong>Sharing by link.</strong> When you explicitly choose to share something as a link, that item is uploaded to an ephemeral file host (0x0.st) and the link is given to you. Nothing is uploaded unless you tap share.</li>

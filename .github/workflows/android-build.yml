@@ -1,0 +1,68 @@
+name: Android build
+
+# Proves the Android side (Kotlin, manifest, Gradle) still builds: a debug APK
+# on pull requests, nothing signed or published. Setup as in release.yml.
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - "lib/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "python_app/**"
+      - "third_party/**"
+      - "assets/**"
+      - ".github/workflows/android-build.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: android-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.35.7"
+  FLUTTER_CHANNEL: "stable"
+  SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/serious_python_app
+  SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
+
+jobs:
+  build-android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: ${{ env.FLUTTER_CHANNEL }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # serious_python_android refuses to configure without the staged
+      # site-packages, so the debug build needs the bundle too.
+      - name: Package Python app for Android
+        run: dart run serious_python:main package python_app/ -p Android -r zstandard -r pycryptodome -r "retro-roster-patcher[images]>=0.9.11"
+
+      # The catalog is a secret download in release.yml; the debug build ships
+      # the empty, tracked assets/catalog/ instead. "direct" because the app
+      # has flavors and a flavorless build finds no APK to report.
+      - name: Build debug APK
+        run: flutter build apk --debug --flavor direct

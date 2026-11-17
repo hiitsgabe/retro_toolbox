@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
@@ -15,7 +16,7 @@ import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 
 /// First-run onboarding: catalog source → download directory & defaults →
-/// optional Internet Archive connection.
+/// optional Internet Archive connection and LaunchBox metadata.
 class SetupWizardScreen extends ConsumerStatefulWidget {
   /// Start on this step. Lets tests and screenshots render later steps.
   @visibleForTesting
@@ -49,6 +50,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   String? _catalogSummary;
   String? _catalogError;
 
+  /// Only a choice until Finish: the import is a 110 MB download.
+  bool _wantLaunchbox = false;
+
   /// Short screens (small handhelds): the header, paddings and footer left
   /// little room for the step.
   bool get _compact => MediaQuery.sizeOf(context).height < 640;
@@ -62,6 +66,8 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     super.initState();
     final savedUrl = ref.read(settingsProvider).catalogSourceUrl;
     if (savedUrl != null) _urlController.text = savedUrl;
+    // Whether metadata is already on, for the Connections step.
+    ref.read(launchboxProvider.notifier).refresh();
   }
 
   @override
@@ -121,11 +127,32 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
   // returns must not pop the route below.
   bool _leaving = false;
 
-  Future<void> _finish() async {
+  Future<void> _finish() => _leave(importMetadata: true);
+
+  /// B on step 0 leaves as a skip: nothing is imported.
+  Future<void> _leave({bool importMetadata = false}) async {
     if (_leaving) return;
     _leaving = true;
     await SetupWizardScreen.markSeen();
+    if (importMetadata && _wantLaunchbox && mounted) await _importLaunchbox();
     if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _importLaunchbox() async {
+    final launchbox = ref.read(launchboxProvider.notifier);
+    // The catalog may have changed since the screen opened, and with it the
+    // platforms to import.
+    await launchbox.refresh();
+    if (!mounted) return;
+    final s = ref.read(launchboxProvider);
+    if (s.manifest != null) return;
+    if (s.wanted.isEmpty) {
+      // Nothing to import: say so. A SnackBar shown now stays up on the
+      // screen the wizard closes to.
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text(noLaunchboxConsolesMessage)));
+      return;
+    }
+    launchbox.startImport(ref, context);
   }
 
   /// What Start does: the enabled primary nav action of this step.
@@ -141,7 +168,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     if (_step > 0) {
       setState(() => _step -= 1);
     } else {
-      _finish();
+      _leave();
     }
   }
 
@@ -469,6 +496,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     final needsIa = consoles.any((c) => c.usesInternetArchive);
     bool authed(Console c) =>
         (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
+    final metadataOn = ref.watch(launchboxProvider).manifest != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,6 +533,16 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             ),
           ),
         ],
+        SizedBox(height: _compact ? 12 : 24),
+        _sectionTitle(theme, Icons.auto_awesome, 'Improve with LaunchBox (optional)',
+            'Ratings, genres, descriptions and artwork for your games. Downloads about 110 MB once and indexes it on this device.'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Download LaunchBox metadata'),
+          subtitle: metadataOn ? const Text('Already on') : null,
+          value: metadataOn || _wantLaunchbox,
+          onChanged: metadataOn ? null : (v) => setState(() => _wantLaunchbox = v),
+        ),
       ],
     );
   }

@@ -239,6 +239,7 @@ Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for
 | `ignore_extension_filtering` | boolean | `false`     | Show all regex matches regardless of `original_format` |
 | `download_url`             | string  | *(none)*      | Download URL template with `<id>` placeholder |
 | `auth`                     | object  | *(none)*      | Authentication config (see below) |
+| `launchbox_platform`       | string  | *(from `platform`)* | LaunchBox platform the metadata comes from (see below) |
 
 ---
 
@@ -335,6 +336,36 @@ A game named `"Cool Game (USA).zip"` would look for a thumbnail at:
 ```
 https://thumbnails.example.com/SNES/Cool Game (USA).png
 ```
+
+---
+
+## LaunchBox Metadata
+
+With *Use LaunchBox metadata* on in Settings, games get ratings, genres, player counts, descriptions
+and artwork from LaunchBox's games database. Each system's games are looked up in one LaunchBox
+platform. Most systems need nothing for this: a built-in map gives the LaunchBox platform for the
+common `platform` ids (`nes`, `snes`, `megadrive`, `psx`, `gba`, `n64`, `dreamcast` and about fifty
+more).
+
+Set `launchbox_platform` for a system the map does not cover, or to look its games up in another
+LaunchBox platform:
+
+```json
+{
+  "name": "Commodore 64",
+  "url": "https://your-server.com/c64/",
+  "platform": "c64",
+  "launchbox_platform": "Commodore 64",
+  "original_format": [".zip"],
+  "decompress": "unzip",
+  "roms_folder": "c64"
+}
+```
+
+The name must match an entry in LaunchBox's Platforms list exactly, capitals and spelling included:
+`Sega Genesis`, not `Mega Drive`, and `Sony Playstation` with a lowercase s. A name LaunchBox does
+not have only means no metadata for that system. The import keeps only the platforms your systems
+use, so after adding a system or changing the field, tap *Update* in Settings.
 
 ---
 

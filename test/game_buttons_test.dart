@@ -17,6 +17,7 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
@@ -131,7 +132,7 @@ void main() {
 
       await t.sendKeyEvent(LogicalKeyboardKey.f3);
       await t.pumpAndSettle();
-      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.byType(GameDetailsPage), findsOneWidget);
     });
   }
 
@@ -151,7 +152,7 @@ void main() {
     expect(catalog.toggled, isEmpty);
     await t.sendKeyEvent(LogicalKeyboardKey.f3);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
   testWidgets('Start downloads the selected games once', (t) async {
@@ -167,7 +168,7 @@ void main() {
     expect(started, hasLength(1));
     expect(started.single.$1, [_a, _b]);
     expect(started.single.$2, 'con');
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
   });
 
   testWidgets('B on the confirmation downloads nothing', (t) async {
@@ -189,7 +190,7 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     expect(started, isEmpty);
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
   testWidgets('Start works from outside the list too', (t) async {
@@ -242,14 +243,14 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(started.single.$1, [_b]);
-    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.byType(GameDetailsPage), findsNothing);
 
     await t.sendKeyEvent(LogicalKeyboardKey.f2);
     await t.pump();
     expect(catalog.toggled, [_a.gameId]);
     await t.sendKeyEvent(LogicalKeyboardKey.f3);
     await t.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
   testWidgets('cover flow: Start with nothing selected opens the centre game', (t) async {
@@ -258,6 +259,6 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
     await t.pumpAndSettle();
     expect(started, isEmpty);
-    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 }

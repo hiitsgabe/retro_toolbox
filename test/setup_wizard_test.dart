@@ -5,9 +5,29 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/screens/setup_wizard_screen.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Records imports instead of queueing them. [manifest] stands for metadata
+/// already on; [platforms] for what the catalog wants at the time of a refresh.
+class _FakeLaunchbox extends LaunchboxNotifier {
+  _FakeLaunchbox(super.ref, {this.manifest});
+  LaunchboxManifest? manifest;
+  Set<String> platforms = {'Nintendo Entertainment System'};
+  final imports = <Set<String>>[];
+
+  @override
+  Future<void> refresh() async {
+    await Future<void>.value();
+    state = state.copyWith(loading: false, manifest: manifest, wanted: platforms);
+  }
+
+  @override
+  void startImport(WidgetRef ref, BuildContext context) => imports.add(state.wanted);
+}
 
 void main() {
   test('a console uses the Internet Archive through an IA url or IA auth', () {
@@ -29,7 +49,8 @@ void main() {
     expect(find.text('No accounts needed for this catalog.'), findsOneWidget);
   });
 
-  Future<List<String>> pumpWizard(WidgetTester tester, {required int step, required List<bool> popped}) async {
+  Future<List<String>> pumpWizard(WidgetTester tester,
+      {required int step, required List<bool> popped, List<Override> overrides = const []}) async {
     SharedPreferences.setMockInitialValues({});
     final tmp = Directory.systemTemp.createTempSync('setup');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -39,17 +60,21 @@ void main() {
     addTearDown(tester.view.reset);
     final key = GlobalKey<NavigatorState>();
     await tester.pumpWidget(ProviderScope(
+      overrides: overrides,
       child: MaterialApp(
         navigatorKey: key,
         builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
-        home: Builder(
-          builder: (ctx) => TextButton(
-            onPressed: () async {
-              await Navigator.of(ctx).push(
-                  MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
-              popped.add(true);
-            },
-            child: const Text('open'),
+        // A Scaffold, as the menu is, for what the wizard says as it closes.
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () async {
+                await Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
+                popped.add(true);
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       ),
@@ -125,5 +150,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(popped, [true]);
     expect(find.text('open'), findsOneWidget);
+  });
+
+  group('LaunchBox on the Connections step', () {
+    late _FakeLaunchbox launchbox;
+    Override fake({LaunchboxManifest? manifest}) =>
+        launchboxProvider.overrideWith((ref) => launchbox = _FakeLaunchbox(ref, manifest: manifest));
+    final tile = find.widgetWithText(SwitchListTile, 'Download LaunchBox metadata');
+
+    Future<void> finish(WidgetTester tester) async {
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Finish'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers the metadata below the accounts, off by default', (tester) async {
+      await pumpWizard(tester, step: 2, popped: [], overrides: [fake()]);
+      expect(find.text('3/3 · Connections'), findsOneWidget);
+      expect(find.text('No accounts needed for this catalog.'), findsOneWidget);
+      expect(find.text('Improve with LaunchBox (optional)'), findsOneWidget);
+      expect(tester.widget<SwitchListTile>(tile).value, isFalse);
+      expect(tester.widget<SwitchListTile>(tile).onChanged, isNotNull);
+    });
+
+    testWidgets('switched on, Finish imports once what the catalog wants now', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      // A catalog loaded earlier in the wizard: Finish must not import the
+      // platforms read when the screen opened.
+      launchbox.platforms = {'Sega Genesis'};
+      await tester.tap(tile);
+      await tester.pump();
+      expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+      await finish(tester);
+      expect(launchbox.imports, [
+        {'Sega Genesis'}
+      ]);
+      expect(popped, [true]);
+    });
+
+    testWidgets('switched on with no console LaunchBox knows, Finish says so on the screen below', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      launchbox.platforms = {};
+      await tester.tap(tile);
+      await tester.pump();
+      await finish(tester);
+      expect(launchbox.imports, isEmpty);
+      expect(popped, [true]);
+      expect(find.text('open'), findsOneWidget);
+      expect(find.text(noLaunchboxConsolesMessage), findsOneWidget);
+    });
+
+    testWidgets('left off, Finish imports nothing', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      await finish(tester);
+      expect(launchbox.imports, isEmpty);
+      expect(popped, [true]);
+    });
+
+    testWidgets('switched on, then leaving with B from the first step imports nothing', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      await tester.tap(tile);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('1/3 · Catalog'), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+      expect(popped, [true]);
+      expect(launchbox.imports, isEmpty);
+    });
+
+    testWidgets('already on: shown on and disabled, and Finish imports nothing', (tester) async {
+      final popped = <bool>[];
+      final manifest = LaunchboxManifest(etag: null, importedAt: DateTime.utc(2026, 11, 16), platforms: const {});
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake(manifest: manifest)]);
+      final s = tester.widget<SwitchListTile>(tile);
+      expect(s.value, isTrue);
+      expect(s.onChanged, isNull);
+      expect(find.descendant(of: tile, matching: find.text('Already on')), findsOneWidget);
+      await finish(tester);
+      expect(launchbox.imports, isEmpty);
+      expect(popped, [true]);
+    });
+
+    testWidgets('switched on, but turned on elsewhere before Finish: no second import', (tester) async {
+      final popped = <bool>[];
+      await pumpWizard(tester, step: 2, popped: popped, overrides: [fake()]);
+      await tester.tap(tile);
+      await tester.pump();
+      // The first read landed after the switch was flipped: metadata was on
+      // all along.
+      launchbox.manifest = LaunchboxManifest(etag: null, importedAt: DateTime.utc(2026, 11, 16), platforms: const {});
+      await finish(tester);
+      expect(launchbox.imports, isEmpty);
+      expect(popped, [true]);
+    });
   });
 }

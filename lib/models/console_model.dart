@@ -14,6 +14,8 @@ class Console {
   /// Batocera system id (`psx`, `switch`…); see ConsolePlatform for the
   /// resolved value with fallbacks.
   final String? platform;
+  /// LaunchBox platform name for metadata lookups; unset uses the built-in map.
+  final String? launchboxPlatform;
   /// What the server delivers (`.zip`, `.rar` or the game's own format).
   final List<String>? originalFormat;
   final Decompress decompress;
@@ -41,6 +43,7 @@ class Console {
     this.boxarts,
     this.releaseDates = const [],
     this.platform,
+    this.launchboxPlatform,
     this.originalFormat,
     this.decompress = Decompress.none,
     this.gameFilesFormat,
@@ -122,6 +125,7 @@ class Console {
       boxarts: json['boxarts'],
       releaseDates: rawDates is List ? List<String>.from(rawDates) : [if (rawDates is String && rawDates.isNotEmpty) rawDates],
       platform: json['platform'] as String?,
+      launchboxPlatform: json['launchbox_platform'] as String?,
       originalFormat: list('original_format') ?? (legacyZip ? ['.zip'] : legacyFormats?.toList()),
       decompress: json.containsKey('decompress')
           ? Decompress.fromId(json['decompress'] as String?)
@@ -159,6 +163,7 @@ class Console {
       if (boxarts != null) 'boxarts': boxarts,
       if (releaseDates.isNotEmpty) 'release_dates': releaseDates,
       if (platform != null) 'platform': platform,
+      if (launchboxPlatform != null) 'launchbox_platform': launchboxPlatform,
       if (originalFormat != null) 'original_format': originalFormat,
       if (decompress != Decompress.none) 'decompress': decompress.name,
       if (gameFilesFormat != null) 'game_files_format': gameFilesFormat,
