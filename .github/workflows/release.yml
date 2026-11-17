@@ -585,9 +585,11 @@ jobs:
 
   release:
     # build-handheld is experimental: it stays in needs (so its zip is ready)
-    # but its result never blocks the release.
+    # but its result never blocks the release. Neither does build-macos: GitHub
+    # sometimes has no macOS runner for hours, and the release then ships
+    # without the DMGs.
     needs: [resolve-version, build-android, build-macos, build-linux, build-windows, build-handheld]
-    if: ${{ !cancelled() && needs.resolve-version.result == 'success' && needs.build-android.result == 'success' && needs.build-macos.result == 'success' && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
+    if: ${{ !cancelled() && needs.resolve-version.result == 'success' && needs.build-android.result == 'success' && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -604,12 +606,14 @@ jobs:
           path: dist/
 
       - name: Download macOS DMG (x64)
+        if: ${{ needs.build-macos.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
           name: macos-dmg-x64
           path: dist/
 
       - name: Download macOS DMG (arm64)
+        if: ${{ needs.build-macos.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
           name: macos-dmg-arm64
@@ -638,7 +642,9 @@ jobs:
         id: ai_notes
         run: |
           TAG=${{ needs.resolve-version.outputs.version }}
-          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | head -2 | tail -1)
+          # The last published release, not the previous tag: a run that never
+          # released still leaves its tag behind.
+          PREV_TAG=$(gh release list --exclude-drafts --limit 1 --json tagName -q '.[0].tagName')
 
           if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
             COMMITS=$(git log "$PREV_TAG".."$TAG" --pretty=format:"- %s" --no-merges 2>/dev/null || git log --pretty=format:"- %s" --no-merges -20)
@@ -682,6 +688,7 @@ jobs:
           echo "$AI_NOTES"
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -702,21 +709,21 @@ jobs:
             | 🤖 Android (arm64) | `retro_toolbox_arm64.apk` | Modern Android devices |
             | 🤖 Android (arm32) | `retro_toolbox_arm32.apk` | Older Android devices |
             | 🤖 Android (universal) | `retro_toolbox_universal.apk` | All architectures |
-            | 🍎 macOS (Apple Silicon) | `retro_toolbox_macos_arm64.dmg` | M1/M2/M3 Macs |
-            | 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |
             | 🐧 Linux | `retro_toolbox_linux_x64.tar.gz` | Linux x64 (GTK 3) |
             | 🪟 Windows | `retro_toolbox_windows_x64.zip` | Windows x64 |
             | 🎮 Linux handheld | `retro_toolbox_handheld_arm64.zip` | PortMaster on ARM64 handhelds (Knulli, MuOS, ROCKNIX); glibc 2.34+ |
+            ${{ needs.build-macos.result == 'success' && '| 🍎 macOS (Apple Silicon) | `retro_toolbox_macos_arm64.dmg` | M1/M2/M3 Macs |' || '' }}
+            ${{ needs.build-macos.result == 'success' && '| 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |' || '' }}
 
             ### Android Installation
             1. Download the APK for your device (`arm64` for most modern phones)
             2. Enable "Install from unknown sources" in your settings if needed
             3. Install the APK
 
-            ### macOS Installation
-            1. Download the DMG for your Mac
-            2. Open the DMG and drag **Retro Toolbox.app** to Applications
-            3. Right-click → Open on first launch to bypass Gatekeeper
+            ${{ needs.build-macos.result == 'success' && '### macOS Installation' || '' }}
+            ${{ needs.build-macos.result == 'success' && '1. Download the DMG for your Mac' || '' }}
+            ${{ needs.build-macos.result == 'success' && '2. Open the DMG and drag **Retro Toolbox.app** to Applications' || '' }}
+            ${{ needs.build-macos.result == 'success' && '3. Right-click → Open on first launch to bypass Gatekeeper' || '' }}
 
             ### Linux Installation
             1. Install GTK 3 if your distribution does not ship it (`libgtk-3-0`)
