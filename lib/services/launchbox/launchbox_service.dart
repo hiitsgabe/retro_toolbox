@@ -10,6 +10,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 
+import 'launchbox_images.dart';
 import 'launchbox_matcher.dart';
 import 'launchbox_models.dart';
 import 'launchbox_platforms.dart';
@@ -41,10 +42,11 @@ class LaunchboxService {
 
   Future<LaunchboxManifest?> manifest() async => (await store()).readManifest();
 
-  /// [games] with LaunchBox fields filled in their details, or [games]
+  /// [games] with LaunchBox fields filled in their details, and with
+  /// [useCovers] their front cover where LaunchBox has one, or [games]
   /// unchanged when the console has no platform, the platform was not
   /// imported, or anything fails (logged with debugPrint, never thrown).
-  Future<List<Game>> enrich(Console console, List<Game> games) async {
+  Future<List<Game>> enrich(Console console, List<Game> games, {bool useCovers = false}) async {
     final platform = launchboxPlatformFor(console);
     if (platform == null || games.isEmpty) return games;
     try {
@@ -59,7 +61,7 @@ class LaunchboxService {
       final ids = await _matchIds(store, console, platform, version, games, byId);
       return [
         for (final g in games)
-          if (byId[ids[g.title]] case final lb?) g.copyWith(details: _fill(g.details, lb, platform)) else g,
+          if (byId[ids[g.title]] case final lb?) g.copyWith(details: _fill(g.details, lb, platform, useCovers ? _cover(lb, g) : null)) else g,
       ];
     } catch (e) {
       debugPrint('LaunchBox enrich failed for ${console.id}: $e');
@@ -151,7 +153,9 @@ class LaunchboxService {
     }
   }
 
-  static GameDetails _fill(GameDetails? details, LaunchboxGame lb, String platform) {
+  static String? _cover(LaunchboxGame lb, Game game) => pickLaunchboxImage(lb.images, LaunchboxImageType.boxFront, game.region)?.url;
+
+  static GameDetails _fill(GameDetails? details, LaunchboxGame lb, String platform, String? cover) {
     // LaunchBox writes 0 with 0 votes for a game nobody rated.
     final rated = lb.rating != null && !(lb.rating == 0 && (lb.ratingCount ?? 0) == 0);
     return (details ?? const GameDetails()).copyWith(
@@ -163,6 +167,7 @@ class LaunchboxService {
       maxPlayers: lb.maxPlayers,
       cooperative: lb.cooperative,
       releaseDate: details?.releaseDate ?? lb.releaseDate,
+      launchboxCover: cover,
     );
   }
 }

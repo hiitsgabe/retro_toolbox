@@ -21,6 +21,7 @@ import 'package:retro_toolbox/services/launchbox/launchbox_importer.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/utils/remote_tree.dart';
 import 'package:retro_toolbox/widgets/settings/launchbox_setting.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const snes = 'Super Nintendo Entertainment System';
 const nes = 'Nintendo Entertainment System';
@@ -119,6 +120,7 @@ class CountingNotifier extends LaunchboxNotifier {
   CountingNotifier(super.ref, {super.store, super.consoles});
   int imports = 0;
   int cancels = 0;
+  final covers = <bool>[];
   Future<void>? turningOff;
 
   @override
@@ -130,6 +132,9 @@ class CountingNotifier extends LaunchboxNotifier {
   @override
   void cancelImport() => cancels++;
 
+  @override
+  Future<void> setUseCovers(bool on) async => covers.add(on);
+
   void showImporting(String lastMessage) => state = state.copyWith(importing: true, message: lastMessage);
 }
 
@@ -138,6 +143,7 @@ void main() {
   late LaunchboxStore store;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     tmp = Directory.systemTemp.createTempSync('lb_setting_');
     store = LaunchboxStore(Directory('${tmp.path}/launchbox'));
   });
@@ -394,6 +400,27 @@ void main() {
       expect(catalog.reapplied, 0, reason: 'a failed import changed nothing on disk');
     });
 
+    test('covers are off until chosen, the choice is kept, and the open list switches at once', () async {
+      var c = container((_, __, ___) async => LaunchboxImportResult.updated);
+      var n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      expect(c.read(launchboxProvider).useCovers, isFalse);
+
+      await n.setUseCovers(true);
+      expect(c.read(launchboxProvider).useCovers, isTrue);
+      expect(catalog.reapplied, 1);
+
+      c = container((_, __, ___) async => LaunchboxImportResult.updated);
+      n = c.read(launchboxProvider.notifier);
+      await n.refresh();
+      expect(c.read(launchboxProvider).useCovers, isTrue, reason: 'read back by a new notifier');
+      expect(await launchboxUseCovers(), isTrue);
+
+      await n.setUseCovers(false);
+      expect(await launchboxUseCovers(), isFalse);
+      expect(catalog.reapplied, 1, reason: "the new notifier's own catalog");
+    });
+
     test('starting an import while one runs does nothing', () async {
       final c = container((_, __, ___) async => LaunchboxImportResult.updated);
       final n = c.read(launchboxProvider.notifier);
@@ -485,19 +512,19 @@ void main() {
         await notifier.refresh();
       });
       await t.pump();
-      await t.tap(find.byType(Switch));
+      await t.tap(find.byType(Switch).first);
       await t.pumpAndSettle();
       expect(find.text('Delete the downloaded metadata?'), findsOneWidget);
       expect(cancelFocused(), isTrue);
     });
 
-    testWidgets('a controller reaches the switch, then Update', (t) async {
+    testWidgets('a controller reaches the switch, then Update, then covers', (t) async {
       await t.runAsync(() => writeManifest({snes}, DateTime.utc(2026, 11, 16, 12)));
       await pump(t);
       String? focused() {
         String? label;
         FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
-          if (e.widget is SwitchListTile) label = 'switch';
+          if (e.widget case SwitchListTile(:final Text title)) label = title.data == 'Use LaunchBox metadata' ? 'switch' : 'covers';
           if (e.widget is FilledButton) label = 'update';
           return label == null;
         });
@@ -505,12 +532,12 @@ void main() {
       }
 
       final order = <String?>[];
-      for (var i = 0; i < 2; i++) {
+      for (var i = 0; i < 3; i++) {
         await t.sendKeyEvent(LogicalKeyboardKey.tab);
         await t.pump();
         order.add(focused());
       }
-      expect(order, ['switch', 'update']);
+      expect(order, ['switch', 'update', 'covers']);
     });
 
     testWidgets('turning off asks, then deletes the store and goes back to off', (t) async {
@@ -518,7 +545,7 @@ void main() {
       await pump(t);
       expect(find.text('Update'), findsOneWidget);
 
-      await t.tap(find.byType(Switch));
+      await t.tap(find.byType(Switch).first);
       await t.pumpAndSettle();
       expect(find.text('Delete the downloaded metadata?'), findsOneWidget);
       await t.tap(find.text('Cancel'));
@@ -526,7 +553,7 @@ void main() {
       expect(notifier.turningOff, isNull);
       expect(store.root.existsSync(), isTrue);
 
-      await t.tap(find.byType(Switch));
+      await t.tap(find.byType(Switch).first);
       await t.pumpAndSettle();
       await t.tap(find.text('Delete'));
       await t.pump();
@@ -561,6 +588,25 @@ void main() {
       expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
     });
 
+    testWidgets('the covers switch shows only with metadata on, and sets the choice', (t) async {
+      const covers = 'Use LaunchBox covers for thumbnails';
+      await pump(t);
+      expect(find.text(covers), findsNothing);
+
+      await t.runAsync(() async {
+        await writeManifest({snes}, DateTime.utc(2026, 11, 16, 12));
+        await notifier.refresh();
+      });
+      await t.pump();
+      expect(find.text(covers), findsOneWidget);
+      expect(find.text("Instead of the catalog's box art, when LaunchBox has one"), findsOneWidget);
+      expect(t.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, covers)).value, isFalse);
+
+      await t.tap(find.text(covers));
+      await t.pump();
+      expect(notifier.covers, [true]);
+    });
+
     testWidgets('while importing the card points at the Task Manager', (t) async {
       await t.runAsync(() => writeManifest({snes}, DateTime.utc(2026, 11, 16, 12)));
       await pump(t);
@@ -569,7 +615,7 @@ void main() {
       expect(find.text('Importing, see the Task Manager'), findsOneWidget);
       expect(find.text('Update'), findsNothing);
       expect(find.text('Updated'), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
+      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile).first).onChanged, isNull);
       await t.tap(find.text('Cancel'));
       expect(notifier.cancels, 1);
     });

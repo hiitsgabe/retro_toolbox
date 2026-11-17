@@ -10,6 +10,7 @@ import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
+import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
@@ -110,7 +111,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       int launchboxGen;
       do {
         launchboxGen = _launchboxGen;
-        enriched = await _ref.read(launchboxServiceProvider).enrich(console, games);
+        enriched = await _ref.read(launchboxServiceProvider).enrich(console, games, useCovers: await launchboxUseCovers());
         if (gen != _loadGeneration || !mounted) return;
       } while (launchboxGen != _launchboxGen);
       _console = console;
@@ -199,9 +200,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final source = state.games;
     if (console == null || source.isEmpty) return;
     // Cleared first, so a game the new data no longer matches (or all of them,
-    // with metadata off) loses what it had.
+    // with metadata off) loses what it had, a LaunchBox cover included.
     final cleared = [for (final g in source) _withoutLaunchbox(g)];
-    final enriched = await _ref.read(launchboxServiceProvider).enrich(console, cleared);
+    final enriched = await _ref.read(launchboxServiceProvider).enrich(console, cleared, useCovers: await launchboxUseCovers());
     // A catalog load started meanwhile: its list wins.
     if (!mounted || launchboxGen != _launchboxGen || !identical(state.games, source)) return;
     final applied = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));

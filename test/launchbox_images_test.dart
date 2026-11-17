@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_images.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
-import 'package:retro_toolbox/widgets/game_details/launchbox_images.dart';
 
 const _front = LaunchboxImageType.boxFront;
 

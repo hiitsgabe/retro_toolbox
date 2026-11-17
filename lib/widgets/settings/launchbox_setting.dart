@@ -106,6 +106,14 @@ class _LaunchboxSettingState extends ConsumerState<LaunchboxSetting> {
           padding: const EdgeInsets.only(top: 8),
           child: Text(s.message!, style: theme.textTheme.bodySmall),
         ),
+      if (manifest != null)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Use LaunchBox covers for thumbnails'),
+          subtitle: const Text("Instead of the catalog's box art, when LaunchBox has one"),
+          value: s.useCovers,
+          onChanged: (on) => ref.read(launchboxProvider.notifier).setUseCovers(on),
+        ),
     ]);
   }
 }

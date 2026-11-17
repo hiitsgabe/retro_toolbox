@@ -17,11 +17,26 @@ import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/utils/remote_tree.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Shown instead of starting an import that would keep no platform.
 const noLaunchboxConsolesMessage = 'None of your consoles has LaunchBox data yet';
 
 typedef LaunchboxImporterFactory = LaunchboxImporter Function(LaunchboxStore store, Directory cacheDir);
+
+const _useCoversKey = 'launchbox_use_covers';
+
+/// Whether game thumbnails show LaunchBox's front cover. The catalog reads it
+/// here rather than from [LaunchboxState]: it loads long before Settings
+/// first refreshes that.
+Future<bool> launchboxUseCovers() async {
+  try {
+    return (await SharedPreferences.getInstance()).getBool(_useCoversKey) ?? false;
+  } catch (e) {
+    debugPrint('LaunchBox covers setting unreadable: $e');
+    return false;
+  }
+}
 
 /// The shape of [TaskQueueService.enqueueTransfer].
 typedef TransferEnqueue = String Function(
@@ -36,7 +51,14 @@ typedef TransferEnqueue = String Function(
 });
 
 class LaunchboxState {
-  const LaunchboxState({this.loading = true, this.manifest, this.wanted = const {}, this.importing = false, this.message});
+  const LaunchboxState({
+    this.loading = true,
+    this.manifest,
+    this.wanted = const {},
+    this.importing = false,
+    this.message,
+    this.useCovers = false,
+  });
 
   /// Until the first manifest read.
   final bool loading;
@@ -51,6 +73,9 @@ class LaunchboxState {
   /// The last import's outcome: "Already up to date", "Updated", or the error.
   final String? message;
 
+  /// LaunchBox's front covers as game thumbnails, where it has one.
+  final bool useCovers;
+
   /// Platforms a console needs that the last import did not keep.
   Set<String> get missing => manifest == null ? const {} : wanted.difference(manifest!.platforms);
 
@@ -62,6 +87,7 @@ class LaunchboxState {
     bool? importing,
     String? message,
     bool clearMessage = false,
+    bool? useCovers,
   }) =>
       LaunchboxState(
         loading: loading ?? this.loading,
@@ -69,6 +95,7 @@ class LaunchboxState {
         wanted: wanted ?? this.wanted,
         importing: importing ?? this.importing,
         message: clearMessage ? null : (message ?? this.message),
+        useCovers: useCovers ?? this.useCovers,
       );
 }
 
@@ -120,19 +147,21 @@ class LaunchboxNotifier extends StateNotifier<LaunchboxState> {
     final gen = ++_refreshes;
     final LaunchboxManifest? manifest;
     final Set<String> wanted;
+    final bool useCovers;
     try {
       wanted = {
         for (final c in await _consoles())
           if (launchboxPlatformFor(c) case final p?) p,
       };
       manifest = await (await _store()).readManifest();
+      useCovers = await launchboxUseCovers();
     } catch (e) {
       debugPrint('LaunchBox refresh failed: $e');
       if (mounted && gen == _refreshes) state = state.copyWith(loading: false);
       return;
     }
     if (!mounted || gen != _refreshes) return;
-    state = state.copyWith(loading: false, manifest: manifest, clearManifest: manifest == null, wanted: wanted);
+    state = state.copyWith(loading: false, manifest: manifest, clearManifest: manifest == null, wanted: wanted, useCovers: useCovers);
   }
 
   /// Queues an import of [LaunchboxState.wanted] as a Task Manager row.
@@ -198,6 +227,13 @@ class LaunchboxNotifier extends StateNotifier<LaunchboxState> {
     }
     LaunchboxService.instance.invalidate();
     await refresh();
+    if (mounted) await _ref.read(catalogProvider.notifier).reapplyLaunchbox();
+  }
+
+  /// Saves the choice and swaps the open list's thumbnails at once.
+  Future<void> setUseCovers(bool on) async {
+    await (await SharedPreferences.getInstance()).setBool(_useCoversKey, on);
+    if (mounted) state = state.copyWith(useCovers: on);
     if (mounted) await _ref.read(catalogProvider.notifier).reapplyLaunchbox();
   }
 

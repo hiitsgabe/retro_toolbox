@@ -1,4 +1,4 @@
-import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
+import 'launchbox_models.dart';
 
 /// LaunchBox region names for an app region (No-Intro names); anything not
 /// listed is compared as is.

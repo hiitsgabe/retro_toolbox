@@ -12,6 +12,9 @@ class GameDetails {
   final List<String> genres;
   final int? maxPlayers;
   final bool? cooperative;
+  /// LaunchBox's front cover, set only when Settings asks for LaunchBox
+  /// covers; [boxart] keeps the catalog's so turning them off restores it.
+  final String? launchboxCover;
 
   const GameDetails({
     this.boxart,
@@ -24,6 +27,7 @@ class GameDetails {
     this.genres = const [],
     this.maxPlayers,
     this.cooperative,
+    this.launchboxCover,
   });
 
   factory GameDetails.fromJson(Map<String, dynamic> json) {
@@ -38,6 +42,7 @@ class GameDetails {
       genres: List<String>.from(json['genres'] ?? const []),
       maxPlayers: json['maxPlayers'],
       cooperative: json['cooperative'],
+      launchboxCover: json['launchboxCover'],
     );
   }
 
@@ -53,6 +58,7 @@ class GameDetails {
       if (genres.isNotEmpty) 'genres': genres,
       if (maxPlayers != null) 'maxPlayers': maxPlayers,
       if (cooperative != null) 'cooperative': cooperative,
+      if (launchboxCover != null) 'launchboxCover': launchboxCover,
     };
   }
 
@@ -67,6 +73,7 @@ class GameDetails {
     List<String>? genres,
     int? maxPlayers,
     bool? cooperative,
+    String? launchboxCover,
   }) {
     return GameDetails(
       boxart: boxart ?? this.boxart,
@@ -79,6 +86,7 @@ class GameDetails {
       genres: genres ?? this.genres,
       maxPlayers: maxPlayers ?? this.maxPlayers,
       cooperative: cooperative ?? this.cooperative,
+      launchboxCover: launchboxCover ?? this.launchboxCover,
     );
   }
 }

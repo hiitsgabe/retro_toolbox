@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_matcher.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
@@ -29,10 +30,21 @@ const lbGames = [
   LaunchboxGame(id: 3, name: 'Unrated Thing', rating: 0, ratingCount: 0),
   LaunchboxGame(id: 4, name: 'Twin Name', ratingCount: 2),
   LaunchboxGame(id: 5, name: 'Twin Name', ratingCount: 9),
+  LaunchboxGame(id: 6, name: 'Two Covers', images: [
+    LaunchboxImage(LaunchboxImageType.boxBack, 'two-back-eu.jpg', 'Europe'),
+    LaunchboxImage(LaunchboxImageType.boxFront, 'two-us.jpg', 'North America'),
+    LaunchboxImage(LaunchboxImageType.boxFront, 'two-eu.jpg', 'Europe'),
+  ]),
 ];
 
-Game game(String file, {GameDetails? details}) =>
-    Game(title: file, url: 'https://host.example/snes/${Uri.encodeComponent(file)}', size: 1, consoleId: 'snes-usa', details: details);
+Game game(String file, {GameDetails? details, String? region}) => Game(
+      title: file,
+      url: 'https://host.example/snes/${Uri.encodeComponent(file)}',
+      size: 1,
+      consoleId: 'snes-usa',
+      details: details,
+      metadata: region == null ? null : GameMetadata(displayTitle: file, regions: [region]),
+    );
 
 void main() {
   late Directory tmp;
@@ -92,6 +104,35 @@ void main() {
     expect((unrated.launchboxId, unrated.rating, unrated.ratingCount), (3, null, null));
 
     expect(out[3], same(games[3]));
+  });
+
+  group('covers', () {
+    final games = [
+      game('Two Covers (Europe).sfc', details: const GameDetails(boxart: 'https://art/two.png'), region: 'Europe'),
+      game('Two Covers (USA).sfc', region: 'USA'),
+      game('Pilotwings (USA).zip', details: const GameDetails(boxart: 'https://art/pilotwings.png'), region: 'USA'),
+    ];
+
+    test('on: the box front for the game\'s region, and the mapped box art is kept', () async {
+      final out = await service.enrich(console, games, useCovers: true);
+      expect([for (final g in out) g.details?.launchboxCover], [
+        'https://images.launchbox-app.com/two-eu.jpg',
+        'https://images.launchbox-app.com/two-us.jpg',
+        null,
+      ], reason: 'Pilotwings has no box front');
+      expect([for (final g in out) g.details?.boxart], ['https://art/two.png', null, 'https://art/pilotwings.png']);
+      expect([for (final g in out) g.boxart], [
+        'https://images.launchbox-app.com/two-eu.jpg',
+        'https://images.launchbox-app.com/two-us.jpg',
+        'https://art/pilotwings.png',
+      ]);
+    });
+
+    test('off by default', () async {
+      final out = await service.enrich(console, games);
+      expect([for (final g in out) g.details?.launchboxCover], [null, null, null]);
+      expect([for (final g in out) g.boxart], ['https://art/two.png', null, 'https://art/pilotwings.png']);
+    });
   });
 
   test('a console whose platform was not imported, or that has none, is left untouched', () async {
@@ -212,8 +253,10 @@ void main() {
         genres: ['Action', 'Platform'],
         maxPlayers: 2,
         cooperative: true,
+        launchboxCover: 'https://images.launchbox-app.com/a.jpg',
       );
       final back = GameDetails.fromJson(jsonDecode(jsonEncode(d.toJson())));
+      expect(back.launchboxCover, 'https://images.launchbox-app.com/a.jpg');
       expect(
         (back.boxart, back.releaseDate, back.launchboxId, back.launchboxPlatform, back.rating, back.ratingCount, back.maxPlayers, back.cooperative),
         ('https://art/a.png', 19940319, 7, snes, 4.25, 31, 2, true),
@@ -225,8 +268,8 @@ void main() {
       expect(const GameDetails(boxart: 'b').toJson(), {'boxart': 'b'});
       final old = GameDetails.fromJson({'boxart': 'b', 'releaseDate': 19990000});
       expect(
-        (old.launchboxId, old.launchboxPlatform, old.rating, old.ratingCount, old.maxPlayers, old.cooperative),
-        (null, null, null, null, null, null),
+        (old.launchboxId, old.launchboxPlatform, old.rating, old.ratingCount, old.maxPlayers, old.cooperative, old.launchboxCover),
+        (null, null, null, null, null, null, null),
       );
       expect(old.genres, isEmpty);
     });

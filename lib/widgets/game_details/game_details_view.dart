@@ -4,10 +4,10 @@ import 'dart:ui' show ImageFilter;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_images.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/image_memory.dart';
-import 'package:retro_toolbox/widgets/game_details/launchbox_images.dart';
 
 /// Builds one image of the page; [fallback] stands in while it loads and when
 /// it fails.

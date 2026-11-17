@@ -72,9 +72,11 @@ class _FakeLaunchbox extends LaunchboxService {
   int? maxPlayers = 2;
   bool hold = false;
   final held = <Completer<void>>[];
+  final coversAsked = <bool>[];
 
   @override
-  Future<List<Game>> enrich(Console console, List<Game> games) async {
+  Future<List<Game>> enrich(Console console, List<Game> games, {bool useCovers = false}) async {
+    coversAsked.add(useCovers);
     final genres = this.genres, rating = this.rating, maxPlayers = this.maxPlayers;
     if (hold) {
       final c = Completer<void>();
@@ -86,7 +88,7 @@ class _FakeLaunchbox extends LaunchboxService {
       for (final g in games)
         g.copyWith(
           details: (g.details ?? const GameDetails())
-              .copyWith(launchboxId: 1, rating: rating, ratingCount: rating == null ? null : 9, genres: genres, maxPlayers: maxPlayers),
+              .copyWith(launchboxId: 1, rating: rating, ratingCount: rating == null ? null : 9, genres: genres, maxPlayers: maxPlayers, launchboxCover: useCovers ? 'https://lb.example/${g.title}.jpg' : null),
         ),
     ];
   }
@@ -313,6 +315,18 @@ void main() {
       expect((d.launchboxId, d.rating, d.ratingCount, d.maxPlayers), (null, null, null, null));
       expect(d.genres, isEmpty);
       expect((d.boxart, d.popularity), ('https://host.example/one.png', 7));
+    });
+
+    test('covers follow the setting, and turning them off restores the mapped box art', () async {
+      SharedPreferences.setMockInitialValues({'launchbox_use_covers': true});
+      await notifier.loadCatalog(_nes);
+      expect(state().paginatedFilteredGames.single.boxart, 'https://lb.example/one.jpg');
+
+      await (await SharedPreferences.getInstance()).setBool('launchbox_use_covers', false);
+      await notifier.reapplyLaunchbox();
+      final d = state().paginatedFilteredGames.single.details!;
+      expect((d.launchboxCover, d.boxart), (null, 'https://host.example/one.png'));
+      expect(launchbox.coversAsked, [true, false]);
     });
 
     test('no matching status for a console LaunchBox has no platform for', () async {
