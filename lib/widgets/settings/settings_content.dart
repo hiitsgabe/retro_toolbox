@@ -20,6 +20,7 @@ import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
+import 'package:retro_toolbox/widgets/settings/launchbox_setting.dart';
 import 'package:retro_toolbox/widgets/settings/save_recipes_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
@@ -185,6 +186,13 @@ class SettingsContent extends ConsumerWidget {
                 title: 'Catalog Source',
                 subtitle: 'Import a console catalog JSON file or load one from a URL.',
                 child: const CatalogSourceSetting(),
+              ),
+              const SizedBox(height: 8),
+              _section(
+                context,
+                icon: Icons.auto_awesome,
+                title: 'Game metadata (LaunchBox)',
+                child: const LaunchboxSetting(),
               ),
               const SizedBox(height: 8),
             ],

@@ -110,7 +110,10 @@ void main() {
     await t.tap(find.text('Games Library & downloads'));
     await t.pumpAndSettle();
     await t.tap(find.text('I understand, enable'));
-    await t.pumpAndSettle();
+    // Not pumpAndSettle: the LaunchBox card spins until its manifest read,
+    // which is real disk IO and never finishes in the fake-async zone.
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 300));
     expect(c.read(settingsProvider).isLibraryEnabled, isTrue);
     expect(find.text('Catalog Source'), findsOneWidget);
   });
