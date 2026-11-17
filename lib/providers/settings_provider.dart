@@ -143,6 +143,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setActiveHandler(String consoleId, GameHandler? handler) =>
       setConsoleSetting<String>(consoleId, AppSettings.additionalHandler, handler?.id ?? 'none');
 
+  /// Whether [consoleId]'s list shows a multi-disc game as one entry.
+  bool groupDiscs(String? consoleId) => getSetting<bool>(AppSettings.groupDiscs, consoleId) ?? false;
+
+  /// Whether Download on a grouped game gets all its discs.
+  bool downloadAllDiscs(String? consoleId) => getSetting<bool>(AppSettings.downloadAllDiscs, consoleId) ?? true;
+
   bool getAutoExtract(String? consoleId) {
     return getSetting(AppSettings.autoExtract, consoleId) ?? true;
   }

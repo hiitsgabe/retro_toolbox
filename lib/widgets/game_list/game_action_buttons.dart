@@ -3,12 +3,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/disc_sets.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 
 /// Test seam: replaces [runGameAction] so tests can observe the dispatch.
 @visibleForTesting
 Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState gameState, GameAction action)? debugRunGameAction;
+
+/// Test seam: replaces [TaskQueueService.startDownloads] for [runGameAction].
+@visibleForTesting
+Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId)? debugStartGameDownloads;
+
+/// What Download on [game] queues: a grouped multi-disc game's other discs
+/// too when Settings says so (see [discsToDownload]). [catalog]: the
+/// console's games, to find the set of a [game] that does not carry it.
+List<Game> gamesToDownload(WidgetRef ref, Game game, {Iterable<Game>? catalog}) {
+  final states = ref.read(gameStateManagerProvider);
+  return discsToDownload(
+    game,
+    all: ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId),
+    catalog: catalog,
+    statusOf: (id) => states[id]?.status,
+  );
+}
 
 /// The one place a [GameAction] turns into a task-queue call; used by the row
 /// buttons and the game action menu.
@@ -19,7 +39,7 @@ Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameS
       TaskQueueService.retryTransfer(ref, game.gameId);
     case GameAction.download:
     case GameAction.retryDownload:
-      await TaskQueueService.startDownloads(ref, context, [game], game.consoleId);
+      await (debugStartGameDownloads ?? TaskQueueService.startDownloads)(ref, context, gamesToDownload(ref, game), game.consoleId);
     case GameAction.pause:
       TaskQueueService.pauseDownloadTask(ref, game.gameId);
     case GameAction.resume:

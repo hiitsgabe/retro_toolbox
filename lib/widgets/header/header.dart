@@ -7,6 +7,7 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
@@ -15,6 +16,7 @@ import 'package:retro_toolbox/screens/about_screen.dart';
 import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
 import 'package:retro_toolbox/widgets/header/search_field.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 
 /// Test seam for [downloadSelected].
 @visibleForTesting
@@ -28,7 +30,16 @@ bool canDownloadSelected(WidgetRef ref) =>
 /// first: a stray Start press must not queue a whole selection.
 Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? consoleId) async {
   final catalogState = ref.read(catalogProvider);
-  final selectedGames = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId)).toList();
+  final selected = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId));
+  // A selected grouped game is its first disc here (the list is ungrouped):
+  // its set comes along when grouping and "Download every disc" are on.
+  final grouped = consoleId != null && ref.read(settingsProvider.notifier).groupDiscs(consoleId);
+  final seen = <String>{};
+  final selectedGames = [
+    for (final game in selected)
+      for (final g in grouped ? gamesToDownload(ref, game, catalog: catalogState.games) : [game])
+        if (seen.add(g.gameId)) g,
+  ];
   final n = selectedGames.length;
   final bytes = selectedGames.fold<int>(0, (sum, g) => sum + g.size);
   final ok = await showDialog<bool>(

@@ -30,6 +30,7 @@ class GameDetailsView extends StatelessWidget {
     this.launchboxPending = false,
     this.actions,
     this.status,
+    this.discs,
     this.imageBuilder,
     this.onOpenImage,
     this.scrollController,
@@ -47,6 +48,9 @@ class GameDetailsView extends StatelessWidget {
 
   /// A line above [actions]: download state, an error.
   final Widget? status;
+
+  /// A grouped multi-disc game's discs, one row each, first in the sheet.
+  final Widget? discs;
 
   /// Null: [CachedNetworkImage], with the fallback as its placeholder and
   /// error widget.
@@ -140,6 +144,7 @@ class GameDetailsView extends StatelessWidget {
             ),
           );
     return [
+      if (discs != null) _Section(title: 'Discs', child: discs!),
       if (wide && details != null && about != null) ...[
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,

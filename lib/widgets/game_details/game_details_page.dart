@@ -5,11 +5,13 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/services/disc_sets.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/utils/formatters.dart';
 
 const _labels = {
   GameAction.download: 'Download',
@@ -155,6 +157,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
               if (error != null) Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
           ),
+          discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
           actions: [
             for (final a in actions) button(_labels[a]!, _icons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
             button(
@@ -172,6 +175,64 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
             if (game.boxart != null) button('View box art', Icons.image_outlined, () => showBoxartViewer(context, game)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One row per disc of a grouped game: its number, size and state, and the
+/// one thing it can do now. Each runs for that disc alone and the page stays.
+class GameDiscList extends StatelessWidget {
+  const GameDiscList({super.key, required this.discs});
+
+  final List<Game> discs;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (i, disc) in discs.indexed) _DiscRow(disc: disc, number: discNumber(disc) == 0 ? i + 1 : discNumber(disc)),
+      ],
+    );
+  }
+}
+
+class _DiscRow extends ConsumerWidget {
+  const _DiscRow({required this.disc, required this.number});
+
+  final Game disc;
+  final int number;
+
+  static const _order = [
+    GameAction.download,
+    GameAction.pause,
+    GameAction.resume,
+    GameAction.cancel,
+    GameAction.extract,
+    GameAction.retryDownload,
+    GameAction.retryExtraction,
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(gameStateProvider(disc));
+    final action = _order.where(state.availableActions.contains).firstOrNull;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          SizedBox(width: 72, child: Text('Disc $number', style: const TextStyle(fontWeight: FontWeight.w600))),
+          SizedBox(width: 88, child: Text(formatBytes(disc.size), style: TextStyle(color: muted))),
+          Expanded(child: Text(state.statusText, style: TextStyle(color: muted), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (action != null)
+            FilledButton.tonalIcon(
+              onPressed: () => runGameAction(ref, context, disc, state, action),
+              icon: Icon(_icons[action]),
+              label: Text(_labels[action]!),
+            ),
+        ],
       ),
     );
   }

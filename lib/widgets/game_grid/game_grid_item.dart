@@ -156,7 +156,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                         ],
                         Row(
                           children: [
-                            if (game.metadata?.diskNumber.isNotEmpty == true) ...[
+                            if (game.discs.length >= 2 || game.metadata?.diskNumber.isNotEmpty == true) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                 decoration: BoxDecoration(
@@ -164,7 +164,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                                   borderRadius: BorderRadius.circular(3),
                                 ),
                                 child: Text(
-                                  'Disk ${game.metadata!.diskNumber}',
+                                  game.discs.length >= 2 ? '${game.discs.length} discs' : 'Disk ${game.metadata!.diskNumber}',
                                   style: TextStyle(
                                     fontSize: 9,
                                     fontWeight: FontWeight.w500,

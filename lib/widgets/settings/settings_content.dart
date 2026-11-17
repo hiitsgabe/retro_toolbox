@@ -9,6 +9,7 @@ import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/settings/directory_setting.dart';
 import 'package:retro_toolbox/widgets/settings/boolean_setting.dart';
+import 'package:retro_toolbox/widgets/settings/disc_grouping_setting.dart';
 import 'package:retro_toolbox/widgets/settings/number_setting.dart';
 import 'package:retro_toolbox/widgets/settings/permissions_setting.dart';
 import 'package:retro_toolbox/widgets/settings/network_address_setting.dart';
@@ -150,6 +151,8 @@ class SettingsContent extends ConsumerWidget {
                     console: selectedConsole,
                     settingsNotifier: settingsNotifier,
                   ),
+                  const SizedBox(height: 8),
+                  DiscGroupingSetting(console: selectedConsole, settingsNotifier: settingsNotifier),
                   if (selectedConsole == null) ...[
                     const SizedBox(height: 8),
                     NumberSetting(
