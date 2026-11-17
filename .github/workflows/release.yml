@@ -225,7 +225,7 @@ jobs:
 
   build-macos:
     needs: [resolve-version, download-catalog]
-    runs-on: macos-latest
+    runs-on: macos-15
     strategy:
       matrix:
         arch: [x64, arm64]
