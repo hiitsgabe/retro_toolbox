@@ -45,5 +45,4 @@ abstract final class SettingsIcons {
   static const check = '<path d="M5 12l5 5L20 7"/>';
   static const none = '';
   static const chevronRight = '<path d="M9 6l6 6-6 6"/>';
-  static const chevronLeft = '<path d="M15 6l-6 6 6 6"/>';
 }

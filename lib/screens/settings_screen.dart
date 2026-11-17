@@ -23,8 +23,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
   final String? consoleId;
   final SettingsSection? section;
 
-  /// Button hints in the header and footer. Null: on Android and the Linux
-  /// handheld, where a gamepad drives the app.
+  /// The L1/R1 hint in the header. Null: on Android and the Linux handheld,
+  /// where a gamepad drives the app.
   final bool? showControllerHints;
 
   /// From this width the rail and the rows share the screen.
@@ -49,9 +49,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _content = FocusNode(debugLabel: 'settings rows', canRequestFocus: false, skipTraversal: true);
   final _rail = FocusNode(debugLabel: 'settings rail', canRequestFocus: false, skipTraversal: true);
 
-  /// Whether focus is in the rows (for the footer's B hint).
-  bool _inRowsNow = false;
-
   bool get _hints => widget.showControllerHints ?? (Platform.isAndroid || Handheld.current);
 
   @override
@@ -63,23 +60,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } else if (widget.section != null) {
       _section = widget.section!;
     }
-    FocusManager.instance.addListener(_onFocus);
   }
 
   @override
   void dispose() {
-    FocusManager.instance.removeListener(_onFocus);
     for (final n in _nodes.values) {
       n.dispose();
     }
     _content.dispose();
     _rail.dispose();
     super.dispose();
-  }
-
-  void _onFocus() {
-    final now = _inRows(FocusManager.instance.primaryFocus);
-    if (now != _inRowsNow && mounted) setState(() => _inRowsNow = now);
   }
 
   FocusNode _node(String key) => _nodes.putIfAbsent(key, () => FocusNode(debugLabel: 'settings $key'));
@@ -144,8 +134,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _later(inRows ? _focusRows : () => _sectionNode(_section).requestFocus());
   }
 
-  /// B (and the back button): from the rows to the rail, from a console's
-  /// page to Consoles, else out of Settings.
+  /// B and the header's back button: from the rows to the rail, from a
+  /// console's page to Consoles, else out of Settings.
   void _back() {
     if (settingsFocusShows && _inRows(FocusManager.instance.primaryFocus)) {
       _focusRail();
@@ -183,7 +173,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _onConsolePicked(BuildContext context, Console c) {
     if (MediaQuery.sizeOf(context).width < SettingsScreen.wideFrom) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: _hints)));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c)));
     } else {
       _openConsole(c);
     }
@@ -191,7 +181,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _onSectionLink(BuildContext context, SettingsSection s) {
     if (MediaQuery.sizeOf(context).width < SettingsScreen.wideFrom) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: _hints)));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s)));
     } else {
       _goTo(s);
     }
@@ -240,7 +230,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           backgroundColor: scheme.surface,
           body: SafeArea(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              SettingsTopBar(crumbs: crumbs, gear: console == null, sectionHint: _hints && console == null),
+              SettingsTopBar(
+                crumbs: crumbs,
+                gear: console == null,
+                sectionHint: _hints && console == null,
+                back: console != null || Navigator.of(context).canPop(),
+              ),
               Expanded(
                 child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Container(
@@ -281,13 +276,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ]),
               ),
-              if (_hints)
-                SettingsHintBar(hints: [
-                  ('A', 'Change'),
-                  if (console == null) ('◀ ▶', 'Adjust'),
-                  if (console != null) ('X', 'Reset this row'),
-                  ('B', console != null ? 'Back to consoles' : (_inRowsNow ? 'Back to sections' : 'Back')),
-                ]),
             ]),
           ),
         ),
@@ -358,10 +346,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _later(() {
         final nav = Navigator.of(context);
         if (c != null) {
-          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.consoles, hints: _hints)));
-          nav.push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: _hints)));
+          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.consoles)));
+          nav.push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c)));
         } else if (section != null && visible.contains(section)) {
-          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: section, hints: _hints)));
+          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: section)));
         }
       });
     }
@@ -370,13 +358,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-            child: Text('Settings', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: scheme.onSurface)),
-          ),
+          SettingsTopBar(crumbs: const [], back: Navigator.of(context).canPop()),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               children: [
                 for (final s in visible)
                   Padding(
@@ -387,7 +372,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       radius: 16,
                       minHeight: 68,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: _hints))),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s))),
                       child: Row(children: [
                         Container(
                           width: 40,
@@ -416,7 +401,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-          if (_hints) const SettingsHintBar(hints: [('A', 'Open'), ('B', 'Back')]),
         ]),
       ),
     );
@@ -425,10 +409,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
 /// A section on its own page (narrow screens).
 class _SectionPage extends ConsumerWidget {
-  const _SectionPage({required this.section, required this.hints});
+  const _SectionPage({required this.section});
 
   final SettingsSection section;
-  final bool hints;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -436,41 +419,35 @@ class _SectionPage extends ConsumerWidget {
       section,
       ref,
       links: SettingsLinks(
-        openConsole: (c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: hints))),
-        openSection: (s) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: hints))),
+        openConsole: (c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c))),
+        openSection: (s) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s))),
       ),
     );
-    return _RowsPage(title: section.label, hints: hints, rows: rows, adjust: true);
+    return _RowsPage(title: section.label, rows: rows);
   }
 }
 
 /// A console's page on its own (narrow screens).
 class _ConsolePage extends ConsumerWidget {
-  const _ConsolePage({required this.console, required this.hints});
+  const _ConsolePage({required this.console});
 
   final Console console;
-  final bool hints;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _RowsPage(
         title: console.name,
-        hints: hints,
-        reset: true,
         rows: consoleSettingsRows(
           console,
           ref,
-          onOpenKeys: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.keys, hints: hints))),
+          onOpenKeys: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.keys))),
         ),
       );
 }
 
 class _RowsPage extends StatelessWidget {
-  const _RowsPage({required this.title, required this.hints, required this.rows, this.reset = false, this.adjust = false});
+  const _RowsPage({required this.title, required this.rows});
 
   final String title;
-  final bool hints;
-  final bool reset;
-  final bool adjust;
   final List<Widget> rows;
 
   @override
@@ -480,53 +457,49 @@ class _RowsPage extends StatelessWidget {
       backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          SettingsTopBar(crumbs: [title], back: true),
+          SettingsTopBar(crumbs: [title], back: true, page: true),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
             ),
           ),
-          if (hints)
-            SettingsHintBar(hints: [
-              ('A', 'Change'),
-              if (adjust) ('◀ ▶', 'Adjust'),
-              if (reset) ('X', 'Reset this row'),
-              ('B', reset ? 'Back to consoles' : 'Back to sections'),
-            ]),
         ]),
       ),
     );
   }
 }
 
-/// The bar on top of Settings: the gear, "Settings / Section / ...", and on
-/// a gamepad the L1/R1 hint. [back]: a page of its own (narrow), with a back
-/// button and only its title.
+/// The bar on top of Settings: the back button, the gear, "Settings /
+/// Section / ..." and on a gamepad the L1/R1 hint. [page]: a page of its
+/// own (narrow), with only its title.
 class SettingsTopBar extends StatelessWidget {
-  const SettingsTopBar({super.key, required this.crumbs, this.gear = true, this.sectionHint = false, this.back = false});
+  const SettingsTopBar({super.key, required this.crumbs, this.gear = true, this.sectionHint = false, this.back = false, this.page = false});
 
   final List<String> crumbs;
   final bool gear;
   final bool sectionHint;
   final bool back;
+  final bool page;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final parts = back ? crumbs : ['Settings', ...crumbs];
+    final parts = page ? crumbs : ['Settings', ...crumbs];
     return Container(
       height: 56,
       padding: EdgeInsets.only(left: back ? 8 : 24, right: 24),
       decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.settingsLine))),
       child: Row(children: [
-        if (back)
+        if (back) ...[
           IconButton(
             tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: SettingsIcon(SettingsIcons.chevronLeft, size: 22, color: scheme.onSurface),
-          )
-        else if (gear) ...[
+            icon: Icon(Icons.arrow_back, color: scheme.onSurface),
+          ),
+          const SizedBox(width: 4),
+        ],
+        if (gear && !page) ...[
           SettingsIcon(SettingsIcons.gear, size: 22, color: scheme.primary),
           const SizedBox(width: 12),
         ],
@@ -647,30 +620,6 @@ class KeyCap extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(round ? 11 : 6)),
       child: Text(label, style: TextStyle(fontSize: 11, fontWeight: round ? FontWeight.w700 : FontWeight.w600, color: scheme.onSurface)),
-    );
-  }
-}
-
-/// The controller buttons this screen answers to, right-aligned in a bar.
-class SettingsHintBar extends StatelessWidget {
-  const SettingsHintBar({super.key, required this.hints});
-
-  final List<(String, String)> hints;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: BoxDecoration(color: scheme.settingsTile, border: Border(top: BorderSide(color: scheme.settingsLine))),
-      child: Row(mainAxisAlignment: MainAxisAlignment.end, spacing: 20, children: [
-        for (final (key, what) in hints)
-          Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
-            KeyCap(key),
-            Text(what, style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
-          ]),
-      ]),
     );
   }
 }

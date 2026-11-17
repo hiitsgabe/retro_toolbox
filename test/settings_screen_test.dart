@@ -65,7 +65,7 @@ void main() {
       });
 
   /// Settings over a home page, so leaving Settings has somewhere to go.
-  Future<ProviderContainer> pump(WidgetTester t, {Size size = const Size(1280, 900), String? consoleId}) async {
+  Future<ProviderContainer> pump(WidgetTester t, {Size size = const Size(1280, 900), String? consoleId, bool? hints}) async {
     await t.binding.setSurfaceSize(size);
     addTearDown(() => t.binding.setSurfaceSize(null));
     final c = ProviderContainer(overrides: [
@@ -87,7 +87,7 @@ void main() {
           builder: (context) => Scaffold(
             body: Center(
               child: TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(consoleId: consoleId))),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(consoleId: consoleId, showControllerHints: hints))),
                 child: const Text('open settings'),
               ),
             ),
@@ -329,9 +329,42 @@ void main() {
       expect(find.text('USING THE DEFAULTS'), findsOneWidget);
       expect(rail('library'), findsOneWidget);
     });
+    testWidgets("the header's back button closes a console page, then leaves Settings", (t) async {
+      saved();
+      await pump(t, consoleId: 'psx');
+      final back = find.descendant(of: find.byType(SettingsTopBar), matching: find.byIcon(Icons.arrow_back));
+      expect(find.widgetWithText(SettingsTopBar, 'PlayStation'), findsOneWidget);
+      await t.tap(back);
+      await t.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsOneWidget);
+      expect(find.widgetWithText(SettingsTopBar, 'PlayStation'), findsNothing);
+      expect(rail('consoles'), findsOneWidget);
+      await t.tap(back);
+      await t.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsNothing);
+      expect(find.text('open settings'), findsOneWidget);
+    });
+
+    testWidgets('no footer of button hints, even on a gamepad', (t) async {
+      saved();
+      await pump(t, hints: true);
+      expect(find.text('switch section'), findsOneWidget); // the header's L1/R1 hint stays
+      expect(find.text('Back to sections'), findsNothing);
+      expect(find.text('Back'), findsNothing);
+      expect(find.text('Adjust'), findsNothing);
+    });
   });
 
   group('narrow', () {
+    testWidgets("the header's back button leaves Settings", (t) async {
+      saved();
+      await pump(t, size: const Size(400, 800));
+      await t.tap(find.descendant(of: find.byType(SettingsTopBar), matching: find.byIcon(Icons.arrow_back)));
+      await t.pumpAndSettle();
+      expect(find.byType(SettingsScreen), findsNothing);
+      expect(find.text('open settings'), findsOneWidget);
+    });
+
     testWidgets('a list of sections, each opening its own page', (t) async {
       saved();
       await pump(t, size: const Size(400, 800));
