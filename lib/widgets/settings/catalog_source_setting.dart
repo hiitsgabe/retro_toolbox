@@ -6,9 +6,48 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sheet.dart';
+
+/// Whether the user imported a catalog of their own (file or URL).
+final hasUserCatalogProvider = FutureProvider<bool>((ref) => CatalogService().hasUserCatalog());
+
+/// Settings > Library: where the catalog comes from; opens the source form
+/// in a sheet.
+class CatalogSourceRow extends ConsumerWidget {
+  const CatalogSourceRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final url = ref.watch(settingsProvider.select((s) => s.catalogSourceUrl));
+    final mine = ref.watch(hasUserCatalogProvider).valueOrNull;
+    return SettingsValueRow(
+      title: 'Catalog source',
+      subtitle: url != null && url.isNotEmpty
+          ? url
+          : mine == false
+              ? 'The bundled catalog'
+              : 'Your imported catalog',
+      value: 'Change',
+      onTap: () async {
+        await showSettingsSheet<void>(
+          context,
+          title: 'Catalog source',
+          subtitle: 'Import a catalog JSON file or load one from a URL.',
+          closeLabel: 'Done',
+          builder: (_) => const CatalogSourceSetting(startOpen: true),
+        );
+        ref.invalidate(hasUserCatalogProvider);
+      },
+    );
+  }
+}
 
 class CatalogSourceSetting extends ConsumerStatefulWidget {
-  const CatalogSourceSetting({super.key});
+  const CatalogSourceSetting({super.key, this.startOpen = false});
+
+  /// Show the URL and file choices at once, not the one-line summary.
+  final bool startOpen;
 
   @override
   ConsumerState<CatalogSourceSetting> createState() => _CatalogSourceSettingState();
@@ -19,7 +58,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
   final _urlController = TextEditingController();
   bool _busy = false;
   bool _hasUserCatalog = false;
-  bool _showOptions = false;
+  late bool _showOptions = widget.startOpen;
 
   @override
   void initState() {
@@ -46,7 +85,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
       await action();
       await ref.read(appStateProvider.notifier).reloadConsoles();
       await _refreshState();
-      if (mounted) setState(() => _showOptions = false);
+      if (mounted) setState(() => _showOptions = widget.startOpen);
       _snack(successMsg);
     } catch (e) {
       _snack('$e');
@@ -66,8 +105,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
     final path = await pickFile(context, title: 'Select a catalog JSON file', extensions: ['json']);
     if (path == null || !mounted) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
-    await _run(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()),
-        'Catalog imported.');
+    await _run(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()), 'Catalog imported.');
   }
 
   Future<void> _loadUrl() async {
@@ -141,9 +179,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
               const SizedBox(width: 8),
               FilledButton(
                 onPressed: _busy ? null : _loadUrl,
-                child: _busy
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Load'),
+                child: _busy ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Load'),
               ),
             ],
           ),

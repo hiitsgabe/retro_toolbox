@@ -2,6 +2,7 @@ import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
+import 'package:retro_toolbox/services/disc_sets.dart';
 
 /// [rating] pulled toward [mean] as if [m] more people had voted the mean, so
 /// a 5.0 from one vote doesn't outrank a 4.5 from hundreds.
@@ -29,6 +30,10 @@ class FilteringService {
     if (filter.showLatestRevisionOnly) {
       allMatched = _filterLatestRevisions(allMatched);
     }
+
+    // After the revisions, so a set is the discs of one revision; before the
+    // sort and the page, so the count and the pages are of entries shown.
+    if (input.groupDiscs) allMatched = groupDiscSets(allMatched);
 
     final key = _sortKey(filter.sort, games);
     if (key != null) {
@@ -230,6 +235,9 @@ class FilterInput {
   final Set<String>? favoriteGameIds;
   final Map<String, GameStatus>? inLibraryStatus;
 
+  /// Show each multi-disc set as one entry (see [groupDiscSets]).
+  final bool groupDiscs;
+
   const FilterInput({
     required this.games,
     required this.filterText,
@@ -238,6 +246,7 @@ class FilterInput {
     required this.limit,
     this.favoriteGameIds,
     this.inLibraryStatus,
+    this.groupDiscs = false,
   });
 }
 

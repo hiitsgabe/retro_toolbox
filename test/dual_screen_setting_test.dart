@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/widgets/settings/dual_screen_setting.dart';
@@ -31,9 +32,9 @@ void main() {
     expect(find.text('Off'), findsOneWidget);
     expect(find.text('Main on top'), findsOneWidget);
     expect(find.text('Main on bottom'), findsOneWidget);
-    expect(find.text('Games list on top, details or tasks below'), findsOneWidget);
-    expect(find.text('Changing which screen is the main one restarts the app on that screen.'), findsOneWidget);
-    expect(tester.widget<RadioGroup<DualScreenMode>>(find.byType(RadioGroup<DualScreenMode>)).groupValue, DualScreenMode.mainOnTop);
+    expect(find.text('Only shown when a second display is found'), findsOneWidget);
+    expect(find.textContaining('Changing which screen is the main one restarts the app there.'), findsOneWidget);
+    expect(tester.widget<SettingsSegmentedRow<DualScreenMode>>(find.byType(SettingsSegmentedRow<DualScreenMode>)).selected, DualScreenMode.mainOnTop);
   });
 
   testWidgets('tapping Main on bottom sets that mode', (tester) async {

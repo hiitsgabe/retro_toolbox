@@ -8,7 +8,7 @@ void main() {
     await t.pumpWidget(const ProviderScope(
       child: MaterialApp(home: Scaffold(body: ToolsSetting(console: null))),
     ));
-    await t.tap(find.byIcon(Icons.clear));
+    await t.tap(find.text('Clear'));
     await t.pumpAndSettle();
     var inCancel = false;
     FocusManager.instance.primaryFocus!.context!.visitAncestorElements((e) {

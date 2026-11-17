@@ -35,7 +35,7 @@ class GameCoverFlow extends ConsumerWidget {
           CoverFlowItem(
             face: GameGridItem(game: game, aspectRatio: _aspectRatio, jumpTarget: false),
             label: game.displayTitle,
-            onTap: () => showGameActionMenu(context, game),
+            onTap: () => tapGameCard(context, ref, game),
             wrapFocus: (focus) => GameCardActions(game: game, selectable: true, child: focus),
           ),
       ],

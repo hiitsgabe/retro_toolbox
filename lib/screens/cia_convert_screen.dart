@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
@@ -12,7 +11,10 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 
 /// Converts 3DS cartridge images (.3ds/.cci) to installable .cia via the
 /// bundled 3dsconv. Needs boot9.bin or aes_keys.txt for encrypted dumps — blocks with a
@@ -36,13 +38,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
 
   Future<void> _pickBoot9() async {
     try {
-      final src = await pickFile(context, title: 'Select boot9.bin or aes_keys.txt');
-      if (src == null || !mounted) return;
-      final supportDir = await getApplicationSupportDirectory();
-      final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
-      await dest.parent.create(recursive: true);
-      await File(src).copy(dest.path);
-      await ref.read(settingsProvider.notifier).setBoot9Path(dest.path);
+      await chooseKeyFile(context, ref, KeyFile.boot9);
     } catch (e) {
       _snack('$e');
     }
@@ -238,7 +234,13 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
                   ),
                   const SizedBox(height: 20),
                   Center(
-                    child: FilledButton.icon(onPressed: _pickBoot9, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Select key file')),
+                    child: Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.center, children: [
+                      FilledButton.icon(onPressed: _pickBoot9, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Choose file')),
+                      OutlinedButton(
+                        onPressed: () => SettingsScreen.open(context, section: SettingsSection.keys),
+                        child: const Text('Open Settings > Keys'),
+                      ),
+                    ]),
                   ),
                 ],
               ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
@@ -39,12 +40,16 @@ class _GameCardActionsState extends ConsumerState<GameCardActions> {
   @override
   void didUpdateWidget(GameCardActions oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.game.gameId != widget.game.gameId && _focus.hasFocus) {
+    // Under touch the flow has no focus, but its old centre may be the game
+    // the second screen shows: the new centre takes its place there too.
+    if (oldWidget.game.gameId != widget.game.gameId && (_focus.hasFocus || _wasShown(oldWidget.game))) {
       Future.microtask(() {
         if (mounted) _report();
       });
     }
   }
+
+  bool _wasShown(Game old) => widget.selectable && ref.read(dualScreenProvider).companionOpen && ref.read(focusedGameProvider)?.gameId == old.gameId;
 
   @override
   void dispose() {
@@ -136,6 +141,43 @@ class _HoldForBoxartState extends State<_HoldForBoxart> {
 
   @override
   Widget build(BuildContext context) => Focus(canRequestFocus: false, skipTraversal: true, onKeyEvent: _onKey, child: widget.child);
+}
+
+/// A tap on a game card. With the second screen open, a game it does not show
+/// yet is shown there (and takes the focus here) instead of opening its page;
+/// a tap on the game it shows opens the page. [focus]: the card's focus stop.
+void tapGameCard(BuildContext context, WidgetRef ref, Game game, {bool selectable = true, FocusNode? focus}) {
+  if (selectable && ref.read(dualScreenProvider).companionOpen && ref.read(focusedGameProvider)?.gameId != game.gameId) {
+    ref.read(focusedGameProvider.notifier).state = game;
+    focus?.requestFocus();
+    return;
+  }
+  showGameActionMenu(context, game, selectable: selectable);
+}
+
+/// Outlines the card whose game the second screen shows. The d-pad outline
+/// is hidden after a touch; this one is not.
+class SecondScreenHighlight extends StatelessWidget {
+  const SecondScreenHighlight({super.key, required this.shown, required this.child, this.radius = 0});
+
+  final bool shown;
+  final double radius;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    // Always the same box, so the card under it is not rebuilt from scratch.
+    return DecoratedBox(
+      position: DecorationPosition.foreground,
+      decoration: shown
+          ? BoxDecoration(
+              border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+              borderRadius: BorderRadius.circular(radius),
+            )
+          : const BoxDecoration(),
+      child: child,
+    );
+  }
 }
 
 /// The details page's route name: the games screen still counts as up under it.

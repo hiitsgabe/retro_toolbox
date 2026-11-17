@@ -203,7 +203,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
 /// Gamepad buttons for the games screen, wherever focus is on it: Start
 /// downloads the selected games (only when the header button would be enabled;
 /// otherwise it defers to the enclosing Start action, DpadScope's press of the
-/// focused control). Filters are in the Y menu; Select opens the task manager
+/// focused control). Filters are behind the header's button; Select opens the task manager
 /// (app-wide, see DpadScope.onOptions).
 class GamesButtons extends ConsumerWidget {
   const GamesButtons({super.key, required this.child});

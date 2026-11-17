@@ -3,14 +3,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 
 /// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
 /// Requires prod.keys — the UI blocks with a keys picker until one is set.
@@ -37,15 +39,7 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
 
   Future<void> _pickKeys() async {
     try {
-      final src = await pickFile(context, title: 'Select prod.keys or title.keys');
-      if (src == null || !mounted) return;
-      // Copy into app support: the picker's temp copy can be cleaned up, and the
-      // Python process needs a stable path.
-      final supportDir = await getApplicationSupportDirectory();
-      final dest = File(p.join(supportDir.path, 'keys', p.basename(src)));
-      await dest.parent.create(recursive: true);
-      await File(src).copy(dest.path);
-      await ref.read(settingsProvider.notifier).setNszKeysPath(dest.path);
+      await chooseKeyFile(context, ref, KeyFile.switchKeys);
     } catch (e) {
       _showPickError(e);
     }
@@ -196,11 +190,13 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
                   ),
                   const SizedBox(height: 20),
                   Center(
-                    child: FilledButton.icon(
-                      onPressed: _pickKeys,
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      label: const Text('Select keys file'),
-                    ),
+                    child: Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.center, children: [
+                      FilledButton.icon(onPressed: _pickKeys, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Choose file')),
+                      OutlinedButton(
+                        onPressed: () => SettingsScreen.open(context, section: SettingsSection.keys),
+                        child: const Text('Open Settings > Keys'),
+                      ),
+                    ]),
                   ),
                 ],
               ),

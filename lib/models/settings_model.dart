@@ -7,6 +7,8 @@ class AppSettings {
   static const String autoApplyFormations = 'autoApplyFormations';
   static const String additionalHandler = 'additionalHandler';
   static const String chdIsoAsCd = 'chdIsoAsCd';
+  static const String groupDiscs = 'groupDiscs';
+  static const String downloadAllDiscs = 'downloadAllDiscs';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
@@ -17,6 +19,8 @@ class AppSettings {
     autoApplyFormations: bool,
     additionalHandler: String,
     chdIsoAsCd: bool,
+    groupDiscs: bool,
+    downloadAllDiscs: bool,
   };
 
   final Map<String, BaseSettings> consoleSettings;
@@ -169,6 +173,10 @@ class BaseSettings {
   final String? additionalHandler;
   /// Per-console: the CHD handler packs an .iso as a CD CHD (AetherSX2) instead of a DVD one.
   final bool? chdIsoAsCd;
+  /// The game list shows Disc 1, Disc 2... of a game as one entry. Null = off.
+  final bool? groupDiscs;
+  /// Download on a grouped game gets every disc. Null = on.
+  final bool? downloadAllDiscs;
 
   const BaseSettings({
     this.downloadDir,
@@ -180,6 +188,8 @@ class BaseSettings {
     this.autoApplyFormations,
     this.additionalHandler,
     this.chdIsoAsCd,
+    this.groupDiscs,
+    this.downloadAllDiscs,
   });
 
   BaseSettings copyWith({
@@ -194,6 +204,8 @@ class BaseSettings {
     String? additionalHandler,
     bool clearAdditionalHandler = false,
     bool? chdIsoAsCd,
+    bool? groupDiscs,
+    bool? downloadAllDiscs,
   }) {
     return BaseSettings(
       downloadDir: downloadDir == '' ? null : downloadDir ?? this.downloadDir,
@@ -205,6 +217,8 @@ class BaseSettings {
       autoApplyFormations: autoApplyFormations ?? this.autoApplyFormations ?? true,
       additionalHandler: clearAdditionalHandler ? null : (additionalHandler ?? this.additionalHandler),
       chdIsoAsCd: chdIsoAsCd ?? this.chdIsoAsCd,
+      groupDiscs: groupDiscs ?? this.groupDiscs,
+      downloadAllDiscs: downloadAllDiscs ?? this.downloadAllDiscs,
     );
   }
 
@@ -219,6 +233,8 @@ class BaseSettings {
       if (autoApplyFormations != null) AppSettings.autoApplyFormations: autoApplyFormations,
       if (additionalHandler != null) AppSettings.additionalHandler: additionalHandler,
       if (chdIsoAsCd != null) AppSettings.chdIsoAsCd: chdIsoAsCd,
+      if (groupDiscs != null) AppSettings.groupDiscs: groupDiscs,
+      if (downloadAllDiscs != null) AppSettings.downloadAllDiscs: downloadAllDiscs,
     };
   }
 
@@ -240,12 +256,43 @@ class BaseSettings {
         return additionalHandler as T?;
       case AppSettings.chdIsoAsCd:
         return chdIsoAsCd as T?;
+      case AppSettings.groupDiscs:
+        return groupDiscs as T?;
+      case AppSettings.downloadAllDiscs:
+        return downloadAllDiscs as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
   }
 
+  /// A copy with [key] set to [value]. Unlike [copyWith], the other keys keep
+  /// a null (following the general setting) instead of taking a default, so
+  /// setting one thing for a console does not pin the rest.
   BaseSettings setSetting<T>(String key, T? value) {
+    final next = _set(key, value);
+    return BaseSettings(
+      downloadDir: next.downloadDir,
+      autoExtract: key == AppSettings.autoExtract ? next.autoExtract : autoExtract,
+      maxParallelDownloads: key == AppSettings.maxParallelDownloads ? next.maxParallelDownloads : maxParallelDownloads,
+      maxParallelExtractions: key == AppSettings.maxParallelExtractions ? next.maxParallelExtractions : maxParallelExtractions,
+      extractToFolder: next.extractToFolder,
+      authToken: next.authToken,
+      autoApplyFormations: key == AppSettings.autoApplyFormations ? next.autoApplyFormations : autoApplyFormations,
+      additionalHandler: next.additionalHandler,
+      chdIsoAsCd: next.chdIsoAsCd,
+      groupDiscs: next.groupDiscs,
+      downloadAllDiscs: next.downloadAllDiscs,
+    );
+  }
+
+  /// A copy without a value for [key]: a console's copy then follows the
+  /// general setting again.
+  BaseSettings cleared(String key) {
+    assert(AppSettings.settingsSchema.containsKey(key), 'Invalid setting key: $key');
+    return BaseSettings.fromJson(toJson()..remove(key));
+  }
+
+  BaseSettings _set<T>(String key, T? value) {
     switch (key) {
       case AppSettings.downloadDir:
         return copyWith(downloadDir: value as String?);
@@ -263,6 +310,10 @@ class BaseSettings {
         return copyWith(additionalHandler: value as String?, clearAdditionalHandler: value == null);
       case AppSettings.chdIsoAsCd:
         return copyWith(chdIsoAsCd: value as bool?);
+      case AppSettings.groupDiscs:
+        return copyWith(groupDiscs: value as bool?);
+      case AppSettings.downloadAllDiscs:
+        return copyWith(downloadAllDiscs: value as bool?);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -279,6 +330,8 @@ class BaseSettings {
       autoApplyFormations: json[AppSettings.autoApplyFormations] as bool?,
       additionalHandler: json[AppSettings.additionalHandler] as String?,
       chdIsoAsCd: json[AppSettings.chdIsoAsCd] as bool?,
+      groupDiscs: json[AppSettings.groupDiscs] as bool?,
+      downloadAllDiscs: json[AppSettings.downloadAllDiscs] as bool?,
     );
   }
 }

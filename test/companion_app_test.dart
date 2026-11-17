@@ -8,6 +8,7 @@ import 'package:retro_toolbox/companion/companion_app.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_payload.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 
@@ -37,15 +38,18 @@ const _streetsLb = LaunchboxGame(
   overview: 'Axel and Blaze take back the city from Mr. X.',
 );
 
-Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) => SizedBox(key: ValueKey(url));
+Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Alignment alignment = Alignment.center, Widget? placeholder, Widget? fallback}) => SizedBox(key: ValueKey(url));
 
 void main() {
   late List<String> sent;
+  late List<Map<String, dynamic>> requests;
 
   setUp(() {
     sent = [];
+    requests = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(_channel, (call) async {
       sent.add(call.method);
+      if (call.method == 'action') requests.add(jsonDecode(call.arguments as String) as Map<String, dynamic>);
       return null;
     });
     CompanionScreen.debugImageBuilder = _image;
@@ -80,9 +84,6 @@ void main() {
     return () => const StandardMethodCodec().decodeEnvelope(reply!);
   }
 
-  Map<String, dynamic> row(String title, String status, double? progress, String state) =>
-      {'title': title, 'status': status, 'progress': progress, 'state': state};
-
   void noActions() {
     expect(find.text('Download'), findsNothing);
     expect(find.text('Add to favourites'), findsNothing);
@@ -97,9 +98,10 @@ void main() {
     expect(sent, ['ready']);
   });
 
-  testWidgets('before any payload it shows the empty task list', (t) async {
+  testWidgets('before any payload it shows the empty Task Manager', (t) async {
     await start(t);
-    expect(find.text('No tasks running'), findsOneWidget);
+    expect(find.text('Task Manager'), findsOneWidget);
+    expect(find.text('No active downloads'), findsOneWidget);
     noActions();
   });
 
@@ -111,7 +113,7 @@ void main() {
     });
     await send(t, detailsPayload(_sonic));
     expect(find.text('Sonic The Hedgehog'), findsOneWidget);
-    expect(find.text('No tasks running'), findsNothing);
+    expect(find.text('Task Manager'), findsNothing);
     expect(find.text('About'), findsNothing);
     expect(asked, isEmpty, reason: 'no LaunchBox id, nothing to look up');
     noActions();
@@ -184,46 +186,90 @@ void main() {
     expect(t.state<ScrollableState>(find.byType(Scrollable)).position.pixels, 0);
   });
 
-  testWidgets('a tasks payload shows its rows, with a bar only where there is progress', (t) async {
-    await start(t);
-    await send(t, {
-      'mode': 'tasks',
-      'tasks': [
-        row('Sonic The Hedgehog', 'Downloading 40%', 0.4, 'active'),
-        row('Streets of Rage 2', 'Queued', null, 'queued'),
-        row('Golden Axe', 'Download failed', null, 'failed'),
-        row('Ecco the Dolphin', 'Ready', null, 'done'),
-      ],
-    });
-    expect(find.text('Tasks'), findsOneWidget);
-    for (final s in ['Sonic The Hedgehog', 'Downloading 40%', 'Streets of Rage 2', 'Queued', 'Golden Axe', 'Download failed', 'Ecco the Dolphin', 'Ready']) {
-      expect(find.text(s), findsOneWidget, reason: s);
-    }
-    expect(find.text('No tasks running'), findsNothing);
-    final bar = find.byType(LinearProgressIndicator);
-    expect(bar, findsOneWidget);
-    expect(t.widget<LinearProgressIndicator>(bar).value, 0.4);
-    // The bar is Sonic's: it sits between its row's title and the next row.
-    final y = t.getCenter(bar).dy;
-    expect(y, greaterThan(t.getCenter(find.text('Sonic The Hedgehog')).dy));
-    expect(y, lessThan(t.getCenter(find.text('Streets of Rage 2')).dy));
+  GameState task(Game game, GameStatus status, Set<GameAction> actions, {double? progress, bool done = false}) => GameState(
+        game: game,
+        status: status,
+        availableActions: actions,
+        showProgressBar: progress != null,
+        currentProgress: progress ?? 0,
+        hasJustCompleted: done,
+      );
 
-    final error = Theme.of(t.element(find.text('Golden Axe'))).colorScheme.error;
-    expect(t.widget<Text>(find.text('Download failed')).style?.color, error);
-    expect(
-      find.ancestor(of: find.text('Ecco the Dolphin'), matching: find.byWidgetPredicate((w) => w is Opacity && w.opacity < 1)),
-      findsOneWidget,
-      reason: 'done is dimmed',
-    );
-    noActions();
+  const golden = Game(title: 'Golden Axe (USA).zip', url: 'https://example.com/ga.zip', size: 1024, consoleId: 'md', metadata: GameMetadata(displayTitle: 'Golden Axe'));
+  const ecco = Game(title: 'Ecco the Dolphin (USA).zip', url: 'https://example.com/ecco.zip', size: 1024, consoleId: 'md', metadata: GameMetadata(displayTitle: 'Ecco the Dolphin'));
+
+  testWidgets('a tasks payload is the main Task Manager: its tabs, counts and rows', (t) async {
+    // No box art: the network image's spinner would keep pumpAndSettle busy.
+    final sonic = _sonic.copyWith(details: const GameDetails());
+    await start(t);
+    await send(
+        t,
+        tasksPayload([
+          task(sonic, GameStatus.downloading, {GameAction.pause, GameAction.cancel}, progress: 0.4),
+          task(_streets, GameStatus.downloadQueued, {GameAction.cancel}),
+          task(golden, GameStatus.downloadFailed, {GameAction.retryDownload}),
+          task(ecco, GameStatus.extracted, {GameAction.none}, done: true),
+        ], isFavorite: (id) => id == sonic.gameId));
+    expect(find.text('Task Manager'), findsOneWidget);
+    // Every close icon is a row's Cancel: no close button, nothing to close to here.
+    expect(find.byIcon(Icons.close).evaluate().length, find.byTooltip('Cancel').evaluate().length);
+    // The tab buttons and their counts, as on the main screen.
+    Finder tab(String label) => find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first;
+    String? count(String label) => t.widgetList<Text>(find.descendant(of: tab(label), matching: find.byType(Text))).map((w) => w.data).where((d) => d != label).firstOrNull;
+    expect([for (final l in ['Downloads', 'Extractions', 'Queue', 'Completed', 'Failed']) count(l)], ['2', null, '1', '1', '1']);
+
+    // Downloads: Sonic downloading with its bar and buttons, Streets queued.
+    expect(find.text('Sonic The Hedgehog'), findsOneWidget);
+    expect(find.text('Downloading'), findsOneWidget);
+    expect(find.text('40.0%'), findsOneWidget);
+    expect(find.text('Streets of Rage 2'), findsOneWidget);
+    expect(find.text('Dl. Queued'), findsOneWidget);
+    expect(find.byIcon(Icons.favorite), findsOneWidget, reason: "Sonic's heart");
+
+    await t.tap(find.byTooltip('Pause'));
+    await t.tap(find.byTooltip('Remove from favorites'));
+    await t.pump();
+    expect(requests, [
+      {'kind': 'game', 'gameId': sonic.gameId, 'action': 'pause'},
+      {'kind': 'favorite', 'gameId': sonic.gameId},
+    ]);
+
+    await t.tap(find.text('Failed'));
+    await t.pumpAndSettle();
+    expect(find.text('Golden Axe'), findsOneWidget);
+    expect(find.text('Download Failed'), findsOneWidget);
+    await t.tap(find.byTooltip('Retry Download'));
+    await t.pump();
+    expect(requests.last, {'kind': 'game', 'gameId': golden.gameId, 'action': 'retryDownload'});
   });
 
-  testWidgets('an empty task list says no tasks are running', (t) async {
+  testWidgets('an empty task list shows the empty tabs', (t) async {
     await start(t);
     await send(t, detailsPayload(_sonic));
-    await send(t, {'mode': 'tasks', 'tasks': <Object>[]});
-    expect(find.text('No tasks running'), findsOneWidget);
+    await send(t, tasksPayload(const []));
+    expect(find.text('No active downloads'), findsOneWidget);
     expect(find.text('Sonic The Hedgehog'), findsNothing);
+  });
+
+  testWidgets("details with the game's state show its status and buttons, and a press goes to the main app", (t) async {
+    await start(t);
+    await send(t, detailsPayload(_sonic, state: task(_sonic, GameStatus.ready, {GameAction.download})));
+    expect(find.text('Ready'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
+    expect(find.text('Add to favourites'), findsNothing);
+    await t.tap(find.text('Download'));
+    await t.pump();
+    expect(requests, [
+      {'kind': 'game', 'gameId': _sonic.gameId, 'action': 'download'}
+    ]);
+
+    // The main app sends the new state: the buttons follow.
+    await send(t, detailsPayload(_sonic, state: task(_sonic, GameStatus.downloading, {GameAction.pause, GameAction.cancel}, progress: 0.1)));
+    expect(find.text('Download'), findsNothing);
+    expect(find.text('Downloading'), findsOneWidget);
+    await t.tap(find.text('Cancel'));
+    await t.pump();
+    expect(requests.last, {'kind': 'game', 'gameId': _sonic.gameId, 'action': 'cancel'});
   });
 
   testWidgets('a malformed payload keeps the current view', (t) async {
@@ -234,8 +280,9 @@ void main() {
       '[]',
       {'mode': 'details'},
       {'mode': 'details', 'game': {'title': 'No url'}},
-      {'mode': 'tasks', 'tasks': 'none'},
-      {'mode': 'tasks', 'tasks': [{'status': 'no title'}]},
+      {'mode': 'tasks', 'tabs': 'none'},
+      {'mode': 'tasks', 'tabs': {'downloading': [{'status': 'downloading'}]}},
+      {'mode': 'tasks', 'tabs': {'downloading': [{'game': _sonic.toJson(), 'status': 'teleporting'}]}},
       {'mode': 'chess'},
     ]) {
       final reply = await send(t, bad);

@@ -1,425 +1,214 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
+import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sheet.dart';
 
-class FavoritesSettings extends ConsumerStatefulWidget {
-  const FavoritesSettings({super.key});
+String _games(int n) => '$n game${n == 1 ? '' : 's'}';
+
+/// Settings > Library > Favorites: share them as a code, import a code, or
+/// clear them, each a row opening its own sheet or question.
+class FavoritesRows extends ConsumerStatefulWidget {
+  const FavoritesRows({super.key});
 
   @override
-  ConsumerState<FavoritesSettings> createState() => _FavoritesSettingsState();
+  ConsumerState<FavoritesRows> createState() => _FavoritesRowsState();
 }
 
-class _FavoritesSettingsState extends ConsumerState<FavoritesSettings> {
-  final TextEditingController _importController = TextEditingController();
-  bool _isExporting = false;
-  bool _isImporting = false;
-  bool _isDeleting = false;
+class _FavoritesRowsState extends ConsumerState<FavoritesRows> {
+  bool _exporting = false;
 
-  @override
-  void dispose() {
-    _importController.dispose();
-    super.dispose();
+  void _snack(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: error ? Theme.of(context).colorScheme.error : null,
+      duration: const Duration(seconds: 3),
+    ));
   }
 
-  void _copyToClipboard(String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Copied to clipboard'),
-        duration: Duration(seconds: 2),
-      ),
+  /// Shares the favorites (once, or again on request) and shows the code.
+  Future<void> _share() async {
+    if (ref.read(favoritesProvider).exportSlug == null && !await _export()) return;
+    if (!mounted) return;
+    await showSettingsSheet<void>(
+      context,
+      title: 'Share favorites',
+      subtitle: 'Type this code on another device, in Import favorites.',
+      closeLabel: 'Done',
+      builder: (sheet) => _ShareCode(onExportAgain: _export),
     );
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-        duration: Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Future<void> _exportFavorites() async {
-    if (_isExporting) return;
-
-    setState(() => _isExporting = true);
-
+  Future<bool> _export() async {
+    setState(() => _exporting = true);
     try {
       await ref.read(favoritesProvider.notifier).exportFavorites();
-      _showSnackBar('Favorites exported successfully!');
+      return true;
     } catch (e) {
-      _showSnackBar('Failed to export favorites', isError: true);
+      _snack('Failed to export favorites', error: true);
+      return false;
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) setState(() => _exporting = false);
     }
   }
 
-  Future<void> _importFavorites() async {
-    final slug = _importController.text.trim();
-    if (slug.isEmpty || _isImporting) return;
+  Future<void> _import() => showSettingsSheet<void>(
+        context,
+        title: 'Import favorites',
+        subtitle: 'Adds the games of a shared code to yours.',
+        builder: (_) => _ImportCode(onDone: _snack),
+      );
 
-    setState(() => _isImporting = true);
+  Future<void> _clear() async {
+    final n = ref.read(favoritesProvider).count;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear favorites'),
+        content: Text('Remove all ${_games(n)} from your favorites? This cannot be undone.'),
+        actions: [
+          TextButton(autofocus: true, onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(favoritesProvider.notifier).clearFavorites();
+    _snack('Favorites cleared');
+  }
 
+  @override
+  Widget build(BuildContext context) {
+    final n = ref.watch(favoritesProvider.select((f) => f.count));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      SettingsValueRow(
+        title: 'Share favorites',
+        subtitle: '${_games(n)}, as a code another device can import',
+        value: _exporting ? 'Exporting' : 'Export',
+        onTap: n == 0 || _exporting ? null : _share,
+      ),
+      SettingsValueRow(title: 'Import favorites', subtitle: 'From a code', value: 'Import', onTap: _import),
+      SettingsActionRow(
+        title: 'Clear favorites',
+        subtitle: 'Removes all $n',
+        action: 'Clear',
+        danger: true,
+        onPressed: n == 0 ? null : _clear,
+      ),
+    ]);
+  }
+}
+
+/// The shared code, to read off or copy, with sharing again and deleting it.
+class _ShareCode extends ConsumerStatefulWidget {
+  const _ShareCode({required this.onExportAgain});
+
+  final Future<bool> Function() onExportAgain;
+
+  @override
+  ConsumerState<_ShareCode> createState() => _ShareCodeState();
+}
+
+class _ShareCodeState extends ConsumerState<_ShareCode> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() f) async {
+    setState(() => _busy = true);
     try {
-      await ref.read(favoritesProvider.notifier).importFavorites(slug, merge: true);
-      _importController.clear();
-      _showSnackBar('Favorites imported successfully!');
-    } catch (e) {
-      _showSnackBar('Failed to import favorites', isError: true);
+      await f();
     } finally {
-      setState(() => _isImporting = false);
-    }
-  }
-
-  Future<void> _clearFavorites() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Clear Favorites'),
-        content: Text('Are you sure you want to remove all favorites? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Clear'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await ref.read(favoritesProvider.notifier).clearFavorites();
-      _showSnackBar('Favorites cleared');
-    }
-  }
-
-  Future<void> _deleteExport() async {
-    if (_isDeleting) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete Export'),
-        content: Text('Are you sure you want to delete the current export? This will permanently remove the shared code.'),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      setState(() => _isDeleting = true);
-
-      try {
-        await ref.read(favoritesProvider.notifier).deleteExport();
-        _showSnackBar('Export deleted successfully');
-      } catch (e) {
-        _showSnackBar('Failed to delete export', isError: true);
-      } finally {
-        setState(() => _isDeleting = false);
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final favorites = ref.watch(favoritesProvider);
-    final theme = Theme.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final slug = ref.watch(favoritesProvider.select((f) => f.exportSlug));
+    final code = slug?.split(':').first;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(14)),
+        child: SelectableText(
+          code ?? 'No code yet',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: 1, color: scheme.onSurface, fontFamily: 'monospace'),
+        ),
+      ),
+      if (code != null && !Handheld.current)
+        SheetOption(
+          icon: SettingsIcons.upload,
+          label: 'Copy the code',
+          autofocus: true,
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: code));
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 2)));
+          },
+        ),
+      SheetOption(icon: SettingsIcons.downloads, label: 'Share again with today\'s list', onPressed: _busy ? null : () => _run(widget.onExportAgain)),
+      if (code != null)
+        SheetOption(
+          icon: SettingsIcons.trash,
+          label: 'Delete this code',
+          danger: true,
+          onPressed: _busy ? null : () => _run(() => ref.read(favoritesProvider.notifier).deleteExport()),
+        ),
+    ]);
+  }
+}
 
-    final displayableCode = favorites.exportSlug?.split(':').first;
+/// A code field and Import.
+class _ImportCode extends ConsumerStatefulWidget {
+  const _ImportCode({required this.onDone});
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.favorite_outline, color: theme.colorScheme.primary),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Favorites Summary',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        '${favorites.count} favorite${favorites.count == 1 ? '' : 's'}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (favorites.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: _clearFavorites,
-                    icon: Icon(Icons.clear, size: 18),
-                    label: Text('Clear'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                      side: BorderSide(color: theme.colorScheme.error.withValues(alpha: 0.5)),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-        SizedBox(height: 20),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.cloud_upload_outlined, color: theme.colorScheme.primary),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Export Favorites',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Export your favorites',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: favorites.isNotEmpty && !_isExporting ? _exportFavorites : null,
-                  icon: _isExporting
-                      ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Icon(Icons.cloud_upload_outlined, size: 18),
-                  label: Text(_isExporting ? 'Exporting' : 'Export'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: theme.colorScheme.primary,
-                    side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
-                  ),
-                ),
-              ],
-            ),
-            if (displayableCode != null) ...[
-              SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Export Code',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          "Last exported: ${_formatDateTime(favorites.lastExported!)}",
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: Platform.isAndroid ? 0 : 4),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.12),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              displayableCode,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontFamily: 'monospace',
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (!Handheld.current)
-                          IconButton(
-                            onPressed: () => _copyToClipboard(displayableCode),
-                            icon: Icon(Icons.copy, size: 18),
-                            tooltip: 'Copy',
-                            style: IconButton.styleFrom(
-                              minimumSize: Size(32, 32),
-                              padding: EdgeInsets.zero,
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: theme.colorScheme.onSurfaceVariant,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _isDeleting ? null : _deleteExport,
-                            icon: _isDeleting
-                                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                : Icon(Icons.delete_outline, size: 18),
-                            tooltip: 'Delete export',
-                            style: IconButton.styleFrom(
-                              minimumSize: Size(32, 32),
-                              padding: EdgeInsets.zero,
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-        SizedBox(height: 20),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.cloud_download_outlined, color: theme.colorScheme.primary),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Import Favorites',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Import favorites using an export code',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _importController,
-                    decoration: InputDecoration(
-                      hintText: 'Enter code (e.g., abcd.fav)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      suffixIcon: _importController.text.trim().isNotEmpty
-                          ? IconButton(
-                              onPressed: () => setState(() => _importController.clear()),
-                              icon: Icon(Icons.clear),
-                              tooltip: 'Clear',
-                            )
-                          : null,
-                    ),
-                    enabled: !_isImporting,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                SizedBox(width: 12),
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _importController.text.trim().isNotEmpty && !_isImporting ? _importFavorites : null,
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      backgroundColor: theme.colorScheme.secondaryContainer,
-                      foregroundColor: theme.colorScheme.onSecondaryContainer,
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size(48, 48),
-                    ),
-                    child: _isImporting ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(Icons.download, size: 24),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
+  final void Function(String message, {bool error}) onDone;
+
+  @override
+  ConsumerState<_ImportCode> createState() => _ImportCodeState();
+}
+
+class _ImportCodeState extends ConsumerState<_ImportCode> {
+  final _code = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
   }
 
-  String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final diff = now.difference(dateTime);
-
-    if (diff.inDays > 0) {
-      return '${diff.inDays} day${diff.inDays == 1 ? '' : 's'} ago';
-    } else if (diff.inHours > 0) {
-      return '${diff.inHours} hour${diff.inHours == 1 ? '' : 's'} ago';
-    } else if (diff.inMinutes > 0) {
-      return '${diff.inMinutes} minute${diff.inMinutes == 1 ? '' : 's'} ago';
-    } else {
-      return 'Just now';
+  Future<void> _import() async {
+    final slug = _code.text.trim();
+    if (slug.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(favoritesProvider.notifier).importFavorites(slug, merge: true);
+      if (mounted) Navigator.of(context).pop();
+      widget.onDone('Favorites imported');
+    } catch (e) {
+      widget.onDone('Failed to import favorites', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+      TextField(
+        controller: _code,
+        autofocus: true,
+        enabled: !_busy,
+        decoration: const InputDecoration(hintText: 'Code, e.g. abcd.fav', border: OutlineInputBorder()),
+        onSubmitted: (_) => _import(),
+      ),
+      const SizedBox(height: 6),
+      SheetOption(icon: SettingsIcons.downloads, label: _busy ? 'Importing' : 'Import', onPressed: _busy ? null : _import),
+    ]);
   }
 }

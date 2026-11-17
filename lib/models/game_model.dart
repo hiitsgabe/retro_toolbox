@@ -9,6 +9,10 @@ class Game {
   final GameMetadata? metadata;
   final GameDetails? details;
 
+  /// A grouped multi-disc game's discs, this one included, by disc number;
+  /// empty otherwise. Set by the list's grouping, never saved.
+  final List<Game> discs;
+
   const Game({
     required this.title,
     required this.url,
@@ -16,6 +20,7 @@ class Game {
     required this.consoleId,
     this.metadata,
     this.details,
+    this.discs = const [],
   });
 
   Game copyWith({
@@ -25,6 +30,7 @@ class Game {
     String? consoleId,
     GameMetadata? metadata,
     GameDetails? details,
+    List<Game>? discs,
   }) {
     return Game(
       title: title ?? this.title,
@@ -33,6 +39,7 @@ class Game {
       consoleId: consoleId ?? this.consoleId,
       metadata: metadata ?? this.metadata,
       details: details ?? this.details,
+      discs: discs ?? this.discs,
     );
   }
 

@@ -48,7 +48,7 @@ const _lb = LaunchboxGame(
   images: [_title, _logo, _front, _back, _fanart, _shot1, _shot2],
 );
 
-Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) => SizedBox(key: ValueKey(url));
+Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Alignment alignment = Alignment.center, Widget? placeholder, Widget? fallback}) => SizedBox(key: ValueKey(url));
 
 Finder _url(String url) => find.byKey(ValueKey(url));
 
@@ -161,6 +161,61 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Download'), findsOneWidget);
   });
 
+  testWidgets('the logo is drawn at the bottom left of its box from the first frame, with no title while it loads', (t) async {
+    final calls = <String, (Alignment, Widget?)>{};
+    t.view.physicalSize = const Size(1240, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: appTheme(),
+      home: Scaffold(
+        body: GameDetailsView(
+          game: _game,
+          launchbox: _lb,
+          imageBuilder: (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) {
+            calls[url] = (alignment, placeholder);
+            return SizedBox(key: ValueKey(url));
+          },
+        ),
+      ),
+    ));
+    final (alignment, placeholder) = calls[_logo.url]!;
+    expect(alignment, Alignment.bottomLeft);
+    expect(placeholder, isA<SizedBox>()); // not the title
+    expect(t.getSize(_url(_logo.url)), const Size(420, 96)); // the whole box: no re-layout when it loads
+  });
+
+  testWidgets('while the record loads the logo place is held empty; the title then fills it without moving the buttons', (t) async {
+    const matched = Game(
+      title: 'Sonic The Hedgehog (USA, Europe).zip',
+      url: 'https://example.com/sonic.zip',
+      size: 1,
+      consoleId: 'md',
+      metadata: GameMetadata(displayTitle: 'Sonic The Hedgehog'),
+      details: GameDetails(launchboxId: 1, launchboxPlatform: 'Sega Genesis'),
+    );
+    Future<void> show({required bool pending}) => t.pumpWidget(MaterialApp(
+          theme: appTheme(),
+          home: Scaffold(
+            body: GameDetailsView(
+              game: matched,
+              launchboxPending: pending,
+              imageBuilder: _image,
+              actions: [FilledButton(onPressed: () {}, child: const Text('Download'))],
+            ),
+          ),
+        ));
+    t.view.physicalSize = const Size(1240, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await show(pending: true);
+    expect(find.text('Sonic The Hedgehog'), findsNothing);
+    final buttonsAt = t.getTopLeft(find.text('Download'));
+    await show(pending: false); // found, but no clear logo
+    expect(find.text('Sonic The Hedgehog'), findsOneWidget);
+    expect(t.getTopLeft(find.text('Download')), buttonsAt);
+  });
+
   testWidgets('wide: the cover sits right of the text; under 600 px it moves above it', (t) async {
     await pump(t, lb: _lb, size: const Size(1920, 1080));
     expect(t.takeException(), isNull);
@@ -175,7 +230,7 @@ void main() {
     await pump(t,
         lb: _lb,
         actions: [
-          for (final l in ['Download', 'Add to favourites', 'Select', 'View box art', 'Filters']) FilledButton(onPressed: () {}, child: Text(l))
+          for (final l in ['Download', 'Add to favourites', 'Select', 'View box art']) FilledButton(onPressed: () {}, child: Text(l))
         ],
         size: const Size(400, 800));
     expect(t.takeException(), isNull);
@@ -243,9 +298,9 @@ void main() {
           launchbox: lb,
           status: const Text('Ready'),
           onOpenImage: (_) {},
-          imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 120),
+          imageBuilder: (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 120),
           actions: [
-            for (final l in ['Download', 'Add to favourites', 'Select', 'View box art', 'Filters'])
+            for (final l in ['Download', 'Add to favourites', 'Select', 'View box art'])
               FilledButton(autofocus: l == 'Download', onPressed: () {}, child: Text(l)),
           ],
         ),
@@ -324,7 +379,7 @@ void main() {
             body: GameDetailsView(
               game: _game,
               launchbox: lb,
-              imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 96),
+              imageBuilder: (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url), width: 84, height: 96),
               actions: [
                 for (final l in ['Download', 'Add to favourites', 'Select']) FilledButton(autofocus: l == 'Download', onPressed: () {}, child: Text(l)),
               ],
@@ -372,7 +427,7 @@ void main() {
         body: GameDetailsView(
           game: _game,
           launchbox: _lb,
-          imageBuilder: (context, url, {fit = BoxFit.cover, fallback}) =>
+          imageBuilder: (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) =>
               url == _fanart.url || url == _shot2.url ? fallback ?? const SizedBox() : SizedBox(key: ValueKey(url)),
         ),
       ),

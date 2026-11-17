@@ -53,7 +53,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
       barrierDismissible: false,
       builder: (context) {
         future.whenComplete(() {
-          if (Navigator.canPop(context)) Navigator.pop(context);
+          if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
         });
         return AlertDialog(
           title: const Text('Preparing…'),

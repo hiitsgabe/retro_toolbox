@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
@@ -474,14 +476,15 @@ void main() {
       expect(notifier.imports, 1);
     });
 
-    testWidgets('on: shows the import date, the platform count and the consoles it misses', (t) async {
+    testWidgets('on: shows the import date and the consoles it misses', (t) async {
       // Early in the UTC day, so west of Greenwich the local date is the day before.
       final at = DateTime.utc(2026, 11, 16, 1);
       await t.runAsync(() => writeManifest({snes, nes}, at));
       await pump(t);
       final local = at.toLocal();
-      final date = '${local.year}-${'${local.month}'.padLeft(2, '0')}-${'${local.day}'.padLeft(2, '0')}';
-      expect(find.text('Updated $date · 2 platforms'), findsOneWidget);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      // No size: the storage walk has no platform folders in a test.
+      expect(find.text('Ratings, genres and artwork. Updated ${months[local.month - 1]} ${local.day}'), findsOneWidget);
       expect(find.text('New consoles need an update: My Platform'), findsOneWidget);
       expect(find.text('Update'), findsOneWidget);
     });
@@ -520,14 +523,14 @@ void main() {
       expect(cancelFocused(), isTrue);
     });
 
-    testWidgets('a controller reaches the switch, then Update, then covers', (t) async {
+    testWidgets('a controller reaches the switch, then covers, then Update', (t) async {
       await t.runAsync(() => writeManifest({snes}, DateTime.utc(2026, 11, 16, 12)));
       await pump(t);
       String? focused() {
         String? label;
         FocusManager.instance.primaryFocus?.context?.visitAncestorElements((e) {
-          if (e.widget case SwitchListTile(:final Text title)) label = title.data == 'Use LaunchBox metadata' ? 'switch' : 'covers';
-          if (e.widget is FilledButton) label = 'update';
+          if (e.widget case SettingsSwitchRow(:final title)) label = title == 'Use LaunchBox metadata' ? 'switch' : 'covers';
+          if (e.widget case SettingsActionRow(action: 'Update')) label = 'update';
           return label == null;
         });
         return label;
@@ -539,7 +542,7 @@ void main() {
         await t.pump();
         order.add(focused());
       }
-      expect(order, ['switch', 'update', 'covers']);
+      expect(order, ['switch', 'covers', 'update']);
     });
 
     testWidgets('turning off asks, then deletes the store and goes back to off', (t) async {
@@ -587,11 +590,11 @@ void main() {
       });
       await t.pump();
       expect(find.text(noLaunchboxConsolesMessage), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged, isNull);
+      expect(t.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow)).onChanged, isNull);
     });
 
     testWidgets('the covers switch shows only with metadata on, and sets the choice', (t) async {
-      const covers = 'Use LaunchBox covers for thumbnails';
+      const covers = 'LaunchBox covers as thumbnails';
       await pump(t);
       expect(find.text(covers), findsNothing);
 
@@ -601,8 +604,8 @@ void main() {
       });
       await t.pump();
       expect(find.text(covers), findsOneWidget);
-      expect(find.text("Instead of the catalog's box art, when LaunchBox has one"), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, covers)).value, isFalse);
+      expect(find.text('Instead of the catalog box art, when LaunchBox has one'), findsOneWidget);
+      expect(t.widget<SettingsSwitchRow>(find.widgetWithText(SettingsSwitchRow, covers)).value, isFalse);
 
       await t.tap(find.text(covers));
       await t.pump();
@@ -617,7 +620,7 @@ void main() {
       expect(find.text('Importing, see the Task Manager'), findsOneWidget);
       expect(find.text('Update'), findsNothing);
       expect(find.text('Updated'), findsOneWidget);
-      expect(t.widget<SwitchListTile>(find.byType(SwitchListTile).first).onChanged, isNull);
+      expect(t.widget<SettingsSwitchRow>(find.byType(SettingsSwitchRow).first).onChanged, isNull);
       await t.tap(find.text('Cancel'));
       expect(notifier.cancels, 1);
     });

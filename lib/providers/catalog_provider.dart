@@ -10,6 +10,7 @@ import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
@@ -52,6 +53,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       if (state.filter.showFavoritesOnly && previous?.gameIds != current.gameIds) {
         updateFilteredGames();
       }
+    });
+    // Grouping is a setting, per console or general: the list follows it.
+    _ref.listen<Map<String, dynamic>>(settingWatcherProvider(AppSettings.groupDiscs), (previous, current) {
+      if (!mapEquals(previous, current)) updateFilteredGames(immediate: true);
     });
   }
 
@@ -275,6 +280,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         limit: limit,
         favoriteGameIds: favs,
         inLibraryStatus: lib,
+        groupDiscs: _ref.read(settingsProvider.notifier).groupDiscs(state.games.firstOrNull?.consoleId),
       ),
     );
   }

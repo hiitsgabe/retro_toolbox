@@ -31,7 +31,7 @@ class GameTitle extends StatelessWidget {
             ),
           ),
         ),
-        if (game.metadata?.diskNumber.isNotEmpty == true) ...[
+        if (game.discs.length >= 2 || game.metadata?.diskNumber.isNotEmpty == true) ...[
           const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -40,7 +40,7 @@ class GameTitle extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
             ),
             child: Text(
-              'Disk ${game.metadata!.diskNumber}',
+              game.discs.length >= 2 ? '${game.discs.length} discs' : 'Disk ${game.metadata!.diskNumber}',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w500,

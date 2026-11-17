@@ -2,9 +2,18 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:retro_toolbox/services/permission_service.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 
 class PermissionsSetting extends StatefulWidget {
   const PermissionsSetting({super.key});
+
+  /// Test seam: the statuses, instead of asking Android.
+  @visibleForTesting
+  static Map<Permission, PermissionStatus>? debugStatuses;
+
+  /// Whether Settings lists permissions: Android, not the Linux handheld.
+  static bool get shown => debugStatuses != null || (Platform.isAndroid && !Handheld.current);
 
   @override
   State<PermissionsSetting> createState() => _PermissionsSettingState();
@@ -21,6 +30,11 @@ class _PermissionsSettingState extends State<PermissionsSetting> {
   }
 
   Future<void> _loadPermissionStatuses() async {
+    final fixed = PermissionsSetting.debugStatuses;
+    if (fixed != null) {
+      _permissionStatuses = {...fixed};
+      return;
+    }
     if (!Platform.isAndroid) return;
 
     setState(() => _loading = true);
@@ -80,101 +94,38 @@ class _PermissionsSettingState extends State<PermissionsSetting> {
     }
   }
 
-  Widget _buildPermissionTile(Permission permission, PermissionStatus status) {
-    final description = PermissionService.permissionDescriptions[permission] ?? permission.toString();
-    final rationale = PermissionService.permissionRationales[permission];
-    final isGranted = status.isGranted;
-    final isPermanentlyDenied = status.isPermanentlyDenied;
+  static final _titles = {
+    Permission.manageExternalStorage: ('Storage access', 'Needed to write to the download folder'),
+    Permission.notification: ('Notifications', 'Shows downloads running in the background'),
+  };
 
-    return ListTile(
-      leading: Icon(
-        isGranted ? Icons.check_circle : Icons.error,
-        color: isGranted ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.error,
-      ),
-      title: Text(description),
-      subtitle: rationale != null
-          ? Text(
-              rationale,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            )
-          : null,
-      trailing: !isGranted
-          ? FilledButton.tonal(
-              onPressed: _loading ? null : () => _requestPermission(permission),
-              child: Text(isPermanentlyDenied ? 'Settings' : 'Request'),
-            )
-          : Text(
-              'Granted',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+  Widget _buildPermissionTile(Permission permission, PermissionStatus status) {
+    final (title, subtitle) = _titles[permission] ??
+        (PermissionService.permissionDescriptions[permission] ?? permission.toString(), PermissionService.permissionRationales[permission] ?? '');
+    return SettingsValueRow(
+      title: title,
+      subtitle: subtitle,
+      value: status.isGranted ? 'Granted' : 'Not granted',
+      onTap: status.isGranted || _loading ? null : () => _requestPermission(permission),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isAndroid) {
-      return const SizedBox.shrink();
-    }
-
+    if (!PermissionsSetting.shown) return const SizedBox.shrink();
     if (_loading && _permissionStatuses.isEmpty) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(Icons.security),
-              SizedBox(width: 12),
-              Text('Permissions'),
-              Spacer(),
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ],
-          ),
-        ),
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Align(alignment: Alignment.centerLeft, child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))),
       );
     }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  const Icon(Icons.security),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Permissions',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const Spacer(),
-                  if (_loading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-            ),
-            ..._permissionStatuses.entries.map(
-              (entry) => _buildPermissionTile(entry.key, entry.value),
-            ),
-          ],
-        ),
-      ),
+    // Storage first: it is the one the library cannot work without.
+    final order = [Permission.manageExternalStorage, Permission.notification];
+    final entries = _permissionStatuses.entries.toList()..sort((a, b) => order.indexOf(a.key).compareTo(order.indexOf(b.key)));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [for (final e in entries) _buildPermissionTile(e.key, e.value)],
     );
   }
 }

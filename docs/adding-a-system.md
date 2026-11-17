@@ -321,6 +321,16 @@ Sent as a cookie: `session_id=your-session-token`.
 
 Sent as `Authorization: LOW access-key:secret-key`.
 
+### Where users sign in
+
+Settings > Accounts & sync lists every login the loaded catalog asks for, built from the catalog
+alone, and follows it when the catalog changes:
+
+- *Internet Archive*, when any system's URL is on archive.org or its auth is `ia_s3`.
+- One row per token or cookie login. Systems share a row (and one sign-in fills in all of them) when
+  their `auth.signin.register_url` has the same host, else when their `auth_message` is the same
+  text. The row is named after that host, else after the first system's name.
+
 ---
 
 ## Boxart / Thumbnails

@@ -66,7 +66,7 @@ void main() {
     final incoming = Archive()
       ..addFile(ArchiveFile('slot00', 3, 'NEW'.codeUnits))
       ..addFile(ArchiveFile(JksvMeta.fileName, JksvMeta.size, JksvMeta.encode(applicationId: 0x0100AAAA00001000)));
-    final res = await _req('PUT', base('/Whatever/backup.zip'), body: ZipEncoder().encode(incoming)!);
+    final res = await _req('PUT', base('/Whatever/backup.zip'), body: ZipEncoder().encode(incoming));
     expect(res.statusCode, 201);
     expect(server.incoming.value.single.titleId, '0100AAAA00001000');
   });

@@ -8,12 +8,14 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
+import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
+import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -67,6 +69,17 @@ class _FakeGames extends StateNotifier<Map<String, GameState>> implements GameSt
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifier {
+  _FakeFavorites() : super(Favorites(lastUpdated: DateTime(2026)));
+  @override
+  bool isFavorite(String gameId) => state.isFavorite(gameId);
+  @override
+  Future<void> toggleFavorite(String gameId) async =>
+      state = state.copyWith(gameIds: state.gameIds.contains(gameId) ? ({...state.gameIds}..remove(gameId)) : {...state.gameIds, gameId});
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 /// Stands for the LaunchBox import the main side has read.
 final _launchboxVersion = StateProvider<String?>((ref) => null);
 
@@ -88,6 +101,7 @@ void main() {
   setUp(() {
     container = ProviderContainer(overrides: [
       gameStateManagerProvider.overrideWith((ref) => _FakeGames()),
+      favoritesProvider.overrideWith((ref) => _FakeFavorites()),
       launchboxVersionProvider.overrideWith((ref) => ref.watch(_launchboxVersion)),
     ]);
     sent = [];
@@ -105,7 +119,7 @@ void main() {
   syncTest('starts on the task list', (t) async {
     sync.start();
     expect(sent.single['mode'], 'tasks');
-    expect(sent.single['tasks'], isEmpty);
+    expect([for (final tab in (sent.single['tabs'] as Map).values) (tab as List).length], [0, 0, 0, 0, 0]);
   });
 
   syncTest('a focused game on the games screen sends its details after the debounce', (t) async {
@@ -169,17 +183,42 @@ void main() {
     expect(sent, hasLength(1));
     await t.pump(const Duration(milliseconds: 1));
     expect(sent, hasLength(2));
-    expect(sent.last['tasks'].single['progress'], 0.3);
+    expect(sent.last['tabs']['downloading'].single['progress'], 0.3);
   });
 
-  syncTest('task updates are ignored while details show', (t) async {
+  syncTest('while details show, a change to the shown game sends them again with its state, throttled', (t) async {
     onGamesScreen(true);
     focus('Zelda');
     sync.start();
     await t.pump(const Duration(milliseconds: 150));
+    expect(sent.single['state']['status'], 'init');
+    await t.pump(const Duration(milliseconds: 500));
     games().put(downloading('Zelda', 0.1));
+    expect(titles(), ['Zelda', 'Zelda']);
+    expect(sent.last['state']['status'], 'downloading');
+    expect(sent.last['state']['progress'], 0.1);
+    games().put(downloading('Zelda', 0.2));
+    games().put(downloading('Zelda', 0.3));
+    await t.pump(const Duration(milliseconds: 499));
+    expect(sent, hasLength(2));
+    await t.pump(const Duration(milliseconds: 1));
+    expect(sent.last['state']['progress'], 0.3);
+    // Another game's progress changes nothing on the page.
+    await t.pump(const Duration(milliseconds: 500));
+    final before = sent.length;
+    games().put(downloading('Mario', 0.5));
     await t.pump(const Duration(seconds: 1));
-    expect(titles(), ['Zelda']);
+    expect(sent, hasLength(before));
+  });
+
+  syncTest('a favourite toggled sends the task list again', (t) async {
+    sync.start();
+    games().put(downloading('Zelda', 0.1));
+    await t.pump(const Duration(milliseconds: 500));
+    expect(sent.last['tabs']['downloading'].single['favorite'], isFalse);
+    await container.read(favoritesProvider.notifier).toggleFavorite('snes/Zelda.zip');
+    await t.pump(const Duration(milliseconds: 500));
+    expect(sent.last['tabs']['downloading'].single['favorite'], isTrue);
   });
 
   syncTest('an unchanged payload is not sent again', (t) async {

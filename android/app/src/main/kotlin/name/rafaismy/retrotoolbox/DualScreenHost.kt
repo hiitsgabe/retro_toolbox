@@ -41,6 +41,7 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
         }
     }
     private val attached: () -> Unit = { changed() }
+    private val action: (String) -> Unit = { json -> channel.invokeMethod("companionAction", json) }
 
     // Set once this activity has handed its engine to the one on the other
     // display. Its Dart can still ask to close the companion while this one
@@ -54,6 +55,7 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
         for (d in displays.displays) wasOn[d.displayId] = d.state == Display.STATE_ON
         displays.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
         CompanionBridge.onAttached = attached
+        CompanionBridge.onAction = action
         CompanionBridge.mainActivity = activity
         channel.setMethodCallHandler { call, result ->
             try {
@@ -172,6 +174,7 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
         displays.unregisterDisplayListener(listener)
         channel.setMethodCallHandler(null)
         if (CompanionBridge.onAttached === attached) CompanionBridge.onAttached = null
+        if (CompanionBridge.onAction === action) CompanionBridge.onAction = null
         releaseKeys()
         closeCompanion()
     }

@@ -96,7 +96,8 @@ void main() {
     saved(false);
     final c = await pump(t, const SettingsScreen(consoleId: null));
     expect(find.text('Games Library & downloads'), findsOneWidget);
-    for (final l in ['Catalog Source', 'Download Directory', 'Accounts', 'Favorites', 'Console']) {
+    // Off: Library holds only the switch; Downloads, Consoles and Accounts have nothing.
+    for (final l in ['Catalog source', 'Downloads', 'Consoles', 'Accounts & sync', 'Favorites']) {
       expect(find.text(l), findsNothing, reason: l);
     }
 
@@ -115,6 +116,7 @@ void main() {
     await t.pump();
     await t.pump(const Duration(milliseconds: 300));
     expect(c.read(settingsProvider).isLibraryEnabled, isTrue);
-    expect(find.text('Catalog Source'), findsOneWidget);
+    expect(find.text('Catalog source'), findsOneWidget);
+    expect(find.text('Downloads'), findsOneWidget);
   });
 }

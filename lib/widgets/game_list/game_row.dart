@@ -4,6 +4,7 @@ import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
@@ -46,6 +47,7 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
     watchJump(gameId);
     final gameState = ref.watch(gameStateProvider(widget.game));
     final isSelected = ref.watch(gameSelectionProvider(gameId));
+    final shown = widget.selectable && ref.watch(shownOnSecondScreenProvider(gameId));
 
     // One focus stop per card (A opens the menu); inner controls are
     // ExcludeFocus'd so the d-pad skips them but touch still hits them.
@@ -58,14 +60,62 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
           focusNode: jumpFocus,
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
-          onTap: () => showGameActionMenu(context, widget.game, selectable: widget.selectable),
-          child: _card(context, gameState, isSelected, catalogNotifier, gameId),
+          onTap: () => tapGameCard(context, ref, widget.game, selectable: widget.selectable, focus: jumpFocus),
+          child: SecondScreenHighlight(
+            shown: shown,
+            child: GameRowBody(
+              game: widget.game,
+              gameState: gameState,
+              isSelected: isSelected,
+              selectable: widget.selectable,
+              isNarrow: widget.isNarrow,
+              sizeColumnWidth: widget.sizeColumnWidth,
+              statusColumnWidth: widget.statusColumnWidth,
+              actionsColumnWidth: widget.actionsColumnWidth,
+              onToggleSelected: () => catalogNotifier.toggleGameSelection(gameId),
+              actions: GameActionButtons(
+                game: widget.game,
+                gameState: gameState,
+                isNarrow: widget.isNarrow,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _card(BuildContext context, GameState gameState, bool isSelected, CatalogNotifier catalogNotifier, String gameId) {
+/// A row's look, from data: [GameRow] feeds it the app's state, the second
+/// screen's Task Manager what the main screen sent.
+class GameRowBody extends StatelessWidget {
+  const GameRowBody({
+    super.key,
+    required this.game,
+    required this.gameState,
+    required this.actions,
+    this.isSelected = false,
+    this.selectable = true,
+    this.isNarrow = false,
+    this.sizeColumnWidth = 100,
+    this.statusColumnWidth = 100,
+    this.actionsColumnWidth = 100,
+    this.onToggleSelected,
+  });
+
+  final Game game;
+  final GameState gameState;
+  final Widget actions;
+  final bool isSelected;
+  final bool selectable;
+  final bool isNarrow;
+  final double sizeColumnWidth;
+  final double statusColumnWidth;
+  final double actionsColumnWidth;
+  final VoidCallback? onToggleSelected;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
@@ -80,21 +130,21 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (widget.selectable) ...[
+          if (selectable) ...[
             SizedBox(
               width: 20,
               child: ExcludeFocus(
                 child: Checkbox(
                   value: isSelected,
-                  onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(gameId) : null,
+                  onChanged: gameState.isInteractable && onToggleSelected != null ? (_) => onToggleSelected!() : null,
                 ),
               ),
             ),
             SizedBox(width: 6),
           ],
           GameBoxart(
-            game: widget.game,
-            size: (widget.isNarrow ? 50 : 60) + (widget.selectable ? 0 : 20),
+            game: game,
+            size: (isNarrow ? 50 : 60) + (selectable ? 0 : 20),
           ),
           Expanded(
             child: Padding(
@@ -110,31 +160,31 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             GameTitle(
-                              game: widget.game,
+                              game: game,
                               gameState: gameState,
                             ),
                             Row(
                               children: [
-                                if (widget.isNarrow)
+                                if (isNarrow)
                                   Text(
-                                    formatBytes(widget.game.size),
+                                    formatBytes(game.size),
                                     style: TextStyle(
                                       fontSize: 10,
                                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
-                                if (widget.isNarrow) SizedBox(width: 8),
-                                Expanded(child: GameTags(game: widget.game)),
+                                if (isNarrow) SizedBox(width: 8),
+                                Expanded(child: GameTags(game: game)),
                               ],
                             ),
                           ],
                         ),
                       ),
-                      if (!widget.isNarrow)
+                      if (!isNarrow)
                         SizedBox(
-                          width: widget.sizeColumnWidth,
+                          width: sizeColumnWidth,
                           child: Text(
-                            formatBytes(widget.game.size),
+                            formatBytes(game.size),
                             style: TextStyle(
                               fontSize: 12,
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -143,7 +193,7 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
                           ),
                         ),
                       SizedBox(
-                        width: widget.statusColumnWidth,
+                        width: statusColumnWidth,
                         child: Tooltip(
                           message: gameState.errorMessage ?? '',
                           child: Text(
@@ -158,14 +208,8 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
                         ),
                       ),
                       SizedBox(
-                        width: widget.actionsColumnWidth,
-                        child: ExcludeFocus(
-                          child: GameActionButtons(
-                            game: widget.game,
-                            gameState: gameState,
-                            isNarrow: widget.isNarrow,
-                          ),
-                        ),
+                        width: actionsColumnWidth,
+                        child: ExcludeFocus(child: actions),
                       ),
                     ],
                   ),

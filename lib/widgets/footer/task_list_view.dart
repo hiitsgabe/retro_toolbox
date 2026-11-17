@@ -16,27 +16,7 @@ class TaskListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (games.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              emptyIcon,
-              size: 48,
-              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-            ),
-            SizedBox(height: 16),
-            Text(
-              emptyMessage,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+    if (games.isEmpty) return TaskListEmpty(message: emptyMessage, icon: emptyIcon);
 
     return ListView.builder(
       padding: EdgeInsets.symmetric(vertical: 8),
@@ -52,6 +32,37 @@ class TaskListView extends StatelessWidget {
           selectable: false,
         );
       },
+    );
+  }
+}
+
+/// A Task Manager tab with nothing in it.
+class TaskListEmpty extends StatelessWidget {
+  const TaskListEmpty({super.key, required this.message, required this.icon});
+
+  final String message;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 48,
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+          ),
+          SizedBox(height: 16),
+          Text(
+            message,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

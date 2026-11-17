@@ -158,7 +158,10 @@ void main() {
       final a = await engine(thor, thorState, 'thor-7f3a', 4);
       expect(await a.pull(stardew), ['Farm_1: pulled']);
       expect(thor.farm('Farm_1'), contains('day 2'));
-      expect(drive.files.values.where((f) => f.name.endsWith('.zip') && !f.trashed), hasLength(2));
+      final zips = drive.files.values.where((f) => f.name.endsWith('.zip') && !f.trashed).map((f) => f.name);
+      // The two pushed revisions, plus the save thor's pull replaced, kept under backups/.
+      expect(zips.where((n) => n != 'save.zip'), hasLength(2));
+      expect(zips.where((n) => n == 'save.zip'), hasLength(1));
     });
 
     test('a push into a full Drive fails with "Drive is full" and leaves the save to push later', () async {

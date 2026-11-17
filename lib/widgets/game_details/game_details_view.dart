@@ -13,7 +13,10 @@ import 'package:retro_toolbox/utils/image_memory.dart';
 
 /// Builds one image of the page; [fallback] stands in while it loads and when
 /// it fails.
-typedef DetailsImageBuilder = Widget Function(BuildContext context, String url, {BoxFit fit, Widget? fallback});
+/// [placeholder] shows while the image loads (default: [fallback]),
+/// [fallback] when it fails.
+typedef DetailsImageBuilder = Widget Function(BuildContext context, String url,
+    {BoxFit fit, Alignment alignment, Widget? placeholder, Widget? fallback});
 
 /// A game's details: a hero the size of the screen, then a sheet with
 /// everything else. Takes its data in and renders, so the second screen can
@@ -24,8 +27,10 @@ class GameDetailsView extends StatelessWidget {
     super.key,
     required this.game,
     this.launchbox,
+    this.launchboxPending = false,
     this.actions,
     this.status,
+    this.discs,
     this.imageBuilder,
     this.onOpenImage,
     this.scrollController,
@@ -34,11 +39,18 @@ class GameDetailsView extends StatelessWidget {
   final Game game;
   final LaunchboxGame? launchbox;
 
+  /// [launchbox] is still being read: the logo's place is kept empty rather
+  /// than showing the title and swapping it for the logo a moment later.
+  final bool launchboxPending;
+
   /// Buttons under the title; null shows none (the second screen).
   final List<Widget>? actions;
 
   /// A line above [actions]: download state, an error.
   final Widget? status;
+
+  /// A grouped multi-disc game's discs, one row each, first in the sheet.
+  final Widget? discs;
 
   /// Null: [CachedNetworkImage], with the fallback as its placeholder and
   /// error widget.
@@ -54,7 +66,7 @@ class GameDetailsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final info = _Info(game, launchbox);
+    final info = _Info(game, launchbox, pending: launchboxPending);
     final image = imageBuilder ?? _networkImage;
     return LayoutBuilder(builder: (context, box) {
       final width = box.maxWidth;
@@ -132,6 +144,7 @@ class GameDetailsView extends StatelessWidget {
             ),
           );
     return [
+      if (discs != null) _Section(title: 'Discs', child: discs!),
       if (wide && details != null && about != null) ...[
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,10 +183,11 @@ class GameDetailsView extends StatelessWidget {
 /// catalog's copy of its fields when it is not (the record loads after the
 /// page opens).
 class _Info {
-  _Info(this.game, this.lb);
+  _Info(this.game, this.lb, {this.pending = false});
 
   final Game game;
   final LaunchboxGame? lb;
+  final bool pending;
 
   List<LaunchboxImage> get images => lb?.images ?? const [];
 
@@ -388,18 +402,23 @@ class _HeroText extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (logo == null)
+        if (logo == null && !info.pending && info.game.details?.launchboxId == null)
           title
         else
-          // Its full height from the start: the buttons below must not move
-          // when the logo comes in, under a d-pad focus already placed.
+          // A fixed box from the first frame, the logo or the title at its
+          // bottom left: nothing moves when the record or the logo comes in,
+          // and the buttons below stay under a d-pad focus already placed.
           SizedBox(
             height: 96,
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: image(context, logo.url, fit: BoxFit.contain, fallback: title),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: SizedBox.expand(
+                child: logo != null
+                    ? image(context, logo.url,
+                        fit: BoxFit.contain, alignment: Alignment.bottomLeft, placeholder: const SizedBox.shrink(), fallback: Align(alignment: Alignment.bottomLeft, child: title))
+                    : info.pending
+                        ? null
+                        : Align(alignment: Alignment.bottomLeft, child: title),
               ),
             ),
           ),
@@ -735,7 +754,8 @@ class _FollowFocusState extends State<_FollowFocus> {
 
 /// Decodes at the size it is laid out at, like the grid's covers: LaunchBox
 /// fanart and screenshots are full size.
-Widget _networkImage(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Widget? fallback}) {
+Widget _networkImage(BuildContext context, String url,
+    {BoxFit fit = BoxFit.cover, Alignment alignment = Alignment.center, Widget? placeholder, Widget? fallback}) {
   return LayoutBuilder(builder: (context, box) {
     final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1;
     final w = box.hasBoundedWidth ? box.maxWidth : null;
@@ -746,12 +766,13 @@ Widget _networkImage(BuildContext context, String url, {BoxFit fit = BoxFit.cove
     return CachedNetworkImage(
       imageUrl: url,
       fit: fit,
+      alignment: alignment,
       fadeInDuration: const Duration(milliseconds: 200),
       memCacheWidth: !byHeight && w != null && h != null ? thumbnailDecodeWidth(w, h, dpr) : null,
       memCacheHeight: byHeight ? math.max(1, (h * dpr).ceil()) : null,
-      // The fallback also covers the load: the title until the logo is in,
-      // the blurred box art until the fanart is.
-      placeholder: (context, url) => fallback ?? const SizedBox.shrink(),
+      // The fallback also covers the load unless told otherwise: the blurred
+      // box art until the fanart is in.
+      placeholder: (context, url) => placeholder ?? fallback ?? const SizedBox.shrink(),
       errorWidget: (context, url, error) => fallback ?? const SizedBox.shrink(),
       errorListener: (e) => debugPrint('Details image failed: $e'),
     );

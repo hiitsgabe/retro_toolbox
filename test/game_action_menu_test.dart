@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:photo_view/photo_view.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
@@ -17,8 +18,8 @@ import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
-import 'package:retro_toolbox/widgets/header/filter_modal.dart';
 
 class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifier {
   _FakeFavorites() : super(Favorites(lastUpdated: DateTime(2020)));
@@ -75,7 +76,7 @@ void main() {
     catalog = _FakeCatalog();
     ran = [];
     debugRunGameAction = (ref, context, game, state, action) async => ran.add((game, action));
-    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url));
+    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url));
   });
   tearDown(() {
     debugRunGameAction = null;
@@ -251,6 +252,25 @@ void main() {
     expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
+  testWidgets('tapping the cover opens the page, not the box art viewer', (t) async {
+    const withArt = Game(
+      title: 'Art',
+      url: 'https://example.com/files/art.zip',
+      size: 1,
+      consoleId: 'con',
+      details: GameDetails(boxart: 'https://example.com/art.png'),
+    );
+    final shown = <Game>[];
+    debugShowBoxart = (_, g) => shown.add(g);
+    addTearDown(() => debugShowBoxart = null);
+    await pump(t, const GameRow(game: withArt), state: const GameState(game: withArt, status: GameStatus.ready));
+    await t.tap(find.byKey(const ValueKey('boxart_con/art.zip')), warnIfMissed: false);
+    await t.pumpAndSettle();
+    expect(find.byType(GameDetailsPage), findsOneWidget);
+    expect(find.byType(PhotoView), findsNothing);
+    expect(shown, isEmpty);
+  });
+
   testWidgets('holding Enter on a card opens the menu once and runs nothing', (t) async {
     await pump(t, const GameRow(game: _game));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -284,7 +304,7 @@ void main() {
     final node = FocusManager.instance.primaryFocus;
     expect(node, isNot(isA<FocusScopeNode>()));
     expect(node?.context?.findAncestorWidgetOfExactType<GameDetailsPage>(), isNotNull);
-    expect(Focus.of(t.element(inPage(find.text('Filters')))).hasFocus, isTrue); // the button that moved into its place
+    expect(Focus.of(t.element(inPage(find.text('Add to favourites')))).hasFocus, isTrue); // the button before it
   });
 
   testWidgets('escape while an action runs does not drop it', (t) async {
@@ -318,7 +338,7 @@ void main() {
     expect(lb.asked, isEmpty);
   });
 
-  testWidgets('a matched game shows at once, then the overview when its record arrives', (t) async {
+  testWidgets('a matched game keeps the logo place empty until its record arrives, then the title and overview', (t) async {
     const matched = Game(
       title: 'Sonic The Hedgehog',
       url: 'https://example.com/files/sonic.zip',
@@ -335,11 +355,17 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(lb.asked, [('Sega Genesis', 7)]);
-    expect(inPage(find.text(matched.title)), findsOneWidget);
+    // No title now to swap for the logo a moment later; the buttons are there.
+    expect(inPage(find.text(matched.title)), findsNothing);
+    expect(inPage(find.text('Download')), findsOneWidget);
     expect(find.text('About'), findsNothing);
+    final buttonsAt = t.getTopLeft(inPage(find.text('Download')));
 
+    // No clear logo in the record: the title takes the logo's place, nothing moves.
     lb.record.complete(const LaunchboxGame(id: 7, name: 'Sonic the Hedgehog', overview: overview, developer: 'Sonic Team'));
     await t.pumpAndSettle();
+    expect(inPage(find.text(matched.title)), findsOneWidget);
+    expect(t.getTopLeft(inPage(find.text('Download'))), buttonsAt);
     await t.drag(inPage(find.byType(CustomScrollView)), const Offset(0, -2000));
     await t.pumpAndSettle();
     expect(inPage(find.text(overview)), findsOneWidget);
@@ -352,17 +378,6 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(Focus.of(t.element(inPage(find.text('Add to favourites')))).hasPrimaryFocus, isTrue);
-  });
-
-  testWidgets('Filters closes the page and opens the filters', (t) async {
-    await pump(t, const GameRow(game: _game));
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter);
-    await t.pumpAndSettle();
-    await t.tap(inPage(find.text('Filters')));
-    await t.pumpAndSettle();
-    expect(find.byType(GameDetailsPage), findsNothing);
-    expect(find.byType(FilterModal), findsOneWidget);
   });
 
   testWidgets('the d-pad walks a long overview down to the back cover, never via the back button', (t) async {
@@ -385,7 +400,7 @@ void main() {
         ],
       ));
     // Sized like real art: an empty box is no place for focus to land.
-    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, fallback}) => SizedBox(key: ValueKey(url), width: 180, height: 240);
+    GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url), width: 180, height: 240);
     await pump(t, const GameRow(game: matched),
         state: const GameState(game: matched, status: GameStatus.ready, availableActions: {GameAction.download}),
         overrides: [launchboxServiceProvider.overrideWithValue(lb)]);

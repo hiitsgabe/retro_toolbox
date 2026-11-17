@@ -9,7 +9,7 @@ import 'package:retro_toolbox/services/smb_service.dart';
 ///   docker run -d --name rt-smb dperson/samba -u "tester;secret" -s "share;/share;yes;no;no;tester"
 ///   docker exec rt-smb sh -c 'mkdir -p /share/t && head -c 9000000 /dev/urandom > /share/t/big.bin &&
 ///     for i in 1 2 3; do head -c 100000 /dev/urandom > /share/t/s$i.bin; done && chown -R tester /share'
-///   SMB_TEST_HOST=<container ip> flutter test test/smb_parallel_download_test.dart
+///   `SMB_TEST_HOST=<container ip> flutter test test/smb_parallel_download_test.dart`
 void main() {
   final host = Platform.environment['SMB_TEST_HOST'];
 

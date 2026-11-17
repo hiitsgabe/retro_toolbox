@@ -116,42 +116,41 @@ class GameBoxart extends StatelessWidget {
           width: 1,
         ),
       ),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () => showBoxartViewer(context, game),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(1),
-          // Decode at the on-screen size: full-size covers made the grid hold
-          // GBs of image memory. The viewer above loads the full image.
-          child: LayoutBuilder(builder: (context, box) => CachedNetworkImage(
-            imageUrl: boxart,
-            width: size,
-            height: size,
-            memCacheWidth: thumbnailDecodeWidth(
-              box.hasBoundedWidth ? box.maxWidth : size,
-              box.hasBoundedHeight ? box.maxHeight : size,
-              MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
-            ),
-            fit: BoxFit.cover,
-            errorWidget: (context, url, error) => _DefaultPlaceholder(size: size),
-            errorListener: (value) => debugPrint('Error loading boxart: $value'),
-            progressIndicatorBuilder: (context, url, downloadProgress) => Container(
-              width: size,
-              height: size,
-              color: Theme.of(context).colorScheme.surface,
-              child: Center(
-                child: SizedBox(
-                  width: size * 0.4,
-                  height: size * 0.4,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    value: downloadProgress.progress,
+      // No tap of its own: a tap on the cover is a tap on the card, which
+      // opens the game's page.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(1),
+        // Decode at the on-screen size: full-size covers made the grid hold
+        // GBs of image memory. The viewer above loads the full image.
+        child: LayoutBuilder(
+            builder: (context, box) => CachedNetworkImage(
+                  imageUrl: boxart,
+                  width: size,
+                  height: size,
+                  memCacheWidth: thumbnailDecodeWidth(
+                    box.hasBoundedWidth ? box.maxWidth : size,
+                    box.hasBoundedHeight ? box.maxHeight : size,
+                    MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
                   ),
-                ),
-              ),
-            ),
-          )),
-        ),
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) => _DefaultPlaceholder(size: size),
+                  errorListener: (value) => debugPrint('Error loading boxart: $value'),
+                  progressIndicatorBuilder: (context, url, downloadProgress) => Container(
+                    width: size,
+                    height: size,
+                    color: Theme.of(context).colorScheme.surface,
+                    child: Center(
+                      child: SizedBox(
+                        width: size * 0.4,
+                        height: size * 0.4,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          value: downloadProgress.progress,
+                        ),
+                      ),
+                    ),
+                  ),
+                )),
       ),
     );
   }

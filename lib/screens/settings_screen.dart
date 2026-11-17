@@ -1,87 +1,676 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
-import 'package:retro_toolbox/widgets/settings/settings_tab_selector.dart';
-import 'package:retro_toolbox/widgets/settings/settings_content.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
+import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 
+/// Settings in sections. Wide: the sections in a rail on the left, the
+/// chosen one's rows on the right; L1/R1 change section, B goes from the rows
+/// back to the rail, and Consoles opens a console's own page in place (its
+/// consoles then fill the rail). Narrow: a list of sections, each its own page.
+/// [consoleId] opens that console's page; [section] opens that section.
 class SettingsScreen extends ConsumerStatefulWidget {
-  final String? consoleId;
+  const SettingsScreen({super.key, this.consoleId, this.section, this.showControllerHints});
 
-  const SettingsScreen({super.key, this.consoleId});
+  final String? consoleId;
+  final SettingsSection? section;
+
+  /// Button hints in the header and footer. Null: on Android and the Linux
+  /// handheld, where a gamepad drives the app.
+  final bool? showControllerHints;
+
+  /// From this width the rail and the rows share the screen.
+  static const wideFrom = 720.0;
+
+  /// Opens Settings on [section] (a converter's "Open Settings > Keys").
+  static Future<void> open(BuildContext context, {SettingsSection? section}) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(section: section)));
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  Console? selectedConsole;
-  late bool showGeneral;
+  SettingsSection _section = SettingsSection.library;
+
+  /// Wide: the console whose page is open in Consoles.
+  String? _consoleId;
+  bool _openedArg = false;
+
+  final _nodes = <String, FocusNode>{};
+  final _content = FocusNode(debugLabel: 'settings rows', canRequestFocus: false, skipTraversal: true);
+  final _rail = FocusNode(debugLabel: 'settings rail', canRequestFocus: false, skipTraversal: true);
+
+  /// Whether focus is in the rows (for the footer's B hint).
+  bool _inRowsNow = false;
+
+  bool get _hints => widget.showControllerHints ?? (Platform.isAndroid || Handheld.current);
 
   @override
   void initState() {
     super.initState();
-    showGeneral = widget.consoleId == null;
+    if (widget.consoleId != null) {
+      _section = SettingsSection.consoles;
+      _consoleId = widget.consoleId;
+    } else if (widget.section != null) {
+      _section = widget.section!;
+    }
+    FocusManager.instance.addListener(_onFocus);
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.removeListener(_onFocus);
+    for (final n in _nodes.values) {
+      n.dispose();
+    }
+    _content.dispose();
+    _rail.dispose();
+    super.dispose();
+  }
+
+  void _onFocus() {
+    final now = _inRows(FocusManager.instance.primaryFocus);
+    if (now != _inRowsNow && mounted) setState(() => _inRowsNow = now);
+  }
+
+  FocusNode _node(String key) => _nodes.putIfAbsent(key, () => FocusNode(debugLabel: 'settings $key'));
+  FocusNode _sectionNode(SettingsSection s) => _node('section:${s.name}');
+  FocusNode _consoleNode(String id) => _node('console:$id');
+
+  bool _inRows(FocusNode? n) => n != null && n.ancestors.contains(_content);
+
+  /// After the next frame, so rows just put on screen can take it.
+  void _later(VoidCallback f) => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) f();
+      });
+
+  void _focusRows() {
+    final first = _content.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull;
+    first?.requestFocus();
+  }
+
+  void _focusRail() => (_consoleId != null ? _consoleNode(_consoleId!) : _sectionNode(_section)).requestFocus();
+
+  void _select(SettingsSection s) {
+    if (s == _section && _consoleId == null) return;
+    setState(() {
+      _section = s;
+      _consoleId = null;
+    });
+  }
+
+  void _openConsole(Console c) {
+    setState(() {
+      _section = SettingsSection.consoles;
+      _consoleId = c.id;
+    });
+    _later(_focusRows);
+  }
+
+  void _closeConsole() {
+    setState(() => _consoleId = null);
+    _later(() => _sectionNode(SettingsSection.consoles).requestFocus());
+  }
+
+  /// A row's link to another section (a console's missing keys to Keys).
+  void _goTo(SettingsSection s) {
+    setState(() {
+      _section = s;
+      _consoleId = null;
+    });
+    _later(_focusRows);
+  }
+
+  /// L1/R1: the section before or after, keeping focus on the rail or in the
+  /// rows, wherever it was.
+  void _step(List<SettingsSection> visible, bool forward) {
+    final i = visible.indexOf(_section);
+    final next = (i + (forward ? 1 : -1)).clamp(0, visible.length - 1);
+    if (next == i && _consoleId == null) return;
+    final inRows = _inRows(FocusManager.instance.primaryFocus);
+    setState(() {
+      _section = visible[next];
+      _consoleId = null;
+    });
+    _later(inRows ? _focusRows : () => _sectionNode(_section).requestFocus());
+  }
+
+  /// B (and the back button): from the rows to the rail, from a console's
+  /// page to Consoles, else out of Settings.
+  void _back() {
+    if (settingsFocusShows && _inRows(FocusManager.instance.primaryFocus)) {
+      _focusRail();
+    } else if (_consoleId != null) {
+      _closeConsole();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  KeyEventResult _onRowsKey(FocusNode _, KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.arrowLeft) return KeyEventResult.ignored;
+    final from = FocusManager.instance.primaryFocus;
+    if (from == null || from.context?.findAncestorStateOfType<EditableTextState>() != null) return KeyEventResult.ignored;
+    // Side by side buttons inside a row keep left for themselves.
+    final r = from.rect;
+    final beside = _content.traversalDescendants
+        .any((n) => n != from && n.canRequestFocus && !n.skipTraversal && n.rect.right <= r.left + 1 && n.rect.bottom > r.top && n.rect.top < r.bottom);
+    if (beside) return KeyEventResult.ignored;
+    // Not a plain step left: the nearest rail tile may not be this section's.
+    _focusRail();
+    return KeyEventResult.handled;
+  }
+
+  KeyEventResult _onRailKey(FocusNode _, KeyEvent e) {
+    if (e is! KeyDownEvent || e.logicalKey != LogicalKeyboardKey.arrowRight) return KeyEventResult.ignored;
+    _focusRows();
+    return KeyEventResult.handled;
+  }
+
+  SettingsLinks _links(BuildContext context) => SettingsLinks(
+        openConsole: (c) => _onConsolePicked(context, c),
+        openSection: (s) => _onSectionLink(context, s),
+      );
+
+  void _onConsolePicked(BuildContext context, Console c) {
+    if (MediaQuery.sizeOf(context).width < SettingsScreen.wideFrom) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: _hints)));
+    } else {
+      _openConsole(c);
+    }
+  }
+
+  void _onSectionLink(BuildContext context, SettingsSection s) {
+    if (MediaQuery.sizeOf(context).width < SettingsScreen.wideFrom) {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: _hints)));
+    } else {
+      _goTo(s);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final appState = ref.watch(appStateProvider);
-    // Per-console settings are all library settings.
-    final library = ref.watch(settingsProvider).isLibraryEnabled;
-    final general = showGeneral || !library;
-    final settingsNotifier = ref.read(settingsProvider.notifier);
-
-    if (widget.consoleId != null && selectedConsole == null && appState.consoles.isNotEmpty) {
-      selectedConsole = appState.consoles[widget.consoleId] ?? appState.consoles.values.first;
+    final links = _links(context);
+    final rows = {for (final s in SettingsSection.values) s: settingsSectionRows(s, ref, links: links)};
+    final visible = [
+      for (final s in SettingsSection.values)
+        if (rows[s]!.isNotEmpty) s
+    ];
+    if (!visible.contains(_section)) {
+      _section = visible.first;
+      _consoleId = null;
     }
+    final consoles = ref.watch(appStateProvider).consolesList;
+    final console = consoles.where((c) => c.id == _consoleId).firstOrNull;
+    if (_consoleId != null && console == null && consoles.isNotEmpty) _consoleId = null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Settings',
-          style: TextStyle(fontSize: 16),
+    return LayoutBuilder(builder: (context, box) {
+      if (box.maxWidth < SettingsScreen.wideFrom) return _narrow(context, visible);
+      return _wide(context, visible, rows[_section]!, consoles, console);
+    });
+  }
+
+  // ---- Wide
+
+  Widget _wide(BuildContext context, List<SettingsSection> visible, List<Widget> sectionRows, List<Console> consoles, Console? console) {
+    final scheme = Theme.of(context).colorScheme;
+    final crumbs = [_section.label, if (console != null) console.name];
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: Actions(
+        actions: {
+          PageFocusIntent: CallbackAction<PageFocusIntent>(onInvoke: (i) {
+            _step(visible, i.forward);
+            return null;
+          }),
+        },
+        child: Scaffold(
+          backgroundColor: scheme.surface,
+          body: SafeArea(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              SettingsTopBar(crumbs: crumbs, gear: console == null, sectionHint: _hints && console == null),
+              Expanded(
+                child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Container(
+                    width: 288,
+                    decoration: BoxDecoration(color: scheme.settingsTile, border: Border(right: BorderSide(color: scheme.settingsLine))),
+                    child: Focus(
+                      focusNode: _rail,
+                      onKeyEvent: _onRailKey,
+                      child: FocusTraversalGroup(
+                        child: ListView(
+                          padding: const EdgeInsets.all(12),
+                          children: console == null ? _sectionTiles(visible) : _consoleTiles(consoles),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Focus(
+                      focusNode: _content,
+                      onKeyEvent: _onRowsKey,
+                      child: FocusTraversalGroup(
+                        child: SingleChildScrollView(
+                          key: ValueKey('rows ${_section.name} $_consoleId'),
+                          padding: const EdgeInsets.fromLTRB(40, 20 - settingsHalfGap, 40, 32),
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 760),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: console == null ? sectionRows : consoleSettingsRows(console, ref, onOpenKeys: () => _goTo(SettingsSection.keys)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+              if (_hints)
+                SettingsHintBar(hints: [
+                  ('A', 'Change'),
+                  if (console == null) ('◀ ▶', 'Adjust'),
+                  if (console != null) ('X', 'Reset this row'),
+                  ('B', console != null ? 'Back to consoles' : (_inRowsNow ? 'Back to sections' : 'Back')),
+                ]),
+            ]),
+          ),
         ),
-        centerTitle: false,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        toolbarHeight: 40,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (library)
-              SettingsTabSelector(
-                showGeneral: showGeneral,
-                selectedConsole: selectedConsole,
-                consoles: appState.consolesList,
-                onTabChanged: (isGeneral) {
-                  setState(() {
-                    showGeneral = isGeneral;
-                    if (!showGeneral && selectedConsole == null) {
-                      selectedConsole = appState.consoles.isNotEmpty ? appState.consolesList.first : null;
-                    }
-                  });
-                },
-                onConsoleSelected: (console) {
-                  setState(() {
-                    selectedConsole = console;
-                  });
-                },
-              ),
-            if (library) const SizedBox(height: 8),
-            Expanded(
-              child: SettingsContent(
-                selectedConsole: general ? null : selectedConsole,
-                settingsNotifier: settingsNotifier,
-              ),
+    );
+  }
+
+  List<Widget> _sectionTiles(List<SettingsSection> visible) => [
+        for (final s in visible)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _RailTile(
+              key: ValueKey('rail ${s.name}'),
+              focusNode: _sectionNode(s),
+              autofocus: s == _section && widget.consoleId == null,
+              icon: s.icon,
+              label: s.label,
+              hint: s.hint,
+              selected: s == _section,
+              // A d-pad walk down the rail shows each section as it passes.
+              onFocused: () {
+                if (settingsFocusShows) _select(s);
+              },
+              onTap: () {
+                _select(s);
+                _later(_focusRows);
+              },
             ),
-          ],
-        ),
+          ),
+      ];
+
+  List<Widget> _consoleTiles(List<Console> consoles) {
+    final notifier = ref.read(settingsProvider.notifier);
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Text('CONSOLES', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.96, color: Theme.of(context).colorScheme.outline)),
       ),
+      for (final c in consoles)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: _RailTile(
+            key: ValueKey('rail console ${c.id}'),
+            focusNode: _consoleNode(c.id),
+            autofocus: c.id == _consoleId && widget.consoleId != null,
+            label: c.name,
+            badge: notifier.changedKeys(c.id).length,
+            selected: c.id == _consoleId,
+            onFocused: () {
+              if (settingsFocusShows && c.id != _consoleId) setState(() => _consoleId = c.id);
+            },
+            onTap: () {
+              setState(() => _consoleId = c.id);
+              _later(_focusRows);
+            },
+          ),
+        ),
+    ];
+  }
+
+  // ---- Narrow
+
+  Widget _narrow(BuildContext context, List<SettingsSection> visible) {
+    if (!_openedArg && (widget.consoleId != null || widget.section != null)) {
+      _openedArg = true;
+      final c = widget.consoleId == null ? null : ref.read(appStateProvider).consoles[widget.consoleId];
+      final section = widget.section;
+      _later(() {
+        final nav = Navigator.of(context);
+        if (c != null) {
+          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.consoles, hints: _hints)));
+          nav.push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: _hints)));
+        } else if (section != null && visible.contains(section)) {
+          nav.push(MaterialPageRoute(builder: (_) => _SectionPage(section: section, hints: _hints)));
+        }
+      });
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+            child: Text('Settings', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: scheme.onSurface)),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+              children: [
+                for (final s in visible)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: SettingsTile(
+                      key: ValueKey('section ${s.name}'),
+                      autofocus: s == visible.first,
+                      radius: 16,
+                      minHeight: 68,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: _hints))),
+                      child: Row(children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
+                          child: SettingsIcon(s.icon, color: scheme.primary),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, spacing: 2, children: [
+                            Text(s.label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurface)),
+                            Text(
+                              settingsSectionSummary(s, ref),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                            ),
+                          ]),
+                        ),
+                        const SizedBox(width: 14),
+                        SettingsIcon(SettingsIcons.chevronRight, size: 18, color: scheme.outline),
+                      ]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (_hints) const SettingsHintBar(hints: [('A', 'Open'), ('B', 'Back')]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// A section on its own page (narrow screens).
+class _SectionPage extends ConsumerWidget {
+  const _SectionPage({required this.section, required this.hints});
+
+  final SettingsSection section;
+  final bool hints;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rows = settingsSectionRows(
+      section,
+      ref,
+      links: SettingsLinks(
+        openConsole: (c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ConsolePage(console: c, hints: hints))),
+        openSection: (s) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s, hints: hints))),
+      ),
+    );
+    return _RowsPage(title: section.label, hints: hints, rows: rows, adjust: true);
+  }
+}
+
+/// A console's page on its own (narrow screens).
+class _ConsolePage extends ConsumerWidget {
+  const _ConsolePage({required this.console, required this.hints});
+
+  final Console console;
+  final bool hints;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => _RowsPage(
+        title: console.name,
+        hints: hints,
+        reset: true,
+        rows: consoleSettingsRows(
+          console,
+          ref,
+          onOpenKeys: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: SettingsSection.keys, hints: hints))),
+        ),
+      );
+}
+
+class _RowsPage extends StatelessWidget {
+  const _RowsPage({required this.title, required this.hints, required this.rows, this.reset = false, this.adjust = false});
+
+  final String title;
+  final bool hints;
+  final bool reset;
+  final bool adjust;
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SettingsTopBar(crumbs: [title], back: true),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
+            ),
+          ),
+          if (hints)
+            SettingsHintBar(hints: [
+              ('A', 'Change'),
+              if (adjust) ('◀ ▶', 'Adjust'),
+              if (reset) ('X', 'Reset this row'),
+              ('B', reset ? 'Back to consoles' : 'Back to sections'),
+            ]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// The bar on top of Settings: the gear, "Settings / Section / ...", and on
+/// a gamepad the L1/R1 hint. [back]: a page of its own (narrow), with a back
+/// button and only its title.
+class SettingsTopBar extends StatelessWidget {
+  const SettingsTopBar({super.key, required this.crumbs, this.gear = true, this.sectionHint = false, this.back = false});
+
+  final List<String> crumbs;
+  final bool gear;
+  final bool sectionHint;
+  final bool back;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final parts = back ? crumbs : ['Settings', ...crumbs];
+    return Container(
+      height: 56,
+      padding: EdgeInsets.only(left: back ? 8 : 24, right: 24),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.settingsLine))),
+      child: Row(children: [
+        if (back)
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: SettingsIcon(SettingsIcons.chevronLeft, size: 22, color: scheme.onSurface),
+          )
+        else if (gear) ...[
+          SettingsIcon(SettingsIcons.gear, size: 22, color: scheme.primary),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Row(children: [
+            for (var i = 0; i < parts.length; i++) ...[
+              if (i > 0) Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('/', style: TextStyle(fontSize: 18, color: scheme.outline))),
+              Flexible(
+                child: Text(
+                  parts[i],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w400,
+                    color: i == 0 || i == parts.length - 1 && parts.length > 2 ? scheme.onSurface : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ]),
+        ),
+        if (sectionHint) ...[
+          const KeyCap('L1'),
+          const SizedBox(width: 8),
+          const KeyCap('R1'),
+          const SizedBox(width: 8),
+          Text('switch section', style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+        ],
+      ]),
+    );
+  }
+}
+
+/// One section (or console) in the wide rail.
+class _RailTile extends StatelessWidget {
+  const _RailTile({
+    super.key,
+    required this.focusNode,
+    required this.label,
+    required this.selected,
+    required this.onFocused,
+    required this.onTap,
+    this.icon,
+    this.hint,
+    this.badge = 0,
+    this.autofocus = false,
+  });
+
+  final FocusNode focusNode;
+  final String label;
+  final bool selected;
+  final VoidCallback onFocused;
+  final VoidCallback onTap;
+  final String? icon;
+  final String? hint;
+  final int badge;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fg = selected ? scheme.onSecondaryContainer : scheme.onSurface;
+    final console = icon == null;
+    return SettingsTile(
+      focusNode: focusNode,
+      autofocus: autofocus,
+      onTap: onTap,
+      onFocusChange: (f) {
+        if (f) onFocused();
+      },
+      color: selected ? scheme.secondaryContainer : Colors.transparent,
+      focusedColor: selected ? scheme.secondaryContainer : scheme.settingsTileFocused,
+      minHeight: console ? 52 : 60,
+      padding: EdgeInsets.symmetric(horizontal: console ? 14 : 12, vertical: 8),
+      child: Row(children: [
+        if (icon != null) ...[
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: selected ? scheme.primary : scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)),
+            child: SettingsIcon(icon!, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 12),
+        ],
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, spacing: 2, children: [
+            Text(label, style: TextStyle(fontSize: 15, fontWeight: console && !selected ? FontWeight.w500 : FontWeight.w600, color: fg)),
+            if (hint != null) Text(hint!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: selected ? fg : scheme.outline)),
+          ]),
+        ),
+        if (badge > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: selected ? scheme.primary : scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
+            child: Text('$badge', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? scheme.onPrimary : scheme.onSurface)),
+          ),
+      ]),
+    );
+  }
+}
+
+/// A controller button's name in a small chip: round for one letter.
+class KeyCap extends StatelessWidget {
+  const KeyCap(this.label, {super.key});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final round = label.length == 1;
+    return Container(
+      constraints: BoxConstraints(minWidth: round ? 22 : 28),
+      height: 22,
+      padding: EdgeInsets.symmetric(horizontal: round ? 0 : 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(round ? 11 : 6)),
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: round ? FontWeight.w700 : FontWeight.w600, color: scheme.onSurface)),
+    );
+  }
+}
+
+/// The controller buttons this screen answers to, right-aligned in a bar.
+class SettingsHintBar extends StatelessWidget {
+  const SettingsHintBar({super.key, required this.hints});
+
+  final List<(String, String)> hints;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: BoxDecoration(color: scheme.settingsTile, border: Border(top: BorderSide(color: scheme.settingsLine))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.end, spacing: 20, children: [
+        for (final (key, what) in hints)
+          Row(mainAxisSize: MainAxisSize.min, spacing: 6, children: [
+            KeyCap(key),
+            Text(what, style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          ]),
+      ]),
     );
   }
 }

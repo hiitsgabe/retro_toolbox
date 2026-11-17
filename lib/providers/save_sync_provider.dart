@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -148,6 +149,10 @@ class SaveSyncState {
 }
 
 final saveSyncProvider = StateNotifierProvider<SaveSyncNotifier, SaveSyncState>((ref) => SaveSyncNotifier());
+
+/// Whether this build has Save Sync (Android only, as the Tools menu gates
+/// it). A provider so Settings can be tested with it either way.
+final saveSyncAvailableProvider = Provider<bool>((ref) => Platform.isAndroid);
 
 /// Every recipe's status, one at a time. A status that throws becomes that
 /// game's error, so one bad game never empties the whole list.
@@ -730,6 +735,27 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     state = state.copyWith(clearSignInError: true);
     _creatingHub = true;
     await refresh();
+  }
+
+  /// Reads only which hub is chosen (and its Google account), without the
+  /// shell and game scan of [refresh]: enough for Settings to say who is
+  /// signed in.
+  Future<void> loadHub() async {
+    try {
+      final choice = (await _sync()).hubChoice;
+      state = state.copyWith(
+        hubKind: switch (choice) {
+          null => HubKind.none,
+          FolderHub() => HubKind.folder,
+          DriveHub() => HubKind.drive,
+        },
+        hubFolder: choice is FolderHub ? choice.path : '',
+        googleEmail: choice is DriveHub ? choice.email : '',
+        googleAvailable: _google.available,
+      );
+    } catch (e) {
+      debugPrint('Save Sync hub read failed: $e');
+    }
   }
 
   /// Google's account sheet, then its Drive consent; the account's Drive becomes the hub.

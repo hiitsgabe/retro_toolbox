@@ -16,6 +16,17 @@ class MarkIntent extends Intent {
   const MarkIntent();
 }
 
+/// Marks controls that draw their own focus outline (the settings rows): the
+/// global outline skips any focused control under it.
+class DpadOwnOutline extends StatelessWidget {
+  const DpadOwnOutline({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
 /// Y: actions for the focused item.
 class ItemActionsIntent extends Intent {
   const ItemActionsIntent();
@@ -350,6 +361,7 @@ class _DpadScopeState extends State<DpadScope> {
     // Elements replaced during layout stay deactivated until the frame ends;
     // findRenderObject() asserts on them (release builds fall to `attached`).
     if (kDebugMode && !ctx.debugIsActive) return null;
+    if (ctx.findAncestorWidgetOfExactType<DpadOwnOutline>() != null) return null;
     final box = ctx.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
     // A focused InkWell keeps itself alive when its list scrolls it away, and
