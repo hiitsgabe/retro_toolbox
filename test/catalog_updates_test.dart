@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_update_model.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/storage_usage.dart';
 
 Map<String, dynamic> _consoleJson(String id) {
   final list = jsonDecode(File('test/fixtures/updates/consoles.json').readAsStringSync()) as List;
@@ -26,6 +29,26 @@ List<Game> _parse(Map<String, dynamic> consoleJson, String feed) => [
 Game _named(List<Game> games, String prefix) => games.singleWhere((g) => g.title.startsWith(prefix));
 
 int _gb(double n) => (n * 1024 * 1024 * 1024).round();
+
+/// One synthetic game `AAA` whose block holds the update entries in [feedTail].
+List<GameUpdate> _updatesOf(String feedTail, {String? updateDownloadUrl}) {
+  final out = parseRegexListing(
+    '<g id="AAA">G</g>$feedTail',
+    Console.fromJson({
+      'id': 'x',
+      'name': 'X',
+      'url': 'https://h.example.com/list/',
+      'original_format': ['.nsz'],
+      'ignore_extension_filtering': true,
+      'regex': r'<g id="(?P<id>\w+)">(?P<text>[^<]+)</g>',
+      'download_url': 'https://h.example.com/<id>/base',
+      'update_regex': r'<u(?: id="(?P<id>\w+)")?(?: href="(?P<url>[^"]+)")? v="(?P<label>[^"]*)"/>',
+      if (updateDownloadUrl != null) 'update_download_url': updateDownloadUrl,
+    }).toJson(),
+    'https://h.example.com/list/',
+  );
+  return Game.fromJson(out.single).updates;
+}
 
 void main() {
   test('a console keeps its update keys through JSON; without them it has no updates', () {
@@ -89,5 +112,37 @@ void main() {
 
   test('the catalog cache is v3, so saved catalogs are read again with their updates', () {
     expect(const Console(id: 'switch', name: 'Nintendo Switch', urls: []).cacheFile, 'catalog_v3_switch.json');
+  });
+
+  test('an update with its own id fills update_download_url with it, not the game id', () {
+    expect([for (final u in _updatesOf('<u id="BBB" v="v1"/>', updateDownloadUrl: 'https://h.example.com/<id>/update')) u.url],
+        ['https://h.example.com/BBB/update']);
+  });
+
+  test('a match with a url ignores update_download_url', () {
+    expect(
+        [for (final u in _updatesOf('<u href="https://f.example.com/zz" v="v1"/>', updateDownloadUrl: 'https://h.example.com/<id>/update')) u.url],
+        ['https://f.example.com/zz']);
+  });
+
+  test('a relative update url resolves against the listing url', () {
+    expect([for (final u in _updatesOf('<u href="../u/zz" v="v1"/>')) u.url], ['https://h.example.com/u/zz']);
+  });
+
+  test('an update without a label is named [update]', () {
+    expect([for (final u in _updatesOf('<u href="https://f.example.com/zz" v=""/>')) u.fileName], ['G [update].nsz']);
+  });
+
+  test('copyWith keeps the updates (the catalog adds details after parsing)', () {
+    const u = GameUpdate(label: 'v1', size: 5, url: 'https://h/1/update', fileName: 'G [v1].nsz');
+    const g = Game(title: 'G.nsz', url: 'https://h/1/base', size: 1, consoleId: 'switch', updates: [u]);
+    expect(g.copyWith(details: const GameDetails(popularity: 3)).updates, [u]);
+  });
+
+  test('Storage counts the v3 game lists', () {
+    final tmp = Directory.systemTemp.createTempSync('rt_storage_v3');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    File(p.join(tmp.path, const Console(id: 'switch', name: 'S', urls: []).cacheFile)).writeAsBytesSync(List.filled(700, 1));
+    expect(measureStorage(cacheDir: tmp.path, supportDir: tmp.path).catalog, 700);
   });
 }
