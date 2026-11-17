@@ -8,6 +8,7 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
@@ -17,6 +18,7 @@ import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,6 +57,14 @@ class _FakeDualScreen extends StateNotifier<DualScreenState> implements DualScre
 
 const _psx = Console(id: 'psx', name: 'PlayStation', urls: [], gameFilesFormat: ['.chd']);
 const _snes = Console(id: 'snes', name: 'Super Nintendo', urls: [], gameFilesFormat: ['.sfc']);
+const _switch = Console(
+  id: 'switch',
+  name: 'Nintendo Switch',
+  urls: [],
+  originalFormat: ['.nsz'],
+  additionalHandler: GameHandler.nszDecompress,
+  updateRegex: 'update',
+);
 
 void main() {
   final nav = GlobalKey<NavigatorState>();
@@ -65,11 +75,11 @@ void main() {
       });
 
   /// Settings over a home page, so leaving Settings has somewhere to go.
-  Future<ProviderContainer> pump(WidgetTester t, {Size size = const Size(1280, 900), String? consoleId, bool? hints}) async {
+  Future<ProviderContainer> pump(WidgetTester t, {Size size = const Size(1280, 900), String? consoleId, bool? hints, Map<String, Console>? consoles}) async {
     await t.binding.setSurfaceSize(size);
     addTearDown(() => t.binding.setSurfaceSize(null));
     final c = ProviderContainer(overrides: [
-      appStateProvider.overrideWith((ref) => _FakeApp(const AppState(consoles: {'psx': _psx, 'snes': _snes}))),
+      appStateProvider.overrideWith((ref) => _FakeApp(AppState(consoles: consoles ?? const {'psx': _psx, 'snes': _snes}))),
       catalogProvider.overrideWith((ref) => _FakeCatalog()),
       launchboxProvider.overrideWith((ref) => _FakeLaunchbox()),
       favoritesProvider.overrideWith((ref) => _FakeFavorites()),
@@ -328,6 +338,29 @@ void main() {
       expect(find.byType(SettingsScreen), findsOneWidget);
       expect(find.text('USING THE DEFAULTS'), findsOneWidget);
       expect(rail('library'), findsOneWidget);
+    });
+    testWidgets('a console whose catalog lists updates has an Updates group, its folder in the download folder', (t) async {
+      saved(general: {'downloadDir': '/roms'});
+      await pump(t, consoleId: 'switch', consoles: const {'switch': _switch, 'psx': _psx});
+      expect(find.text('Updates folder'), findsOneWidget);
+      expect(find.text('/roms/updates'), findsOneWidget);
+      await t.tap(rail('console psx'));
+      await t.pumpAndSettle();
+      expect(find.text('Updates folder'), findsNothing);
+    });
+
+    testWidgets('Keep files for updates is a change of its own; picking Same as the game follows the game again', (t) async {
+      saved(general: {'downloadDir': '/roms'});
+      final c = await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      final row = find.byWidgetPredicate((w) => w is SettingsSegmentedRow && w.title == 'After an update downloads');
+      await t.ensureVisible(row);
+      await t.tap(find.descendant(of: row, matching: find.text('Keep files')));
+      await t.pump();
+      expect(c.read(settingsProvider).consoleSettings['switch']!.updateHandler, 'none');
+      expect(c.read(settingsProvider.notifier).changedKeys('switch'), [AppSettings.updateHandler]);
+      await t.tap(find.descendant(of: row, matching: find.text('Same as the game')));
+      await t.pump();
+      expect(c.read(settingsProvider).consoleSettings['switch']!.updateHandler, isNull);
     });
     testWidgets("the header's back button closes a console page, then leaves Settings", (t) async {
       saved();

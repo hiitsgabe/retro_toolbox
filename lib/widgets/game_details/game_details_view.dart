@@ -31,6 +31,7 @@ class GameDetailsView extends StatelessWidget {
     this.actions,
     this.status,
     this.discs,
+    this.sections = const [],
     this.imageBuilder,
     this.onOpenImage,
     this.scrollController,
@@ -51,6 +52,10 @@ class GameDetailsView extends StatelessWidget {
 
   /// A grouped multi-disc game's discs, one row each, first in the sheet.
   final Widget? discs;
+
+  /// More parts of the sheet after [discs], (title, content), in order:
+  /// versions, box set contents, extras, updates.
+  final List<(String, Widget)> sections;
 
   /// Null: [CachedNetworkImage], with the fallback as its placeholder and
   /// error widget.
@@ -145,6 +150,7 @@ class GameDetailsView extends StatelessWidget {
           );
     return [
       if (discs != null) _Section(title: 'Discs', child: discs!),
+      for (final (title, child) in sections) _Section(title: title, child: child),
       if (wide && details != null && about != null) ...[
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,

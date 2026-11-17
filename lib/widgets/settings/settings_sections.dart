@@ -33,6 +33,7 @@ import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 import 'package:retro_toolbox/widgets/settings/setting_rows.dart';
 import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
+import 'package:retro_toolbox/widgets/settings/updates_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
 import 'package:retro_toolbox/widgets/settings/tools_setting.dart';
 
@@ -83,6 +84,12 @@ String _changeName(String key, Console console, SettingsNotifier n) {
       return h == null ? 'no conversion' : 'conversion to ${h.output.substring(1).toUpperCase()}';
     case AppSettings.chdIsoAsCd:
       return 'CHD type';
+    case AppSettings.updatesDir:
+      return 'updates folder';
+    case AppSettings.updateDecompress:
+      return 'update unpacking';
+    case AppSettings.updateHandler:
+      return 'update conversion';
     default:
       return key;
   }
@@ -351,6 +358,10 @@ List<Widget> consoleSettingsRows(Console console, WidgetRef ref, {VoidCallback? 
     if (console.applicableHandlers.isNotEmpty) ...[
       const SettingsHeader('Conversion', top: 14),
       HandlerSetting(console: console, onOpenKeys: onOpenKeys),
+    ],
+    if (console.hasUpdates) ...[
+      const SettingsHeader('Updates', top: 14),
+      UpdatesSetting(console: console),
     ],
     const SettingsHeader('Storage', top: 14),
     _ConsoleCacheRow(console: console),

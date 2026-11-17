@@ -38,6 +38,11 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   bool _busy = false;
   final _scroll = ScrollController();
 
+  /// The Game of each update, by its url, built once: Game has no ==, and
+  /// gameStateProvider keeps an entry per Game it has seen, so a new Game on
+  /// every rebuild would leave an entry behind each time.
+  final _updateGames = <String, Game>{};
+
   /// The hero has scrolled away: the app bar gets a background and the title,
   /// or the sheet would scroll under a bare back button.
   final _pastHero = ValueNotifier(false);
@@ -138,6 +143,12 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
             ],
           ),
           discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
+          sections: [
+            if (game.updates.isNotEmpty)
+              ('Updates', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (final u in game.updates) GameFileRow(game: _updateGames.putIfAbsent(u.url, () => u.toGame(game)), label: u.label),
+              ])),
+          ],
           actions: [
             for (final a in actions) button(gameActionLabels[a]!, gameActionIcons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
             button(
@@ -209,6 +220,58 @@ class _DiscRow extends ConsumerWidget {
           if (action != null)
             FilledButton.tonalIcon(
               onPressed: () => runGameAction(ref, context, disc, state, action),
+              icon: Icon(gameActionIcons[action]),
+              label: Text(gameActionLabels[action]!),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One file of a game's page (a version, an extra, an update): what it is,
+/// its size and state, and the one thing it can do now. It runs for that file
+/// alone and the page stays. [main]: the version the list shows.
+class GameFileRow extends ConsumerWidget {
+  const GameFileRow({super.key, required this.game, required this.label, this.main = false});
+
+  final Game game;
+  final String label;
+  final bool main;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(gameStateProvider(game));
+    final action = _DiscRow._order.where(state.availableActions.contains).firstOrNull;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final size = game.discs.length >= 2 ? game.discs.fold<int>(0, (sum, d) => sum + d.size) : game.size;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis)),
+                  if (main) ...[
+                    const SizedBox(width: 8),
+                    Text('Main', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600)),
+                  ],
+                ]),
+                Text(
+                  [formatBytes(size), if (state.statusText.isNotEmpty) state.statusText].join('  '),
+                  style: TextStyle(color: muted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          if (action != null)
+            FilledButton.tonalIcon(
+              onPressed: () => runGameAction(ref, context, game, state, action),
               icon: Icon(gameActionIcons[action]),
               label: Text(gameActionLabels[action]!),
             ),
