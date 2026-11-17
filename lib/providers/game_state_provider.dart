@@ -40,6 +40,9 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     _ref.listen(settingWatcherProvider(AppSettings.downloadDir), (prev, next) {
       if (prev != next) _resetStates();
     });
+    _ref.listen(settingWatcherProvider(AppSettings.updatesDir), (prev, next) {
+      if (prev != next) _resetStates();
+    });
     _ref.listen(catalogProvider, (prev, next) {
       if (prev?.games != next.games) _initGames(next.games);
     });
@@ -179,7 +182,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
-    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final downloadDir = settingsNotifier.downloadDirFor(game);
     if (downloadDir.isEmpty) return;
 
     _resolving[gameId] = true;
@@ -242,7 +245,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     // still be in flight; its result is stale now, and it would block ours.
     _resolving.remove(gameId);
     state = {...state, gameId: GameState(game: current.game)};
-    final dir = _ref.read(settingsProvider.notifier).getDownloadDir(current.game.consoleId);
+    final dir = _ref.read(settingsProvider.notifier).downloadDirFor(current.game);
     if (dir.isEmpty) {
       // resolveState bails without a folder; nothing on disk to find anyway.
       _updateState(gameId, (s) => s.copyWith(status: GameStatus.ready, isInteractable: true, availableActions: {GameAction.download}));
@@ -312,7 +315,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
   bool _canExtract(Game game) {
     try {
       final settingsNotifier = _ref.read(settingsProvider.notifier);
-      final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+      final downloadDir = settingsNotifier.downloadDirFor(game);
       final filePath = path.join(downloadDir, game.filename);
       return DirectoryService.isCompressedFile(filePath);
     } catch (_) {

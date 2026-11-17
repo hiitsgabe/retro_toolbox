@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/game_handler.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/settings_service.dart';
@@ -112,6 +113,9 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     AppSettings.downloadAllDiscs,
     AppSettings.additionalHandler,
     AppSettings.chdIsoAsCd,
+    AppSettings.updatesDir,
+    AppSettings.updateDecompress,
+    AppSettings.updateHandler,
   ];
 
   /// What [key] (an on/off setting) is for [consoleId] when the console does
@@ -148,6 +152,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
           differs = own.additionalHandler != null && activeHandler(consoleId) != defaultHandler(consoleId);
         case AppSettings.chdIsoAsCd:
           differs = own.chdIsoAsCd == true && activeHandler(consoleId) == GameHandler.chdCompress;
+        case AppSettings.updatesDir:
+          differs = own.updatesDir?.isNotEmpty ?? false;
+        case AppSettings.updateDecompress:
+          differs = own.updateDecompress != null;
+        case AppSettings.updateHandler:
+          differs = own.updateHandler != null;
         default:
           final v = own.getSetting<bool>(key);
           differs = v != null && v != generalBool(key, consoleId);
@@ -213,6 +223,43 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> setChdIsoAsCd(String consoleId, bool value) =>
       setConsoleSetting<bool>(consoleId, AppSettings.chdIsoAsCd, value);
+
+  /// Where [consoleId]'s updates go when it does not choose a folder: a
+  /// folder named updates in its download folder.
+  String defaultUpdatesDir(String consoleId) {
+    final base = getDownloadDir(consoleId);
+    return base.isEmpty ? '' : p.join(base, 'updates');
+  }
+
+  /// Where [consoleId]'s updates go.
+  String updatesDir(String consoleId) {
+    final own = getConsoleSetting<String>(consoleId, AppSettings.updatesDir);
+    return own != null && own.isNotEmpty ? own : defaultUpdatesDir(consoleId);
+  }
+
+  /// The folder [game] downloads to: its console's, or the updates folder.
+  String downloadDirFor(Game game) => game.isUpdate ? updatesDir(game.consoleId) : getDownloadDir(game.consoleId);
+
+  /// How [game] is unpacked after its download.
+  Decompress decompressFor(Game game) {
+    final catalog = CatalogService.consoleByIdSync(game.consoleId)?.decompress ?? Decompress.none;
+    if (!game.isUpdate) return catalog;
+    return resolveUpdateDecompress(getConsoleSetting<String>(game.consoleId, AppSettings.updateDecompress), catalog);
+  }
+
+  /// The handler that runs after [game]'s download, if any.
+  GameHandler? activeHandlerFor(Game game) {
+    final handler = activeHandler(game.consoleId);
+    if (!game.isUpdate) return handler;
+    return resolveUpdateHandler(getConsoleSetting<String>(game.consoleId, AppSettings.updateHandler), handler);
+  }
+
+  /// An update's unpacking: [game]'s unless [saved] (a Decompress name) says.
+  static Decompress resolveUpdateDecompress(String? saved, Decompress game) => saved == null ? game : Decompress.fromId(saved);
+
+  /// An update's handler: [game]'s unless [saved] says ('none': nothing).
+  static GameHandler? resolveUpdateHandler(String? saved, GameHandler? game) =>
+      saved == null ? game : (saved == 'none' ? null : GameHandler.fromId(saved));
 
   /// Saves [handler] (null = none) as [consoleId]'s choice over the catalog's.
   Future<void> setActiveHandler(String consoleId, GameHandler? handler) =>

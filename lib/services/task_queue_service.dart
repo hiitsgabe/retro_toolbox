@@ -50,13 +50,12 @@ class TaskQueueService {
     }
 
     final settingsNotifier = ref.read(settingsProvider.notifier);
-    final downloadDir = settingsNotifier.getDownloadDir(consoleId);
     final queueNotifier = ref.read(taskQueueProvider.notifier);
 
     for (final game in games) {
       queueNotifier.enqueue(game.gameId, TaskType.download, {
         'game': game.toJson(),
-        'downloadDir': downloadDir,
+        'downloadDir': settingsNotifier.downloadDirFor(game),
         'group': consoleId ?? 'default',
       });
     }

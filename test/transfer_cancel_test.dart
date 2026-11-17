@@ -35,6 +35,8 @@ class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifi
   @override
   String getDownloadDir(String? consoleId) => dir;
   @override
+  String downloadDirFor(Game game) => dir;
+  @override
   bool getExtractToFolder(String? consoleId) => false;
   @override
   int getMaxParallelDownloads() => 5;

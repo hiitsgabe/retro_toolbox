@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
@@ -57,7 +58,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
-    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final downloadDir = settingsNotifier.downloadDirFor(game);
     final filePath = path.join(downloadDir, game.filename);
     final extractionDir = settingsNotifier.getExtractToFolder(game.consoleId)
         ? path.join(path.dirname(filePath), path.basenameWithoutExtension(filePath))
@@ -221,10 +222,11 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
   }
 
-  /// Queues the console's active handler for the [files] it accepts, if any.
-  void startGameHandler(String taskId, String consoleId, List<String> files) {
+  /// Queues [game]'s handler (an update's may differ) for the [files] it
+  /// accepts, if any.
+  void startGameHandler(String taskId, Game game, List<String> files) {
     final settings = _ref.read(settingsProvider.notifier);
-    final handler = settings.activeHandler(consoleId);
+    final handler = settings.activeHandlerFor(game);
     if (handler == null) return;
     final inputs = files.where(handler.accepts).toList();
     if (inputs.isEmpty) return;
@@ -234,7 +236,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       'inputs': inputs,
       'files': files,
       'chdmanPath': _ref.read(settingsProvider).chdmanPath,
-      'isoAsCd': settings.chdIsoAsCd(consoleId),
+      'isoAsCd': settings.chdIsoAsCd(game.consoleId),
       'keysPath': settings.getNszKeysPath(),
       'boot9Path': settings.getBoot9Path(),
     });
@@ -263,7 +265,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
 
     final game = gameStateManager.state[taskId]?.game;
-    final downloadDir = game == null ? '' : _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+    final downloadDir = game == null ? '' : _ref.read(settingsProvider.notifier).downloadDirFor(game);
     final verb = handler.label;
     await ExtractionService.startNotification(taskId, verb, '$verb...');
     try {
@@ -484,7 +486,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     final game = gameStateManager.state[taskId]?.game;
     if (game != null) {
-      final dir = _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+      final dir = _ref.read(settingsProvider.notifier).downloadDirFor(game);
       if (dir.isNotEmpty) {
         _ref.read(librarySnapshotProvider(dir).notifier).markFileRemoved(game.filename);
       }
@@ -553,7 +555,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     final game = gameStateManager.state[taskId]?.game;
     if (game != null) {
-      final dir = _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+      final dir = _ref.read(settingsProvider.notifier).downloadDirFor(game);
       if (dir.isNotEmpty) {
         final snap = _ref.read(librarySnapshotProvider(dir).notifier);
         snap.markFileRemoved(game.filename);
@@ -576,7 +578,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
 
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
-    if (game != null) startGameHandler(taskId, game.consoleId, files);
+    if (game != null) startGameHandler(taskId, game, files);
   }
 
   Future<void> _deleteOriginalFile(String taskId) async {
@@ -585,7 +587,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
-    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final downloadDir = settingsNotifier.downloadDirFor(game);
     final filePath = path.join(downloadDir, game.filename);
 
     if (await DirectoryService.deleteFile(filePath)) {
@@ -616,7 +618,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
       // Only clean up per-game subfolders. In root-extraction mode the
       // extraction dir IS the console download folder — never delete it.
       final game = gameStateManager.state[taskId]?.game;
-      final downloadDir = game != null ? _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId) : '';
+      final downloadDir = game != null ? _ref.read(settingsProvider.notifier).downloadDirFor(game) : '';
       final isSubfolder = downloadDir.isNotEmpty && path.normalize(extractionDir) != path.normalize(downloadDir);
       final dir = Directory(extractionDir);
       if (isSubfolder && dir.existsSync()) {

@@ -173,7 +173,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
       final game = gameStateManager.state[update.task.taskId]?.game;
       if (game != null) {
-        final dir = _ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+        final dir = _ref.read(settingsProvider.notifier).downloadDirFor(game);
         if (dir.isNotEmpty) {
           _ref.read(librarySnapshotProvider(dir).notifier).markFileAdded(game.filename);
         }
@@ -289,8 +289,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
-    final console = CatalogService.consoleByIdSync(game.consoleId);
-    final decompress = console?.decompress ?? Decompress.none;
+    final decompress = settingsNotifier.decompressFor(game);
 
     // Decompress first when the catalog asks for it; the handler then runs on
     // the extracted files (see ExtractionNotifier._updateCompleted).
@@ -304,9 +303,9 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
       debugPrint('Skipped ${decompress.name}: ${game.filename} is not that kind of archive');
     }
 
-    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final downloadDir = settingsNotifier.downloadDirFor(game);
     final extraction = _ref.read(extractionProvider.notifier);
-    Future.microtask(() => extraction.startGameHandler(taskId, game.consoleId, [p.join(downloadDir, game.filename)]));
+    Future.microtask(() => extraction.startGameHandler(taskId, game, [p.join(downloadDir, game.filename)]));
   }
 
   bool isTaskDownloadable(String taskId) {
@@ -352,7 +351,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
 
   Future<void> startSingleDownload(Game game) async {
     final settingsNotifier = _ref.read(settingsProvider.notifier);
-    final downloadDir = settingsNotifier.getDownloadDir(game.consoleId);
+    final downloadDir = settingsNotifier.downloadDirFor(game);
     final queueNotifier = _ref.read(taskQueueProvider.notifier);
 
     queueNotifier.enqueue(game.gameId, TaskType.download, {

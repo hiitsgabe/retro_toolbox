@@ -18,6 +18,10 @@ class Game {
   /// them; empty when it lists none.
   final List<GameUpdate> updates;
 
+  /// An update of a catalog game (see GameUpdate.toGame): it downloads to the
+  /// console's updates folder, with the console's choices for updates.
+  final bool isUpdate;
+
   const Game({
     required this.title,
     required this.url,
@@ -27,6 +31,7 @@ class Game {
     this.details,
     this.discs = const [],
     this.updates = const [],
+    this.isUpdate = false,
   });
 
   Game copyWith({
@@ -38,6 +43,7 @@ class Game {
     GameDetails? details,
     List<Game>? discs,
     List<GameUpdate>? updates,
+    bool? isUpdate,
   }) {
     return Game(
       title: title ?? this.title,
@@ -48,6 +54,7 @@ class Game {
       details: details ?? this.details,
       discs: discs ?? this.discs,
       updates: updates ?? this.updates,
+      isUpdate: isUpdate ?? this.isUpdate,
     );
   }
 
@@ -74,6 +81,7 @@ class Game {
       metadata: json['metadata'] != null ? GameMetadata.fromJson(json['metadata']) : null,
       details: json['details'] != null ? GameDetails.fromJson(json['details']) : null,
       updates: [for (final u in (json['updates'] as List? ?? const [])) GameUpdate.fromJson(Map<String, dynamic>.from(u as Map))],
+      isUpdate: json['isUpdate'] == true,
     );
   }
 
@@ -86,6 +94,7 @@ class Game {
       'metadata': metadata?.toJson(),
       'details': details?.toJson(),
       if (updates.isNotEmpty) 'updates': [for (final u in updates) u.toJson()],
+      if (isUpdate) 'isUpdate': true,
     };
   }
 

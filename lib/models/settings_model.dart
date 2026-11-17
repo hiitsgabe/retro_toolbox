@@ -9,6 +9,9 @@ class AppSettings {
   static const String chdIsoAsCd = 'chdIsoAsCd';
   static const String groupDiscs = 'groupDiscs';
   static const String downloadAllDiscs = 'downloadAllDiscs';
+  static const String updatesDir = 'updatesDir';
+  static const String updateDecompress = 'updateDecompress';
+  static const String updateHandler = 'updateHandler';
 
   static const Map<String, Type> settingsSchema = {
     downloadDir: String,
@@ -21,6 +24,9 @@ class AppSettings {
     chdIsoAsCd: bool,
     groupDiscs: bool,
     downloadAllDiscs: bool,
+    updatesDir: String,
+    updateDecompress: String,
+    updateHandler: String,
   };
 
   final Map<String, BaseSettings> consoleSettings;
@@ -177,6 +183,15 @@ class BaseSettings {
   final bool? groupDiscs;
   /// Download on a grouped game gets every disc. Null = on.
   final bool? downloadAllDiscs;
+  /// Per console: where its updates go. Null = a folder named updates in its
+  /// download folder.
+  final String? updatesDir;
+  /// Per console: how its updates are unpacked, a Decompress name. Null = as
+  /// the game.
+  final String? updateDecompress;
+  /// Per console: what runs on its updates, a GameHandler id or 'none'. Null
+  /// = as the game.
+  final String? updateHandler;
 
   const BaseSettings({
     this.downloadDir,
@@ -190,6 +205,9 @@ class BaseSettings {
     this.chdIsoAsCd,
     this.groupDiscs,
     this.downloadAllDiscs,
+    this.updatesDir,
+    this.updateDecompress,
+    this.updateHandler,
   });
 
   BaseSettings copyWith({
@@ -206,6 +224,9 @@ class BaseSettings {
     bool? chdIsoAsCd,
     bool? groupDiscs,
     bool? downloadAllDiscs,
+    String? updatesDir,
+    String? updateDecompress,
+    String? updateHandler,
   }) {
     return BaseSettings(
       downloadDir: downloadDir == '' ? null : downloadDir ?? this.downloadDir,
@@ -219,6 +240,9 @@ class BaseSettings {
       chdIsoAsCd: chdIsoAsCd ?? this.chdIsoAsCd,
       groupDiscs: groupDiscs ?? this.groupDiscs,
       downloadAllDiscs: downloadAllDiscs ?? this.downloadAllDiscs,
+      updatesDir: updatesDir ?? this.updatesDir,
+      updateDecompress: updateDecompress ?? this.updateDecompress,
+      updateHandler: updateHandler ?? this.updateHandler,
     );
   }
 
@@ -235,6 +259,9 @@ class BaseSettings {
       if (chdIsoAsCd != null) AppSettings.chdIsoAsCd: chdIsoAsCd,
       if (groupDiscs != null) AppSettings.groupDiscs: groupDiscs,
       if (downloadAllDiscs != null) AppSettings.downloadAllDiscs: downloadAllDiscs,
+      if (updatesDir != null) AppSettings.updatesDir: updatesDir,
+      if (updateDecompress != null) AppSettings.updateDecompress: updateDecompress,
+      if (updateHandler != null) AppSettings.updateHandler: updateHandler,
     };
   }
 
@@ -260,6 +287,12 @@ class BaseSettings {
         return groupDiscs as T?;
       case AppSettings.downloadAllDiscs:
         return downloadAllDiscs as T?;
+      case AppSettings.updatesDir:
+        return updatesDir as T?;
+      case AppSettings.updateDecompress:
+        return updateDecompress as T?;
+      case AppSettings.updateHandler:
+        return updateHandler as T?;
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -282,6 +315,9 @@ class BaseSettings {
       chdIsoAsCd: next.chdIsoAsCd,
       groupDiscs: next.groupDiscs,
       downloadAllDiscs: next.downloadAllDiscs,
+      updatesDir: next.updatesDir,
+      updateDecompress: next.updateDecompress,
+      updateHandler: next.updateHandler,
     );
   }
 
@@ -314,6 +350,12 @@ class BaseSettings {
         return copyWith(groupDiscs: value as bool?);
       case AppSettings.downloadAllDiscs:
         return copyWith(downloadAllDiscs: value as bool?);
+      case AppSettings.updatesDir:
+        return copyWith(updatesDir: value as String?);
+      case AppSettings.updateDecompress:
+        return copyWith(updateDecompress: value as String?);
+      case AppSettings.updateHandler:
+        return copyWith(updateHandler: value as String?);
       default:
         throw ArgumentError('Unknown setting key: $key');
     }
@@ -332,6 +374,9 @@ class BaseSettings {
       chdIsoAsCd: json[AppSettings.chdIsoAsCd] as bool?,
       groupDiscs: json[AppSettings.groupDiscs] as bool?,
       downloadAllDiscs: json[AppSettings.downloadAllDiscs] as bool?,
+      updatesDir: json[AppSettings.updatesDir] as String?,
+      updateDecompress: json[AppSettings.updateDecompress] as String?,
+      updateHandler: json[AppSettings.updateHandler] as String?,
     );
   }
 }

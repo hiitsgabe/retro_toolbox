@@ -1,3 +1,5 @@
+import 'package:retro_toolbox/models/game_model.dart';
+
 /// A downloadable update of a catalog game (catalog key `update_regex`).
 class GameUpdate {
   const GameUpdate({required this.label, required this.size, required this.url, required this.fileName});
@@ -18,4 +20,7 @@ class GameUpdate {
       );
 
   Map<String, dynamic> toJson() => {'label': label, 'size': size, 'url': url, 'fileName': fileName};
+
+  /// This update as a download of [game]'s console.
+  Game toGame(Game game) => Game(title: fileName, url: url, size: size, consoleId: game.consoleId, isUpdate: true);
 }

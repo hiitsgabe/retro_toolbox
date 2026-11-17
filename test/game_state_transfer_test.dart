@@ -28,6 +28,8 @@ class _DirSettings extends _FakeSettings {
   final String dir;
   @override
   String getDownloadDir(String? consoleId) => dir;
+  @override
+  String downloadDirFor(Game game) => dir;
 }
 
 void main() {
