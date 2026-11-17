@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,9 +11,11 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/game_update_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifier {
   _FakeFavorites() : super(Favorites(lastUpdated: DateTime(2020)));
@@ -20,6 +25,7 @@ class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifi
 
 class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier {
   _FakeCatalog() : super(const CatalogState());
+  void set(CatalogState s) => state = s;
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -102,5 +108,51 @@ void main() {
     ));
     await t.pump();
     expect(watched.where((g) => g.isUpdate), hasLength(1));
+  });
+
+  testWidgets('the row shows the update size and its state', (t) async {
+    await pumpPage(t, _game);
+    final row = find.ancestor(of: find.text('v65536'), matching: find.byType(GameFileRow));
+    expect(find.descendant(of: row, matching: find.text('2.5 GB  Ready')), findsOneWidget);
+  });
+
+  testWidgets('two updates with one label: each row downloads its own file', (t) async {
+    const a = GameUpdate(label: 'v1', size: 1, url: 'https://api.example.com/u/a', fileName: 'A [v1].nsz');
+    const b = GameUpdate(label: 'v1', size: 2, url: 'https://api.example.com/u/b', fileName: 'B [v1].nsz');
+    await pumpPage(t, _game.copyWith(updates: const [a, b]));
+    final rows = find.byType(GameFileRow);
+    for (final i in [0, 1]) {
+      await t.tap(find.descendant(of: rows.at(i), matching: find.text('Download')));
+      await t.pumpAndSettle();
+    }
+    expect([for (final (g, _) in ran) g.title], [a.fileName, b.fileName]);
+  });
+
+  test('with the real GameStateManager an update Game is registered, resolves, and takes queue updates', () async {
+    final dir = Directory.systemTemp.createTempSync('upd_state');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    SharedPreferences.setMockInitialValues({
+      'app_settings': '{"generalSettings":{"downloadDir":"${dir.path}"},"consoleSettings":{}}',
+    });
+    final catalog = _FakeCatalog();
+    final c = ProviderContainer(overrides: [catalogProvider.overrideWith((ref) => catalog)]);
+    addTearDown(c.dispose);
+    await c.read(settingsProvider.notifier).loaded;
+    c.read(gameStateManagerProvider);
+    catalog.set(const CatalogState(games: [_game]));
+    await Future<void>.delayed(Duration.zero);
+    final upd = _update.toGame(_game);
+    expect(c.read(gameStateManagerProvider).keys, containsAll([_game.gameId, upd.gameId]));
+    // Reading it starts its resolve: Loading gives way to the real status.
+    c.read(gameStateProvider(upd));
+    for (var i = 0; i < 50 && c.read(gameStateProvider(upd)).status != GameStatus.ready; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    final resolved = c.read(gameStateProvider(upd));
+    expect(resolved.status, GameStatus.ready);
+    expect(resolved.availableActions, contains(GameAction.download));
+    // Queue updates reach its entry.
+    c.read(gameStateManagerProvider.notifier).updateDownloadState(upd.gameId, TaskStatus.running, null, false);
+    expect(c.read(gameStateProvider(upd)).status, GameStatus.downloading);
   });
 }

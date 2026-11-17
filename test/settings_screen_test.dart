@@ -18,6 +18,7 @@ import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
@@ -97,7 +98,8 @@ void main() {
           builder: (context) => Scaffold(
             body: Center(
               child: TextButton(
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(consoleId: consoleId, showControllerHints: hints))),
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsScreen(consoleId: consoleId, showControllerHints: hints))),
                 child: const Text('open settings'),
               ),
             ),
@@ -362,6 +364,89 @@ void main() {
       await t.pump();
       expect(c.read(settingsProvider).consoleSettings['switch']!.updateHandler, isNull);
     });
+    testWidgets('X on each segmented Updates row resets only that row', (t) async {
+      saved(general: {
+        'downloadDir': '/roms'
+      }, consoles: {
+        'switch': {'updateHandler': 'none', 'updateDecompress': 'unzip', 'updatesDir': '/sd/upd'}
+      });
+      final c = await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      Focus.of(t.element(find.text('Unpack updates'))).requestFocus();
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
+      await t.pump();
+      var s = c.read(settingsProvider).consoleSettings['switch']!;
+      expect((s.updateDecompress, s.updateHandler, s.updatesDir), (null, 'none', '/sd/upd'));
+      Focus.of(t.element(find.text('After an update downloads'))).requestFocus();
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
+      await t.pump();
+      s = c.read(settingsProvider).consoleSettings['switch']!;
+      expect((s.updateDecompress, s.updateHandler, s.updatesDir), (null, null, '/sd/upd'));
+      Focus.of(t.element(find.text('Updates folder'))).requestFocus();
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
+      await t.pump();
+      expect(c.read(settingsProvider.notifier).changedKeys('switch'), isEmpty);
+    });
+
+    testWidgets('a chosen updates folder shows, its subtitle names the default in the download folder', (t) async {
+      saved(general: {
+        'downloadDir': '/roms'
+      }, consoles: {
+        'switch': {'updatesDir': '/sd/upd'}
+      });
+      await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      expect(find.text('/sd/upd'), findsOneWidget);
+      expect(find.text('Default: /roms/updates'), findsOneWidget);
+    });
+
+    testWidgets("the default follows the console's own download folder", (t) async {
+      saved(general: {
+        'downloadDir': '/roms'
+      }, consoles: {
+        'switch': {'downloadDir': '/sd/switch'}
+      });
+      await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      expect(find.text('/sd/switch/updates'), findsOneWidget);
+    });
+
+    testWidgets('Right on Unpack updates starts from its own choice, not the handler row', (t) async {
+      saved(general: {
+        'downloadDir': '/roms'
+      }, consoles: {
+        'switch': {'updateHandler': 'none'}
+      });
+      final c = await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      Focus.of(t.element(find.text('Unpack updates'))).requestFocus();
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.pump();
+      expect(c.read(settingsProvider).consoleSettings['switch']!.updateDecompress, 'none');
+    });
+
+    testWidgets('the Consoles list names the update changes', (t) async {
+      saved(general: {
+        'downloadDir': '/roms'
+      }, consoles: {
+        'switch': {'updatesDir': '/sd/upd', 'updateDecompress': 'none', 'updateHandler': 'none'}
+      });
+      await pump(t, consoles: const {'switch': _switch});
+      await t.tap(rail('consoles'));
+      await t.pumpAndSettle();
+      expect(find.text('Updates folder, update unpacking, update conversion'), findsOneWidget);
+    });
+
+    testWidgets("the handler row offers the console's handler", (t) async {
+      saved(general: {'downloadDir': '/roms'});
+      final c = await pump(t, consoleId: 'switch', consoles: const {'switch': _switch});
+      final row = find.byWidgetPredicate((w) => w is SettingsSegmentedRow && w.title == 'After an update downloads');
+      await t.ensureVisible(row);
+      await t.tap(find.descendant(of: row, matching: find.text(handlerChoice(GameHandler.nszDecompress))));
+      await t.pump();
+      expect(c.read(settingsProvider).consoleSettings['switch']!.updateHandler, GameHandler.nszDecompress.id);
+    });
+
     testWidgets("the header's back button closes a console page, then leaves Settings", (t) async {
       saved();
       await pump(t, consoleId: 'psx');

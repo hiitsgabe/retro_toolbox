@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/game_update_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -38,10 +39,10 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   bool _busy = false;
   final _scroll = ScrollController();
 
-  /// The Game of each update, by its url, built once: Game has no ==, and
+  /// The Game of each update, by the update itself, built once: Game has no ==, and
   /// gameStateProvider keeps an entry per Game it has seen, so a new Game on
   /// every rebuild would leave an entry behind each time.
-  final _updateGames = <String, Game>{};
+  final _updateGames = <GameUpdate, Game>{};
 
   /// The hero has scrolled away: the app bar gets a background and the title,
   /// or the sheet would scroll under a bare back button.
@@ -146,7 +147,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
           sections: [
             if (game.updates.isNotEmpty)
               ('Updates', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final u in game.updates) GameFileRow(game: _updateGames.putIfAbsent(u.url, () => u.toGame(game)), label: u.label),
+                for (final u in game.updates) GameFileRow(game: _updateGames.putIfAbsent(u, () => u.toGame(game)), label: u.label),
               ])),
           ],
           actions: [
