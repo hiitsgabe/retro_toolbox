@@ -76,6 +76,12 @@ class CatalogState {
     );
   }
 
+  // The filter modal offers the rating and players choices only when these
+  // hold, and CatalogNotifier drops those choices when they stop holding.
+  bool get hasRatings => games.any((g) => g.details?.rating != null);
+
+  bool get hasPlayerCounts => games.any((g) => g.details?.maxPlayers != null || g.details?.cooperative != null);
+
   List<Game> get paginatedFilteredGames => _cachedFilteredGames;
 
   bool get hasMoreItems => _cachedHasMore;

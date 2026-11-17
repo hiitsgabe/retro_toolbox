@@ -30,7 +30,7 @@ class FilteringService {
       allMatched = _filterLatestRevisions(allMatched);
     }
 
-    final key = _sortKey(filter.sort, allMatched);
+    final key = _sortKey(filter.sort, games);
     if (key != null) {
       // Games without the key go last; equal keys keep name order (the sort
       // isn't stable, so the name is compared explicitly).
@@ -54,8 +54,9 @@ class FilteringService {
     );
   }
 
-  /// The value [sort] orders [games] by, largest first (null: a game lacks
-  /// it), or null for the name order the list already has.
+  /// The value [sort] orders by, largest first (null: a game lacks it), or
+  /// null for the name order the list already has. [games] is the whole
+  /// console, unfiltered.
   static int? Function(Game)? _sortKey(CatalogSort sort, List<Game> games) => switch (sort) {
         CatalogSort.name => null,
         CatalogSort.sizeDesc => (g) => g.size > 0 ? g.size : null,
@@ -66,7 +67,8 @@ class FilteringService {
       };
 
   /// The Bayesian score against the mean of [games], scaled to an int to share
-  /// the comparator. A rating with no votes counts as no rating.
+  /// the comparator. A rating with no votes counts as no rating. The mean is
+  /// the whole console's, so another filter never reorders two games.
   static int? Function(Game) _ratingKey(List<Game> games) {
     double? rating(Game g) => (g.details?.ratingCount ?? 0) > 0 ? g.details?.rating : null;
     final ratings = games.map(rating).whereType<double>().toList();

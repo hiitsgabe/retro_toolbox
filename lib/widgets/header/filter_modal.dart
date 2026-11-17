@@ -23,8 +23,7 @@ class FilterModal extends ConsumerWidget {
     final filter = catalogState.filter;
     final games = catalogState.games;
     final hasSize = games.any((g) => g.size > 0);
-    final hasRating = games.any((g) => g.details?.rating != null);
-    final hasPlayers = games.any((g) => g.details?.maxPlayers != null || g.details?.cooperative != null);
+    final hasRating = catalogState.hasRatings;
     final sorts = {
       CatalogSort.name: 'Name',
       if (hasSize) CatalogSort.sizeDesc: 'Largest',
@@ -114,7 +113,7 @@ class FilterModal extends ConsumerWidget {
                     ),
                     const SizedBox(height: 20),
                   ],
-                  if (hasPlayers) ...[
+                  if (catalogState.hasPlayerCounts) ...[
                     _FilterSection(
                       title: 'Players',
                       icon: Icons.people,

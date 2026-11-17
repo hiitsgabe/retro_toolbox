@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
@@ -61,18 +63,36 @@ class _OneGameService extends CatalogService {
       [_game('one', const GameDetails(boxart: 'https://host.example/one.png', popularity: 7))];
 }
 
-/// Gives every game [genres], or leaves the list alone when there are none.
+/// Gives every game what the fields hold when enrich is called, as reading
+/// the disk would, or leaves the list alone when they hold nothing. With
+/// [hold] set, each call waits on its own completer in [held].
 class _FakeLaunchbox extends LaunchboxService {
   List<String> genres = const ['Shooter'];
+  double? rating = 4.0;
+  int? maxPlayers = 2;
+  bool hold = false;
+  final held = <Completer<void>>[];
 
   @override
-  Future<List<Game>> enrich(Console console, List<Game> games) async => [
-        for (final g in games)
-          genres.isEmpty
-              ? g
-              : g.copyWith(details: (g.details ?? const GameDetails()).copyWith(launchboxId: 1, rating: 4.0, ratingCount: 9, genres: genres, maxPlayers: 2)),
-      ];
+  Future<List<Game>> enrich(Console console, List<Game> games) async {
+    final genres = this.genres, rating = this.rating, maxPlayers = this.maxPlayers;
+    if (hold) {
+      final c = Completer<void>();
+      held.add(c);
+      await c.future;
+    }
+    if (genres.isEmpty && rating == null && maxPlayers == null) return games;
+    return [
+      for (final g in games)
+        g.copyWith(
+          details: (g.details ?? const GameDetails())
+              .copyWith(launchboxId: 1, rating: rating, ratingCount: rating == null ? null : 9, genres: genres, maxPlayers: maxPlayers),
+        ),
+    ];
+  }
 }
+
+const _nes = Console(id: 'nes', name: 'NES', urls: [], launchboxPlatform: 'Nintendo Entertainment System');
 
 void main() {
   group('bayesianRating', () {
@@ -95,6 +115,40 @@ void main() {
         _game('Alpha', const GameDetails(rating: 5.0, ratingCount: 1)),
       ];
       expect(_shown(games, _open.copyWith(sort: CatalogSort.topRated)), ['Bravo', 'Alpha', 'Easy', 'Echo', 'Able', 'Charlie', 'Delta']);
+    });
+
+    test('the mean counts only ratings with votes', () {
+      // C = (5.0 + 4.0 + 4.8) / 3 = 4.6: A 4.67, B 4.12, D 4.80. A mean of 3.5,
+      // or one that took E's 1.0 in (3.7), puts B above A.
+      final games = [
+        _game('A', const GameDetails(rating: 5.0, ratingCount: 2)),
+        _game('B', const GameDetails(rating: 4.0, ratingCount: 40)),
+        _game('D', const GameDetails(rating: 4.8, ratingCount: 1000)),
+        _game('E', const GameDetails(rating: 1.0, ratingCount: 0)),
+      ];
+      expect(_shown(games, _open.copyWith(sort: CatalogSort.topRated)), ['D', 'A', 'B', 'E']);
+    });
+
+    test('hiding games with a filter does not move the mean', () {
+      Game rated(String title, double rating, int votes, String region) => Game(
+            title: title,
+            url: 'https://host.example/$title.bin',
+            size: 1,
+            consoleId: 'con',
+            metadata: GameMetadata(displayTitle: title, regions: [region]),
+            details: GameDetails(rating: rating, ratingCount: votes),
+          );
+      // C over the console is (3 + 4 + 5 + 5) / 4 = 4.25: Zed 4.14, Abe 4.00.
+      // Over only the USA games it would be 3.5, and Abe would pass Zed.
+      final games = [
+        rated('Zed', 3.0, 1, 'USA'),
+        rated('Abe', 4.0, 1000, 'USA'),
+        rated('Hi One', 5.0, 1000, 'Japan'),
+        rated('Hi Two', 5.0, 1000, 'Japan'),
+      ];
+      final top = _open.copyWith(sort: CatalogSort.topRated);
+      expect(_shown(games, top), ['Hi One', 'Hi Two', 'Zed', 'Abe']);
+      expect(_shown(games, top.copyWith(regions: {'USA'})), ['Zed', 'Abe']);
     });
   });
 
@@ -222,32 +276,151 @@ void main() {
       (_) async => tmp.path,
     );
 
-    test('loadCatalog enriches and lists genres, reapplyLaunchbox takes them away again', () async {
+    late _FakeLaunchbox launchbox;
+    late CatalogNotifier notifier;
+    late ProviderContainer container;
+    CatalogState state() => container.read(catalogProvider);
+
+    setUp(() {
       SharedPreferences.setMockInitialValues({});
-      final launchbox = _FakeLaunchbox();
-      final container = ProviderContainer(overrides: [
+      launchbox = _FakeLaunchbox();
+      container = ProviderContainer(overrides: [
         catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _OneGameService())),
         launchboxServiceProvider.overrideWithValue(launchbox),
       ]);
-      addTearDown(container.dispose);
+      notifier = container.read(catalogProvider.notifier);
+    });
+    tearDown(() => container.dispose());
+
+    test('loadCatalog enriches and lists genres, reapplyLaunchbox takes them away again', () async {
       final statuses = <String>[];
       container.listen(catalogProvider, (_, s) => statuses.add(s.loadingStatus));
-      final notifier = container.read(catalogProvider.notifier);
 
-      await notifier.loadCatalog(const Console(id: 'con', name: 'Con', urls: []));
-      var s = container.read(catalogProvider);
+      await notifier.loadCatalog(_nes);
+      var s = state();
       expect(statuses, contains('Matching LaunchBox metadata'));
       expect(s.availableGenres, {'Shooter'});
       expect(s.paginatedFilteredGames.single.details?.genres, ['Shooter']);
 
-      launchbox.genres = const [];
+      launchbox
+        ..genres = const []
+        ..rating = null
+        ..maxPlayers = null;
       await notifier.reapplyLaunchbox();
-      s = container.read(catalogProvider);
+      s = state();
       expect(s.availableGenres, isEmpty);
       final d = s.paginatedFilteredGames.single.details!;
       expect((d.launchboxId, d.rating, d.ratingCount, d.maxPlayers), (null, null, null, null));
       expect(d.genres, isEmpty);
       expect((d.boxart, d.popularity), ('https://host.example/one.png', 7));
+    });
+
+    test('no matching status for a console LaunchBox has no platform for', () async {
+      final statuses = <String>[];
+      container.listen(catalogProvider, (_, s) => statuses.add(s.loadingStatus));
+      await notifier.loadCatalog(const Console(id: 'con', name: 'Con', urls: []));
+      expect(statuses, isNot(contains('Matching LaunchBox metadata')));
+      expect(state().availableGenres, {'Shooter'});
+    });
+
+    test('a reapply while the load is matching is not lost', () async {
+      launchbox
+        ..genres = const ['Old']
+        ..hold = true;
+      final load = notifier.loadCatalog(_nes);
+      await pumpEventQueue();
+      expect(launchbox.held, hasLength(1));
+
+      launchbox
+        ..genres = const ['New']
+        ..hold = false;
+      await notifier.reapplyLaunchbox();
+      launchbox.held.single.complete();
+      await load;
+      expect(state().availableGenres, {'New'});
+      expect(state().paginatedFilteredGames.single.details?.genres, ['New']);
+    });
+
+    test('of two overlapping reapplies the later one wins', () async {
+      await notifier.loadCatalog(_nes);
+      launchbox
+        ..hold = true
+        ..genres = const ['New'];
+      final first = notifier.reapplyLaunchbox();
+      await pumpEventQueue();
+      launchbox.genres = const [];
+      final second = notifier.reapplyLaunchbox();
+      await pumpEventQueue();
+      expect(launchbox.held, hasLength(2));
+
+      launchbox.held[0].complete();
+      await first;
+      launchbox.held[1].complete();
+      await second;
+      expect(state().availableGenres, isEmpty);
+    });
+
+    group('choices the modal no longer offers are dropped', () {
+      Future<CatalogFilter> after(void Function() change) async {
+        launchbox.genres = const ['RPG', 'Gone'];
+        await notifier.loadCatalog(_nes);
+        notifier.updateFilter(state().filter.copyWith(
+              genres: {'RPG', 'Gone'},
+              players: {'2+'},
+              minRating: 3.5,
+              sort: CatalogSort.topRated,
+            ));
+        change();
+        await notifier.reapplyLaunchbox();
+        return state().filter;
+      }
+
+      void expectFilter(CatalogFilter f, Set<String> genres, Set<String> players, double minRating, CatalogSort sort) {
+        expect(f.genres, genres);
+        expect(f.players, players);
+        expect((f.minRating, f.sort), (minRating, sort));
+      }
+
+      test('a genre no game has any more', () async {
+        final f = await after(() => launchbox.genres = const ['RPG']);
+        expectFilter(f, {'RPG'}, {'2+'}, 3.5, CatalogSort.topRated);
+        expect(state().filteredGamesCount, 1);
+      });
+
+      test('players when no game has player data', () async {
+        final f = await after(() => launchbox.maxPlayers = null);
+        expectFilter(f, {'RPG', 'Gone'}, <String>{}, 3.5, CatalogSort.topRated);
+      });
+
+      test('the minimum rating and the top rated sort when no game has a rating', () async {
+        final f = await after(() => launchbox.rating = null);
+        expectFilter(f, {'RPG', 'Gone'}, {'2+'}, 0.0, CatalogSort.name);
+      });
+
+      test('everything once metadata is off, so the list is not left empty', () async {
+        final f = await after(() => launchbox
+          ..genres = const []
+          ..rating = null
+          ..maxPlayers = null);
+        expectFilter(f, <String>{}, <String>{}, 0.0, CatalogSort.name);
+        expect(state().filteredGamesCount, 1);
+      });
+
+      test('on load, for the console switched to', () async {
+        notifier.updateFilter(state().filter.copyWith(genres: {'RPG'}, players: {'coop'}));
+        launchbox
+          ..genres = const ['Puzzle']
+          ..maxPlayers = null;
+        await notifier.loadCatalog(_nes);
+        final f = state().filter;
+        expect(f.genres, isEmpty);
+        expect(f.players, isEmpty);
+        // The DAT defaults survive: the list was not emptied, so the
+        // reset-everything fallback did not run.
+        expect(f.regions, {'USA'});
+        expect(f.showLatestRevisionOnly, isTrue);
+        expect(state().filteredGamesCount, 1);
+      });
     });
   });
 }

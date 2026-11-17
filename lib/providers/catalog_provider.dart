@@ -13,6 +13,7 @@ import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
+import 'package:retro_toolbox/services/launchbox/launchbox_platforms.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -40,6 +41,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   int _loadGeneration = 0;
   // The console the games came from, for reapplyLaunchbox.
   Console? _console;
+  // Incremented per reapplyLaunchbox call: only the latest one writes, and a
+  // load whose matching overlapped one matches again.
+  int _launchboxGen = 0;
 
   CatalogNotifier(this._ref, this.catalogService) : super(const CatalogState()) {
     _ref.listen<Favorites>(favoritesProvider, (previous, current) {
@@ -97,9 +101,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         return;
       }
 
-      state = state.copyWith(loadingStatus: 'Matching LaunchBox metadata');
-      final enriched = await _ref.read(launchboxServiceProvider).enrich(console, games);
-      if (gen != _loadGeneration || !mounted) return;
+      if (launchboxPlatformFor(console) != null) {
+        state = state.copyWith(loadingStatus: 'Matching LaunchBox metadata');
+      }
+      // A reapply meanwhile found no games to apply to (they are cleared until
+      // this load ends) and its data may be newer, so match again.
+      List<Game> enriched;
+      int launchboxGen;
+      do {
+        launchboxGen = _launchboxGen;
+        enriched = await _ref.read(launchboxServiceProvider).enrich(console, games);
+        if (gen != _loadGeneration || !mounted) return;
+      } while (launchboxGen != _launchboxGen);
       _console = console;
 
       Set<String> regions = <String>{};
@@ -126,13 +139,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         if (state.filter.showInLibraryOnly) updateFilteredGames();
       });
 
-      state = state.copyWith(
+      final loaded = state.copyWith(
         games: enriched,
         availableRegions: regions,
         availableLanguages: languages,
         availableCategories: categories,
         availableGenres: _genresOf(enriched),
       );
+      state = loaded.copyWith(filter: _offeredOnly(loaded));
 
       await updateFilteredGames(immediate: true);
 
@@ -180,6 +194,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   /// Applies LaunchBox data again to the loaded list, after an import or after
   /// metadata was turned off, without reloading the catalog.
   Future<void> reapplyLaunchbox() async {
+    final launchboxGen = ++_launchboxGen;
     final console = _console;
     final source = state.games;
     if (console == null || source.isEmpty) return;
@@ -188,8 +203,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final cleared = [for (final g in source) _withoutLaunchbox(g)];
     final enriched = await _ref.read(launchboxServiceProvider).enrich(console, cleared);
     // A catalog load started meanwhile: its list wins.
-    if (!mounted || !identical(state.games, source)) return;
-    state = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));
+    if (!mounted || launchboxGen != _launchboxGen || !identical(state.games, source)) return;
+    final applied = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));
+    state = applied.copyWith(filter: _offeredOnly(applied));
     await updateFilteredGames(immediate: true);
   }
 
@@ -200,6 +216,19 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   static Set<String> _genresOf(List<Game> games) => {for (final g in games) ...?g.details?.genres};
+
+  /// The filter without the LaunchBox choices the modal no longer shows for
+  /// [s]'s games: kept, they would hide every game with no way to clear them.
+  static CatalogFilter _offeredOnly(CatalogState s) {
+    final f = s.filter;
+    final rated = s.hasRatings;
+    return f.copyWith(
+      genres: f.genres.intersection(s.availableGenres),
+      players: s.hasPlayerCounts ? null : const {},
+      minRating: rated ? null : 0,
+      sort: f.sort == CatalogSort.topRated && !rated ? CatalogSort.name : null,
+    );
+  }
 
   Future<Map<String, GameStatus>> getLibraryStatus() async {
     final consoleId = state.games.isNotEmpty ? state.games.first.consoleId : null;
