@@ -21,6 +21,8 @@ import 'package:retro_toolbox/widgets/settings/nsz_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/launchbox_setting.dart';
+import 'package:retro_toolbox/widgets/settings/dual_screen_setting.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/widgets/settings/save_recipes_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/extra_servers_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
@@ -193,6 +195,15 @@ class SettingsContent extends ConsumerWidget {
                 icon: Icons.auto_awesome,
                 title: 'Game metadata (LaunchBox)',
                 child: const LaunchboxSetting(),
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (showDualScreenCard(isAndroid: Platform.isAndroid, hasSecondDisplay: ref.watch(dualScreenProvider.select((s) => s.hasSecondDisplay)))) ...[
+              _section(
+                context,
+                icon: Icons.splitscreen,
+                title: 'Dual screen',
+                child: const DualScreenSetting(),
               ),
               const SizedBox(height: 8),
             ],
