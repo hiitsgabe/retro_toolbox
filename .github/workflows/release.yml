@@ -332,6 +332,9 @@ jobs:
     # (AVX2) and bundles a libarchive that needs libxml2.so.16, so the build
     # would not start on Ubuntu 24.04 or older CPUs.
     runs-on: ubuntu-24.04
+    # A stuck apt mirror once held this job (and so the release) for 30+
+    # minutes; the whole build takes about 4.
+    timeout-minutes: 20
     steps:
       # Check out the tag created by resolve-version — the plain github.sha is
       # the pre-bump commit, which would build with the previous version.
@@ -400,7 +403,11 @@ jobs:
       - name: Prepare chdman (Linux)
         run: |
           set -euo pipefail
-          sudo apt-get install -y mame-tools patchelf
+          # man-db's trigger can take minutes on the runner; nothing here needs man pages.
+          echo 'set man-db/auto-update false' | sudo debconf-communicate >/dev/null || true
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update -o Acquire::Retries=3
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -o Acquire::Retries=3 mame-tools patchelf
           CH=$(command -v chdman)
           echo "chdman: $CH"
           DEST=assets/chdman/linux
@@ -587,9 +594,10 @@ jobs:
     # build-handheld is experimental: it stays in needs (so its zip is ready)
     # but its result never blocks the release. Neither does build-macos: GitHub
     # sometimes has no macOS runner for hours, and the release then ships
-    # without the DMGs.
+    # without the DMGs. Linux likewise: a failed or timed-out Linux build
+    # ships the release without the tarball (and without the server image).
     needs: [resolve-version, build-android, build-macos, build-linux, build-windows, build-handheld]
-    if: ${{ !cancelled() && needs.resolve-version.result == 'success' && needs.build-android.result == 'success' && needs.build-linux.result == 'success' && needs.build-windows.result == 'success' }}
+    if: ${{ !cancelled() && needs.resolve-version.result == 'success' && needs.build-android.result == 'success' && needs.build-windows.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -620,6 +628,7 @@ jobs:
           path: dist/
 
       - name: Download Linux tarball
+        if: ${{ needs.build-linux.result == 'success' }}
         uses: actions/download-artifact@v4
         with:
           name: linux-tarball
@@ -709,9 +718,9 @@ jobs:
             | 🤖 Android (arm64) | `retro_toolbox_arm64.apk` | Modern Android devices |
             | 🤖 Android (arm32) | `retro_toolbox_arm32.apk` | Older Android devices |
             | 🤖 Android (universal) | `retro_toolbox_universal.apk` | All architectures |
-            | 🐧 Linux | `retro_toolbox_linux_x64.tar.gz` | Linux x64 (GTK 3) |
             | 🪟 Windows | `retro_toolbox_windows_x64.zip` | Windows x64 |
             | 🎮 Linux handheld | `retro_toolbox_handheld_arm64.zip` | PortMaster on ARM64 handhelds (Knulli, MuOS, ROCKNIX); glibc 2.34+ |
+            ${{ needs.build-linux.result == 'success' && '| 🐧 Linux | `retro_toolbox_linux_x64.tar.gz` | Linux x64 (GTK 3) |' || '' }}
             ${{ needs.build-macos.result == 'success' && '| 🍎 macOS (Apple Silicon) | `retro_toolbox_macos_arm64.dmg` | M1/M2/M3 Macs |' || '' }}
             ${{ needs.build-macos.result == 'success' && '| 🍎 macOS (Intel) | `retro_toolbox_macos_x64.dmg` | Intel Macs |' || '' }}
 
@@ -725,10 +734,10 @@ jobs:
             ${{ needs.build-macos.result == 'success' && '2. Open the DMG and drag **Retro Toolbox.app** to Applications' || '' }}
             ${{ needs.build-macos.result == 'success' && '3. Right-click → Open on first launch to bypass Gatekeeper' || '' }}
 
-            ### Linux Installation
-            1. Install GTK 3 if your distribution does not ship it (`libgtk-3-0`)
-            2. Extract: `tar -xzf retro_toolbox_linux_x64.tar.gz`
-            3. Run `./retro_toolbox`
+            ${{ needs.build-linux.result == 'success' && '### Linux Installation' || '' }}
+            ${{ needs.build-linux.result == 'success' && '1. Install GTK 3 if your distribution does not ship it (`libgtk-3-0`)' || '' }}
+            ${{ needs.build-linux.result == 'success' && '2. Extract: `tar -xzf retro_toolbox_linux_x64.tar.gz`' || '' }}
+            ${{ needs.build-linux.result == 'success' && '3. Run `./retro_toolbox`' || '' }}
 
             ### Windows Installation
             1. Download and extract `retro_toolbox_windows_x64.zip`
