@@ -185,10 +185,14 @@ void main() {
       await pump(t);
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonRight1);
       await t.pumpAndSettle();
+      expect(find.text('Colours'), findsOneWidget); // Style
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonRight1);
+      await t.pumpAndSettle();
       expect(find.text('Parallel downloads'), findsOneWidget);
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonRight1);
       await t.pumpAndSettle();
       expect(find.text('USING THE DEFAULTS'), findsOneWidget); // Consoles
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonLeft1);
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonLeft1);
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonLeft1);
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonLeft1);
@@ -222,6 +226,9 @@ void main() {
     testWidgets('a d-pad walk down the rail shows each section', (t) async {
       saved();
       await pump(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.pumpAndSettle();
+      expect(find.text('Colours'), findsOneWidget); // Style
       await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await t.pumpAndSettle();
       expect(find.text('Parallel downloads'), findsOneWidget);
