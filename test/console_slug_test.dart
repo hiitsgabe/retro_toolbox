@@ -15,6 +15,19 @@ void main() {
     expect(consoleArtSlugForText('snes'), 'snes');
   });
 
+  test('current consoles resolve to their own slug, not an older sibling', () {
+    expect(consoleArtSlugForText('PlayStation 5'), 'ps5');
+    expect(consoleArtSlugForText('ps5'), 'ps5');
+    expect(consoleArtSlugForText('Xbox One'), 'xboxone');
+    // One logo for the whole Series generation.
+    expect(consoleArtSlugForText('Xbox Series X'), 'xboxseries');
+    expect(consoleArtSlugForText('Xbox Series S'), 'xboxseries');
+    expect(consoleArtSlugForText('Xbox Series X|S'), 'xboxseries');
+    expect(consoleArtSlugForText('Xbox 360'), 'xbox360');
+    expect(consoleArtSlugForText('Xbox'), 'xbox');
+    expect(consoleArtSlugForText('PlayStation 4'), 'ps4');
+  });
+
   group('resolvedPlatform', () {
     test('explicit platform wins', () {
       expect(console('Game Boy', platform: 'gba').resolvedPlatform, 'gba');
@@ -36,6 +49,9 @@ void main() {
   test('logo follows platform', () {
     expect(consoleLogoAsset(console('x', platform: 'megadrive')), 'assets/console_art/genesis_logo.svg');
     expect(consoleLogoAsset(console('x', platform: 'wswan')), 'assets/console_art/wonderswan_logo.svg');
+    expect(consoleLogoAsset(console('PlayStation 5')), 'assets/console_art/ps5_logo.svg');
+    expect(consoleLogoAsset(console('Xbox One')), 'assets/console_art/xboxone_logo.svg');
+    expect(consoleLogoAsset(console('Xbox Series X')), 'assets/console_art/xboxseries_logo.svg');
   });
 
   test('servers detect by platform', () {

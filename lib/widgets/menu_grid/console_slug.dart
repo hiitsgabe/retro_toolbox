@@ -124,11 +124,14 @@ const List<MapEntry<String, List<String>>> _rules = [
   MapEntry('sg1000', ['sg-1000', 'sg1000']),
   MapEntry('saturn', ['saturn']),
   MapEntry('dreamcast', ['dreamcast']),
+  MapEntry('ps5', ['playstation 5', 'ps5']),
   MapEntry('ps4', ['playstation 4', 'ps4']),
   MapEntry('ps3', ['playstation 3', 'ps3']),
   MapEntry('ps2', ['playstation 2', 'ps2']),
   MapEntry('psp', ['playstation portable', 'psp']),
   MapEntry('psx', ['playstation', 'psx', 'ps1', 'psone']),
+  MapEntry('xboxseries', ['xbox series', 'xboxseries', 'series x', 'series s']),
+  MapEntry('xboxone', ['xbox one', 'xboxone']),
   MapEntry('xbox360', ['xbox 360', 'xbox360', 'x360']),
   MapEntry('xbox', ['xbox']),
   MapEntry('ngp', ['neo geo pocket', 'ngp']),
@@ -155,7 +158,8 @@ const Set<String> _bundledLogos = {
   'dreamcast', 'segacd', 'sega32x', 'sg1000', 'psx', 'ps2', 'ps3', 'ps4', 'psp', 'xbox',
   'xbox360', 'pcengine', 'neogeo', 'ngp', 'arcade', 'atari2600', 'atari7800',
   'atarilynx', 'atarijaguar', '3do', 'colecovision', 'intellivision', 'msx', 'c64',
-  'amiga', 'wonderswan', 'switch2',
+  'amiga', 'wonderswan', 'switch2', 'ps5', 'xboxone',
+  'xboxseries',
 };
 
 /// Per-console accent color, keyed by iconic hardware identity (not brand
@@ -191,10 +195,13 @@ const Map<String, Color> _slugColors = {
   'ps2': Color(0xFF123C8C),
   'ps3': Color(0xFF1E4FA0),
   'ps4': Color(0xFF0A5BB0),
+  'ps5': Color(0xFF2F5FC4),
   'psp': Color(0xFF2E6DB4),
   // Microsoft
   'xbox': Color(0xFF107C10), // green
   'xbox360': Color(0xFF5DC21E), // lighter green
+  'xboxone': Color(0xFF0E7A0D),
+  'xboxseries': Color(0xFF0B5C0B), // darker green
   // Atari
   'atari2600': Color(0xFFC8102E),
   'atari7800': Color(0xFFA3122A),
