@@ -35,13 +35,13 @@ void main() {
     GameDetailsPage.debugImageBuilder = null;
   });
 
-  Future<void> pumpPage(WidgetTester t, Game game) async {
+  Future<void> pumpPage(WidgetTester t, Game game, {Size size = const Size(1240, 4000)}) async {
     ran = [];
     watched = [];
     debugRunGameAction = (ref, context, game, state, action) async => ran.add((game, action));
     GameDetailsPage.debugImageBuilder =
         (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url));
-    t.view.physicalSize = const Size(1240, 4000);
+    t.view.physicalSize = size;
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(ProviderScope(
@@ -59,6 +59,7 @@ void main() {
   }
 
   Finder row(String label) => find.ancestor(of: find.text(label), matching: find.byType(GameFileRow));
+  Finder mainIn(String label) => find.descendant(of: row(label), matching: find.text('Main'));
 
   testWidgets('a game lists its versions with the main one marked; a version downloads with its discs', (t) async {
     final mgs = groupEntry(buildGameGroups(psxGames(['Metal Gear Solid'])).single, (_) => true)!;
@@ -149,5 +150,107 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(find.text('Contents'), findsNothing);
+  });
+
+  testWidgets('opened on an owned Europe version, Europe is the main row and USA is not', (t) async {
+    final group = buildGameGroups(psxGames(['Metal Gear Solid'])).single;
+    final europe = groupEntry(group, (_) => true, owned: (g) => g.title.startsWith('Metal Gear Solid (Europe) (Disc'))!;
+    expect(europe.title, 'Metal Gear Solid (Europe) (Disc 1).zip');
+    await pumpPage(t, europe);
+    expect(mainIn('Europe · 2 discs'), findsOneWidget);
+    expect(mainIn('USA · Rev 1 · 2 discs'), findsNothing);
+    expect(find.text('Main'), findsOneWidget);
+  });
+
+  testWidgets('a game with one version has no Versions section', (t) async {
+    final box = buildGameGroups(psxGamesStartingWith('Arc the Lad Collection - ')).single;
+    final iii = box.members.singleWhere((m) => memberLabel(box, m) == 'Arc the Lad III');
+    expect(iii.versions, hasLength(1));
+    await pumpPage(t, groupEntry(iii, (_) => true)!);
+    expect(find.text('Discs'), findsOneWidget);
+    expect(find.text('Versions'), findsNothing);
+    expect(find.byType(GameFileRow), findsNothing);
+  });
+
+  testWidgets('Versions comes before Extras', (t) async {
+    final mgs = groupEntry(buildGameGroups(psxGames(['Metal Gear Solid'])).single, (_) => true)!;
+    await pumpPage(t, mgs);
+    double y(String s) => t.getTopLeft(find.text(s)).dy;
+    expect(y('Versions'), lessThan(y('Extras')));
+  });
+
+  /// What the focused control belongs to: a GameFileRow's label, or
+  /// "open:<member>" for a Contents Open button; null otherwise.
+  String? focused() {
+    String? out;
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    ctx?.visitAncestorElements((a) {
+      final w = a.widget;
+      if (w is GameFileRow) {
+        out = w.label;
+        return false;
+      }
+      if (w is Row && w.children.length == 2 && w.children.first is Expanded && (w.children.first as Expanded).child is Text) {
+        final label = ((w.children.first as Expanded).child as Text).data;
+        out = 'open:$label';
+        return false;
+      }
+      return true;
+    });
+    return out;
+  }
+
+  Future<List<String>> walk(WidgetTester t, LogicalKeyboardKey key, int steps) async {
+    final seen = <String>[];
+    for (var step = 0; step < steps; step++) {
+      await t.sendKeyEvent(key);
+      await t.pumpAndSettle();
+      final f = focused();
+      if (f != null && !seen.contains(f)) seen.add(f);
+    }
+    return seen;
+  }
+
+  // D-pad on a TV-sized screen: rows below the fold.
+  for (final size in const [Size(1280, 720), Size(800, 480)]) {
+    testWidgets('at $size the d-pad reaches every version and extra button in order, and Up leaves them', (t) async {
+      final group = buildGameGroups(psxGames(['Metal Gear Solid'])).single;
+      final mgs = groupEntry(group, (_) => true)!;
+      await pumpPage(t, mgs, size: size);
+      final want = [for (final v in group.versions) v.label, for (final e in group.extras) extraLabel(e)];
+      final down = await walk(t, LogicalKeyboardKey.arrowDown, 120);
+      expect(down, want);
+      await walk(t, LogicalKeyboardKey.arrowUp, 120);
+      expect(focused(), isNull);
+      expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<GameFileRow>(), isNull);
+    });
+
+    testWidgets('at $size the d-pad reaches every Open button and A on the last opens that game; Back returns', (t) async {
+      final group = buildGameGroups(psxGamesStartingWith('Arc the Lad Collection - ')).single;
+      final box = groupEntry(group, (_) => true)!;
+      await pumpPage(t, box, size: size);
+      final down = await walk(t, LogicalKeyboardKey.arrowDown, 120);
+      expect(down, [for (final m in group.members) 'open:${memberLabel(group, m)}']);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(find.text('Contents'), findsNothing);
+      expect(find.textContaining('The Making of Arc the Lad'), findsWidgets);
+      await t.pageBack();
+      await t.pumpAndSettle();
+      expect(find.text('Contents'), findsOneWidget);
+    });
+  }
+
+  testWidgets('a member page shows its own extras', (t) async {
+    final box = groupEntry(buildGameGroups(psxGamesStartingWith('Arc the Lad Collection - ')).single, (_) => true)!;
+    await pumpPage(t, box);
+    final open = find.ancestor(of: find.text('Arc the Lad II'), matching: find.byType(Row));
+    await t.tap(find.descendant(of: open.first, matching: find.text('Open')));
+    await t.pumpAndSettle();
+    expect(find.text('Extras'), findsOneWidget);
+    expect(find.text('USA · Beta · 2001-09-11'), findsOneWidget);
+    await t.pageBack();
+    await t.pumpAndSettle();
+    expect(find.text('Contents'), findsOneWidget);
   });
 }
