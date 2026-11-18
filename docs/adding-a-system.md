@@ -113,6 +113,34 @@ When the listing page and the actual download endpoint differ, use `download_url
 }
 ```
 
+### Updates
+
+A game can list updates (patches) next to it. Add `update_regex` and each game shows its updates on its page.
+
+- `update_regex`: run over each game's part of the feed (from the game's `regex` match to the next game's) with the same flags as `regex`. Every match is one update. Named groups: `label` (the version shown), `size`, and either `url` (a full link, or a path relative to the console's `url`) or `id`.
+- `update_download_url`: the link of an update whose match has no `url`. `<id>` is the update's own `id` group, or the game's `id` when the match has none.
+- `update_format`: the update file's extension, used for its name (`<game> [<label>]<format>`). Defaults to the first `original_format`.
+
+```json
+{
+  "name": "Custom API",
+  "url": "https://api.example.com/catalog",
+  "regex": "\"(?P<id>[A-F0-9]+)\".*?\"name\":\"(?P<text>[^\"]+)\"",
+  "download_url": "https://api.example.com/download/<id>/file",
+  "update_regex": "\"update_version\":\"(?P<label>[^\"]+)\"",
+  "update_download_url": "https://api.example.com/download/<id>/update",
+  "original_format": [".zip"],
+  "roms_folder": "custom",
+  "ignore_extension_filtering": true
+}
+```
+
+A match with no `url` and no usable `id` is skipped. Updates download to the console's updates folder, by default a folder named `updates` inside its download folder; change it in the console's settings, where *Unpack updates* and *After an update downloads* default to *Same as the game* (they follow the game's unpacking and handler) and can be set separately.
+
+### How games are grouped
+
+Consoles without a `regex` are listed from file names (No-Intro and Redump style), and the list shows one entry per game. With *Group versions* on (the default), files share an entry when their names are the same once the trailing `(...)` tags are removed, so `Game (USA)`, `Game (Europe) (Rev 1)` and `Game (USA) (Disc 1)` are one game, with regions, revisions and discs on its page. Names with a prefix before ` - ` holding `Collection`, `Anthology` or `Trilogy` (at least two of them) form a box set listing its games. Demos, previews, betas, prototypes and bonus discs, found by their tags, are kept apart as extras. A console with a custom `regex` is not grouped.
+
 ---
 
 ## 2. Internet Archive
@@ -238,6 +266,9 @@ Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for
 | `usa_regex`                | string  | `"(USA)"`     | Custom regex for region filtering |
 | `ignore_extension_filtering` | boolean | `false`     | Show all regex matches regardless of `original_format` |
 | `download_url`             | string  | *(none)*      | Download URL template with `<id>` placeholder |
+| `update_regex`             | string  | *(none)*      | Finds a game's updates in the feed (see *Updates*) |
+| `update_download_url`       | string  | *(none)*      | Link of an update whose match has no `url` |
+| `update_format`            | string  | first `original_format` | The update file's extension |
 | `auth`                     | object  | *(none)*      | Authentication config (see below) |
 | `launchbox_platform`       | string  | *(from `platform`)* | LaunchBox platform the metadata comes from (see below) |
 
