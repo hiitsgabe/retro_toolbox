@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -22,7 +23,10 @@ class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifi
 }
 
 class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier {
-  _FakeCatalog() : super(const CatalogState());
+  _FakeCatalog([CatalogState? state, this.owned = const {}]) : super(state ?? const CatalogState());
+  final Set<String> owned;
+  @override
+  Future<Set<String>> ownedGameIds() async => owned;
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -35,7 +39,7 @@ void main() {
     GameDetailsPage.debugImageBuilder = null;
   });
 
-  Future<void> pumpPage(WidgetTester t, Game game, {Size size = const Size(1240, 4000)}) async {
+  Future<void> pumpPage(WidgetTester t, Game game, {Size size = const Size(1240, 4000), CatalogState? catalog, Set<String> owned = const {}}) async {
     ran = [];
     watched = [];
     debugRunGameAction = (ref, context, game, state, action) async => ran.add((game, action));
@@ -51,7 +55,7 @@ void main() {
           return GameState(game: g, status: GameStatus.ready, availableActions: const {GameAction.download});
         }),
         favoritesProvider.overrideWith((ref) => _FakeFavorites()),
-        catalogProvider.overrideWith((ref) => _FakeCatalog()),
+        catalogProvider.overrideWith((ref) => _FakeCatalog(catalog, owned)),
       ],
       child: MaterialApp(home: GameDetailsPage(game: game)),
     ));
@@ -252,5 +256,35 @@ void main() {
     await t.pageBack();
     await t.pumpAndSettle();
     expect(find.text('Contents'), findsOneWidget);
+  });
+
+  group('a box member opens on the version the list would pick', () {
+    final files = [psxGame('Foo Collection - Alpha (USA)'), psxGame('Foo Collection - Alpha (Europe)'), psxGame('Foo Collection - Alpha (Japan)'), psxGame('Foo Collection - Beta (USA)')];
+
+    Future<void> openAlpha(WidgetTester t, {CatalogState? catalog, Set<String> owned = const {}}) async {
+      final box = buildGameGroups(files).single;
+      expect(box.isBoxSet, isTrue);
+      await pumpPage(t, groupEntry(box, (_) => true)!, catalog: catalog ?? CatalogState(games: files, filter: const CatalogFilter(regions: {})), owned: owned);
+      final open = find.ancestor(of: find.text('Alpha'), matching: find.byType(Row));
+      await t.tap(find.descendant(of: open.first, matching: find.text('Open')));
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('an owned Europe version is the main one', (t) async {
+      await openAlpha(t, owned: {psxGame('Foo Collection - Alpha (Europe)').gameId});
+      expect(mainIn('Europe'), findsOneWidget);
+      expect(mainIn('USA'), findsNothing);
+    });
+
+    testWidgets('nothing owned: the default region order picks USA', (t) async {
+      await openAlpha(t);
+      expect(mainIn('USA'), findsOneWidget);
+    });
+
+    testWidgets('a Japan region filter picks the Japan version', (t) async {
+      await openAlpha(t, catalog: CatalogState(games: files, filter: const CatalogFilter(regions: {'Japan'})));
+      expect(mainIn('Japan'), findsOneWidget);
+      expect(mainIn('USA'), findsNothing);
+    });
   });
 }

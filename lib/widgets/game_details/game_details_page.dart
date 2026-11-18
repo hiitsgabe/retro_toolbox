@@ -8,6 +8,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
@@ -246,25 +247,53 @@ class _DiscRow extends ConsumerWidget {
   }
 }
 
-/// A box set's games, each opening its own page.
-class GameContentsList extends StatelessWidget {
+/// A box set's games, each opening its own page on the version the list
+/// would pick: the owned one first, then the filter's regions.
+class GameContentsList extends ConsumerStatefulWidget {
   const GameContentsList({super.key, required this.group});
 
   final GameGroup group;
 
   @override
+  ConsumerState<GameContentsList> createState() => _GameContentsListState();
+}
+
+class _GameContentsListState extends ConsumerState<GameContentsList> {
+  /// Read once; the rows do not wait for it, they ask it when tapped, so they
+  /// (and the d-pad focus on them) stay as they are.
+  late final Future<Set<String>> _owned = ref.read(catalogProvider.notifier).ownedGameIds();
+
+  Future<void> _open(GameGroup member) async {
+    final owned = await _owned;
+    if (!mounted) return;
+    final catalog = ref.read(catalogProvider);
+    final input = FilterInput(
+      games: catalog.games,
+      filterText: '',
+      filter: catalog.filter,
+      limit: 0,
+      groupVersions: true,
+      ownedGameIds: owned,
+    );
+    final entry = FilteringService.entryFor(member, input) ?? groupEntry(member, (_) => true);
+    if (entry == null) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameDetailsPage(game: entry)));
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final group = widget.group;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final member in group.members)
-          if (groupEntry(member, (_) => true) case final entry?)
+          if (groupEntry(member, (_) => true) != null)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(children: [
                 Expanded(child: Text(memberLabel(group, member), style: const TextStyle(fontWeight: FontWeight.w600))),
                 FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameDetailsPage(game: entry))),
+                  onPressed: () => _open(member),
                   icon: const Icon(Icons.chevron_right_rounded),
                   label: const Text('Open'),
                 ),
