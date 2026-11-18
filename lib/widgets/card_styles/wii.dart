@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -244,7 +243,6 @@ class _GameArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final hasArt = game.boxart != null;
     final placeholder = ColoredBox(color: scheme.surfaceContainerHighest, child: Icon(Icons.videogame_asset_outlined, color: scheme.outline));
     return Column(
       children: [
@@ -252,30 +250,8 @@ class _GameArt extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // The art blurred to fill the channel, the sharp one centred over it.
-              if (hasArt)
-                ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 14, sigmaY: 14, tileMode: TileMode.clamp),
-                  child: Transform.scale(scale: 1.3, child: SizedBox.expand(child: GameBoxart(game: game, placeholder: placeholder))),
-                )
-              else
-                DecoratedBox(
-                    decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                            begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [scheme.surfaceContainerHigh, scheme.surfaceContainerHighest]))),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: 3 / 4,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(3), boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))]),
-                      child: ClipRRect(borderRadius: BorderRadius.circular(3), child: SizedBox.expand(child: GameBoxart(game: game, placeholder: placeholder))),
-                    ),
-                  ),
-                ),
-              ),
+              // The art fills the channel (cover, the overflow cropped).
+              SizedBox.expand(child: GameBoxart(game: game, placeholder: placeholder)),
               _gloss(),
               Positioned(top: 4, left: 4, child: badges),
             ],

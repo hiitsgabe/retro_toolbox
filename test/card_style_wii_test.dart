@@ -14,6 +14,7 @@ import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -180,6 +181,14 @@ void main() {
       await pump(t, gameList());
       expect(find.byKey(const ValueKey('wii-games')), findsOneWidget);
       expect(find.text('Game 00'), findsOneWidget, reason: 'the title sits under the art');
+    });
+
+    testWidgets('the art fills the channel, with only the title band under it', (t) async {
+      await pump(t, gameList());
+      final channel = t.getSize(find.byKey(const ValueKey('wii-channel')).first);
+      final art = t.getSize(find.byType(GameBoxart).first);
+      expect(art.width, channel.width - 2 * 9, reason: 'edge to edge inside border and inset');
+      expect(art.height, channel.height - 2 * 9 - 26, reason: 'full height above the 26 px title band');
     });
 
     testWidgets('a downloading game shows its progress and a selected one its check', (t) async {
