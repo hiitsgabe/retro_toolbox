@@ -5,11 +5,24 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/screens/setup_wizard_screen.dart';
+import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// No consoles: the wizard's text must not depend on a git-ignored catalog in
+/// assets/catalog, which a developer may have and CI does not.
+class _NoCatalog extends CatalogService {
+  @override
+  Future<Map<String, Console>> getConsoles([String consolesFilePath = 'consoles.json']) async => {};
+}
+
+Override _noCatalog() =>
+    appStateProvider.overrideWith((ref) => AppStateNotifier(ref, _NoCatalog(), ref.read(catalogProvider.notifier)));
 
 /// Records imports instead of queueing them. [manifest] stands for metadata
 /// already on; [platforms] for what the catalog wants at the time of a refresh.
@@ -42,7 +55,7 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => tmp.path);
 
-    await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: SetupWizardScreen(initialStep: 2))));
+    await tester.pumpWidget(ProviderScope(overrides: [_noCatalog()], child: const MaterialApp(home: SetupWizardScreen(initialStep: 2))));
     await tester.pump();
 
     expect(find.text('Internet Archive'), findsNothing);
@@ -60,7 +73,7 @@ void main() {
     addTearDown(tester.view.reset);
     final key = GlobalKey<NavigatorState>();
     await tester.pumpWidget(ProviderScope(
-      overrides: overrides,
+      overrides: [_noCatalog(), ...overrides],
       child: MaterialApp(
         navigatorKey: key,
         builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
