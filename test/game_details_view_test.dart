@@ -411,10 +411,31 @@ void main() {
     expect((net(_back.url).memCacheWidth, net(_back.url).memCacheHeight), (null, 720));
     expect((net(_logo.url).memCacheWidth, net(_logo.url).memCacheHeight), (null, 192));
     expect((net(_front.url).memCacheWidth, net(_front.url).memCacheHeight), (null, 240));
-    // Screenshots fill their box: by the box. The last one is the strip's;
-    // the hero shows it too, behind the fanart while that loads.
+    // Screenshots fill their box: by the box. The last one is the strip's.
     expect(net(_shot1.url).memCacheWidth, 384);
     t.takeException(); // the image cache has no plugin in tests
+  });
+
+  testWidgets('while the fanart loads the hero holds the blurred box art, not a screenshot', (t) async {
+    t.view.physicalSize = const Size(1240, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      theme: appTheme(),
+      home: Scaffold(
+        body: GameDetailsView(
+          game: _game,
+          launchbox: _lb,
+          // The fanart is still loading: it shows whatever it holds the place with.
+          imageBuilder: (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) =>
+              url == _fanart.url ? placeholder ?? fallback ?? const SizedBox() : SizedBox(key: ValueKey(url)),
+        ),
+      ),
+    ));
+    // One step to the fanart: no screenshot shown in between.
+    expect(find.byType(ImageFiltered), findsOneWidget);
+    expect(_url(_game.boxart!), findsWidgets);
+    expect(_url(_shot1.url), findsOneWidget); // the strip's only
   });
 
   testWidgets('failed art: the background falls to a screenshot, a thumbnail to a placeholder', (t) async {

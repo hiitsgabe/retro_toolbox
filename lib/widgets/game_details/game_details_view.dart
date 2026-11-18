@@ -287,7 +287,10 @@ class _Hero extends StatelessWidget {
       final boxart = game.boxart == null ? null : blurred(game.boxart!);
       final shot = pickLaunchboxImage(info.images, LaunchboxImageType.screenshot, region)?.url;
       final next = shot == null || shot == bg.url ? boxart : image(context, shot, fallback: boxart);
-      background = bg.blur ? blurred(bg.url) : image(context, bg.url, fallback: next);
+      // The blurred box art holds the place while the fanart loads; the
+      // screenshot is only for fanart that fails. As a placeholder it would
+      // load too, and the hero would go box art, screenshot, fanart.
+      background = bg.blur ? blurred(bg.url) : image(context, bg.url, placeholder: boxart ?? const SizedBox.shrink(), fallback: next);
     }
 
     final text = _HeroText(info: info, image: image, actions: actions, status: status);
