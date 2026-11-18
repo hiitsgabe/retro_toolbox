@@ -22,9 +22,13 @@ class FilteringService {
       // A game shows when one of its versions passes; the region filter's
       // order (else the default) picks which one is the entry.
       final regions = filter.regions.isEmpty ? defaultRegionOrder : filter.regions.toList();
+      final owned = input.ownedGameIds;
       allMatched = [
-        for (final group in buildGameGroups(games))
-          if (groupEntry(group, (g) => _matchesFilter(g, input, checkText: false), text: input.filterText, regions: regions) case final entry?) entry,
+        for (final group in input.groups ?? buildGameGroups(games))
+          if (groupEntry(group, (g) => _matchesFilter(g, input, checkText: false),
+                  text: input.filterText, regions: regions, owned: owned == null ? null : (g) => owned.contains(g.gameId))
+              case final entry?)
+            entry,
       ];
     } else {
       allMatched = [
@@ -195,6 +199,14 @@ class FilterInput {
   /// One entry per game (see buildGameGroups).
   final bool groupVersions;
 
+  /// [games] already grouped (building them is the costly part); built here
+  /// when null.
+  final List<GameGroup>? groups;
+
+  /// The games the user has (downloaded, extracted or in flight): a version
+  /// with one is the main version of its game.
+  final Set<String>? ownedGameIds;
+
   const FilterInput({
     required this.games,
     required this.filterText,
@@ -204,6 +216,8 @@ class FilterInput {
     this.favoriteGameIds,
     this.inLibraryStatus,
     this.groupVersions = false,
+    this.groups,
+    this.ownedGameIds,
   });
 }
 

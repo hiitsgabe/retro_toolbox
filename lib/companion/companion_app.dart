@@ -91,7 +91,12 @@ class _CompanionScreenState extends State<CompanionScreen> {
       final payload = jsonDecode(call.arguments as String) as Map<String, dynamic>;
       switch (payload['mode']) {
         case 'details':
-          final game = Game.fromJson(payload['game'] as Map<String, dynamic>);
+          final gameJson = Map<String, dynamic>.from(payload['game'] as Map);
+          final title = payload['displayTitle'];
+          if (title is String && title.isNotEmpty) {
+            gameJson['metadata'] = {...?(gameJson['metadata'] as Map?)?.cast<String, dynamic>(), 'displayTitle': title};
+          }
+          final game = Game.fromJson(gameJson);
           final state = payload['state'] as Map<String, dynamic>?;
           _state = state == null ? null : gameStateFromJson(state);
           final version = payload['launchbox'] as String?;

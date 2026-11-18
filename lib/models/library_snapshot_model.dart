@@ -69,6 +69,15 @@ class LibrarySnapshot {
     return result;
   }
 
+  /// The base names (file names without extension) that have anything in the
+  /// library: a file, or files in a folder of that name. Cost follows the
+  /// library's size, not the catalog's; [statusFor] settles each candidate.
+  Set<String> presentBaseNames() => {
+        ...baseNames,
+        ...relatedFiles.keys,
+        for (final f in exactFiles) p.basenameWithoutExtension(f),
+      };
+
   Map<String, LibraryPresence> allStatuses() {
     final map = <String, LibraryPresence>{};
     for (final f in exactFiles) {

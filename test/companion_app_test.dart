@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/companion/companion_app.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
@@ -117,6 +118,17 @@ void main() {
     expect(find.text('About'), findsNothing);
     expect(asked, isEmpty, reason: 'no LaunchBox id, nothing to look up');
     noActions();
+  });
+
+  testWidgets('a box set entry is shown by the box name, not its first game', (t) async {
+    final box = GameGroup(title: 'Sonic Collection', members: [GameGroup(title: 'Sonic The Hedgehog')]);
+    final payload = detailsPayload(_sonic.copyWith(group: box));
+    expect((payload['game'] as Map)['metadata']['displayTitle'], 'Sonic The Hedgehog');
+    expect(payload['displayTitle'], 'Sonic Collection');
+    await start(t);
+    await send(t, payload);
+    expect(find.text('Sonic Collection'), findsOneWidget);
+    expect(find.text('Sonic The Hedgehog'), findsNothing);
   });
 
   testWidgets('a details payload with a LaunchBox id shows the record from the lookup', (t) async {

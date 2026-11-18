@@ -65,10 +65,10 @@ class GameGroup {
       ];
 }
 
-/// The version to show and download: the first of [regions] it is in, then
-/// the newest revision, then a plain version before an Alt, then the shortest
-/// name. Null when there is none.
-GameVersion? pickMainVersion(List<GameVersion> versions, List<String> regions) {
+/// The version to show and download: one the user has ([owned]), then the
+/// first of [regions] it is in, then the newest revision, then a plain
+/// version before an Alt, then the shortest name. Null when there is none.
+GameVersion? pickMainVersion(List<GameVersion> versions, List<String> regions, {bool Function(GameVersion)? owned}) {
   if (versions.isEmpty) return null;
   int rank(GameVersion v) {
     for (var i = 0; i < regions.length; i++) {
@@ -78,6 +78,10 @@ GameVersion? pickMainVersion(List<GameVersion> versions, List<String> regions) {
   }
 
   final sorted = [...versions]..sort((a, b) {
+      if (owned != null) {
+        final byOwned = (owned(a) ? 0 : 1).compareTo(owned(b) ? 0 : 1);
+        if (byOwned != 0) return byOwned;
+      }
       final byRegion = rank(a).compareTo(rank(b));
       if (byRegion != 0) return byRegion;
       final byRevision = compareRevisions(b.revision, a.revision);

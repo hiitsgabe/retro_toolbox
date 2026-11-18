@@ -178,22 +178,35 @@ void main() {
       ),
     ));
     await t.runAsync(() => catalog.loadCatalog(_console));
+    // The first run reads the download folder (real IO); later ones reuse it.
+    await t.runAsync(() => catalog.updateFilteredGames(immediate: true));
     await t.pumpAndSettle();
+
+    // The jumps filter in an isolate: wait for what they do, not a fixed time.
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 100 && !done(); i++) {
+        await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await t.pump();
+      }
+      await t.pumpAndSettle();
+    }
 
     String focusedTitle() =>
         FocusManager.instance.primaryFocus!.context!.findAncestorWidgetOfExactType<GameCardActions>()!.game.title;
     expect(focusedTitle(), 'A game 00');
 
     await t.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
-    await t.pump();
+    // The jump filters in an isolate: wait for the flash, not a fixed time.
+    for (var i = 0; i < 100 && find.text('B').evaluate().isEmpty; i++) {
+      await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await t.pump();
+    }
     expect(find.text('B'), findsOneWidget); // the flash
     await t.pumpAndSettle();
     expect(focusedTitle(), 'B game 00');
 
     await t.sendKeyEvent(LogicalKeyboardKey.pageUp);
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
-    await t.pumpAndSettle();
+    await until(() => focusedTitle() == 'A game 00');
     expect(focusedTitle(), 'A game 00');
 
     // Sorted by anything but name, L1/R1 keep paging six rows.
@@ -201,8 +214,7 @@ void main() {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
     await t.pumpAndSettle();
     await t.sendKeyEvent(LogicalKeyboardKey.pageDown);
-    await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
-    await t.pumpAndSettle();
+    await until(() => focusedTitle() == 'A game 06');
     expect(focusedTitle(), 'A game 06');
   });
 }

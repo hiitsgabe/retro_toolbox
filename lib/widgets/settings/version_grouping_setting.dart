@@ -15,6 +15,8 @@ class VersionGroupingSetting extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(settingsProvider);
+    // A console read by a regex lists each game once already: nothing to group.
+    if (console?.regex != null) return const SizedBox.shrink();
     final grouped = ref.read(settingsProvider.notifier).groupVersions(console?.id);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

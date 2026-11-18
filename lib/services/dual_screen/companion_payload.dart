@@ -9,6 +9,8 @@ import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 Map<String, dynamic> detailsPayload(Game game, {String? launchboxVersion, GameState? state}) => {
       'mode': 'details',
       'game': game.toJson(),
+      // A box set is shown by the box's name, which the game's own JSON lacks.
+      'displayTitle': game.displayTitle,
       'launchbox': launchboxVersion,
       if (state != null) 'state': gameStateJson(state),
     };

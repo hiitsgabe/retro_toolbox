@@ -20,17 +20,26 @@ String _name(Game g) => g.title.replaceFirst(_extension, '');
 final _trailingTags = RegExp(r'^(.*?)((?: \([^)]*\))+)$');
 
 /// The No-Intro title: the name minus its trailing run of tags.
-String baseTitleOf(Game g) {
-  final n = _name(g);
-  final m = _trailingTags.firstMatch(n);
-  return (m == null ? n : m.group(1)!).trim();
-}
+String baseTitleOf(Game g) => _parse(g).$1;
 
 /// The name's trailing tags in parentheses, in order.
-List<String> tagsOf(Game g) {
-  final m = _trailingTags.firstMatch(_name(g));
-  if (m == null) return const [];
-  return [for (final t in _tag.allMatches(m.group(2)!)) t.group(1)!.trim()];
+List<String> tagsOf(Game g) => _parse(g).$2;
+
+// Reading a name is most of what building the groups costs and each title is
+// read several times, so it is read once. Per isolate; cleared when it grows
+// past any catalog.
+final _parsed = <String, (String, List<String>)>{};
+
+(String, List<String>) _parse(Game g) {
+  final hit = _parsed[g.title];
+  if (hit != null) return hit;
+  if (_parsed.length > 100000) _parsed.clear();
+  final n = _name(g);
+  final m = _trailingTags.firstMatch(n);
+  return _parsed[g.title] = (
+    (m == null ? n : m.group(1)!).trim(),
+    m == null ? const <String>[] : [for (final t in _tag.allMatches(m.group(2)!)) t.group(1)!.trim()],
+  );
 }
 
 /// A demo, preview, sampler, beta or prototype, or a bonus disc that is not
@@ -210,11 +219,12 @@ List<String> _commonTags(List<Game> discs) {
 }
 
 /// The list's entry for [group] under a filter: the main version (among the
-/// versions [passes] lets through, by [regions]) carrying the group; for a
+/// versions [passes] lets through, the owned one first ([owned]: a file the
+/// user has), then by [regions]) carrying the group; for a
 /// group with no version, its first extra that passes; for a box set, its
 /// first game's entry with no disc set. Null when nothing passes or [text]
 /// matches no title of the group.
-Game? groupEntry(GameGroup group, bool Function(Game) passes, {String text = '', List<String> regions = defaultRegionOrder}) {
+Game? groupEntry(GameGroup group, bool Function(Game) passes, {String text = '', List<String> regions = defaultRegionOrder, bool Function(Game)? owned}) {
   if (text.isNotEmpty) {
     final t = text.toLowerCase();
     final hit = group.title.toLowerCase().contains(t) ||
@@ -223,12 +233,12 @@ Game? groupEntry(GameGroup group, bool Function(Game) passes, {String text = '',
   }
   if (group.isBoxSet) {
     for (final m in group.members) {
-      final e = groupEntry(m, passes, regions: regions);
+      final e = groupEntry(m, passes, regions: regions, owned: owned);
       if (e != null) return e.copyWith(group: group, discs: const []);
     }
     return null;
   }
-  final main = pickMainVersion([for (final v in group.versions) if (passes(v.first)) v], regions);
+  final main = pickMainVersion([for (final v in group.versions) if (passes(v.first)) v], regions, owned: owned == null ? null : (v) => v.discs.any(owned));
   if (main != null) return main.entry.copyWith(group: group);
   if (group.versions.isNotEmpty) return null;
   final extra = group.extras.where(passes).firstOrNull;

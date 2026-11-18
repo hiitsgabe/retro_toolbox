@@ -363,12 +363,14 @@ void main() {
 
       launchbox.genres = const ['New'];
       await notifier.reapplyLaunchbox();
-      expect(focused(), same(state().games.single));
+      // The entry the list shows, so the focused game keeps its group.
+      expect(focused(), same(state().paginatedFilteredGames.single));
+      expect(focused()?.group, isNotNull);
       expect(focused()?.details?.genres, ['New']);
 
       launchbox.genres = const ['Reloaded'];
       await notifier.loadCatalog(_nes);
-      expect(focused(), same(state().games.single));
+      expect(focused(), same(state().paginatedFilteredGames.single));
       expect(focused()?.details?.genres, ['Reloaded']);
 
       // One the list does not have is left alone.

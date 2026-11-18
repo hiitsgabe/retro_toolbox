@@ -91,6 +91,9 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     return snap;
   }
 
+  /// The snapshot, scanned first when there is none yet.
+  Future<LibrarySnapshot> current() => _ensure();
+
   Future<LibraryPresence> getStatus(String filename) async {
     final snap = await _ensure();
     return snap.statusFor(filename);

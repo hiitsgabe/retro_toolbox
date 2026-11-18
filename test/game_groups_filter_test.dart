@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
+import 'package:retro_toolbox/services/game_groups.dart';
 
 import 'game_groups_support.dart';
 
@@ -53,15 +54,66 @@ void main() {
     expect(both.totalCount, 2);
   });
 
-  test('another filter passes a group when any of its versions passes', () {
-    final games = [psxGame('Game (USA) (Beta)'), psxGame('Game (Japan)')];
-    final r = _run(games, filter: _open.copyWith(romTypes: {'normal'}));
-    expect(r.games.single.title, 'Game (Japan).zip');
+  // The usual main version (USA) fails the filter; the group still shows, by
+  // the version that passes.
+  test('a group shows by any version that passes, even when the usual main one does not', () {
+    final r = _run([psxGame('Game (USA) (Debug)'), psxGame('Game (Japan)')], filter: _open.copyWith(modifications: {'none'}));
+    expect([for (final g in r.games) g.title], ['Game (Japan).zip']);
   });
 
   test('the search finds a game by any of its titles', () {
     final r = _run(psxGames(['Metal Gear Solid', 'Spyro the Dragon']), text: 'Premium Package');
     expect([for (final g in r.games) g.group!.title], ['Metal Gear Solid']);
+  });
+
+  // The search finds the group, it does not choose the version.
+  test('a search by another version or an extra still shows the main version', () {
+    final mgs = _run(psxGames(['Metal Gear Solid', 'Spyro the Dragon']), text: 'Premium Package');
+    expect(_entry(mgs, 'Metal Gear Solid').title, 'Metal Gear Solid (USA) (Disc 1) (Rev 1).zip');
+    final crash = _run(psxGames(['Crash Bandicoot - Warped', 'Metal Gear Solid', 'Tekken 3']), text: '(France) (Demo)');
+    expect([for (final g in crash.games) g.title], ['Tekken 3 (USA).zip']);
+  });
+
+  test('entries are sorted by name, not by catalog order', () {
+    final r = _run(psxGames(['Metal Gear Solid', 'Spyro the Dragon', 'Tekken 3']).reversed.toList());
+    expect([for (final g in r.games) g.group!.title], ['Metal Gear Solid', 'Spyro the Dragon', 'Tekken 3']);
+  });
+
+  // Europe before Japan and World before Japan, whatever the names' lengths say.
+  test('without a region filter, the default region order picks the main version', () {
+    final r = _run([psxGame('Euro (Japan)'), psxGame('Euro (Europe)'), psxGame('Wide (Japan)'), psxGame('Wide (World)')]);
+    expect([for (final g in r.games) g.title], ['Euro (Europe).zip', 'Wide (World).zip']);
+  });
+
+  test('a version the user has is the main version, before the region order', () {
+    final games = [psxGame('Game (USA)'), psxGame('Game (Europe)')];
+    String title({Set<String>? owned, CatalogFilter filter = _open}) => FilteringService.filterAndPaginate(FilterInput(
+            games: games, filterText: '', filter: filter, limit: 10, groupVersions: true, ownedGameIds: owned))
+        .games
+        .single
+        .title;
+    final europe = games[1].gameId;
+    expect(title(), 'Game (USA).zip');
+    expect(title(owned: {europe}), 'Game (Europe).zip');
+    expect(title(owned: {games[0].gameId, europe}), 'Game (USA).zip', reason: 'both owned: the region order breaks the tie');
+    expect(title(owned: {europe}, filter: _open.copyWith(regions: {'USA'})), 'Game (USA).zip', reason: 'the region filter still decides what shows');
+  });
+
+  test('a version is owned when any of its discs is', () {
+    final games = psxGames(['Metal Gear Solid']);
+    final eu = games.firstWhere((g) => g.title == 'Metal Gear Solid (Europe) (Disc 2).zip');
+    final r = FilteringService.filterAndPaginate(
+        FilterInput(games: games, filterText: '', filter: _open, limit: 10, groupVersions: true, ownedGameIds: {eu.gameId}));
+    expect(r.games.single.title, startsWith('Metal Gear Solid (Europe) (Disc 1)'));
+  });
+
+  test('groups built beforehand give the same entries as groups built in the run', () {
+    final games = psxAll();
+    final built = _run(games, filter: const CatalogFilter());
+    final given = FilteringService.filterAndPaginate(FilterInput(
+        games: games, filterText: '', filter: const CatalogFilter(), limit: 1000, groupVersions: true, groups: buildGameGroups(games)));
+    expect([for (final g in given.games) g.title], [for (final g in built.games) g.title]);
+    expect(given.totalCount, built.totalCount);
   });
 
   test('sorting, the count and the pages are of entries, not files', () {

@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,5 +92,47 @@ void main() {
     await container.read(settingsProvider.notifier).loaded;
     await container.read(catalogProvider.notifier).loadCatalog(sw);
     expect(container.read(catalogProvider).paginatedFilteredGames, hasLength(2));
+    expect(container.read(catalogProvider.notifier).groupsVersions, isFalse);
+  });
+
+  test('a version on disk is the entry, with no filter on, and the setting predicate is the notifier\'s', () async {
+    final dir = Directory.systemTemp.createTempSync('owned_version');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    File('${dir.path}/Game (Europe).chd').writeAsStringSync('x');
+    SharedPreferences.setMockInitialValues({});
+    const psx = Console(id: 'psx', name: 'PSX', urls: []);
+    final container = ProviderContainer(overrides: [
+      catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService([_g('Game (USA)'), _g('Game (Europe)')]))),
+    ]);
+    addTearDown(container.dispose);
+    final settings = container.read(settingsProvider.notifier);
+    await settings.loaded;
+    await settings.setSetting<String>(AppSettings.downloadDir, dir.path, 'psx');
+    final catalog = container.read(catalogProvider.notifier);
+    await catalog.loadCatalog(psx);
+    catalog.clearFilters();
+    await catalog.updateFilteredGames(immediate: true);
+    expect(catalog.groupsVersions, isTrue);
+    expect(container.read(catalogProvider).paginatedFilteredGames.single.title, 'Game (Europe)');
+  });
+
+  test('a version being downloaded is the entry too', () async {
+    SharedPreferences.setMockInitialValues({});
+    const psx = Console(id: 'psx', name: 'PSX', urls: []);
+    final eu = _g('Game (Europe)');
+    final container = ProviderContainer(overrides: [
+      catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService([_g('Game (USA)'), eu]))),
+    ]);
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.notifier).loaded;
+    final catalog = container.read(catalogProvider.notifier);
+    final manager = container.read(gameStateManagerProvider.notifier);
+    await catalog.loadCatalog(psx);
+    catalog.clearFilters();
+    await catalog.updateFilteredGames(immediate: true);
+    expect(container.read(catalogProvider).paginatedFilteredGames.single.title, 'Game (USA)');
+    manager.state = {...manager.state, eu.gameId: GameState(game: eu, status: GameStatus.downloading)};
+    await catalog.updateFilteredGames(immediate: true);
+    expect(container.read(catalogProvider).paginatedFilteredGames.single.title, 'Game (Europe)');
   });
 }

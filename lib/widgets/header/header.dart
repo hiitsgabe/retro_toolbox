@@ -7,7 +7,6 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
-import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
@@ -33,7 +32,7 @@ Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? conso
   final selected = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId));
   // A selected grouped game is its first disc here (the list is ungrouped):
   // its set comes along when grouping and "Download every disc" are on.
-  final grouped = consoleId != null && ref.read(settingsProvider.notifier).groupVersions(consoleId);
+  final grouped = consoleId != null && ref.read(catalogProvider.notifier).groupsVersions;
   final seen = <String>{};
   final selectedGames = [
     for (final game in selected)

@@ -3,11 +3,13 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
@@ -16,6 +18,7 @@ import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
+import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_platforms.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
@@ -33,6 +36,12 @@ final catalogProvider = StateNotifierProvider<CatalogNotifier, CatalogState>((re
   return CatalogNotifier(ref, catalogService);
 });
 
+/// Games being downloaded or extracted, put here by the game state manager
+/// (it listens to the catalog, so the catalog cannot read it). The next filter
+/// run reads it: a download starting does not re-list, which would drop the
+/// pages the user scrolled through.
+final inFlightGameIdsProvider = StateProvider<Set<String>>((ref) => const {});
+
 class CatalogNotifier extends StateNotifier<CatalogState> {
   final CatalogService catalogService;
   final Ref _ref;
@@ -47,6 +56,28 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   // Incremented per reapplyLaunchbox call: only the latest one writes, and a
   // load whose matching overlapped one matches again.
   int _launchboxGen = 0;
+
+  // The groups of state.games, built once per list (in an isolate) and kept
+  // until the list is replaced: grouping is the costly part of a filter run.
+  List<Game>? _groupsSource;
+  Future<List<GameGroup>>? _groups;
+
+  Future<List<GameGroup>> _groupsOf(List<Game> games) {
+    if (!identical(_groupsSource, games)) {
+      _groupsSource = games;
+      _groups = compute(buildGameGroups, games)..catchError((Object _) {
+        if (identical(_groupsSource, games)) _groupsSource = null;
+        return <GameGroup>[];
+      });
+    }
+    return _groups!;
+  }
+
+  /// Whether the list shows one entry per game: the setting is on and the
+  /// console lists files (a console read by a regex lists each game once
+  /// already). The one place that decides it.
+  bool get groupsVersions =>
+      _console?.regex == null && _ref.read(settingsProvider.notifier).groupVersions(state.games.firstOrNull?.consoleId);
 
   CatalogNotifier(this._ref, this.catalogService) : super(const CatalogState()) {
     _ref.listen<Favorites>(favoritesProvider, (previous, current) {
@@ -154,9 +185,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         availableGenres: _genresOf(enriched),
       );
       state = loaded.copyWith(filter: _offeredOnly(loaded));
-      _refocus(enriched);
 
       await updateFilteredGames(immediate: true);
+      _refocus(enriched);
 
       // The default filter (USA / normal / good-dump) hides whole catalogs like
       // homebrew or non-USA sets. If it emptied a catalog that actually has
@@ -214,16 +245,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (!mounted || launchboxGen != _launchboxGen || !identical(state.games, source)) return;
     final applied = state.copyWith(games: enriched, availableGenres: _genresOf(enriched));
     state = applied.copyWith(filter: _offeredOnly(applied));
-    _refocus(enriched);
     await updateFilteredGames(immediate: true);
+    _refocus(enriched);
   }
 
-  /// Points the focused game at its copy in [games]: the second screen shows
-  /// that object, and would keep the old LaunchBox data until focus moves.
+  /// Points the focused game at its copy in the list just filtered (so it
+  /// keeps its group), else in [games]: the second screen shows that object,
+  /// and would keep the old LaunchBox data until focus moves.
   void _refocus(List<Game> games) {
     final focused = _ref.read(focusedGameProvider);
     if (focused == null) return;
-    final fresh = games.where((g) => g.gameId == focused.gameId).firstOrNull;
+    final fresh = state.paginatedFilteredGames.where((g) => g.gameId == focused.gameId).firstOrNull ??
+        games.where((g) => g.gameId == focused.gameId).firstOrNull;
     if (fresh != null) _ref.read(focusedGameProvider.notifier).state = fresh;
   }
 
@@ -267,22 +300,54 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<FilterResult> _runFilterAndPaginate({required int skip, required int limit}) async {
     final favs = state.filter.showFavoritesOnly ? _ref.read(favoritesProvider).gameIds : null;
+    final grouped = groupsVersions;
+    final games = state.games;
+    // The library is read for the in-library filter, and to put a version the
+    // user has first among a game's.
     final lib = state.filter.showInLibraryOnly ? await getLibraryStatus() : null;
+    final groups = grouped ? await _groupsOf(games) : null;
+    final owned = grouped ? await _ownedIds(games) : null;
 
     return compute(
       FilteringService.filterAndPaginate,
       FilterInput(
-        games: state.games,
+        games: games,
         filterText: state.filterText,
         filter: state.filter,
         skip: skip,
         limit: limit,
         favoriteGameIds: favs,
         inLibraryStatus: lib,
-        // A console read by a regex lists each game once already.
-        groupVersions: _console?.regex == null && _ref.read(settingsProvider.notifier).groupVersions(state.games.firstOrNull?.consoleId),
+        groupVersions: grouped,
+        groups: groups,
+        ownedGameIds: owned,
       ),
     );
+  }
+
+  // state.games by file name without extension, for _ownedIds; per list, built
+  // in an isolate (the file names are the costly part).
+  List<Game>? _byBaseSource;
+  Future<Map<String, List<(String, String)>>>? _byBase;
+
+  /// The games the user has: on disk (downloaded or extracted) or in flight.
+  /// Walks the library, not the catalog, so a filter run stays cheap.
+  Future<Set<String>> _ownedIds(List<Game> games) async {
+    final owned = <String>{..._ref.read(inFlightGameIdsProvider)};
+    final dir = games.isEmpty ? '' : _ref.read(settingsProvider.notifier).getDownloadDir(games.first.consoleId);
+    if (dir.isEmpty) return owned;
+    final snap = await _ref.read(librarySnapshotProvider(dir).notifier).current();
+    if (!identical(_byBaseSource, games)) {
+      _byBaseSource = games;
+      _byBase = compute(_indexByBase, games);
+    }
+    final byBase = await _byBase!;
+    for (final base in snap.presentBaseNames()) {
+      for (final (gameId, filename) in byBase[base] ?? const <(String, String)>[]) {
+        if (snap.statusFor(filename) != LibraryPresence.none) owned.add(gameId);
+      }
+    }
+    return owned;
   }
 
   Future<void> loadMoreItems() async {
@@ -561,4 +626,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     _filterDebounce?.cancel();
     super.dispose();
   }
+}
+
+/// [games] as (gameId, filename) by file name without extension.
+Map<String, List<(String, String)>> _indexByBase(List<Game> games) {
+  final byBase = <String, List<(String, String)>>{};
+  for (final g in games) {
+    (byBase[p.basenameWithoutExtension(g.filename)] ??= []).add((g.gameId, g.filename));
+  }
+  return byBase;
 }

@@ -35,6 +35,9 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
   final toggled = <String>[];
 
   @override
+  bool get groupsVersions => false;
+
+  @override
   void toggleGameSelection(String gameId) {
     toggled.add(gameId);
     final sel = {...state.selectedGames};

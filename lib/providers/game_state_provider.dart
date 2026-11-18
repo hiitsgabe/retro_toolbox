@@ -34,6 +34,16 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
   final Ref _ref;
   final Map<String, bool> _resolving = {};
   
+  static bool _isInFlight(GameStatus s) => switch (s) {
+        GameStatus.downloadQueued ||
+        GameStatus.downloading ||
+        GameStatus.downloadPaused ||
+        GameStatus.extractionQueued ||
+        GameStatus.extracting =>
+          true,
+        _ => false,
+      };
+
   bool isResolving(String gameId) => _resolving[gameId] == true;
 
   GameStateManager(this._ref) : super({}) {
@@ -43,6 +53,17 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     _ref.listen(catalogProvider, (prev, next) {
       if (prev?.games != next.games) _initGames(next.games);
     });
+    // The catalog puts a game the user has first among its versions.
+    var inFlight = <String>{};
+    addListener((states) {
+      final now = {
+        for (final e in states.entries)
+          if (_isInFlight(e.value.status)) e.key,
+      };
+      if (setEquals(now, inFlight)) return;
+      inFlight = now;
+      _ref.read(inFlightGameIdsProvider.notifier).state = now;
+    }, fireImmediately: false);
   }
 
   void updateDownloadState(String gameId, TaskStatus? status, TaskProgressUpdate? progress, bool isCompleted, {String? error}) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -63,7 +64,12 @@ class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifi
 }
 
 class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier {
-  _FakeCatalog(super.state);
+  _FakeCatalog(super.state, {this.groups = true});
+  final bool groups;
+
+  @override
+  bool get groupsVersions => groups;
+
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -110,7 +116,7 @@ void main() {
       overrides: [
         settingsProvider.overrideWith((ref) => _FakeSettings(settings)),
         gameStateManagerProvider.overrideWith((ref) => _FakeGames(states)),
-        catalogProvider.overrideWith((ref) => _FakeCatalog(catalog)),
+        catalogProvider.overrideWith((ref) => _FakeCatalog(catalog, groups: settings.consoleSettings['psx']?.groupVersions ?? true)),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -244,14 +250,20 @@ void main() {
   });
 
   group('settings', () {
-    Future<_FakeSettings> pumpSetting(WidgetTester t, AppSettings s) async {
+    Future<_FakeSettings> pumpSetting(WidgetTester t, AppSettings s, {Console? console}) async {
       final fake = _FakeSettings(s);
       await t.pumpWidget(ProviderScope(
         overrides: [settingsProvider.overrideWith((ref) => fake)],
-        child: MaterialApp(home: Scaffold(body: const VersionGroupingSetting(console: null))),
+        child: MaterialApp(home: Scaffold(body: VersionGroupingSetting(console: console))),
       ));
       return fake;
     }
+
+    testWidgets('a console read by a regex has no grouping rows', (t) async {
+      await pumpSetting(t, const AppSettings(), console: const Console(id: 'psx', name: 'PSX', urls: [], regex: 'x'));
+      expect(find.text('Group versions'), findsNothing);
+      expect(find.text('Download every disc'), findsNothing);
+    });
 
     testWidgets('"Download every disc" shows only while grouping is on', (t) async {
       final fake = await pumpSetting(t, const AppSettings());
