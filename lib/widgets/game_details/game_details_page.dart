@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/game_update_model.dart';
@@ -7,6 +8,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
@@ -43,6 +45,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   /// gameStateProvider keeps an entry per Game it has seen, so a new Game on
   /// every rebuild would leave an entry behind each time.
   final _updateGames = <GameUpdate, Game>{};
+
+  /// The same for each version of a multi-disc game: its entry is a copy.
+  final _versionGames = <GameVersion, Game>{};
 
   /// The hero has scrolled away: the app bar gets a background and the title,
   /// or the sheet would scroll under a bare back button.
@@ -96,6 +101,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   @override
   Widget build(BuildContext context) {
     final game = widget.game;
+    final group = game.group;
     final gameState = ref.watch(gameStateProvider(game));
     final isFavorite = ref.watch(favoritesProvider).isFavorite(game.gameId);
     final isSelected = ref.watch(gameSelectionProvider(game.gameId));
@@ -145,6 +151,16 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
           ),
           discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
           sections: [
+            if (group != null && group.isBoxSet) ('Contents', GameContentsList(group: group)),
+            if (group != null && group.versions.length >= 2)
+              ('Versions', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (final v in group.versions)
+                  GameFileRow(game: _versionGames.putIfAbsent(v, () => v.entry), label: v.label, main: v.first.gameId == game.gameId),
+              ])),
+            if (group != null && group.extras.isNotEmpty)
+              ('Extras', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (final e in group.extras) GameFileRow(game: e, label: extraLabel(e)),
+              ])),
             if (game.updates.isNotEmpty)
               ('Updates', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 for (final u in game.updates) GameFileRow(game: _updateGames.putIfAbsent(u, () => u.toGame(game)), label: u.label),
@@ -226,6 +242,35 @@ class _DiscRow extends ConsumerWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+/// A box set's games, each opening its own page.
+class GameContentsList extends StatelessWidget {
+  const GameContentsList({super.key, required this.group});
+
+  final GameGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final member in group.members)
+          if (groupEntry(member, (_) => true) case final entry?)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Expanded(child: Text(memberLabel(group, member), style: const TextStyle(fontWeight: FontWeight.w600))),
+                FilledButton.tonalIcon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameDetailsPage(game: entry))),
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  label: const Text('Open'),
+                ),
+              ]),
+            ),
+      ],
     );
   }
 }
