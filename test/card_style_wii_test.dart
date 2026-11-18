@@ -132,6 +132,15 @@ void main() {
       expect(logo.colorFilter, const ColorFilter.mode(Colors.white, BlendMode.srcIn));
       expect(find.text('Tile 0'), findsNothing);
 
+      // The logo canvas is square with the ink on its middle band: it must be
+      // taller than the 16:9 art box so the ink fills most of the channel width.
+      final channel = t.getSize(find.byKey(const ValueKey('wii-channel')).first);
+      final artHeight = channel.height - 2 * 9; // 3 px border + 6 px inset
+      final size = t.getSize(find.byType(SvgPicture));
+      expect(size.width, size.height, reason: 'square canvas');
+      expect(size.height, greaterThan(artHeight));
+      expect(size.width, lessThanOrEqualTo(channel.width));
+
       expect(find.text('Tile 1'), findsOneWidget);
       expect(find.byIcon(Icons.star), findsNWidgets(5));
     });

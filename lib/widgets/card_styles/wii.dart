@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -187,10 +188,24 @@ class _MenuArt extends StatelessWidget {
                 _image(tile.bgAssetPath!, BoxFit.cover, null, const SizedBox()),
                 DecoratedBox(decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35))),
               ],
-              Padding(
-                padding: EdgeInsets.all(logo ? 10 : 8),
-                child: Center(child: _content(fg, logo)),
-              ),
+              if (logo)
+                // The logo's canvas is square with the ink on its middle band:
+                // size it from the width and let the empty canvas spill past
+                // the art box, the channel's clip trims it.
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final side = math.min(box.maxWidth * 0.86, box.maxHeight * 2.0);
+                    return OverflowBox(
+                      minWidth: side,
+                      maxWidth: side,
+                      minHeight: side,
+                      maxHeight: side,
+                      child: _content(fg, true),
+                    );
+                  },
+                )
+              else
+                Padding(padding: const EdgeInsets.all(8), child: Center(child: _content(fg, false))),
               _gloss(),
             ],
           ),
