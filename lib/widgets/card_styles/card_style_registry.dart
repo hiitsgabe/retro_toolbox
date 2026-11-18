@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:retro_toolbox/models/app_style.dart';
+import 'package:retro_toolbox/widgets/card_styles/three_ds.dart';
 import 'package:retro_toolbox/widgets/card_styles/vita.dart';
 import 'package:retro_toolbox/widgets/card_styles/wii.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
@@ -24,7 +25,7 @@ CardStyleKit? cardStyleKit(CardStyle style) {
   return switch (style) {
     CardStyle.classic => null,
     CardStyle.vita => vitaKit,
-    CardStyle.threeDs => null, // Task 7
+    CardStyle.threeDs => threeDsKit,
     CardStyle.wii => wiiKit(),
     CardStyle.switchStyle => null, // Task 9
   };
