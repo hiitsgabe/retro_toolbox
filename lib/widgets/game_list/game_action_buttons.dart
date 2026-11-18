@@ -52,8 +52,11 @@ Future<List<Game>> gamesToDownload(WidgetRef ref, Game game, {Iterable<Game>? ca
             if (wants(d)) d,
     ];
   }
+  // Discs on disk have their state only once something watches them: the
+  // disk set stands in for it.
+  final onDisk = all ? await ref.read(catalogProvider.notifier).ownedGameIds() : const <String>{};
   final states = ref.read(gameStateManagerProvider);
-  return discsToDownload(game, all: all, catalog: catalog, statusOf: (id) => states[id]?.status);
+  return discsToDownload(game, all: all, catalog: catalog, statusOf: (id) => onDisk.contains(id) ? GameStatus.extracted : states[id]?.status);
 }
 
 /// The one place a [GameAction] turns into a task-queue call; used by the row

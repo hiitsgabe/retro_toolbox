@@ -118,4 +118,11 @@ void main() {
     final out = await gamesToDownload(_Ref(c), box, catalog: foo);
     expect(out.map((g) => g.title), ['Foo Collection - Bar (Europe).zip', 'Foo Collection - Baz (Europe).zip']);
   });
+
+  test('a multi-disc game with a disc on disk gets only its other discs', () async {
+    final ff = psxGamesStartingWith('Final Fantasy VII (USA)');
+    final (c, shown) = await setUp(ff, ['Final Fantasy VII (USA) (Disc 2).zip']);
+    final out = await gamesToDownload(_Ref(c), shown.single, catalog: ff);
+    expect(out.map((g) => g.title), ['Final Fantasy VII (USA) (Disc 1).zip', 'Final Fantasy VII (USA) (Disc 3).zip']);
+  });
 }
