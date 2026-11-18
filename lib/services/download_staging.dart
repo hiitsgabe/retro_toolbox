@@ -3,9 +3,16 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-/// background_downloader stages every download in the app's private storage
+/// background_downloader stages a download in the app's private storage
 /// under this name plus a random int, and only moves it out on success.
 const downloaderTempPrefix = 'com.bbflight.background_downloader';
+
+/// With `Config.useDestinationDir` (our fork) the partial file sits next to
+/// its destination instead, as `.<file name>.<random int>.part`.
+final _destinationPartial = RegExp(r'^\..+\.\d+\.part$');
+
+/// Whether [name] is a downloader staging or partial file.
+bool isDownloaderTemp(String name) => name.startsWith(downloaderTempPrefix) || _destinationPartial.hasMatch(name);
 
 /// Deletes downloader staging files in [dirs] older than [minAge], returning
 /// the bytes freed. A crash or kill mid-download leaves the staging file
@@ -20,7 +27,7 @@ Future<int> sweepDownloaderTemps(Iterable<String> dirs, {DateTime? now, Duration
     final directory = Directory(dir);
     if (!await directory.exists()) continue;
     await for (final entity in directory.list(followLinks: false)) {
-      if (entity is! File || !p.basename(entity.path).startsWith(downloaderTempPrefix)) continue;
+      if (entity is! File || !isDownloaderTemp(p.basename(entity.path))) continue;
       try {
         final stat = await entity.stat();
         if (!stat.modified.isBefore(cutoff)) continue;

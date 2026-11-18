@@ -50,6 +50,30 @@ void main() {
       expect(near.existsSync(), isTrue);
     });
 
+    test('deletes old partial files written next to their destination', () async {
+      final part = make('.Crash Bandicoot (USA).chd.1234567.part', modified: now.subtract(const Duration(hours: 1)), bytes: 9);
+
+      final freed = await sweepDownloaderTemps([dir.path], now: now);
+
+      expect(part.existsSync(), isFalse);
+      expect(freed, 9);
+    });
+
+    test('never touches a user file that only looks like a partial', () async {
+      final keep = [
+        make('Crash Bandicoot (USA).chd.1234567.part', modified: now.subtract(const Duration(days: 30))),
+        make('.Crash Bandicoot (USA).chd.part', modified: now.subtract(const Duration(days: 30))),
+        make('.hidden.12a.part', modified: now.subtract(const Duration(days: 30))),
+        make('.Crash.1234567.partial', modified: now.subtract(const Duration(days: 30))),
+      ];
+
+      await sweepDownloaderTemps([dir.path], now: now);
+
+      for (final f in keep) {
+        expect(f.existsSync(), isTrue, reason: p.basename(f.path));
+      }
+    });
+
     test('a missing directory is skipped', () async {
       expect(await sweepDownloaderTemps([p.join(dir.path, 'nope')], now: now), 0);
     });

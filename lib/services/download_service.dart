@@ -11,6 +11,9 @@ class DownloadService {
       ],
       androidConfig: [
         (Config.useCacheDir, Config.never),
+        // Write the partial file in the destination folder, so a finished
+        // download is a rename instead of a copy out of internal storage
+        (Config.useDestinationDir, Config.always),
         (Config.runInForeground, Config.always),
       ],
     );

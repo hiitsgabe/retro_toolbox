@@ -74,7 +74,7 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
   }
 
   /// Frees the staging files crashed or killed downloads left in internal
-  /// storage (see [sweepDownloaderTemps]). Runs at startup and whenever the
+  /// storage or next to their destination (see [sweepDownloaderTemps]). Runs at startup and whenever the
   /// last download ends, and only while the downloader has no task at all.
   /// allTasks lists only unfinished work, and a paused task's work has
   /// finished, so the paused records are checked too: they own their file.
@@ -83,7 +83,11 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     try {
       if ((await FileDownloader().allTasks(allGroups: true)).isNotEmpty) return;
       if ((await FileDownloader().database.allRecordsWithStatus(TaskStatus.paused)).isNotEmpty) return;
-      final dirs = [(await getApplicationSupportDirectory()).path, (await getTemporaryDirectory()).path];
+      final dirs = {
+        (await getApplicationSupportDirectory()).path,
+        (await getTemporaryDirectory()).path,
+        ...await _consoleDownloadDirs(),
+      };
       final freed = await sweepDownloaderTemps(dirs);
       if (freed > 0) debugPrint('Freed $freed bytes of orphaned download staging files');
     } catch (e) {
@@ -116,21 +120,21 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     }
   }
 
+  /// Every console's download and updates folder, once each.
+  Future<Set<String>> _consoleDownloadDirs() async {
+    final settings = _ref.read(settingsProvider.notifier);
+    final consoles = await CatalogService().getConsoles();
+    return {
+      for (final consoleId in consoles.keys) ...[settings.getDownloadDir(consoleId), settings.updatesDir(consoleId)],
+    }..remove('');
+  }
+
   /// On startup, clean up after a decompression a crash/kill interrupted: drop
   /// the incomplete `.nsp` but keep the `.nsz`. Never auto-starts a retry — the
   /// user decides when to decompress again (from the game or the NSZ tool).
   Future<void> _cleanupInterruptedNsz() async {
     try {
-      final settings = _ref.read(settingsProvider.notifier);
-      final consoles = await CatalogService().getConsoles();
-      final scanned = <String>{};
-
-      final dirs = <String>[];
-      for (final consoleId in consoles.keys) {
-        dirs.addAll({settings.getDownloadDir(consoleId), settings.updatesDir(consoleId)});
-      }
-      for (final dir in dirs) {
-        if (dir.isEmpty || !scanned.add(dir)) continue;
+      for (final dir in await _consoleDownloadDirs()) {
         final directory = Directory(dir);
         if (!await directory.exists()) continue;
 

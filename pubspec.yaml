@@ -13,7 +13,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   path_provider: ^2.1.5
   file_picker: ^10.3.3
-  background_downloader: ^9.3.0
+  background_downloader:
+    git:
+      url: https://github.com/hiitsgabe/background_downloader.git
+      ref: direct-destination
   flutter_riverpod: ^2.6.1
   json_annotation: ^4.9.0
   path: ^1.9.1
