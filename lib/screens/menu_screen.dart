@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
@@ -120,12 +121,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
           if (Platform.isAndroid)
-            MenuTile(
-                label: 'Save Sync',
-                icon: Icons.sync,
-                accentColor: const Color(0xFF2E7D5B),
-                badge: 'ALPHA',
-                onTap: () => _push(const SaveSyncScreen())),
+            MenuTile(label: 'Save Sync', icon: Icons.sync, accentColor: const Color(0xFF2E7D5B), badge: 'ALPHA', onTap: () => _push(const SaveSyncScreen())),
           if (Handheld.current)
             MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
           if (Handheld.current)
@@ -189,19 +185,22 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset('assets/icon.png', height: 30),
-            const SizedBox(width: 10),
-            const Text('Retro Toolbox', style: TextStyle(fontWeight: FontWeight.w600)),
-          ],
+    return MenuBackdrop(
+      child: Scaffold(
+        backgroundColor: MenuBackdrop.scaffoldColor,
+        appBar: AppBar(
+          centerTitle: true,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset('assets/icon.png', height: 30),
+              const SizedBox(width: 10),
+              const Text('Retro Toolbox', style: TextStyle(fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
+        body: MenuGrid(tiles: tiles),
       ),
-      body: MenuGrid(tiles: tiles),
     );
   }
 }

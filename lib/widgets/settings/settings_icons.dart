@@ -29,6 +29,8 @@ class SettingsIcon extends StatelessWidget {
 /// The section and sheet icons, as SVG elements for [SettingsIcon].
 abstract final class SettingsIcons {
   static const library = '<path d="M4 5h4v14H4z"/><path d="M10 5h4v14h-4z"/><path d="M16.2 6.2l3.4-.9 3 12.6-3.4.9z"/>';
+  static const style =
+      '<path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-.9 2-1.8 0-1.2-1-1.4-1-2.5 0-1 .8-1.7 1.8-1.7H17a4 4 0 0 0 4-4C21 6.7 17 3 12 3z"/><path d="M7.5 11h.01"/><path d="M10 7.5h.01"/><path d="M14.5 7.5h.01"/>';
   static const downloads = '<path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 19h14"/>';
   static const consoles =
       '<rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 10.5v4"/><path d="M5 12.5h4"/><path d="M15.5 12h.01"/><path d="M18 14h.01"/>';

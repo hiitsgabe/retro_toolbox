@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -17,6 +20,8 @@ class ConsoleGridScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
+    // A card style other than Classic has its own layout: no view modes.
+    final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
 
     // Always the console list: a catalog loads (and can fail) on the games
     // screen, never here.
@@ -52,45 +57,48 @@ class ConsoleGridScreen extends ConsumerWidget {
       final tiles = [
         for (final console in appState.consolesList) _consoleTile(context, ref, console),
       ];
-      body = _viewFor(appState.consoleViewMode, tiles);
+      body = kit?.menuList(context, tiles, shrinkWrap: false, autofocusFirst: true) ?? _viewFor(appState.consoleViewMode, tiles);
     }
 
-    final showToggle = appState.consolesList.isNotEmpty;
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(96),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 16, 12, 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  tooltip: 'Back',
-                  onPressed: () => Navigator.maybePop(context),
-                ),
-                const Spacer(),
-                Text(
-                  'Games Library',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (showToggle)
+    final showToggle = appState.consolesList.isNotEmpty && kit == null;
+    return MenuBackdrop(
+      child: Scaffold(
+        backgroundColor: MenuBackdrop.scaffoldColor,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 16, 12, 8),
+              child: Row(
+                children: [
                   IconButton(
-                    icon: Icon(_viewIcon(appState.consoleViewMode)),
-                    tooltip: 'Change view',
-                    onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
-                  )
-                else
-                  const SizedBox(width: 48),
-              ],
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.maybePop(context),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Games Library',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  if (showToggle)
+                    IconButton(
+                      icon: Icon(_viewIcon(appState.consoleViewMode)),
+                      tooltip: 'Change view',
+                      onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
+                    )
+                  else
+                    const SizedBox(width: 48),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: body,
+        body: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: body,
+        ),
       ),
     );
   }
@@ -100,8 +108,7 @@ class ConsoleGridScreen extends ConsumerWidget {
       case ViewMode.coverflow:
         return CoverFlow(
           items: [
-            for (final t in tiles)
-              CoverFlowItem(face: MenuTileFace(tile: t, showLabel: false), label: t.label, onTap: t.onTap),
+            for (final t in tiles) CoverFlowItem(face: MenuTileFace(tile: t, showLabel: false), label: t.label, onTap: t.onTap),
           ],
         );
       case ViewMode.list:

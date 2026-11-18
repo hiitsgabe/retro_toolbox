@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/services/catalog_logins.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/key_files.dart';
@@ -32,6 +33,7 @@ import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 import 'package:retro_toolbox/widgets/settings/setting_rows.dart';
+import 'package:retro_toolbox/widgets/settings/style_setting.dart';
 import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
 import 'package:retro_toolbox/widgets/settings/updates_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
@@ -40,6 +42,7 @@ import 'package:retro_toolbox/widgets/settings/tools_setting.dart';
 /// The parts of Settings, in rail order. [icon]: SVG elements for SettingsIcon.
 enum SettingsSection {
   library('Library', 'Catalog, metadata, favorites', SettingsIcons.library),
+  style('Style', 'Background and cards', SettingsIcons.style),
   downloads('Downloads', 'Folder, extraction, discs', SettingsIcons.downloads),
   consoles('Consoles', 'Changes for one console', SettingsIcons.consoles),
   screens('Screens & controls', 'Dual screen, keyboard', SettingsIcons.screens),
@@ -129,6 +132,8 @@ List<Widget> settingsSectionRows(SettingsSection section, WidgetRef ref, {requir
           const FavoritesRows(),
         ],
       ];
+    case SettingsSection.style:
+      return const [StyleSettingRows()];
     case SettingsSection.downloads:
       if (!library) return const [];
       final extract = notifier.getGeneralSetting<bool>(AppSettings.autoExtract) ?? true;
@@ -288,6 +293,9 @@ String settingsSectionSummary(SettingsSection section, WidgetRef ref) {
       final lb = ref.watch(launchboxProvider.select((s) => s.manifest != null));
       final favorites = ref.watch(favoritesProvider.select((f) => f.count));
       return 'LaunchBox ${lb ? 'on' : 'off'}, ${_plural(favorites, 'favorite')}';
+    case SettingsSection.style:
+      final style = ref.watch(styleProvider);
+      return '${style.backdrop.kind.label}, ${style.cards.label} cards';
     case SettingsSection.downloads:
       final dir = notifier.getGeneralSetting<String>(AppSettings.downloadDir) ?? '';
       final extract = notifier.getGeneralSetting<bool>(AppSettings.autoExtract) ?? true;

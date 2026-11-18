@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
@@ -12,16 +13,13 @@ import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 class SportGamesGridScreen extends ConsumerWidget {
   final String? platform;
   final String? sport;
-  const SportGamesGridScreen({super.key, this.platform, this.sport})
-      : assert(platform != null || sport != null);
+  const SportGamesGridScreen({super.key, this.platform, this.sport}) : assert(platform != null || sport != null);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final patchers = ref.watch(patchersProvider);
     final byPlatform = platform != null;
-    final games = (patchers.valueOrNull ?? const <PatcherInfo>[])
-        .where((p) => byPlatform ? p.platform == platform : p.sport == sport)
-        .toList();
+    final games = (patchers.valueOrNull ?? const <PatcherInfo>[]).where((p) => byPlatform ? p.platform == platform : p.sport == sport).toList();
     final title = byPlatform ? platformLabel(platform!) : _cap(sport!);
     final tiles = [
       for (final info in games)
@@ -37,11 +35,12 @@ class SportGamesGridScreen extends ConsumerWidget {
           ),
         ),
     ];
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: tiles.isEmpty
-          ? const Center(child: Text('No games here.'))
-          : MenuGrid(tiles: tiles),
+    return MenuBackdrop(
+      child: Scaffold(
+        backgroundColor: MenuBackdrop.scaffoldColor,
+        appBar: AppBar(title: Text(title)),
+        body: tiles.isEmpty ? const Center(child: Text('No games here.')) : MenuGrid(tiles: tiles),
+      ),
     );
   }
 

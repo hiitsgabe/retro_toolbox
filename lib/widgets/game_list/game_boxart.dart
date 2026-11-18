@@ -90,11 +90,17 @@ class GameBoxart extends StatelessWidget {
   final double size;
   final Widget? placeholder;
 
+  /// For the card styles: the art fills its box with no frame of its own,
+  /// and [placeholder] also stands in while it loads and when it fails, so
+  /// a card never shows a smaller card inside it.
+  final bool fill;
+
   const GameBoxart({
     super.key,
     required this.game,
     this.size = 40,
     this.placeholder,
+    this.fill = false,
   });
 
   @override
@@ -103,6 +109,27 @@ class GameBoxart extends StatelessWidget {
 
     if (boxart == null) {
       return placeholder ?? _DefaultPlaceholder(size: size);
+    }
+
+    if (fill) {
+      final stand = placeholder ?? _DefaultPlaceholder(size: size);
+      return LayoutBuilder(
+        builder: (context, box) => CachedNetworkImage(
+          key: ValueKey('boxart_${game.gameId}'),
+          imageUrl: boxart,
+          width: box.hasBoundedWidth ? box.maxWidth : size,
+          height: box.hasBoundedHeight ? box.maxHeight : size,
+          memCacheWidth: thumbnailDecodeWidth(
+            box.hasBoundedWidth ? box.maxWidth : size,
+            box.hasBoundedHeight ? box.maxHeight : size,
+            MediaQuery.maybeDevicePixelRatioOf(context) ?? 1,
+          ),
+          fit: BoxFit.cover,
+          placeholder: (context, url) => stand,
+          errorWidget: (context, url, error) => stand,
+          errorListener: (value) => debugPrint('Error loading boxart: $value'),
+        ),
+      );
     }
 
     return Container(
