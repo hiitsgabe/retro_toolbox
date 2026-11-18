@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// Reusable grid page: an app bar title plus a [MenuGrid]. Used for the static
@@ -11,9 +12,12 @@ class MenuGridScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: MenuGrid(tiles: tiles),
+    return MenuBackdrop(
+      child: Scaffold(
+        backgroundColor: MenuBackdrop.scaffoldColor,
+        appBar: AppBar(title: Text(title)),
+        body: MenuGrid(tiles: tiles),
+      ),
     );
   }
 }
