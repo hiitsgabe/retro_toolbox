@@ -96,6 +96,39 @@ void main() {
     expect(Directory(p.join(odin.saves, 'Farm_1')).statSync().mode & 0x1FF, 0x1FF);
   });
 
+  // A save that grew a subfolder on one device (an emulator's per-game album)
+  // lands on a device whose copy never had it: the folder has to be made.
+  test('a unit file in a subfolder this device lacks gets its folder', () async {
+    final nested = Recipe.parse({
+      'schema': 1,
+      'id': 'stardew-valley',
+      'name': 'Nested',
+      'status': 'draft',
+      'packages': [stardewPkg],
+      'locations': [
+        {'area': 'androidData', 'root': 'files/Saves'},
+      ],
+      'unit': 'folder',
+      'include': ['*/**'],
+    });
+    thor.writeFarm('Farm_1', 'day 5');
+    File(p.join(thor.saves, 'Farm_1', 'album', 'shot.jpg'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('picture');
+    final unit = (await UnitScanner(thor.fsFor(nested)).scan(nested, thor.saves))['Farm_1']!;
+    final gen = await Pusher(fs: thor.fsFor(nested), hub: hub, stagingRoot: p.join(thor.paths.saveSync, '.staging'), deviceId: 'thor-7f3a', deviceName: 'AYN Thor')
+        .push(recipe: nested, binding: binding, locationDir: thor.saves, unit: unit, parents: const []);
+
+    odin.writeFarm('Farm_1', 'day 3');
+    final expected = (await UnitScanner(odin.fsFor(nested)).scan(nested, odin.saves))['Farm_1']!.hashes;
+    await Puller(fs: odin.fsFor(nested), hub: hub, history: LocalHistory(p.join(odin.paths.saveSync, 'history'), odin.fsFor(nested)), stagingRoot: p.join(odin.paths.saveSync, '.staging'))
+        .pull(recipe: nested, binding: binding, locationDir: odin.saves, unitKey: 'Farm_1', gen: gen, expectedLocal: expected);
+
+    expect(odin.farm('Farm_1'), contains('day 5'));
+    expect(File(p.join(odin.saves, 'Farm_1', 'album', 'shot.jpg')).readAsStringSync(), 'picture');
+    expect(Directory(p.join(odin.saves, 'Farm_1', 'album')).statSync().mode & 0x1FF, 0x1FF);
+  });
+
   test('refusals change nothing: older game, running game, missing save folder, local edited since the check', () async {
     final gen = await pushFromThor('Farm_1', 'day 5');
     odin.writeFarm('Farm_1', 'day 3');

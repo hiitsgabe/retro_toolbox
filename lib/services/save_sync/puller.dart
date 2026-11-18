@@ -106,6 +106,13 @@ class Puller {
         }
         for (final rel in gen.files.keys.toList()..sort()) {
           final target = p.posix.join(locationDir, rel);
+          // A subfolder the save grew elsewhere (an emulator's per-game album)
+          // may not exist here yet; the copy needs it first.
+          var dir = locationDir;
+          for (final seg in p.posix.split(p.posix.dirname(rel)).where((s) => s != '.')) {
+            dir = p.posix.join(dir, seg);
+            if (!await fs.isDir(dir)) await fs.makeGameDir(dir);
+          }
           final had = before[rel];
           // Registered first: a reply lost after the command ran must still be undone.
           undo.add(had != null ? () => fs.replace(p.join(entry, rel), target, had) : () => fs.remove(target));
