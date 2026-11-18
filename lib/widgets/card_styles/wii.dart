@@ -251,7 +251,7 @@ class _GameArt extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // The art fills the channel (cover, the overflow cropped).
-              SizedBox.expand(child: GameBoxart(game: game, placeholder: placeholder)),
+              SizedBox.expand(child: GameBoxart(game: game, fill: true, placeholder: placeholder)),
               _gloss(),
               Positioned(top: 4, left: 4, child: badges),
             ],

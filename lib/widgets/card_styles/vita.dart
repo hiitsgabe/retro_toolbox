@@ -508,7 +508,7 @@ Widget _gameFace(BuildContext context, Game game, GameState state, bool selected
   final d = _VitaMetrics.of(context).bubble;
   return _Bubble(
     focused: focused,
-    art: GameBoxart(game: game, size: d, placeholder: _Placeholder(game: game)),
+    art: GameBoxart(game: game, size: d, fill: true, placeholder: _Placeholder(game: game)),
     corner: GameStateBadges(state: state, selected: selected, size: (d * 0.2).clamp(18.0, 28.0)),
   );
 }
