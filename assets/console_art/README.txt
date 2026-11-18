@@ -11,5 +11,15 @@ Art credits / licenses (non-commercial use):
   Anthony Caccese, licensed CC-BY-NC-SA
   (https://creativecommons.org/licenses/by-nc-sa/2.0/).
 - ps4/switch2 logos: official marks vectorized on Wikimedia Commons.
+- xbox360 wordmark ("X Box 360 logo.svg") and the Xbox sphere ("Xbox one
+  logo.svg"): Wikimedia Commons, public domain.
+
+All logos are drawn in one color by the app (white on the brand tile), so each
+file was edited for that: backing boxes, (R) and TM marks and small taglines
+removed, the PS2/PS3/PS4/PSP family given the same stroke weight and no PS
+symbol, and the Xbox sphere added to both Xbox logos. Every file is cropped to
+a square canvas sized so the logos read the same size (same area, at most the
+full width and 45% of the height; Wii/Wii U, Game Boy, DS, PlayStation and
+Xbox families share one letter height). A new logo needs the same treatment.
 These are third-party trademarked marks bundled for personal use; review before
 any commercial distribution.

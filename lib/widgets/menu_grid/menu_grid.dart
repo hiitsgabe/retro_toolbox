@@ -27,6 +27,11 @@ class MenuTile {
 
   /// Optional corner badge (e.g. "ALPHA").
   final String? badge;
+
+  /// [assetPath] is a brand logo (a console's): drawn in one color, white on
+  /// the accent, and standing in for [label], which shows only when the logo
+  /// is missing. The bundled logos share one canvas so they read the same size.
+  final bool brandLogo;
   final VoidCallback onTap;
 
   const MenuTile({
@@ -38,6 +43,7 @@ class MenuTile {
     this.accentColor,
     this.subtitle,
     this.badge,
+    this.brandLogo = false,
   });
 
   static void _noop() {}
@@ -147,9 +153,13 @@ class MenuTileFace extends StatelessWidget {
   /// Light-on-dark content (accent gradient or bg image present).
   bool get _light => _hasBg || tile.accentColor != null;
 
+  /// A brand logo is on screen, so the label is redundant.
+  bool get _logoOnly => tile.brandLogo && _loadable(tile.assetPath);
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final showLabel = this.showLabel && !_logoOnly;
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: Container(
@@ -293,7 +303,11 @@ class MenuTileFace extends StatelessWidget {
   Widget _tileImage(ColorScheme scheme) {
     final path = tile.assetPath;
     if (path != null && _loadable(path)) {
-      return _image(path, fit: BoxFit.contain, fallback: _fallbackIcon(scheme, 56));
+      final tint = tile.brandLogo ? ColorFilter.mode(_light ? Colors.white : scheme.onSurface, BlendMode.srcIn) : null;
+      final image = _image(path, fit: BoxFit.contain, tint: tint, fallback: _fallbackIcon(scheme, 56));
+      // The bundled logos share one square canvas, so filling the box is what
+      // makes them read the same size; their own width/height are arbitrary.
+      return tile.brandLogo ? SizedBox.expand(child: image) : image;
     }
     return _fallbackIcon(scheme, 56);
   }
@@ -303,12 +317,12 @@ class MenuTileFace extends StatelessWidget {
   bool _loadable(String? path) =>
       path != null && (path.startsWith('assets/') || File(path).existsSync());
 
-  Widget _image(String path, {double? width, double? height, BoxFit? fit, required Widget fallback}) {
+  Widget _image(String path, {double? width, double? height, BoxFit? fit, ColorFilter? tint, required Widget fallback}) {
     final isAsset = path.startsWith('assets/');
     if (path.toLowerCase().endsWith('.svg')) {
       return isAsset
-          ? SvgPicture.asset(path, width: width, height: height, fit: fit ?? BoxFit.contain)
-          : SvgPicture.file(File(path), width: width, height: height, fit: fit ?? BoxFit.contain);
+          ? SvgPicture.asset(path, width: width, height: height, fit: fit ?? BoxFit.contain, colorFilter: tint)
+          : SvgPicture.file(File(path), width: width, height: height, fit: fit ?? BoxFit.contain, colorFilter: tint);
     }
     return isAsset
         ? Image.asset(path, width: width, height: height, fit: fit, errorBuilder: (_, __, ___) => fallback)

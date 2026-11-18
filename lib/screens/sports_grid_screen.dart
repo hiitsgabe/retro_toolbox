@@ -81,6 +81,7 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
           icon: Icons.videogame_asset,
           assetPath: platformLogoAsset(platform),
           accentColor: platformBrandColor(platform),
+          brandLogo: true,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => SportGamesGridScreen(platform: platform)),
           ),

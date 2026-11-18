@@ -144,6 +144,7 @@ class ConsoleGridScreen extends ConsumerWidget {
       icon: Icons.videogame_asset,
       assetPath: consoleLogoAsset(console),
       accentColor: consoleBrandColor(console),
+      brandLogo: true,
       onTap: () {
         appStateNotifier.selectConsole(console);
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HomeScreen()));

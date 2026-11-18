@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
@@ -103,5 +104,60 @@ void main() {
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     await tester.pumpAndSettle();
     expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.05);
+  });
+
+  group('brand logo tiles', () {
+    Future<void> pumpFace(WidgetTester tester, MenuTile tile) => tester.pumpWidget(
+          MaterialApp(home: Scaffold(body: SizedBox(width: 180, height: 180, child: MenuTileFace(tile: tile)))),
+        );
+
+    ColorFilter? filterOf(WidgetTester tester) => tester.widget<SvgPicture>(find.byType(SvgPicture)).colorFilter;
+
+    testWidgets('a console logo drops the label and is drawn white on the accent', (tester) async {
+      await pumpFace(
+        tester,
+        const MenuTile(label: 'Nintendo Wii', icon: Icons.videogame_asset, assetPath: 'assets/console_art/wii_logo.svg', accentColor: Colors.blue, brandLogo: true),
+      );
+
+      expect(find.text('Nintendo Wii'), findsNothing);
+      expect(filterOf(tester), const ColorFilter.mode(Colors.white, BlendMode.srcIn));
+    });
+
+    testWidgets('a console logo fills its box even when the SVG declares a smaller size', (tester) async {
+      // xbox360_logo.svg declares 123 x 123, under the box: (180 less the 1 px
+      // border and 18 px padding a side) = 142.
+      await pumpFace(
+        tester,
+        const MenuTile(label: 'Xbox 360', icon: Icons.videogame_asset, assetPath: 'assets/console_art/xbox360_logo.svg', accentColor: Colors.green, brandLogo: true),
+      );
+
+      expect(tester.getSize(find.byType(SvgPicture)), const Size(142, 142));
+    });
+
+    testWidgets('without an accent the logo takes the text color', (tester) async {
+      await pumpFace(
+        tester,
+        const MenuTile(label: 'Nintendo Wii', icon: Icons.videogame_asset, assetPath: 'assets/console_art/wii_logo.svg', brandLogo: true),
+      );
+
+      final onSurface = Theme.of(tester.element(find.byType(MenuTileFace))).colorScheme.onSurface;
+      expect(filterOf(tester), ColorFilter.mode(onSurface, BlendMode.srcIn));
+    });
+
+    testWidgets('a console with no bundled logo keeps its name under the icon', (tester) async {
+      await pumpFace(tester, const MenuTile(label: 'Odyssey 2', icon: Icons.videogame_asset, accentColor: Colors.blue, brandLogo: true));
+
+      expect(find.text('Odyssey 2'), findsOneWidget);
+    });
+
+    testWidgets('other tiles keep their label and their own colors', (tester) async {
+      await pumpFace(
+        tester,
+        const MenuTile(label: 'Sports', icon: Icons.sports, assetPath: 'assets/console_art/wii_logo.svg', accentColor: Colors.blue),
+      );
+
+      expect(find.text('Sports'), findsOneWidget);
+      expect(filterOf(tester), isNull);
+    });
   });
 }
