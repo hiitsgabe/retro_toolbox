@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -17,16 +18,30 @@ Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState 
 @visibleForTesting
 Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId)? debugStartGameDownloads;
 
-/// What Download on [game] queues: a grouped multi-disc game's other discs
-/// too when Settings says so (see [discsToDownload]). [catalog]: the
-/// console's games, to find the set of a [game] that does not carry it.
+/// What Download on [game] queues: for a box set, every game in it in its
+/// main version (the one the user has, else by region), skipping what is
+/// already queued or done; a multi-disc version's other discs too when
+/// Settings says so (see [discsToDownload]). [catalog]: the console's games,
+/// to find the set of a [game] that does not carry it.
 List<Game> gamesToDownload(WidgetRef ref, Game game, {Iterable<Game>? catalog}) {
   final states = ref.read(gameStateManagerProvider);
+  GameStatus? statusOf(String id) => states[id]?.status;
+  final group = game.group;
+  if (group != null && group.isBoxSet) {
+    final all = ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId);
+    bool owned(Game g) => !wantsDownload(statusOf(g.gameId));
+    return [
+      for (final member in group.members)
+        if (pickMainVersion(member.versions, defaultRegionOrder, owned: (v) => v.discs.any(owned)) case final v?)
+          for (final d in discsToDownload(v.entry, all: all, statusOf: statusOf))
+            if (wantsDownload(statusOf(d.gameId))) d,
+    ];
+  }
   return discsToDownload(
     game,
     all: ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId),
     catalog: catalog,
-    statusOf: (id) => states[id]?.status,
+    statusOf: statusOf,
   );
 }
 

@@ -71,11 +71,12 @@ List<Game> discsToDownload(Game game, {required bool all, Iterable<Game>? catalo
   if (set.length < 2) return [game];
   return [
     for (final d in set)
-      if (d.gameId == game.gameId || _wantsDownload(statusOf?.call(d.gameId))) d,
+      if (d.gameId == game.gameId || wantsDownload(statusOf?.call(d.gameId))) d,
   ];
 }
 
-bool _wantsDownload(GameStatus? status) => switch (status) {
+/// Whether a game in [status] still needs downloading: not queued, running or done.
+bool wantsDownload(GameStatus? status) => switch (status) {
       null || GameStatus.init || GameStatus.loading || GameStatus.ready || GameStatus.downloadFailed || GameStatus.error => true,
       _ => false,
     };

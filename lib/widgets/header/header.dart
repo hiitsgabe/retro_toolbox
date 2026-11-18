@@ -30,13 +30,20 @@ bool canDownloadSelected(WidgetRef ref) =>
 Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? consoleId) async {
   final catalogState = ref.read(catalogProvider);
   final selected = catalogState.games.where((game) => catalogState.selectedGames.contains(game.gameId));
-  // A selected grouped game is its first disc here (the list is ungrouped):
-  // its set comes along when grouping and "Download every disc" are on.
+  // What the list shows for a selected game: its entry carries the game (a
+  // box set's other games, a version's other discs). The entry can be another
+  // version than the one selected (a region change or a re-pick since), so it
+  // is found by any file of its group.
   final grouped = consoleId != null && ref.read(catalogProvider.notifier).groupsVersions;
+  final shown = {
+    if (grouped)
+      for (final entry in catalogState.paginatedFilteredGames)
+        for (final id in [entry.gameId, ...?entry.group?.files.map((f) => f.gameId)]) id: entry,
+  };
   final seen = <String>{};
   final selectedGames = [
     for (final game in selected)
-      for (final g in grouped ? gamesToDownload(ref, game, catalog: catalogState.games) : [game])
+      for (final g in grouped ? gamesToDownload(ref, shown[game.gameId] ?? game, catalog: catalogState.games) : [game])
         if (seen.add(g.gameId)) g,
   ];
   final n = selectedGames.length;

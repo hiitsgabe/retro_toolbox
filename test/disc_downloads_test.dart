@@ -12,12 +12,15 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/settings/version_grouping_setting.dart';
+
+import 'game_groups_support.dart';
 
 /// Real resolution (console, then general) over an in-memory [AppSettings].
 class _FakeSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
@@ -195,6 +198,79 @@ void main() {
       await t.tap(find.widgetWithText(FilledButton, 'Download'));
       await t.pumpAndSettle();
       expect(_titles(started.single), _titles([_other, _d1]));
+    });
+  });
+
+  group('box sets', () {
+    final files = psxGamesStartingWith('Arc the Lad Collection - ');
+    final box = groupEntry(buildGameGroups(files).single, (_) => true)!;
+    const arc = [
+      'Arc the Lad Collection - Arc Arena - Monster Tournament (USA).zip',
+      'Arc the Lad Collection - Arc the Lad (USA).zip',
+      'Arc the Lad Collection - Arc the Lad II (USA).zip',
+      'Arc the Lad Collection - Arc the Lad III (USA) (Disc 1).zip',
+      'Arc the Lad Collection - Arc the Lad III (USA) (Disc 2).zip',
+      'Arc the Lad Collection - The Making of Arc the Lad (USA).zip',
+    ];
+    Game file(String title) => files.firstWhere((g) => g.title == title);
+
+    testWidgets('Download gets every game in the box, in its main version with all its discs', (t) async {
+      await pumpRef(t, _settings(), (ref, context) => runGameAction(ref, context, box, GameState(game: box, status: GameStatus.ready), GameAction.download));
+      expect(_titles(started.single), arc);
+    });
+
+    testWidgets('games of the box the user already has are not downloaded again', (t) async {
+      final states = {
+        for (final title in [arc[1], arc[3]]) file(title).gameId: GameState(game: file(title), status: GameStatus.extracted),
+      };
+      await pumpRef(t, _settings(), (ref, context) => runGameAction(ref, context, box, GameState(game: box, status: GameStatus.ready), GameAction.download),
+          states: states);
+      // Arc the Lad is whole; Arc the Lad III has disc 1, so only disc 2 is left.
+      expect(_titles(started.single), [arc[0], arc[2], arc[4], arc[5]]);
+    });
+
+    testWidgets('a game of the box the user has in another region follows that version', (t) async {
+      final names = [
+        'Foo Collection - Bar (USA)',
+        'Foo Collection - Bar (Europe)',
+        'Foo Collection - Baz (USA)',
+        'Foo Collection - Baz (Europe)',
+      ];
+      final foo = [for (final n in names) psxGame(n)];
+      final group = buildGameGroups(foo).single;
+      final entry = groupEntry(group, (_) => true)!;
+      final europeBar = foo[1];
+      await pumpRef(
+        t,
+        _settings(),
+        (ref, context) => runGameAction(ref, context, entry, GameState(game: entry, status: GameStatus.ready), GameAction.download),
+        states: {europeBar.gameId: GameState(game: europeBar, status: GameStatus.downloaded)},
+      );
+      // Bar is whole in Europe: no second copy. Baz has none: its main version.
+      expect(_titles(started.single), [foo[2].title]);
+    });
+
+    testWidgets('Download Selected on a box counts all of it', (t) async {
+      final catalog = CatalogState(games: files, selectedGames: {box.gameId}, cachedFilteredGames: [box]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      expect(find.text('Download 6 games?'), findsOneWidget);
+      await t.tap(find.widgetWithText(FilledButton, 'Download'));
+      await t.pumpAndSettle();
+      expect(_titles(started.single), arc);
+    });
+
+    testWidgets('Download Selected downloads the version the list shows now, not the one that was selected', (t) async {
+      final ff = psxGamesStartingWith('Final Fantasy VII (');
+      final group = buildGameGroups(ff).single;
+      final before = groupEntry(group, (_) => true)!;
+      final spain = ff.where((g) => g.title.contains('(Spain)') && g.title.contains('(Rev 1)')).toList();
+      final after = groupEntry(group, (_) => true, owned: (g) => g.gameId == spain.first.gameId)!;
+      expect(after.gameId, isNot(before.gameId)); // the premise: a re-pick changed the entry
+      final catalog = CatalogState(games: ff, selectedGames: {before.gameId}, cachedFilteredGames: [after]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      await t.tap(find.widgetWithText(FilledButton, 'Download'));
+      await t.pumpAndSettle();
+      expect(_titles(started.single), _titles(spain));
     });
   });
 
