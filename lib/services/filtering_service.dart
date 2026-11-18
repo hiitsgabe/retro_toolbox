@@ -19,16 +19,9 @@ class FilteringService {
 
     List<Game> allMatched;
     if (input.groupVersions) {
-      // A game shows when one of its versions passes; the region filter's
-      // order (else the default) picks which one is the entry.
-      final regions = filter.regions.isEmpty ? defaultRegionOrder : filter.regions.toList();
-      final owned = input.ownedGameIds;
       allMatched = [
         for (final group in input.groups ?? buildGameGroups(games))
-          if (groupEntry(group, (g) => _matchesFilter(g, input, checkText: false),
-                  text: input.filterText, regions: regions, owned: owned == null ? null : (g) => owned.contains(g.gameId))
-              case final entry?)
-            entry,
+          if (entryFor(group, input) case final entry?) entry,
       ];
     } else {
       allMatched = [
@@ -61,6 +54,17 @@ class FilteringService {
       totalCount: allMatched.length,
       hasMore: skip + limit < allMatched.length,
     );
+  }
+
+  /// The list's entry for [group] under [input]'s filter, text and owned
+  /// games: a game shows when one of its versions passes; the region filter's
+  /// order (else the default) picks which one, the owned one first. Null when
+  /// nothing passes.
+  static Game? entryFor(GameGroup group, FilterInput input) {
+    final regions = input.filter.regions.isEmpty ? defaultRegionOrder : input.filter.regions.toList();
+    final owned = input.ownedGameIds;
+    return groupEntry(group, (g) => _matchesFilter(g, input, checkText: false),
+        text: input.filterText, regions: regions, owned: owned == null ? null : (g) => owned.contains(g.gameId));
   }
 
   /// The value [sort] orders by, largest first (null: a game lacks it), or

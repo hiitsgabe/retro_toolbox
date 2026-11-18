@@ -38,7 +38,7 @@ final _parsed = <String, (String, List<String>)>{};
   final m = _trailingTags.firstMatch(n);
   return _parsed[g.title] = (
     (m == null ? n : m.group(1)!).trim(),
-    m == null ? const <String>[] : [for (final t in _tag.allMatches(m.group(2)!)) t.group(1)!.trim()],
+    m == null ? const <String>[] : List.unmodifiable([for (final t in _tag.allMatches(m.group(2)!)) t.group(1)!.trim()]),
   );
 }
 

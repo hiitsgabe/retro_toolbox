@@ -178,8 +178,6 @@ void main() {
       ),
     ));
     await t.runAsync(() => catalog.loadCatalog(_console));
-    // The first run reads the download folder (real IO); later ones reuse it.
-    await t.runAsync(() => catalog.updateFilteredGames(immediate: true));
     await t.pumpAndSettle();
 
     // The jumps filter in an isolate: wait for what they do, not a fixed time.

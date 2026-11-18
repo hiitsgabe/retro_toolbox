@@ -111,12 +111,13 @@ void main() {
     Future<void> Function(WidgetRef ref, BuildContext context) onPress, {
     Map<String, GameState> states = const {},
     CatalogState catalog = const CatalogState(),
+    bool? groups,
   }) async {
     await t.pumpWidget(ProviderScope(
       overrides: [
         settingsProvider.overrideWith((ref) => _FakeSettings(settings)),
         gameStateManagerProvider.overrideWith((ref) => _FakeGames(states)),
-        catalogProvider.overrideWith((ref) => _FakeCatalog(catalog, groups: settings.consoleSettings['psx']?.groupVersions ?? true)),
+        catalogProvider.overrideWith((ref) => _FakeCatalog(catalog, groups: groups ?? settings.consoleSettings['psx']?.groupVersions ?? true)),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -169,6 +170,16 @@ void main() {
       await t.tap(find.widgetWithText(FilledButton, 'Download'));
       await t.pumpAndSettle();
       expect(_titles(started.single), _titles([_other, _d1, _d2, _d3]));
+    });
+
+    // The setting says group; the catalog says this console does not (a regex
+    // console): the catalog decides.
+    testWidgets('the catalog predicate decides, not the setting', (t) async {
+      await pumpRef(t, _settings(group: true), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog, groups: false);
+      expect(find.text('Download 2 games?'), findsOneWidget);
+      await t.tap(find.widgetWithText(FilledButton, 'Download'));
+      await t.pumpAndSettle();
+      expect(_titles(started.single), _titles([_other, _d1]));
     });
 
     testWidgets('with grouping off, only what was selected', (t) async {

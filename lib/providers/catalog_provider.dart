@@ -62,16 +62,29 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   List<Game>? _groupsSource;
   Future<List<GameGroup>>? _groups;
 
+  /// How many times the groups were built (a test reads it).
+  @visibleForTesting
+  int debugGroupBuilds = 0;
+
   Future<List<GameGroup>> _groupsOf(List<Game> games) {
     if (!identical(_groupsSource, games)) {
       _groupsSource = games;
-      _groups = compute(buildGameGroups, games)..catchError((Object _) {
+      debugGroupBuilds++;
+      final built = compute(buildGameGroups, games);
+      // A failed build is not kept: the next run builds again (the caller of
+      // this run gets the error).
+      built.then((_) {}, onError: (Object _) {
         if (identical(_groupsSource, games)) _groupsSource = null;
-        return <GameGroup>[];
       });
+      _groups = built;
     }
     return _groups!;
   }
+
+  // The owned games the shown list was filtered with. Pages and letter jumps
+  // reuse it, so one list never mixes two answers (a game twice, or missing);
+  // a new first page or a re-pick replaces it.
+  Set<String> _listOwned = const {};
 
   /// Whether the list shows one entry per game: the setting is on and the
   /// console lists files (a console read by a regex lists each game once
@@ -86,6 +99,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       }
     });
     // Grouping is a setting, per console or general: the list follows it.
+    // A download starting or ending changes which version a game shows.
+    _ref.listen<Set<String>>(inFlightGameIdsProvider, (_, __) => _repickShown());
     _ref.listen<Map<String, dynamic>>(settingWatcherProvider(AppSettings.groupVersions), (previous, current) {
       if (!mapEquals(previous, current)) updateFilteredGames(immediate: true);
     });
@@ -174,7 +189,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       final settingsNotifier = _ref.read(settingsProvider.notifier);
       final downloadDir = settingsNotifier.getDownloadDir(console.id);
       _ref.listen(librarySnapshotProvider(downloadDir), (_, __) {
-        if (state.filter.showInLibraryOnly) updateFilteredGames();
+        if (state.filter.showInLibraryOnly) {
+          updateFilteredGames();
+        } else {
+          _repickShown();
+        }
       });
 
       final loaded = state.copyWith(
@@ -298,7 +317,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     return result;
   }
 
-  Future<FilterResult> _runFilterAndPaginate({required int skip, required int limit}) async {
+  Future<FilterResult> _runFilterAndPaginate({required int skip, required int limit, bool reuseOwned = false}) async {
     final favs = state.filter.showFavoritesOnly ? _ref.read(favoritesProvider).gameIds : null;
     final grouped = groupsVersions;
     final games = state.games;
@@ -306,7 +325,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     // user has first among a game's.
     final lib = state.filter.showInLibraryOnly ? await getLibraryStatus() : null;
     final groups = grouped ? await _groupsOf(games) : null;
-    final owned = grouped ? await _ownedIds(games) : null;
+    final owned = grouped ? (skip > 0 || reuseOwned ? _listOwned : (_listOwned = await _ownedIds(games))) : null;
 
     return compute(
       FilteringService.filterAndPaginate,
@@ -323,6 +342,52 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         ownedGameIds: owned,
       ),
     );
+  }
+
+  /// The shown entries again after the owned games changed: a game whose
+  /// owned version is not the one shown switches to it, in place (order and
+  /// pages stay, only the entries whose game id changes are replaced).
+  Future<void> _repickShown() async {
+    try {
+      await _repick();
+    } catch (e) {
+      // Not worth more than the old entries: the next filter run sets them.
+      debugPrint('Error re-picking shown games: $e');
+    }
+  }
+
+  Future<void> _repick() async {
+    // With the in-library filter on, the list is filtered again instead.
+    final games = state.games, shown = state.paginatedFilteredGames;
+    if (shown.isEmpty || state.filter.showInLibraryOnly || !groupsVersions) return;
+    final owned = await _ownedIds(games);
+    if (!mounted || !identical(state.games, games) || !identical(state.paginatedFilteredGames, shown)) return;
+    // Under a sort by something the version changes (size, rating), the next
+    // pages keep the owned set the first page was ordered by: ordered by the
+    // new one, a game would show twice and another not at all.
+    if (state.filter.sort == CatalogSort.name) _listOwned = owned;
+    final input = FilterInput(
+      games: games,
+      filterText: state.filterText,
+      filter: state.filter,
+      limit: 0,
+      favoriteGameIds: state.filter.showFavoritesOnly ? _ref.read(favoritesProvider).gameIds : null,
+      groupVersions: true,
+      ownedGameIds: owned,
+    );
+    var changed = false;
+    final next = <Game>[];
+    for (final entry in shown) {
+      final group = entry.group;
+      final fresh = group == null ? null : FilteringService.entryFor(group, input);
+      if (fresh != null && fresh.gameId != entry.gameId) {
+        changed = true;
+        next.add(fresh);
+      } else {
+        next.add(entry);
+      }
+    }
+    if (changed) state = state.copyWith(cachedFilteredGames: next);
   }
 
   // state.games by file name without extension, for _ownedIds; per list, built
@@ -602,7 +667,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   Future<({String gameId, String letter})?> letterJump(Game? fromGame, {required bool forward}) async {
     if (state.games.isEmpty) return null;
     final games = state.games, filter = state.filter, text = state.filterText;
-    final all = await _runFilterAndPaginate(skip: 0, limit: 1 << 30);
+    final all = await _runFilterAndPaginate(skip: 0, limit: 1 << 30, reuseOwned: true);
     if (!identical(state.games, games) || !identical(state.filter, filter) || state.filterText != text) return null;
     final target = letterJumpTarget([for (final g in all.games) g.displayTitle], fromGame?.displayTitle, forward: forward);
     if (target == null) return null;
