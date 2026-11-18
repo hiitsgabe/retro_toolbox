@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:retro_toolbox/models/app_style.dart';
+import 'package:retro_toolbox/widgets/card_styles/wii.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
 /// What a card style draws. Classic has none: its lists are today's widgets.
@@ -23,7 +24,7 @@ CardStyleKit? cardStyleKit(CardStyle style) {
     CardStyle.classic => null,
     CardStyle.vita => null, // Task 6
     CardStyle.threeDs => null, // Task 7
-    CardStyle.wii => null, // Task 8
+    CardStyle.wii => wiiKit(),
     CardStyle.switchStyle => null, // Task 9
   };
 }
