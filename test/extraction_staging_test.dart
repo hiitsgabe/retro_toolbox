@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/extraction_service.dart';
@@ -26,6 +27,33 @@ void main() {
     files.forEach((name, body) => a.addFile(ArchiveFile.string(name, body)));
     File(zipPath).writeAsBytesSync(ZipEncoder().encode(a));
   }
+
+  // Android 12+ refuses a foreground service started while the app is in the
+  // background (an auto-extract after a download finished behind another app).
+  // The archive must still be extracted, not handed to a service that is not there.
+  test('a refused foreground service falls back to extracting in an isolate', () async {
+    final zip = p.join(dir.path, 'game.zip');
+    writeZip(zip, {'Game/game.iso': 'disc'});
+    ExtractionService.useForegroundService = () => true;
+    ExtractionService.startForegroundService = (_) async =>
+        ServiceRequestFailure(error: Exception('startForegroundService() not allowed due to mAllowStartForeground false'));
+    addTearDown(ExtractionService.resetForTesting);
+
+    final done = Completer<List<String>>();
+    await ExtractionService.startExtraction(
+      taskId: 't',
+      filePath: zip,
+      extractionDir: dir.path,
+      allowedExtensions: const ['.iso'],
+      onProgress: (_, __) {},
+      onComplete: (_, __, files) => done.complete(files),
+      onError: (_, e, __) => done.completeError(e),
+    );
+
+    final files = await done.future.timeout(const Duration(seconds: 10));
+    expect(files.map(p.basename), ['game.iso']);
+    expect(File(p.join(dir.path, 'game.iso')).readAsStringSync(), 'disc');
+  });
 
   test('extracting into the console folder leaves its other files alone', () async {
     // A console folder: other queued archives, a gamelist and media.

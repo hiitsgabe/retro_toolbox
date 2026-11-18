@@ -19,6 +19,28 @@ class ExtractionService {
   static final Map<String, Function(String taskId, String extractionDir, List<String> files)> _onCompleteCallbacks = {};
   static Timer? _serviceStopTimer;
 
+  /// Seams for tests: whether archives go to the foreground service, and how it starts.
+  @visibleForTesting
+  static bool Function() useForegroundService = _isAndroid;
+  @visibleForTesting
+  static Future<ServiceRequestResult> Function(String text) startForegroundService = _startService;
+
+  @visibleForTesting
+  static void resetForTesting() {
+    useForegroundService = _isAndroid;
+    startForegroundService = _startService;
+  }
+
+  static bool _isAndroid() => Platform.isAndroid;
+
+  static Future<ServiceRequestResult> _startService(String text) => FlutterForegroundTask.startService(
+        serviceId: 1,
+        notificationTitle: 'Extracting Archive',
+        notificationText: text,
+        notificationIcon: const NotificationIcon(metaDataName: 'ic_notification'),
+        callback: extractionTaskCallback,
+      );
+
   static Future<void> initialize() async {
     if (!Platform.isAndroid) return;
     FlutterForegroundTask.initCommunicationPort();
@@ -115,22 +137,17 @@ class ExtractionService {
 
     // Foreground service is only supported on Android, so we use an isolate for extraction on other platforms.
     // Also Android is the only platform that supports native unzip, the other platforms must use virtual
-    if (!Platform.isAndroid) {
-      return extractInIsolate(
-        taskId,
-        filePath,
-        extractionDir,
-        allowedExtensions: allowedExtensions,
-        onProgress: onProgress,
-        onComplete: onComplete,
-        onError: onError,
-        cancelled: cancelled,
-      );
-    }
-
-    // The service stops at its next entry and reports back as an error, after
-    // which the caller removes what it left.
-    cancelled?.then((_) => FlutterForegroundTask.sendDataToTask({'action': 'cancel', 'taskId': taskId}));
+    Future<void> inIsolate() => extractInIsolate(
+          taskId,
+          filePath,
+          extractionDir,
+          allowedExtensions: allowedExtensions,
+          onProgress: onProgress,
+          onComplete: onComplete,
+          onError: onError,
+          cancelled: cancelled,
+        );
+    if (!useForegroundService()) return inIsolate();
 
     _activeTasks.add(taskId);
     _onProgressCallbacks[taskId] = onProgress;
@@ -144,17 +161,24 @@ class ExtractionService {
 
     // If first task, (re)start foreground service
     if (_activeTasks.length == 1) {
-      await FlutterForegroundTask.startService(
-        serviceId: 1,
-        notificationTitle: 'Extracting Archive',
-        notificationText: 'Extracting $fileName...',
-        notificationIcon: const NotificationIcon(metaDataName: 'ic_notification'),
-        callback: extractionTaskCallback,
-      );
+      final started = await startForegroundService('Extracting $fileName...');
+      // Android 12+ refuses to start a foreground service while the app is in
+      // the background (an auto-extract after a download finished behind
+      // another app). The task would then wait forever on a service that is
+      // not there: extract in this process instead.
+      if (started is ServiceRequestFailure && started.error is! ServiceAlreadyStartedException) {
+        debugPrint('Extraction service refused (${started.error}); extracting in an isolate: $filePath');
+        _cleanup(taskId);
+        return inIsolate();
+      }
     } else {
       // if not the first task, just update the notification
       FlutterForegroundTask.updateService(notificationText: 'Extracting $fileName...');
     }
+
+    // The service stops at its next entry and reports back as an error, after
+    // which the caller removes what it left.
+    cancelled?.then((_) => FlutterForegroundTask.sendDataToTask({'action': 'cancel', 'taskId': taskId}));
 
     debugPrint('Sending extraction task to foreground service: $filePath');
 
