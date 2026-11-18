@@ -2,7 +2,8 @@ import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
-import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/models/game_group_model.dart';
+import 'package:retro_toolbox/services/game_groups.dart';
 
 /// [rating] pulled toward [mean] as if [m] more people had voted the mean, so
 /// a 5.0 from one vote doesn't outrank a 4.5 from hundreds.
@@ -16,24 +17,23 @@ class FilteringService {
     final skip = input.skip;
     final limit = input.limit;
 
-    var allMatched = <Game>[];
-
-    for (final game in games) {
-      if (_matchesFilter(game, input)) {
-        allMatched.add(game);
-      }
+    List<Game> allMatched;
+    if (input.groupVersions) {
+      // A game shows when one of its versions passes; the region filter's
+      // order (else the default) picks which one is the entry.
+      final regions = filter.regions.isEmpty ? defaultRegionOrder : filter.regions.toList();
+      allMatched = [
+        for (final group in buildGameGroups(games))
+          if (groupEntry(group, (g) => _matchesFilter(g, input, checkText: false), text: input.filterText, regions: regions) case final entry?) entry,
+      ];
+    } else {
+      allMatched = [
+        for (final game in games)
+          if (_matchesFilter(game, input)) game,
+      ];
     }
 
     allMatched.sort((a, b) => a.displayTitle.toLowerCase().compareTo(b.displayTitle.toLowerCase()));
-
-    // Filtering by latest revision is after regular filtering because it's also a grouping operation
-    if (filter.showLatestRevisionOnly) {
-      allMatched = _filterLatestRevisions(allMatched);
-    }
-
-    // After the revisions, so a set is the discs of one revision; before the
-    // sort and the page, so the count and the pages are of entries shown.
-    if (input.groupVersions) allMatched = groupDiscSets(allMatched);
 
     final key = _sortKey(filter.sort, games);
     if (key != null) {
@@ -92,7 +92,7 @@ class FilteringService {
         _ => false,
       };
 
-  static bool _matchesFilter(Game game, FilterInput input) {
+  static bool _matchesFilter(Game game, FilterInput input, {bool checkText = true}) {
     final filterText = input.filterText.toLowerCase();
     final filter = input.filter;
     final favoriteGameIds = input.favoriteGameIds;
@@ -108,7 +108,7 @@ class FilteringService {
       }
     }
 
-    if (filterText.isNotEmpty) {
+    if (checkText && filterText.isNotEmpty) {
       final titleMatch = game.displayTitle.toLowerCase().contains(filterText);
       final originalMatch = game.title.toLowerCase().contains(filterText);
       if (!titleMatch && !originalMatch) return false;
@@ -181,49 +181,6 @@ class FilteringService {
 
     return true;
   }
-
-  static List<Game> _filterLatestRevisions(List<Game> games) {
-    if (games.isEmpty) return games;
-
-    final Map<String, Game> latestByGameIdentity = {};
-
-    for (final game in games) {
-      final metadata = game.metadata;
-      final baseTitle = metadata?.displayTitle ?? game.title;
-      final regions = (metadata?.regions ?? []).join(',');
-      final languages = (metadata?.languages ?? []).join(',');
-      final diskNumber = metadata?.diskNumber ?? '';
-
-      final gameIdentity = '$baseTitle|$regions|$languages|$diskNumber';
-      final currentRevision = metadata?.revision ?? '';
-
-      final existing = latestByGameIdentity[gameIdentity];
-      if (existing == null || _isNewerRevision(currentRevision, existing.metadata?.revision ?? '')) {
-        latestByGameIdentity[gameIdentity] = game;
-      }
-    }
-
-    return games.where((game) {
-      final metadata = game.metadata;
-      final baseTitle = metadata?.displayTitle ?? game.title;
-      final regions = (metadata?.regions ?? []).join(',');
-      final languages = (metadata?.languages ?? []).join(',');
-      final diskNumber = metadata?.diskNumber ?? '';
-      final gameIdentity = '$baseTitle|$regions|$languages|$diskNumber';
-
-      return latestByGameIdentity[gameIdentity] == game;
-    }).toList();
-  }
-
-  // Possible bug: if revisions are non-numeric and not lexically comparable like 1.0, 1.0a, 1.0b or 1.2, 1.10,
-  // this function may not work as intended.
-  static bool _isNewerRevision(String current, String existing) {
-    if (current.isEmpty && existing.isEmpty) return false;
-    if (existing.isEmpty) return true;
-    if (current.isEmpty) return false;
-
-    return current.compareTo(existing) > 0;
-  }
 }
 
 class FilterInput {
@@ -235,7 +192,7 @@ class FilterInput {
   final Set<String>? favoriteGameIds;
   final Map<String, GameStatus>? inLibraryStatus;
 
-  /// One entry per game (see buildGameGroups); until Task 6, per disc set.
+  /// One entry per game (see buildGameGroups).
   final bool groupVersions;
 
   const FilterInput({

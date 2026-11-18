@@ -74,4 +74,21 @@ void main() {
     final grouped = container.read(catalogProvider).paginatedFilteredGames;
     expect(grouped.firstWhere((g) => g.discs.isNotEmpty).discs, hasLength(3));
   });
+
+  test('a console read by a regex (one entry per game already) is never grouped', () async {
+    SharedPreferences.setMockInitialValues({});
+    const sw = Console(id: 'psx', name: 'PSX', urls: [], regex: 'x');
+    final container = ProviderContainer(overrides: [
+      catalogProvider.overrideWith((ref) => CatalogNotifier(
+          ref,
+          _FakeCatalogService([
+            _g('Final Fantasy VII (USA) (Disc 1)'),
+            _g('Final Fantasy VII (USA) (Disc 2)'),
+          ]))),
+    ]);
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.notifier).loaded;
+    await container.read(catalogProvider.notifier).loadCatalog(sw);
+    expect(container.read(catalogProvider).paginatedFilteredGames, hasLength(2));
+  });
 }

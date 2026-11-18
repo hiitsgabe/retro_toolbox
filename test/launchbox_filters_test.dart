@@ -29,7 +29,6 @@ const _open = CatalogFilter(
   romTypes: {},
   modifications: {},
   distributionTypes: {},
-  showLatestRevisionOnly: false,
 );
 
 List<String> _shown(List<Game> games, CatalogFilter filter) => [
@@ -192,7 +191,6 @@ void main() {
         romTypes: {},
         modifications: {},
         distributionTypes: {},
-        showLatestRevisionOnly: false,
       );
       expect(off.isActive, isFalse);
       expect(off.copyWith(genres: {'RPG'}).isActive, isTrue);
@@ -457,7 +455,6 @@ void main() {
         // The DAT defaults survive: the list was not emptied, so the
         // reset-everything fallback did not run.
         expect(f.regions, {'USA'});
-        expect(f.showLatestRevisionOnly, isTrue);
         expect(state().filteredGamesCount, 1);
       });
     });

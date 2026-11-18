@@ -171,7 +171,6 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             romTypes: {},
             modifications: {},
             distributionTypes: {},
-            showLatestRevisionOnly: false,
             showFavoritesOnly: false,
             showInLibraryOnly: false,
             sort: state.filter.sort,
@@ -280,7 +279,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         limit: limit,
         favoriteGameIds: favs,
         inLibraryStatus: lib,
-        groupVersions: _ref.read(settingsProvider.notifier).groupVersions(state.games.firstOrNull?.consoleId),
+        // A console read by a regex lists each game once already.
+        groupVersions: _console?.regex == null && _ref.read(settingsProvider.notifier).groupVersions(state.games.firstOrNull?.consoleId),
       ),
     );
   }
@@ -462,13 +462,6 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       default:
         return;
     }
-    updateFilter(newFilter);
-  }
-
-  void toggleLatestRevisionOnly() async {
-    final newFilter = state.filter.copyWith(
-      showLatestRevisionOnly: !state.filter.showLatestRevisionOnly,
-    );
     updateFilter(newFilter);
   }
 

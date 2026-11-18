@@ -9,7 +9,6 @@ class CatalogFilter {
   final Set<String> romTypes;
   final Set<String> modifications;
   final Set<String> distributionTypes;
-  final bool showLatestRevisionOnly;
   final bool showFavoritesOnly;
   final bool showInLibraryOnly;
   final CatalogSort sort;
@@ -27,7 +26,6 @@ class CatalogFilter {
     this.romTypes = const {'normal'},
     this.modifications = const {'none'},
     this.distributionTypes = const {'standard', 'multiCart'},
-    this.showLatestRevisionOnly = true,
     this.showFavoritesOnly = false,
     this.showInLibraryOnly = false,
     this.sort = CatalogSort.name,
@@ -47,7 +45,6 @@ class CatalogFilter {
     Set<String>? romTypes,
     Set<String>? modifications,
     Set<String>? distributionTypes,
-    bool? showLatestRevisionOnly,
     bool? showFavoritesOnly,
     bool? showInLibraryOnly,
     CatalogSort? sort,
@@ -67,7 +64,6 @@ class CatalogFilter {
       romTypes: romTypes ?? this.romTypes,
       modifications: modifications ?? this.modifications,
       distributionTypes: distributionTypes ?? this.distributionTypes,
-      showLatestRevisionOnly: showLatestRevisionOnly ?? this.showLatestRevisionOnly,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       showInLibraryOnly: showInLibraryOnly ?? this.showInLibraryOnly,
       sort: sort ?? this.sort,
@@ -86,7 +82,6 @@ class CatalogFilter {
         romTypes.isNotEmpty ||
         modifications.isNotEmpty ||
         distributionTypes.isNotEmpty ||
-        showLatestRevisionOnly ||
         showFavoritesOnly ||
         showInLibraryOnly ||
         genres.isNotEmpty ||

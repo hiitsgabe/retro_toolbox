@@ -111,7 +111,7 @@ void main() {
     FilterResult run({required bool group, int limit = 100}) => FilteringService.filterAndPaginate(FilterInput(
           games: games,
           filterText: '',
-          filter: const CatalogFilter(regions: {}, dumpQualities: {}, romTypes: {}, modifications: {}, distributionTypes: {}, showLatestRevisionOnly: false),
+          filter: const CatalogFilter(regions: {}, dumpQualities: {}, romTypes: {}, modifications: {}, distributionTypes: {}),
           limit: limit,
           groupVersions: group,
         ));
@@ -122,16 +122,16 @@ void main() {
       expect(r.games.every((g) => g.discs.isEmpty), isTrue);
     });
 
-    test('on: one entry per set, counted and paged as entries', () {
+    test('on: one entry per game, counted and paged as entries', () {
       final r = run(group: true);
-      expect(r.totalCount, 3);
-      expect(_titles(r.games), ['Crash Bandicoot (USA)', 'Final Fantasy VII (Europe) (Disc 1)', 'Final Fantasy VII (USA) (Disc 1)']);
-      expect(r.games[2].discs.length, 3);
-      final page = run(group: true, limit: 2);
-      expect((page.games.length, page.totalCount, page.hasMore), (2, 3, true));
+      expect(r.totalCount, 2);
+      expect(_titles(r.games), ['Crash Bandicoot (USA)', 'Final Fantasy VII (USA) (Disc 1)']);
+      expect(r.games[1].discs.length, 3);
+      final page = run(group: true, limit: 1);
+      expect((page.games.length, page.totalCount, page.hasMore), (1, 2, true));
     });
 
-    test('with latest revision only on (the default), the discs survive it and group', () {
+    test('two discs of one version are one entry', () {
       final revs = [
         _g('Game (USA) (Disc 1)'),
         _g('Game (USA) (Disc 2)'),
