@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -72,6 +73,9 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
 
   @override
   bool get groupsVersions => groups;
+
+  @override
+  Future<Set<String>> ownedGameIds() async => const {};
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -244,7 +248,8 @@ void main() {
         t,
         _settings(),
         (ref, context) => runGameAction(ref, context, entry, GameState(game: entry, status: GameStatus.ready), GameAction.download),
-        states: {europeBar.gameId: GameState(game: europeBar, status: GameStatus.downloaded)},
+        states: {europeBar.gameId: GameState(game: europeBar, status: GameStatus.extracted)},
+        catalog: const CatalogState(filter: CatalogFilter(regions: {})),
       );
       // Bar is whole in Europe: no second copy. Baz has none: its main version.
       expect(_titles(started.single), [foo[2].title]);
@@ -271,6 +276,47 @@ void main() {
       await t.tap(find.widgetWithText(FilledButton, 'Download'));
       await t.pumpAndSettle();
       expect(_titles(started.single), _titles(spain));
+    });
+
+    testWidgets('with "Download every disc" off, each game of the box gets its first disc only', (t) async {
+      await pumpRef(t, _settings(all: false), (ref, context) => runGameAction(ref, context, box, GameState(game: box, status: GameStatus.ready), GameAction.download));
+      expect(_titles(started.single), [arc[0], arc[1], arc[2], arc[3], arc[5]]);
+    });
+
+    testWidgets('a selected beta of a box member downloads the beta, not the whole box', (t) async {
+      final beta = file('Arc the Lad Collection - Arc the Lad II (USA) (Beta) (2001-09-11).zip');
+      final catalog = CatalogState(games: files, selectedGames: {beta.gameId}, cachedFilteredGames: [box]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      await t.tap(find.widgetWithText(FilledButton, 'Download'));
+      await t.pumpAndSettle();
+      expect(_titles(started.single), [beta.title]);
+    });
+
+    testWidgets('a selected box member downloads that member, not the whole box', (t) async {
+      final member = groupEntry(buildGameGroups(files).single.members[2], (_) => true)!;
+      final catalog = CatalogState(games: files, selectedGames: {member.gameId}, cachedFilteredGames: [box]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      expect(find.text('Download 1 game?'), findsOneWidget);
+    });
+
+    testWidgets('a selected sampler downloads the sampler, not the game', (t) async {
+      final ff = psxGamesStartingWith('Final Fantasy VII (');
+      final entry = groupEntry(buildGameGroups(ff).single, (_) => true)!;
+      final sampler = ff.firstWhere((g) => g.title.contains('Interactive Sampler'));
+      final catalog = CatalogState(games: ff, selectedGames: {sampler.gameId}, cachedFilteredGames: [entry]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog);
+      await t.tap(find.widgetWithText(FilledButton, 'Download'));
+      await t.pumpAndSettle();
+      expect(_titles(started.single), [sampler.title]);
+    });
+
+    testWidgets('a fully owned box selected says so and asks nothing', (t) async {
+      final states = {for (final f in files) f.gameId: GameState(game: f, status: GameStatus.extracted)};
+      final catalog = CatalogState(games: files, selectedGames: {box.gameId}, cachedFilteredGames: [box]);
+      await pumpRef(t, _settings(), (ref, context) => downloadSelected(ref, context, 'psx'), catalog: catalog, states: states);
+      expect(find.text('Download 0 games?'), findsNothing);
+      expect(find.text('Already downloaded'), findsOneWidget);
+      expect(started, isEmpty);
     });
   });
 

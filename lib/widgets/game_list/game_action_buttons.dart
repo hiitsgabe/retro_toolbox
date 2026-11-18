@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 
@@ -18,31 +19,41 @@ Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState 
 @visibleForTesting
 Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId)? debugStartGameDownloads;
 
-/// What Download on [game] queues: for a box set, every game in it in its
-/// main version (the one the user has, else by region), skipping what is
-/// already queued or done; a multi-disc version's other discs too when
-/// Settings says so (see [discsToDownload]). [catalog]: the console's games,
-/// to find the set of a [game] that does not carry it.
-List<Game> gamesToDownload(WidgetRef ref, Game game, {Iterable<Game>? catalog}) {
-  final states = ref.read(gameStateManagerProvider);
-  GameStatus? statusOf(String id) => states[id]?.status;
+/// What Download on [game] queues: for a box set, every game in it in the
+/// version the list would show for it (the one the user has, then the
+/// filter's regions, else the default order, under the same filters),
+/// skipping what is already on disk, queued or done; a multi-disc version's
+/// other discs too when Settings says so (see [discsToDownload]). [catalog]:
+/// the console's games, to find the set of a [game] that does not carry it.
+Future<List<Game>> gamesToDownload(WidgetRef ref, Game game, {Iterable<Game>? catalog}) async {
+  final all = ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId);
   final group = game.group;
   if (group != null && group.isBoxSet) {
-    final all = ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId);
-    bool owned(Game g) => !wantsDownload(statusOf(g.gameId));
+    // The owned games the list is ordered by (disk and in flight), and the
+    // session's own states (a download that finished since).
+    final onDisk = await ref.read(catalogProvider.notifier).ownedGameIds();
+    final states = ref.read(gameStateManagerProvider);
+    GameStatus? statusOf(String id) => states[id]?.status;
+    bool wants(Game g) => !onDisk.contains(g.gameId) && wantsDownload(statusOf(g.gameId));
+    final catalogState = ref.read(catalogProvider);
+    final input = FilterInput(
+      games: catalogState.games,
+      filterText: '',
+      filter: catalogState.filter,
+      limit: 0,
+      favoriteGameIds: catalogState.filter.showFavoritesOnly ? ref.read(favoritesProvider).gameIds : null,
+      groupVersions: true,
+      ownedGameIds: {...onDisk, for (final g in group.files) if (!wantsDownload(statusOf(g.gameId))) g.gameId},
+    );
     return [
       for (final member in group.members)
-        if (pickMainVersion(member.versions, defaultRegionOrder, owned: (v) => v.discs.any(owned)) case final v?)
-          for (final d in discsToDownload(v.entry, all: all, statusOf: statusOf))
-            if (wantsDownload(statusOf(d.gameId))) d,
+        if (FilteringService.entryFor(member, input) case final entry?)
+          for (final d in discsToDownload(entry, all: all, statusOf: statusOf))
+            if (wants(d)) d,
     ];
   }
-  return discsToDownload(
-    game,
-    all: ref.read(settingsProvider.notifier).downloadAllDiscs(game.consoleId),
-    catalog: catalog,
-    statusOf: statusOf,
-  );
+  final states = ref.read(gameStateManagerProvider);
+  return discsToDownload(game, all: all, catalog: catalog, statusOf: (id) => states[id]?.status);
 }
 
 /// The one place a [GameAction] turns into a task-queue call; used by the row
@@ -54,7 +65,13 @@ Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameS
       TaskQueueService.retryTransfer(ref, game.gameId);
     case GameAction.download:
     case GameAction.retryDownload:
-      await (debugStartGameDownloads ?? TaskQueueService.startDownloads)(ref, context, gamesToDownload(ref, game), game.consoleId);
+      final games = await gamesToDownload(ref, game);
+      if (!context.mounted) return;
+      if (games.isEmpty) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Already downloaded')));
+        return;
+      }
+      await (debugStartGameDownloads ?? TaskQueueService.startDownloads)(ref, context, games, game.consoleId);
     case GameAction.pause:
       TaskQueueService.pauseDownloadTask(ref, game.gameId);
     case GameAction.resume:

@@ -397,6 +397,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   /// The games the user has: on disk (downloaded or extracted) or in flight.
   /// Walks the library, not the catalog, so a filter run stays cheap.
+  Future<Set<String>> ownedGameIds() => _ownedIds(state.games);
+
   Future<Set<String>> _ownedIds(List<Game> games) async {
     final owned = <String>{..._ref.read(inFlightGameIdsProvider)};
     final dir = games.isEmpty ? '' : _ref.read(settingsProvider.notifier).getDownloadDir(games.first.consoleId);

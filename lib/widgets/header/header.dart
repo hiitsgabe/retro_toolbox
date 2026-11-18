@@ -33,19 +33,27 @@ Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? conso
   // What the list shows for a selected game: its entry carries the game (a
   // box set's other games, a version's other discs). The entry can be another
   // version than the one selected (a region change or a re-pick since), so it
-  // is found by any file of its group.
+  // is found by any disc of its group's versions (an extra, or a game of a
+  // box, is what was selected).
   final grouped = consoleId != null && ref.read(catalogProvider.notifier).groupsVersions;
   final shown = {
     if (grouped)
       for (final entry in catalogState.paginatedFilteredGames)
-        for (final id in [entry.gameId, ...?entry.group?.files.map((f) => f.gameId)]) id: entry,
+        for (final id in [entry.gameId, ...?entry.group?.versions.expand((v) => v.discs).map((f) => f.gameId)]) id: entry,
   };
   final seen = <String>{};
-  final selectedGames = [
-    for (final game in selected)
-      for (final g in grouped ? gamesToDownload(ref, shown[game.gameId] ?? game, catalog: catalogState.games) : [game])
-        if (seen.add(g.gameId)) g,
-  ];
+  final selectedGames = <Game>[];
+  for (final game in selected) {
+    final entry = shown[game.gameId] ?? game;
+    for (final g in grouped ? await gamesToDownload(ref, entry, catalog: catalogState.games) : [game]) {
+      if (seen.add(g.gameId)) selectedGames.add(g);
+    }
+  }
+  if (!context.mounted) return;
+  if (selectedGames.isEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Already downloaded')));
+    return;
+  }
   final n = selectedGames.length;
   final bytes = selectedGames.fold<int>(0, (sum, g) => sum + g.size);
   final ok = await showDialog<bool>(
