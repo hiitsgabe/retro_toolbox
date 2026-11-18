@@ -4,7 +4,9 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
+import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
@@ -100,6 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
+    final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
 
     return Scaffold(
       body: GamesButtons(
@@ -185,11 +188,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                               ),
                             )
                           : LetterJump(
-                              child: switch (appState.viewMode) {
-                                ViewMode.grid => GameGrid(),
-                                ViewMode.coverflow => const GameCoverFlow(),
-                                ViewMode.list => GameList(),
-                              },
+                              // A card style other than Classic has its own layout: no view modes.
+                              child: kit?.gameList(context) ??
+                                  switch (appState.viewMode) {
+                                    ViewMode.grid => GameGrid(),
+                                    ViewMode.coverflow => const GameCoverFlow(),
+                                    ViewMode.list => GameList(),
+                                  },
                             ),
             ),
             Footer(),

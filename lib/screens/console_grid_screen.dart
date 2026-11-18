@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -17,6 +19,8 @@ class ConsoleGridScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
+    // A card style other than Classic has its own layout: no view modes.
+    final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
 
     // Always the console list: a catalog loads (and can fail) on the games
     // screen, never here.
@@ -52,10 +56,10 @@ class ConsoleGridScreen extends ConsumerWidget {
       final tiles = [
         for (final console in appState.consolesList) _consoleTile(context, ref, console),
       ];
-      body = _viewFor(appState.consoleViewMode, tiles);
+      body = kit?.menuList(context, tiles, shrinkWrap: false, autofocusFirst: true) ?? _viewFor(appState.consoleViewMode, tiles);
     }
 
-    final showToggle = appState.consolesList.isNotEmpty;
+    final showToggle = appState.consolesList.isNotEmpty && kit == null;
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(96),

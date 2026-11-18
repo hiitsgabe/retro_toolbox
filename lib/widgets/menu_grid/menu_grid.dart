@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 
 /// One tile in a [MenuGrid]. Shows [assetPath] (a PNG on disk or bundled) when
 /// present and loadable, otherwise falls back to [icon].
@@ -65,6 +68,16 @@ class MenuGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A card style other than Classic brings its own layout. Without a
+    // ProviderScope (a bare MenuGrid) there is no style to read: Classic.
+    if (context.getElementForInheritedWidgetOfExactType<UncontrolledProviderScope>() == null) return _classic(context);
+    return Consumer(builder: (context, ref, _) {
+      final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
+      return kit?.menuList(context, tiles, shrinkWrap: shrinkWrap, autofocusFirst: autofocusFirst) ?? _classic(context);
+    });
+  }
+
+  Widget _classic(BuildContext context) {
     final grid = GridView.builder(
       padding: const EdgeInsets.all(16),
       shrinkWrap: shrinkWrap,

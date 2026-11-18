@@ -7,11 +7,13 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/screens/about_screen.dart';
+import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
 import 'package:retro_toolbox/widgets/header/search_field.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
@@ -228,6 +230,8 @@ class _HeaderState extends ConsumerState<Header> {
     required bool canAccessSettings,
   }) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
+    // A card style other than Classic has its own layout: no view modes.
+    final classic = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards))) == null;
 
     return [
       _buildActionButton(
@@ -246,18 +250,20 @@ class _HeaderState extends ConsumerState<Header> {
         tooltip: 'Download Selected',
       ),
       SizedBox(width: 4),
-      _buildActionButton(
-        context: context,
-        icon: switch (appState.viewMode) {
-          ViewMode.grid => Icons.grid_view_rounded,
-          ViewMode.list => Icons.view_list_rounded,
-          ViewMode.coverflow => Icons.view_carousel_rounded,
-        },
-        isActive: false,
-        onPressed: () => appStateNotifier.toggleViewMode(),
-        tooltip: 'Change view',
-      ),
-      SizedBox(width: 4),
+      if (classic) ...[
+        _buildActionButton(
+          context: context,
+          icon: switch (appState.viewMode) {
+            ViewMode.grid => Icons.grid_view_rounded,
+            ViewMode.list => Icons.view_list_rounded,
+            ViewMode.coverflow => Icons.view_carousel_rounded,
+          },
+          isActive: false,
+          onPressed: () => appStateNotifier.toggleViewMode(),
+          tooltip: 'Change view',
+        ),
+        SizedBox(width: 4),
+      ],
       PopupMenuButton<String>(
         icon: Icon(
           Icons.more_vert,
