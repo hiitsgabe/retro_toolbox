@@ -15,7 +15,7 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 @visibleForTesting
 Future<void> Function(WidgetRef ref, BuildContext context, Game game, GameState gameState, GameAction action)? debugRunGameAction;
 
-/// Test seam: replaces [TaskQueueService.startDownloads] for [runGameAction].
+/// Test seam: replaces [TaskQueueService.startDownloads] for [downloadGames].
 @visibleForTesting
 Future<void> Function(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId)? debugStartGameDownloads;
 
@@ -68,13 +68,7 @@ Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameS
       TaskQueueService.retryTransfer(ref, game.gameId);
     case GameAction.download:
     case GameAction.retryDownload:
-      final games = await gamesToDownload(ref, game);
-      if (!context.mounted) return;
-      if (games.isEmpty) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Already downloaded')));
-        return;
-      }
-      await (debugStartGameDownloads ?? TaskQueueService.startDownloads)(ref, context, games, game.consoleId);
+      await downloadGames(ref, context, [game], game.consoleId);
     case GameAction.pause:
       TaskQueueService.pauseDownloadTask(ref, game.gameId);
     case GameAction.resume:
@@ -90,6 +84,21 @@ Future<void> runGameAction(WidgetRef ref, BuildContext context, Game game, GameS
     case GameAction.none:
       break;
   }
+}
+
+/// Download on each of [games], queued as one batch: a page's Download all
+/// gets one sign-in or keys check and one message, not one per file.
+Future<void> downloadGames(WidgetRef ref, BuildContext context, List<Game> games, String? consoleId) async {
+  final queue = <Game>[];
+  for (final g in games) {
+    queue.addAll(await gamesToDownload(ref, g));
+  }
+  if (!context.mounted) return;
+  if (queue.isEmpty) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('Already downloaded')));
+    return;
+  }
+  await (debugStartGameDownloads ?? TaskQueueService.startDownloads)(ref, context, queue, consoleId);
 }
 
 /// The game page's (and the second screen's) button for each action it shows.
