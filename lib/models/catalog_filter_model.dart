@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum CatalogSort { name, sizeDesc, sizeAsc, newest, popular, topRated }
 
 class CatalogFilter {
@@ -71,6 +73,26 @@ class CatalogFilter {
       players: players ?? this.players,
       minRating: minRating ?? this.minRating,
     );
+  }
+
+  /// Whether any filter is off its default. [isActive] is true on a fresh
+  /// install (the default hides bad dumps and non-USA sets), so the header icon
+  /// asks this instead. Sort is not a filter.
+  bool get differsFromDefault {
+    const d = CatalogFilter();
+    return !setEquals(regions, d.regions) ||
+        !setEquals(languages, d.languages) ||
+        !setEquals(categories, d.categories) ||
+        !setEquals(mediaTypes, d.mediaTypes) ||
+        !setEquals(dumpQualities, d.dumpQualities) ||
+        !setEquals(romTypes, d.romTypes) ||
+        !setEquals(modifications, d.modifications) ||
+        !setEquals(distributionTypes, d.distributionTypes) ||
+        showFavoritesOnly != d.showFavoritesOnly ||
+        showInLibraryOnly != d.showInLibraryOnly ||
+        !setEquals(genres, d.genres) ||
+        !setEquals(players, d.players) ||
+        minRating != d.minRating;
   }
 
   bool get isActive {

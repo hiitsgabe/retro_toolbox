@@ -236,8 +236,8 @@ class _HeaderState extends ConsumerState<Header> {
     return [
       _buildActionButton(
         context: context,
-        icon: catalogState.filter.isActive ? Icons.filter_alt : Icons.filter_alt_outlined,
-        isActive: catalogState.filter.isActive,
+        icon: catalogState.filter.differsFromDefault ? Icons.filter_alt : Icons.filter_alt_outlined,
+        isActive: catalogState.filter.differsFromDefault,
         onPressed: () => FilterModal.show(context),
         tooltip: 'Filters',
       ),
