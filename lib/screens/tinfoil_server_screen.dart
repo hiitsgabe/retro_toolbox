@@ -10,6 +10,7 @@ import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/advanced_port.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.
@@ -103,7 +104,7 @@ class TinfoilServerScreen extends ConsumerWidget {
             shape: const Border(),
             leading: Icon(
               authed(c) ? Icons.check_circle : Icons.lock_outline,
-              color: authed(c) ? Colors.green : theme.colorScheme.error,
+              color: authed(c) ? StyleTokens.of(context).success : theme.colorScheme.error,
             ),
             title: Text('${c.name} sign-in'),
             subtitle: Text(authed(c) ? 'Authenticated' : 'Required to download'),

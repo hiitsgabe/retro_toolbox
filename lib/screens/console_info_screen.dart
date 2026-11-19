@@ -12,6 +12,7 @@ import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 typedef Mount = ({String label, String mount, int total, int free});
 
@@ -297,7 +298,7 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
             pct == null ? _dash : '$pct%',
             charging == null ? _dash : (charging ? 'Charging' : 'On battery'),
             pct == null ? null : pct / 100,
-            pct != null && pct < 20 && charging != true ? Colors.redAccent : null,
+            pct != null && pct < 20 && charging != true ? StyleTokens.of(context).error : null,
           ),
           const SizedBox(width: 16),
           half(
@@ -305,7 +306,7 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
             temp == null ? _dash : '${temp.toStringAsFixed(1)} °C',
             'CPU',
             temp == null ? null : (temp / 100).clamp(0, 1).toDouble(),
-            temp == null ? null : (temp >= 75 ? Colors.redAccent : (temp >= 60 ? Colors.amberAccent : null)),
+            temp == null ? null : (temp >= 75 ? StyleTokens.of(context).error : (temp >= 60 ? StyleTokens.of(context).warning : null)),
           ),
         ],
       ),
@@ -314,6 +315,7 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
 
   Widget _storage() {
     final t = Theme.of(context).textTheme;
+    final low = StyleTokens.of(context).warning;
     return _InfoCard(
       title: 'Storage',
       icon: Icons.sd_storage,
@@ -340,7 +342,7 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
                     ],
                   ),
                   const SizedBox(height: 5),
-                  _Bar(m.total == 0 ? null : (m.total - m.free) / m.total, color: m.total > 0 && m.free / m.total < 0.1 ? Colors.amberAccent : null),
+                  _Bar(m.total == 0 ? null : (m.total - m.free) / m.total, color: m.total > 0 && m.free / m.total < 0.1 ? low : null),
                 ],
               ],
             ),

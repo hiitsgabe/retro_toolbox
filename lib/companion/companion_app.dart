@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/companion/companion_tasks_view.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_payload.dart';
@@ -24,7 +25,8 @@ class CompanionApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Retro Toolbox',
-      theme: appTheme(),
+      // Its own engine, with no style provider: the second screen stays Classic.
+      theme: appTheme(CardStyle.classic),
       debugShowCheckedModeBanner: false,
       home: home,
     );

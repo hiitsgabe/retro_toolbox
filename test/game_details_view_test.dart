@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -65,7 +66,7 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       home: Scaffold(
         body: GameDetailsView(game: game, launchbox: lb, actions: actions, onOpenImage: onOpenImage, imageBuilder: _image),
       ),
@@ -167,7 +168,7 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       home: Scaffold(
         body: GameDetailsView(
           game: _game,
@@ -195,7 +196,7 @@ void main() {
       details: GameDetails(launchboxId: 1, launchboxPlatform: 'Sega Genesis'),
     );
     Future<void> show({required bool pending}) => t.pumpWidget(MaterialApp(
-          theme: appTheme(),
+          theme: appTheme(CardStyle.classic),
           home: Scaffold(
             body: GameDetailsView(
               game: matched,
@@ -290,7 +291,7 @@ void main() {
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
       navigatorKey: nav,
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       builder: (context, child) => DpadScope(navigatorKey: nav, child: child!),
       home: Scaffold(
         body: GameDetailsView(
@@ -374,7 +375,7 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     Widget view(LaunchboxGame? lb) => MaterialApp(
-          theme: appTheme(),
+          theme: appTheme(CardStyle.classic),
           home: Scaffold(
             body: GameDetailsView(
               game: _game,
@@ -404,7 +405,7 @@ void main() {
     t.view.devicePixelRatio = 2;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       home: Scaffold(body: GameDetailsView(game: _game, launchbox: _lb)),
     ));
     CachedNetworkImage net(String url) => t.widget<CachedNetworkImage>(find.byWidgetPredicate((w) => w is CachedNetworkImage && w.imageUrl == url).last);
@@ -421,7 +422,7 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       home: Scaffold(
         body: GameDetailsView(
           game: _game,
@@ -443,7 +444,7 @@ void main() {
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       home: Scaffold(
         body: GameDetailsView(
           game: _game,

@@ -8,6 +8,7 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sheet.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Whether the user imported a catalog of their own (file or URL).
 final hasUserCatalogProvider = FutureProvider<bool>((ref) => CatalogService().hasUserCatalog());
@@ -127,7 +128,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
     if (_hasUserCatalog && !_showOptions) {
       return Row(
         children: [
-          const Icon(Icons.check_circle, size: 18, color: Colors.green),
+          Icon(Icons.check_circle, size: 18, color: StyleTokens.of(context).success),
           const SizedBox(width: 8),
           const Expanded(child: Text('Using your imported catalog', style: TextStyle(fontWeight: FontWeight.w500))),
           TextButton.icon(
@@ -147,7 +148,7 @@ class _CatalogSourceSettingState extends ConsumerState<CatalogSourceSetting> {
             Icon(
               _hasUserCatalog ? Icons.check_circle : Icons.info_outline,
               size: 16,
-              color: _hasUserCatalog ? Colors.green : Theme.of(context).colorScheme.onSurfaceVariant,
+              color: _hasUserCatalog ? StyleTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Expanded(

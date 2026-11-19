@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 const _iaLoginUrl = 'https://archive.org/services/xauthn/?op=login';
 
@@ -100,7 +101,7 @@ class _IaCredentialsSettingState extends ConsumerState<IaCredentialsSetting> {
         if (isLoggedIn) ...[
           Row(
             children: [
-              const Icon(Icons.check_circle, color: Colors.green, size: 18),
+              Icon(Icons.check_circle, color: StyleTokens.of(context).success, size: 18),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -112,7 +113,7 @@ class _IaCredentialsSettingState extends ConsumerState<IaCredentialsSetting> {
                 onPressed: _logout,
                 icon: const Icon(Icons.logout, size: 16),
                 label: const Text('Log out'),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: StyleTokens.of(context).error),
               ),
             ],
           ),
@@ -153,7 +154,7 @@ class _IaCredentialsSettingState extends ConsumerState<IaCredentialsSetting> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 6),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            Text(_error!, style: TextStyle(color: StyleTokens.of(context).error, fontSize: 12)),
           ],
           const SizedBox(height: 10),
           SizedBox(

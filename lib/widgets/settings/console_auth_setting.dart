@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/utils/network.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 class ConsoleAuthSetting extends ConsumerStatefulWidget {
   final Console console;
@@ -108,7 +109,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
     if (hasToken && !_dirty) {
       return Row(
         children: [
-          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+          Icon(Icons.check_circle, color: StyleTokens.of(context).success, size: 18),
           const SizedBox(width: 8),
           const Expanded(
             child: Text('Signed in', style: TextStyle(fontWeight: FontWeight.w500)),
@@ -117,7 +118,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
             onPressed: _clear,
             icon: const Icon(Icons.logout, size: 16),
             label: const Text('Log out'),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: StyleTokens.of(context).error),
           ),
         ],
       );
@@ -219,7 +220,7 @@ class _ConsoleAuthSettingState extends ConsumerState<ConsoleAuthSetting> {
                 onPressed: _clear,
                 icon: const Icon(Icons.delete_outline, size: 16),
                 label: const Text('Clear'),
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
+                style: TextButton.styleFrom(foregroundColor: StyleTokens.of(context).error),
               ),
             const Spacer(),
             FilledButton.icon(

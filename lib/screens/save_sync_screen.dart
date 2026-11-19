@@ -16,6 +16,7 @@ import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Words for a unit's plan.
 String planLabel(UnitPlan plan) => switch (plan) {
@@ -299,8 +300,8 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                           CheckLevel.fail => Icons.error,
                         },
                         color: switch (l.level) {
-                          CheckLevel.ok => Colors.green,
-                          CheckLevel.warn => Colors.orange,
+                          CheckLevel.ok => StyleTokens.of(context).success,
+                          CheckLevel.warn => StyleTokens.of(context).warning,
                           CheckLevel.fail => Theme.of(context).colorScheme.error,
                         },
                       ),

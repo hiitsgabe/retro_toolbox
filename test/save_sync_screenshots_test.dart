@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
@@ -90,7 +91,7 @@ void main() {
       overrides: [saveSyncProvider.overrideWith((ref) => _Shots(state, checkLines))],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: appTheme(),
+        theme: appTheme(CardStyle.classic),
         builder: (context, child) => RepaintBoundary(key: boundary, child: child!),
         home: const SaveSyncScreen(),
       ),

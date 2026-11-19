@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/models/soccer_formation.dart';
@@ -123,7 +124,7 @@ void main() {
       await t.pumpWidget(ProviderScope(
         child: MaterialApp(
           navigatorKey: key,
-          theme: appTheme(),
+          theme: appTheme(CardStyle.classic),
           builder: (c, child) => DpadScope(navigatorKey: key, child: child!),
           home: RepaintBoundary(key: boundaryKey, child: page(images)),
         ),

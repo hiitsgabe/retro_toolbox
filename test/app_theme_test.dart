@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
@@ -13,7 +14,7 @@ void main() {
     final nav = GlobalKey<NavigatorState>();
     await t.pumpWidget(MaterialApp(
       navigatorKey: nav,
-      theme: appTheme(),
+      theme: appTheme(CardStyle.classic),
       builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
       home: const Scaffold(body: Text('first')),
     ));

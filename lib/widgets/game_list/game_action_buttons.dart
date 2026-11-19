@@ -10,6 +10,7 @@ import 'package:retro_toolbox/services/disc_sets.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Test seam: replaces [runGameAction] so tests can observe the dispatch.
 @visibleForTesting
@@ -186,7 +187,7 @@ class GameActionButtonsView extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(padding: pad, child: _favoriteButton()),
+            Padding(padding: pad, child: _favoriteButton(context)),
             for (final button in _actionButtons(context)) Padding(padding: pad, child: button),
           ],
         ),
@@ -194,7 +195,7 @@ class GameActionButtonsView extends StatelessWidget {
     );
   }
 
-  Widget _favoriteButton() {
+  Widget _favoriteButton(BuildContext context) {
     final buttonSize = isNarrow ? 18.0 : 24.0;
     return Tooltip(
       message: isFavorite ? 'Remove from favorites' : 'Add to favorites',
@@ -202,7 +203,7 @@ class GameActionButtonsView extends StatelessWidget {
         icon: Icon(
           isFavorite ? Icons.favorite : Icons.favorite_border,
           size: buttonSize,
-          color: isFavorite ? Colors.red : null,
+          color: isFavorite ? StyleTokens.of(context).error : null,
         ),
         onPressed: onFavorite,
         constraints: const BoxConstraints(minWidth: 18, minHeight: 18),

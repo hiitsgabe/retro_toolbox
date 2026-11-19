@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_metadata_model.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 class GameTags extends StatelessWidget {
   final Game game;
@@ -21,23 +22,7 @@ class GameTags extends StatelessWidget {
         Wrap(
           spacing: 3,
           runSpacing: 2,
-          children: tags
-              .map((tag) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: _getTagColor(tag),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      tag,
-                      style: const TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ))
-              .toList(),
+          children: [for (final tag in tags) _tag(tag, _getTagColor(context, tag))],
         ),
       ],
     );
@@ -71,17 +56,31 @@ class GameTags extends StatelessWidget {
     return tags;
   }
 
-  Color _getTagColor(String tag) {
+  Widget _tag(String tag, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+        child: Text(
+          tag,
+          style: TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+            // The warning amber is too light for white.
+            color: ThemeData.estimateBrightnessForColor(color) == Brightness.light ? Colors.black87 : Colors.white,
+          ),
+        ),
+      );
+
+  Color _getTagColor(BuildContext context, String tag) {
     switch (tag) {
       case 'Bad':
       case 'Over':
-        return Colors.red.shade600;
+        return StyleTokens.of(context).error;
       case 'Demo':
       case 'Sample':
       case 'Proto':
       case 'Beta':
       case 'Alpha':
-        return Colors.orange.shade600;
+        return StyleTokens.of(context).warning;
       case 'Hack':
       case 'Transl.':
       case 'Fixed':

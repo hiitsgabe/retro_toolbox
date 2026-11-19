@@ -12,6 +12,7 @@ import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/kit_picker.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Edits one team's squad: reorder, add, remove, edit players (incl. stats),
 /// set the team color for games that use it, and its kits for games whose
@@ -774,6 +775,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
 
   Widget _scaffold(BuildContext context) {
     final theme = Theme.of(context);
+    final starterColor = StyleTokens.of(context).success;
     final players = team.players;
     final compact = _compact;
     final swapping = _swapFrom != null;
@@ -895,7 +897,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                     // pinning two tall tiles above the squad.
                     // While swapping, only the players: no colors, no labels.
                     // Soccer labels each line instead.
-                    header: swapping ? null : top(_isSoccer ? const SizedBox.shrink() : _sectionLabel(theme, startersLabel(widget.gameId), Colors.green)),
+                    header: swapping ? null : top(_isSoccer ? const SizedBox.shrink() : _sectionLabel(theme, startersLabel(widget.gameId), starterColor)),
                     buildDefaultDragHandles: !swapping && !Handheld.current,
                     itemBuilder: (context, i) {
                       final p = players[i];
@@ -953,7 +955,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
                                       focusNode: _focusRow == i ? _rowFocus : null,
                                       dense: compact,
                                       visualDensity: compact ? VisualDensity.compact : null,
-                                      leading: _avatar(p, line?.color ?? (starter ? Colors.green : Colors.grey)),
+                                      leading: _avatar(p, line?.color ?? (starter ? starterColor : Colors.grey)),
                                       title: Text(
                                         p.name,
                                         overflow: TextOverflow.ellipsis,

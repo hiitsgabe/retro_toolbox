@@ -9,7 +9,8 @@
 // DEVICE: phone (412x915), odin2 (731x411) or linux640 (640x480, the Linux
 // handheld framebuffer build); empty renders 1280x720.
 // OUT: where the PNGs and overflows.txt go (default build/screenshots).
-// CARDS, BACKDROP: one card style and the backdrop for styles_test.
+// CARDS: one card style for styles_test, and the theme every other test
+// renders in (default classic). BACKDROP: the backdrop for styles_test.
 // ONLY: comma separated screen names for tools_test and servers_test.
 
 import 'dart:convert';
@@ -34,6 +35,10 @@ final bool screenshotsEnabled = Platform.environment['SCREENSHOTS'] == '1';
 
 const shotDevice = String.fromEnvironment('DEVICE');
 const outDir = String.fromEnvironment('OUT', defaultValue: 'build/screenshots');
+const _cards = String.fromEnvironment('CARDS');
+
+/// The style a test renders in when it does not pick one.
+final shotStyle = AppStyle(cards: _cards.isEmpty ? CardStyle.classic : CardStyle.values.byName(_cards));
 
 /// (logical size, devicePixelRatio, Linux handheld framebuffer build)
 const _devices = <String, (Size, double, bool)>{
@@ -138,8 +143,8 @@ Future<void> loadFonts(WidgetTester t) async {
 
 /// The app theme, with a fallback for glyphs ChakraPetch lacks (a device
 /// falls back to its system font).
-ThemeData shotTheme() {
-  final t = appTheme();
+ThemeData shotTheme(CardStyle cards) {
+  final t = appTheme(cards);
   const fb = ['Roboto', 'DejaVuSansMono'];
   return t.copyWith(
     textTheme: t.textTheme.apply(fontFamilyFallback: fb),
@@ -155,10 +160,10 @@ Future<ProviderContainer> launch(
   Widget home, {
   List<Override> overrides = const [],
   Map<String, Object>? prefs,
-  AppStyle style = const AppStyle(),
+  AppStyle? style,
 }) async {
   await loadFonts(t);
-  SharedPreferences.setMockInitialValues(prefs ?? basePrefs(style: style));
+  SharedPreferences.setMockInitialValues(prefs ?? basePrefs(style: style ?? shotStyle));
   t.view.devicePixelRatio = _dpr;
   t.view.physicalSize = _logical * _dpr;
   addTearDown(t.view.reset);
@@ -195,13 +200,16 @@ Future<ProviderContainer> launch(
   final nav = GlobalKey<NavigatorState>();
   await t.pumpWidget(UncontrolledProviderScope(
     container: c,
-    child: MaterialApp(
-      navigatorKey: nav,
-      navigatorObservers: [DpadScope.routeObserver],
-      debugShowCheckedModeBanner: false,
-      theme: shotTheme(),
-      builder: (context, child) => RepaintBoundary(key: _boundary, child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!)),
-      home: home,
+    // Follows the style as the app does, so Settings > Style restyles it.
+    child: Consumer(
+      builder: (context, ref, _) => MaterialApp(
+        navigatorKey: nav,
+        navigatorObservers: [DpadScope.routeObserver],
+        debugShowCheckedModeBanner: false,
+        theme: shotTheme(ref.watch(styleProvider.select((s) => s.cards))),
+        builder: (context, child) => RepaintBoundary(key: _boundary, child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!)),
+        home: home,
+      ),
     ),
   ));
   await frames(t);

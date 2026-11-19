@@ -19,6 +19,7 @@ import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 const _dirKey = 'link_download_dir';
 const _portKey = 'link_inbox_port';
@@ -347,7 +348,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
                   Text(
                     error ?? (ip == null ? 'Connect to Wi-Fi to send links from your phone' : 'Scan, paste a link and tap Send'),
                     textAlign: TextAlign.center,
-                    style: t.bodySmall?.copyWith(color: error != null ? Colors.amberAccent : Colors.white70),
+                    style: t.bodySmall?.copyWith(color: error != null ? StyleTokens.of(context).warning : Colors.white70),
                   ),
                 ],
               ),

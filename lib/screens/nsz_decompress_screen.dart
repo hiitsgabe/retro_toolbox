@@ -13,6 +13,7 @@ import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
 /// Requires prod.keys — the UI blocks with a keys picker until one is set.
@@ -247,7 +248,7 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
           Row(
             children: [
               Icon(_failed ? Icons.error_outline : Icons.check_circle,
-                  color: _failed ? theme.colorScheme.error : Colors.green, size: 18),
+                  color: _failed ? theme.colorScheme.error : StyleTokens.of(context).success, size: 18),
               const SizedBox(width: 8),
               Expanded(child: Text(_result!, style: TextStyle(color: _failed ? theme.colorScheme.error : null))),
             ],

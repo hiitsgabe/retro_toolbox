@@ -15,6 +15,7 @@ import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Converts 3DS cartridge images (.3ds/.cci) to installable .cia via the
 /// bundled 3dsconv. Needs boot9.bin or aes_keys.txt for encrypted dumps — blocks with a
@@ -134,7 +135,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
       return _resultCard(theme, Icons.error_outline, theme.colorScheme.error, 'Conversion failed', task?.error ?? 'Unknown error', 'Try again');
     }
     if (status == ExtractionStatus.completed) {
-      return _resultCard(theme, Icons.check_circle, Colors.green, 'Done', 'Saved to $_outputDir', 'Convert another');
+      return _resultCard(theme, Icons.check_circle, StyleTokens.of(context).success, 'Done', 'Saved to $_outputDir', 'Convert another');
     }
     return Center(
       child: Column(

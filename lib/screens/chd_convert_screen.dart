@@ -14,6 +14,7 @@ import 'package:retro_toolbox/services/chd_service.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Convert disc images to/from CHD via chdman. Compresses .cue/.gdi/.iso and
 /// extracts .chd back. Blocks with a "chdman required" card until a binary is
@@ -156,7 +157,7 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
           task?.error ?? 'Unknown error', 'Try again');
     }
     if (status == ExtractionStatus.completed) {
-      return _resultCard(theme, Icons.check_circle, Colors.green, 'Done',
+      return _resultCard(theme, Icons.check_circle, StyleTokens.of(context).success, 'Done',
           'Saved to $_outputDir', 'Convert another');
     }
     return Center(
