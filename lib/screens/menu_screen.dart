@@ -42,6 +42,10 @@ import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key});
 
+  /// Android only, like before it left Tools. Tests flip it, the host platform is Linux.
+  @visibleForTesting
+  static bool? saveSyncShownForTest;
+
   @override
   ConsumerState<MenuScreen> createState() => _MenuScreenState();
 }
@@ -95,6 +99,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           accentColor: const Color(0xFF2E6DB4),
           onTap: _openGamesLibrary,
         ),
+      if (MenuScreen.saveSyncShownForTest ?? Platform.isAndroid)
+        MenuTile(label: 'Save Sync', icon: Icons.sync, accentColor: const Color(0xFF2E7D5B), badge: 'ALPHA', onTap: () => _push(const SaveSyncScreen())),
       MenuTile(
         label: 'Servers',
         icon: Icons.dns,
@@ -120,8 +126,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
-          if (Platform.isAndroid)
-            MenuTile(label: 'Save Sync', icon: Icons.sync, accentColor: const Color(0xFF2E7D5B), badge: 'ALPHA', onTap: () => _push(const SaveSyncScreen())),
           if (Handheld.current)
             MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
           if (Handheld.current)
