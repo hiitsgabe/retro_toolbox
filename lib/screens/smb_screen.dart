@@ -97,7 +97,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
             padding: const EdgeInsets.only(left: 4, bottom: 8),
             child: Text('FOUND ON YOUR NETWORK', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, letterSpacing: 1.2)),
           ),
-          for (final h in state.discovered) _hostTile(context, h),
+          for (final h in state.discovered) _hostTile(context, h, state.busy ? null : () => _connectTo(h, notifier)),
         ] else if (!state.scanning) ...[
           const SizedBox(height: 16),
           Center(
@@ -128,7 +128,19 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
     );
   }
 
-  Widget _hostTile(BuildContext context, SmbHost h) {
+  // Tapping a found host connects right away; only a refused login falls back
+  // to the manual form, with the host filled in.
+  Future<void> _connectTo(SmbHost h, SmbNotifier notifier) async {
+    if (await notifier.connectToHost(h.ip) || !mounted) return;
+    final state = ref.read(smbProvider);
+    _host.text = h.ip;
+    _user.text = state.username;
+    _domain.text = state.domain;
+    setState(() {});
+    _advanced.expand();
+  }
+
+  Widget _hostTile(BuildContext context, SmbHost h, VoidCallback? onTap) {
     final theme = Theme.of(context);
     final hasName = h.name != null;
     return Padding(
@@ -138,11 +150,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
         borderRadius: BorderRadius.circular(14),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {
-            _host.text = h.ip;
-            setState(() {});
-            _advanced.expand();
-          },
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(

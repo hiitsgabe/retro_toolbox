@@ -92,9 +92,11 @@ class SmbState {
 final smbProvider = StateNotifierProvider<SmbNotifier, SmbState>((ref) => SmbNotifier());
 
 class SmbNotifier extends StateNotifier<SmbState> {
-  final _service = SmbService();
+  final SmbService _service;
 
-  SmbNotifier() : super(const SmbState()) {
+  SmbNotifier({SmbService? service})
+      : _service = service ?? SmbService(),
+        super(const SmbState()) {
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
       state = state.copyWith(
@@ -120,6 +122,18 @@ class SmbNotifier extends StateNotifier<SmbState> {
     } catch (e) {
       state = state.copyWith(busy: false, connected: false, error: '$e');
     }
+  }
+
+  /// Connects to a host found by [scan]: with the user and domain saved for
+  /// it, else as guest. The password is never saved, so it goes empty either
+  /// way. True when it connected.
+  Future<bool> connectToHost(String host) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_hostKey) == host;
+    final user = saved ? prefs.getString(_userKey) ?? '' : '';
+    final domain = saved ? prefs.getString(_domainKey) ?? '' : '';
+    await connect(host: host, username: user, password: '', domain: domain);
+    return state.connected;
   }
 
   /// Probes the local subnet for hosts with SMB (445) open.
