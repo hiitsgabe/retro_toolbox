@@ -30,6 +30,34 @@ class ArchiveExtractService {
     }
   }
 
+  /// The files [path]'s archive spans: itself, or for a multi-part RAR every
+  /// part beside it (`name.partN.rar`, or `name.rar` with `name.r00`...), in
+  /// part order. The plugin reads the other parts on its own, so they go too
+  /// when the original is deleted.
+  static List<String> volumes(String path) {
+    final dir = p.dirname(path), name = p.basename(path);
+    final partN = RegExp(r'^(.*)\.part\d+\.rar$', caseSensitive: false).firstMatch(name);
+    final RegExp member;
+    if (partN != null) {
+      member = RegExp('^${RegExp.escape(partN[1]!)}\\.part(\\d+)\\.rar\$', caseSensitive: false);
+    } else if (p.extension(name).toLowerCase() == '.rar') {
+      member = RegExp('^${RegExp.escape(p.basenameWithoutExtension(name))}\\.r(\\d{2,3})\$', caseSensitive: false);
+    } else {
+      return [path];
+    }
+    final parts = <(int, String)>[];
+    try {
+      for (final e in Directory(dir).listSync(followLinks: false)) {
+        final m = e is File ? member.firstMatch(p.basename(e.path)) : null;
+        if (m != null) parts.add((int.parse(m[1]!), e.path));
+      }
+    } catch (_) {} // unreadable folder: just the archive itself
+    parts.sort((a, b) => a.$1.compareTo(b.$1));
+    final found = [for (final (_, f) in parts) f];
+    if (partN == null) return [path, ...found];
+    return found.isEmpty ? [path] : found;
+  }
+
   /// The `rar` plugin bundles native code for android/ios/macos; Linux works
   /// when the CI-built library loaded.
   static bool rarSupported({String? overrideOs}) {

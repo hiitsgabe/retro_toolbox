@@ -8,7 +8,7 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -30,7 +30,7 @@ class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifie
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
-const _update = GameUpdate(
+const _update = GameAddon(
   label: 'v65536',
   size: 2722082635,
   url: 'https://api.example.com/games/download/0100BA4026E94000/update',
@@ -117,8 +117,8 @@ void main() {
   });
 
   testWidgets('two updates with one label: each row downloads its own file', (t) async {
-    const a = GameUpdate(label: 'v1', size: 1, url: 'https://api.example.com/u/a', fileName: 'A [v1].nsz');
-    const b = GameUpdate(label: 'v1', size: 2, url: 'https://api.example.com/u/b', fileName: 'B [v1].nsz');
+    const a = GameAddon(label: 'v1', size: 1, url: 'https://api.example.com/u/a', fileName: 'A [v1].nsz');
+    const b = GameAddon(label: 'v1', size: 2, url: 'https://api.example.com/u/b', fileName: 'B [v1].nsz');
     await pumpPage(t, _game.copyWith(updates: const [a, b]));
     final rows = find.byType(GameFileRow);
     for (final i in [0, 1]) {

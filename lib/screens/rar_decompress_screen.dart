@@ -26,6 +26,7 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
   String? _outputDir;
   String? _result;
   bool _failed = false;
+  bool _deleteOriginals = false;
 
   void _setError(Object e) {
     if (!mounted) return;
@@ -92,6 +93,7 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
       'taskId': game.gameId,
       'archivePath': archive,
       'outputDir': out,
+      'deleteOriginals': _deleteOriginals,
     });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Extraction added to the task list')),
@@ -121,7 +123,16 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
             const SizedBox(height: 12),
             _fileRow(theme, Icons.folder_outlined, 'Output folder',
                 _outputDir ?? 'No folder selected', _pickOutput),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: _deleteOriginals,
+              onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
+              title: const Text('Delete original when done'),
+              subtitle: const Text('Only after a successful extraction. A multi-part archive takes all its parts with it.'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(

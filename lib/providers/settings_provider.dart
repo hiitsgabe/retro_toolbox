@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
@@ -237,21 +238,45 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return own != null && own.isNotEmpty ? own : defaultUpdatesDir(consoleId);
   }
 
-  /// The folder [game] downloads to: its console's, or the updates folder.
-  String downloadDirFor(Game game) => game.isUpdate ? updatesDir(game.consoleId) : getDownloadDir(game.consoleId);
-
-  /// How [game] is unpacked after its download.
-  Decompress decompressFor(Game game) {
-    final catalog = CatalogService.consoleByIdSync(game.consoleId)?.decompress ?? Decompress.none;
-    if (!game.isUpdate) return catalog;
-    return resolveUpdateDecompress(getConsoleSetting<String>(game.consoleId, AppSettings.updateDecompress), catalog);
+  /// Where [consoleId]'s mods go, one folder per game: a folder named mods
+  /// in its download folder.
+  String modsDir(String consoleId) {
+    final base = getDownloadDir(consoleId);
+    return base.isEmpty ? '' : p.join(base, 'mods');
   }
 
-  /// The handler that runs after [game]'s download, if any.
+  /// The folder [game] downloads to: its console's, the updates folder (a
+  /// DLC installs like an update) or its game's folder under mods.
+  String downloadDirFor(Game game) => switch (game.addonKind) {
+        null => getDownloadDir(game.consoleId),
+        AddonKind.update || AddonKind.dlc => updatesDir(game.consoleId),
+        AddonKind.mod => _modDirFor(game),
+      };
+
+  String _modDirFor(Game mod) {
+    final root = modsDir(mod.consoleId);
+    final game = mod.addonOf;
+    return root.isEmpty || game == null ? root : p.join(root, Game.sanitizeForFat(game));
+  }
+
+  /// How [game] is unpacked after its download. A mod is kept as is.
+  Decompress decompressFor(Game game) {
+    final catalog = CatalogService.consoleByIdSync(game.consoleId)?.decompress ?? Decompress.none;
+    return switch (game.addonKind) {
+      null => catalog,
+      AddonKind.update || AddonKind.dlc => resolveUpdateDecompress(getConsoleSetting<String>(game.consoleId, AppSettings.updateDecompress), catalog),
+      AddonKind.mod => Decompress.none,
+    };
+  }
+
+  /// The handler that runs after [game]'s download, if any; none for a mod.
   GameHandler? activeHandlerFor(Game game) {
     final handler = activeHandler(game.consoleId);
-    if (!game.isUpdate) return handler;
-    return resolveUpdateHandler(getConsoleSetting<String>(game.consoleId, AppSettings.updateHandler), handler);
+    return switch (game.addonKind) {
+      null => handler,
+      AddonKind.update || AddonKind.dlc => resolveUpdateHandler(getConsoleSetting<String>(game.consoleId, AppSettings.updateHandler), handler),
+      AddonKind.mod => null,
+    };
   }
 
   /// An update's unpacking: [game]'s unless [saved] (a Decompress name) says.
@@ -275,11 +300,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     return getSetting(AppSettings.autoExtract, consoleId) ?? true;
   }
 
-  /// Whether [game]'s download is unpacked on arrival: an update whose
-  /// console chose an unpacking does it whatever "Extract archives" says;
-  /// anything else follows that setting.
+  /// Whether [game]'s download is unpacked on arrival: never for a mod; an
+  /// update or DLC whose console chose an unpacking does it whatever
+  /// "Extract archives" says; anything else follows that setting.
   bool shouldUnpack(Game game) {
-    if (game.isUpdate) {
+    if (game.addonKind == AddonKind.mod) return false;
+    if (game.addonKind == AddonKind.update || game.addonKind == AddonKind.dlc) {
       final saved = getConsoleSetting<String>(game.consoleId, AppSettings.updateDecompress);
       if (saved != null) {
         final d = Decompress.fromId(saved);

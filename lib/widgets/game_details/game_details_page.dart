@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -42,10 +42,10 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   bool _busy = false;
   final _scroll = ScrollController();
 
-  /// The Game of each update, by the update itself, built once: Game has no ==, and
+  /// The Game of each addon (update, DLC, mod), by the addon itself, built once: Game has no ==, and
   /// gameStateProvider keeps an entry per Game it has seen, so a new Game on
   /// every rebuild would leave an entry behind each time.
-  final _updateGames = <GameUpdate, Game>{};
+  final _addonGames = <GameAddon, Game>{};
 
   /// The same for each version of a multi-disc game: its entry is a copy.
   final _versionGames = <GameVersion, Game>{};
@@ -117,6 +117,14 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         ? FilledButton.icon(autofocus: autofocus, onPressed: onPressed, icon: Icon(icon), label: Text(label))
         : FilledButton.tonalIcon(autofocus: autofocus, onPressed: onPressed, icon: Icon(icon), label: Text(label));
 
+    (String, Widget) section(String title, List<GameAddon> list) {
+      final games = [for (final a in list) _addonGames.putIfAbsent(a, () => a.toGame(game))];
+      return (title, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (games.length >= 2) _DownloadAll(games: games, consoleId: game.consoleId),
+        for (final (i, a) in list.indexed) GameFileRow(game: games[i], label: a.label),
+      ]));
+    }
+
     final error = gameState.errorMessage;
     return PopScope(
       canPop: !_busy,
@@ -162,10 +170,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
               ('Extras', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 for (final e in group.extras) GameFileRow(game: e, label: extraLabel(e)),
               ])),
-            if (game.updates.isNotEmpty)
-              ('Updates', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final u in game.updates) GameFileRow(game: _updateGames.putIfAbsent(u, () => u.toGame(game)), label: u.label),
-              ])),
+            if (game.updates.isNotEmpty) section('Updates', game.updates),
+            if (game.dlcs.isNotEmpty) section('DLC', game.dlcs),
+            if (game.mods.isNotEmpty) section('Mods', game.mods),
           ],
           actions: [
             for (final a in actions) button(gameActionLabels[a]!, gameActionIcons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
@@ -242,6 +249,33 @@ class _DiscRow extends ConsumerWidget {
               label: Text(gameActionLabels[action]!),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A section's Download all: queues each of [games] that offers Download now,
+/// so what is on disk, queued or running is left alone.
+class _DownloadAll extends ConsumerWidget {
+  const _DownloadAll({required this.games, required this.consoleId});
+
+  final List<Game> games;
+  final String? consoleId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.tonalIcon(
+          onPressed: () => downloadGames(ref, context, [
+            for (final g in games)
+              if (ref.read(gameStateProvider(g)).availableActions.contains(GameAction.download)) g,
+          ], consoleId),
+          icon: Icon(gameActionIcons[GameAction.download]),
+          label: const Text('Download all'),
+        ),
       ),
     );
   }

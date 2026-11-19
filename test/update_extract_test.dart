@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/extraction_provider.dart';
@@ -76,7 +76,7 @@ void main() {
     ]);
     addTearDown(c.dispose);
     await c.read(settingsProvider.notifier).loaded;
-    final u = const GameUpdate(label: 'v1', size: 3, url: 'https://api.example.com/u', fileName: 'Base [v1].zip').toGame(_game);
+    final u = const GameAddon(label: 'v1', size: 3, url: 'https://api.example.com/u', fileName: 'Base [v1].zip').toGame(_game);
     c.read(gameStateManagerProvider.notifier).registerTransientGame(u);
     final snap = c.read(librarySnapshotProvider(updates).notifier);
     await snap.getStatus('Base [v1].zip'); // the library has seen the download
@@ -109,7 +109,7 @@ void main() {
     ]);
     addTearDown(c.dispose);
     await c.read(settingsProvider.notifier).loaded;
-    final u = const GameUpdate(label: 'v1', size: 1 << 62, url: 'https://api.example.com/b', fileName: 'Bad [v1].zip').toGame(_game);
+    final u = const GameAddon(label: 'v1', size: 1 << 62, url: 'https://api.example.com/b', fileName: 'Bad [v1].zip').toGame(_game);
     c.read(gameStateManagerProvider.notifier).registerTransientGame(u);
     await c.read(extractionProvider.notifier).extractFile(u.gameId);
     ExtractionStatus? st() => c.read(extractionProvider).tasks[u.gameId]?.status;

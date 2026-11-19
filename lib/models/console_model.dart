@@ -32,10 +32,16 @@ class Console {
   /// (named groups label, size, url or id).
   final String? updateRegex;
   /// An update's link when its match has no url: `<id>` is the update's id
-  /// group, else the game's.
+  /// group, else the game's; `<game_id>` is always the game's.
   final String? updateDownloadUrl;
   /// The update file's extension; null uses the first original_format.
   final String? updateFormat;
+  /// Like updateRegex and updateDownloadUrl, for DLC and for mods. These
+  /// matches may also name the file (group name).
+  final String? dlcRegex;
+  final String? dlcDownloadUrl;
+  final String? modRegex;
+  final String? modDownloadUrl;
   final Map<String, dynamic>? auth;
   final String? listUrl;
   final String listJsonFileLocation;
@@ -65,6 +71,10 @@ class Console {
     this.updateRegex,
     this.updateDownloadUrl,
     this.updateFormat,
+    this.dlcRegex,
+    this.dlcDownloadUrl,
+    this.modRegex,
+    this.modDownloadUrl,
     this.auth,
     this.listUrl,
     this.listJsonFileLocation = 'files',
@@ -161,6 +171,10 @@ class Console {
       updateRegex: json['update_regex'] as String?,
       updateDownloadUrl: json['update_download_url'] as String?,
       updateFormat: json['update_format'] as String?,
+      dlcRegex: json['dlc_regex'] as String?,
+      dlcDownloadUrl: json['dlc_download_url'] as String?,
+      modRegex: json['mod_regex'] as String?,
+      modDownloadUrl: json['mod_download_url'] as String?,
       auth: json['auth'] as Map<String, dynamic>?,
       listUrl: json['list_url'] as String?,
       listJsonFileLocation: json['list_json_file_location'] as String? ?? 'files',
@@ -193,6 +207,10 @@ class Console {
       if (updateRegex != null) 'update_regex': updateRegex,
       if (updateDownloadUrl != null) 'update_download_url': updateDownloadUrl,
       if (updateFormat != null) 'update_format': updateFormat,
+      if (dlcRegex != null) 'dlc_regex': dlcRegex,
+      if (dlcDownloadUrl != null) 'dlc_download_url': dlcDownloadUrl,
+      if (modRegex != null) 'mod_regex': modRegex,
+      if (modDownloadUrl != null) 'mod_download_url': modDownloadUrl,
       if (auth != null) 'auth': auth,
       if (listUrl != null) 'list_url': listUrl,
       'list_json_file_location': listJsonFileLocation,
@@ -207,8 +225,8 @@ class Console {
   String get defaultRegex =>
       '<tr><td class="link"><a href="(?<href>[^"]+)" title="(?<title>[^"]+)">(?<text>[^<]+)</a></td><td class="size">(?<size>[^<]+)</td><td class="date">[^<]*</td></tr>';
 
-  // v3: games saved with their updates (update_regex); older files are
-  // ignored, so the first load after the update re-fetches.
+  // v4: games saved with their DLC and mods (dlc_regex, mod_regex); older
+  // files are ignored, so the first load after the update re-fetches.
   // ponytail: the old files stay behind in the cache dir until it is cleared.
-  String get cacheFile => 'catalog_v3_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
+  String get cacheFile => 'catalog_v4_${id.replaceAll(RegExp(r'[^a-z0-9]+'), '_')}.json';
 }

@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +18,7 @@ const _game = Game(
   size: 560321310,
   consoleId: 'switch',
 );
-const _update = GameUpdate(
+const _update = GameAddon(
   label: 'v65536',
   size: 2722082635,
   url: 'https://api.example.com/games/download/0100BA4026E94000/update',

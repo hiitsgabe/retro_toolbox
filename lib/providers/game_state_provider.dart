@@ -297,10 +297,10 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
       if (!state.containsKey(game.gameId)) {
         updates[game.gameId] = GameState(game: game);
       }
-      // An update downloads and resolves like a game, so it needs its own entry.
-      for (final u in game.updates) {
-        final update = u.toGame(game);
-        if (!state.containsKey(update.gameId)) updates[update.gameId] = GameState(game: update);
+      // An addon downloads and resolves like a game, so it needs its own entry.
+      for (final a in [...game.updates, ...game.dlcs, ...game.mods]) {
+        final addon = a.toGame(game);
+        if (!state.containsKey(addon.gameId)) updates[addon.gameId] = GameState(game: addon);
       }
     }
     if (updates.isNotEmpty) {

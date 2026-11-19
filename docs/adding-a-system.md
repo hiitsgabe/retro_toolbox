@@ -137,6 +137,23 @@ A game can list updates (patches) next to it. Add `update_regex` and each game s
 
 A match with no `url` and no usable `id` is skipped. Updates download to the console's updates folder, by default a folder named `updates` inside its download folder; change it in the console's settings, where *Unpack updates* and *After an update downloads* default to *Same as the game* (they follow the game's unpacking and handler) and can be set separately.
 
+### DLC and mods
+
+`dlc_regex` and `mod_regex` work like `update_regex`, over the same part of the feed, and each game shows them in its *DLC* and *Mods* sections.
+
+- Named groups: `name` (the file name as the feed gives it, JSON escapes decoded), `label` (shown; defaults to `name` without its extension), `size`, and `url` or `id`. Without `name` the file is `<game> [<label>]<format>`.
+- `dlc_download_url` / `mod_download_url`: the link of a match with no `url`. `<id>` is the match's `id` (or the game's), and `<game_id>` is always the game's `id` (also accepted in `update_download_url`).
+- DLC downloads to the updates folder and follows the update unpacking and handler. A mod downloads to `mods/<game>` inside the download folder and is never unpacked.
+
+The Switch catalog uses the feed's `resource_id` prefix to tell the two apart:
+
+```json
+"dlc_regex": "\\{\"name\"\\s*:\\s*\"(?P<name>(?:[^\"\\\\]|\\\\.)+)\"\\s*,\\s*\"size\"\\s*:\\s*(?P<size>\\d+)\\s*,\\s*\"resource_id\"\\s*:\\s*\"(?P<id>dlc-[^\"]+)\"",
+"dlc_download_url": "https://api.ultranx.ru/games/download/<game_id>/<id>",
+"mod_regex": "\\{\"name\"\\s*:\\s*\"(?P<name>(?:[^\"\\\\]|\\\\.)+)\"\\s*,\\s*\"size\"\\s*:\\s*(?P<size>\\d+)\\s*,\\s*\"resource_id\"\\s*:\\s*\"(?P<id>mod-[^\"]+)\"",
+"mod_download_url": "https://api.ultranx.ru/games/download/<game_id>/<id>"
+```
+
 ### How games are grouped
 
 Consoles without a `regex` are listed from file names (No-Intro and Redump style), and the list shows one entry per game. With *Group versions* on (the default), files share an entry when their names are the same once the trailing `(...)` tags are removed, so `Game (USA)`, `Game (Europe) (Rev 1)` and `Game (USA) (Disc 1)` are one game, with regions, revisions and discs on its page. Names with a prefix before ` - ` holding `Collection`, `Anthology` or `Trilogy` (at least two of them) form a box set listing its games. Demos, previews, betas, prototypes and bonus discs, found by their tags, are kept apart as extras. A console with a custom `regex` is not grouped.
@@ -269,6 +286,8 @@ Plus a source — either `url` (for HTML or Internet Archive) or `list_url` (for
 | `update_regex`             | string  | *(none)*      | Finds a game's updates in the feed (see *Updates*) |
 | `update_download_url`       | string  | *(none)*      | Link of an update whose match has no `url` |
 | `update_format`            | string  | first `original_format` | The update file's extension |
+| `dlc_regex` / `mod_regex`  | string  | *(none)*      | Finds a game's DLC or mods in the feed (see *DLC and mods*) |
+| `dlc_download_url` / `mod_download_url` | string | *(none)* | Link of a DLC or mod whose match has no `url` |
 | `auth`                     | object  | *(none)*      | Authentication config (see below) |
 | `launchbox_platform`       | string  | *(from `platform`)* | LaunchBox platform the metadata comes from (see below) |
 

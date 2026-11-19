@@ -117,6 +117,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     required String nszFilePath,
     required String outputDir,
     required String keysPath,
+    bool deleteOriginals = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(
@@ -140,7 +141,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
           ExtractionService.updateNotification('Decompressing $fileName... ${(progress * 100).round()}%');
         },
       );
-      await _onNszCompleted(taskId, nszFilePath, outputDir);
+      _onNszCompleted(taskId, nszFilePath, deleteOriginals: deleteOriginals);
     } catch (e) {
       debugPrint('NSZ decompression error: $e');
       _onNszError(taskId, e.toString());
@@ -193,6 +194,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     required String outputDir,
     String? boot9Path,
     bool ignoreEncryption = false,
+    bool deleteOriginals = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
@@ -213,6 +215,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
           ExtractionService.updateNotification('Converting $fileName... ${(progress * 100).round()}%');
         },
       );
+      if (deleteOriginals) _deleteOriginals([inputPath]);
       _onConversionCompleted(taskId);
     } catch (e) {
       debugPrint('3DS→CIA conversion error: $e');
@@ -329,11 +332,13 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
 
   /// The archive tool's extraction (.zip or .rar to any folder), run as a
   /// background task with progress in the task manager and notification.
-  /// Unlike a downloaded game's auto-extract, the archive is kept.
+  /// Unlike a downloaded game's auto-extract, the archive is kept unless
+  /// [deleteOriginals] (then every part of a multi-part set goes too).
   Future<void> archiveExtract({
     required String taskId,
     required String archivePath,
     required String outputDir,
+    bool deleteOriginals = false,
   }) async {
     final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
     tasks[taskId] = ExtractionTaskState(taskId: taskId, status: ExtractionStatus.extracting, progress: 0.0);
@@ -356,6 +361,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
         return;
       }
       _cancels.remove(taskId);
+      if (deleteOriginals) _deleteOriginals(ArchiveExtractService.volumes(archivePath));
       _onConversionCompleted(taskId);
     }
 
@@ -458,41 +464,34 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     }
     _ref.read(taskQueueProvider.notifier).updateTaskStatus(taskId, TaskQueueStatus.completed);
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
-    // ponytail: source file is kept — a conversion isn't a throwaway temp like a
-    // downloaded .nsz. Add an opt-in "delete source" later if users ask.
   }
 
-  Future<void> _onNszCompleted(String taskId, String nszFilePath, String outputDir) async {
-    final tasks = Map<String, ExtractionTaskState>.from(state.tasks);
-    final currentTask = tasks[taskId];
-    if (currentTask != null) {
-      tasks[taskId] = currentTask.copyWith(status: ExtractionStatus.completed, progress: 1.0);
-      state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
-    }
-
-    final queueNotifier = _ref.read(taskQueueProvider.notifier);
-    queueNotifier.updateTaskStatus(taskId, TaskQueueStatus.completed);
-
-    // Delete the source .nsz file
-    try {
-      final nszFile = File(nszFilePath);
-      if (await nszFile.exists()) {
-        await nszFile.delete();
-        debugPrint('Deleted NSZ source: $nszFilePath');
-      }
-    } catch (e) {
-      debugPrint('Failed to delete NSZ source: $e');
-    }
-
-    final game = gameStateManager.state[taskId]?.game;
-    if (game != null) {
-      final dir = _ref.read(settingsProvider.notifier).downloadDirFor(game);
-      if (dir.isNotEmpty) {
-        _ref.read(librarySnapshotProvider(dir).notifier).markFileRemoved(game.filename);
+  /// A tool's "Delete original when done", run only after its job succeeded.
+  /// A file that won't go is left; the job itself still succeeded.
+  void _deleteOriginals(List<String> files) {
+    for (final f in files) {
+      try {
+        File(f).deleteSync();
+      } catch (e) {
+        debugPrint('Could not delete $f: $e');
       }
     }
+  }
 
-    gameStateManager.updateExtractionState(taskId, ExtractionStatus.completed, 1.0);
+  /// The .nsz goes before the task reads completed, so nothing sees it done
+  /// with the source still there.
+  void _onNszCompleted(String taskId, String nszFilePath, {required bool deleteOriginals}) {
+    if (deleteOriginals) {
+      _deleteOriginals([nszFilePath]);
+      final game = gameStateManager.state[taskId]?.game;
+      if (game != null) {
+        final dir = _ref.read(settingsProvider.notifier).downloadDirFor(game);
+        if (dir.isNotEmpty) {
+          _ref.read(librarySnapshotProvider(dir).notifier).markFileRemoved(game.filename);
+        }
+      }
+    }
+    _onConversionCompleted(taskId);
   }
 
   void _onNszError(String taskId, String error) {

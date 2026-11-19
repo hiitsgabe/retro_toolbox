@@ -89,6 +89,8 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
         authHeaders: (c) => sourceAuthHeaders(_ref.read(settingsProvider), c),
         // Games already downloaded here go out from disk, not the internet.
         downloadDir: (c) => _ref.read(settingsProvider.notifier).getDownloadDir(c.id),
+        // Where updates and DLC download.
+        updatesDir: (c) => _ref.read(settingsProvider.notifier).updatesDir(c.id),
       );
       final addresses = await TinfoilServerService.localAddresses();
       state = state.copyWith(running: true, addresses: addresses, port: _service.port, clearError: true);

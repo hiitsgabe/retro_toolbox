@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -33,7 +33,7 @@ class _Queue extends StateNotifier<TaskQueueState> implements TaskQueueNotifier 
 }
 
 const _game = Game(title: 'Base.zip', url: 'https://api.example.com/base', size: 1, consoleId: 'switch');
-const _update = GameUpdate(label: 'v1', size: 1, url: 'https://api.example.com/update', fileName: 'Base [v1].nsz');
+const _update = GameAddon(label: 'v1', size: 1, url: 'https://api.example.com/update', fileName: 'Base [v1].nsz');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

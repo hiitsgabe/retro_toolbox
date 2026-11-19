@@ -3,17 +3,21 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 
 void main() {
   late HttpServer upstream;
+  late List<String> upstreamPaths;
   late TinfoilServerService service;
 
   setUp(() async {
     // Fake upstream: asserts auth header arrives, honors Range with 206.
     upstream = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    upstreamPaths = [];
     upstream.listen((req) async {
+      upstreamPaths.add(req.uri.path);
       if (req.headers.value('Authorization') != 'Bearer tok123') {
         req.response.statusCode = 401;
         await req.response.close();
@@ -174,6 +178,51 @@ void main() {
 
     final all = await index('/All%20games/');
     expect((all['files'] as List).length, 2);
+  });
+
+  test('a DLC route streams the DLC link with the console auth', () async {
+    final console = Console(id: 'x', name: 'X', urls: const [], originalFormat: const ['.nsz']);
+    final dlc = GameAddon(
+        kind: AddonKind.dlc, label: 'Pack', size: 100, url: 'http://127.0.0.1:${upstream.port}/dlc-1', fileName: 'Game [DLC Pack] [0100000000001001][v0].nsz');
+    final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'x', dlcs: [dlc]);
+    await service.start(port: 0, loadGames: () async => {console: [game]}, authHeaders: (c) => {'Authorization': 'Bearer tok123'});
+    final client = HttpClient();
+    addTearDown(client.close);
+    // No index fetched first: the route map is rebuilt for the request.
+    final res = await (await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}/dl/x/0d0/Game.nsz'))).close();
+    expect(res.statusCode, 200); // the upstream answers 401 without the auth header
+    expect(await res.fold<List<int>>([], (a, b) => a..addAll(b)), List.generate(100, (i) => i));
+    expect(upstreamPaths, ['/dlc-1']);
+  });
+
+  test('an update in the updates folder goes out from disk under Fast install', () async {
+    final downloads = Directory.systemTemp.createTempSync('tinfoil_downloads');
+    final updates = Directory.systemTemp.createTempSync('tinfoil_updates');
+    addTearDown(() => downloads.deleteSync(recursive: true));
+    addTearDown(() => updates.deleteSync(recursive: true));
+    File('${updates.path}/Game [v65536].nsz').writeAsBytesSync([9, 8, 7]);
+    final console = Console(id: 'x', name: 'X', urls: const [], originalFormat: const ['.nsz']);
+    final update = GameAddon(label: 'v65536', size: 100, url: 'http://127.0.0.1:${upstream.port}/update', fileName: 'Game [v65536].nsz');
+    final game = Game(title: 'Game.nsz', url: 'http://127.0.0.1:${upstream.port}/download/0100000000001000/base', size: 100, consoleId: 'x', updates: [update]);
+    await service.start(
+      port: 0,
+      loadGames: () async => {console: [game]},
+      authHeaders: (c) => {'Authorization': 'Bearer tok123'},
+      downloadDir: (c) => downloads.path,
+      updatesDir: (c) => updates.path,
+    );
+    final client = HttpClient();
+    addTearDown(client.close);
+    Future<List<int>> get(String path) async =>
+        (await (await client.getUrl(Uri.parse('http://127.0.0.1:${service.port}$path'))).close()).fold<List<int>>([], (a, b) => a..addAll(b));
+
+    // Before any index: the rebuilt route map knows the file too.
+    expect(await get('/dl/x/0u0/Game.nsz'), [9, 8, 7]);
+    final file = (jsonDecode(utf8.decode(await get('/Fast%20install/')))['files'] as List).single;
+    expect(file['url'], endsWith('/dl/x/0u0/Game%20%5B0100000000001800%5D%5Bv65536%5D.nsz'));
+    expect(file['size'], 3);
+    expect(await get(Uri.parse(file['url'] as String).path), [9, 8, 7]);
+    expect(upstreamPaths, isEmpty);
   });
 
   test('unknown route 404s', () async {
