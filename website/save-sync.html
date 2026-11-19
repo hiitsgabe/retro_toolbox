@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Save Sync and Shizuku | Retro Toolbox</title>
+<meta name="description" content="How Save Sync keeps game saves in step between your handhelds and phones, and why it asks for Shizuku, with step by step setup.">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --purple-light: #a56ce8;
+  --purple: #7c3fd4;
+  --purple-deep: #2e1687;
+  --lavender: #ddb9fc;
+  --bg: #0d0620;
+  --surface: rgba(255, 255, 255, 0.04);
+  --border: rgba(165, 108, 232, 0.22);
+  --text: #ece7f5;
+  --muted: #a99cc4;
+  --pixel: 'Press Start 2P', 'Courier New', monospace;
+  --sans: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+.aurora {
+  position: fixed; inset: -30vh -20vw; z-index: -1;
+  background:
+    radial-gradient(42vw 42vw at 18% 12%, rgba(124, 63, 212, 0.42), transparent 62%),
+    radial-gradient(38vw 38vw at 82% 26%, rgba(46, 22, 135, 0.55), transparent 64%);
+  filter: blur(28px);
+}
+nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px); background: rgba(13, 6, 32, 0.7); border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 860px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; font-family: var(--pixel); font-size: 11px; letter-spacing: 0.04em; }
+.brand img { width: 28px; height: 28px; image-rendering: pixelated; }
+.nav-inner a.back { color: var(--lavender); text-decoration: none; font-weight: 500; }
+main { max-width: 860px; margin: 0 auto; padding: 56px 20px 80px; }
+h1 { font-family: var(--pixel); font-size: 22px; line-height: 1.5; color: var(--lavender); margin-bottom: 12px; }
+.meta { color: var(--muted); margin-bottom: 36px; }
+h2 { font-size: 22px; font-weight: 700; margin: 40px 0 12px; color: var(--text); }
+h3 { font-size: 18px; font-weight: 700; margin: 28px 0 8px; color: var(--lavender); }
+h2, h3 { scroll-margin-top: 80px; }
+p, li { color: var(--text); }
+p { margin-bottom: 14px; }
+ul, ol { padding-left: 22px; margin-bottom: 14px; }
+li { margin-bottom: 8px; }
+li strong, p strong { color: var(--lavender); font-weight: 600; }
+a { color: var(--purple-light); }
+code { font-family: 'Courier New', monospace; font-size: 0.92em; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; overflow-wrap: anywhere; }
+.ui { color: var(--lavender); font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 24px; }
+.card p:last-child { margin-bottom: 0; }
+.toc { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; }
+.toc p { color: var(--muted); font-size: 15px; margin-bottom: 8px; }
+.toc ol { margin-bottom: 0; }
+.toc li { margin-bottom: 4px; }
+.toc ul { margin: 4px 0 0; }
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+footer { border-top: 1px solid var(--border); padding: 28px 20px; text-align: center; color: var(--muted); font-size: 15px; }
+footer a { color: var(--muted); margin: 0 10px; }
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+
+<nav>
+  <div class="nav-inner">
+    <a class="brand" href="index.html"><img src="assets/logo.png" alt=""><span>RETRO TOOLBOX</span></a>
+    <a class="back" href="index.html">&larr; Back to the site</a>
+  </div>
+</nav>
+
+<main>
+  <h1>Save Sync and Shizuku</h1>
+  <p class="meta">Retro Toolbox &middot; Android only &middot; Save Sync is in alpha</p>
+
+  <div class="card">
+    <p><strong>The short version.</strong> Save Sync copies your game saves between your handhelds and phones, one app at a time, and keeps older copies so you can go back. Android does not let one app open another app's save folder. Shizuku is a free app that gives Retro Toolbox that access, without root. Without it (or root), Save Sync can show your list but cannot move any save.</p>
+  </div>
+
+  <div class="toc" role="navigation" aria-label="On this page">
+    <p>On this page</p>
+    <ol>
+      <li><a href="#what">What Save Sync is</a></li>
+      <li><a href="#how">How it works</a>
+        <ul>
+          <li><a href="#hub">The hub</a></li>
+          <li><a href="#push-pull">Upload and download</a></li>
+          <li><a href="#history">Versions, backups and history</a></li>
+          <li><a href="#conflicts">Conflicts</a></li>
+          <li><a href="#recipes">Recipes</a></li>
+        </ul>
+      </li>
+      <li><a href="#shizuku">Shizuku: why Save Sync asks for it</a></li>
+      <li><a href="#setup">Set up Shizuku, step by step</a></li>
+      <li><a href="#troubleshooting">Troubleshooting</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ol>
+  </div>
+
+  <h2 id="what">What Save Sync is</h2>
+  <p>Save Sync keeps game saves in step between your devices. Play on your handheld, then carry on from the same point on your phone.</p>
+  <ul>
+    <li><strong>Per app.</strong> You choose which apps sync: emulators and Android games. Each one has its own row.</li>
+    <li><strong>One save at a time.</strong> An emulator keeps one save per game. Each of those gets its own line and its own button, so syncing one game never touches another.</li>
+    <li><strong>You decide when.</strong> Nothing syncs on its own. Download a game's save before you play and upload it after.</li>
+    <li><strong>With a history.</strong> Every save Save Sync replaces is kept first. See <a href="#history">Versions, backups and history</a>.</li>
+  </ul>
+  <p>Open it from the main menu: <span class="ui">Save Sync</span>. It is only in the Android app.</p>
+
+  <h2 id="how">How it works</h2>
+
+  <h3 id="hub">The hub</h3>
+  <p>The hub is the one place all your devices share. The first time you open Save Sync it asks <span class="ui">Where should saves go?</span> You pick one of two:</p>
+  <ul>
+    <li><strong>Google Drive</strong> (<span class="ui">Sign in with Google</span>). Saves go into a folder named <code>Retro Toolbox Saves</code> in your own Drive. Retro Toolbox can see only the files it puts there, nothing else in your Drive. This button only shows in builds that are registered with Google.</li>
+    <li><strong>A folder</strong> (<span class="ui">Use a folder</span>). Saves go into a folder on the device, <code>Retro Toolbox Saves</code> in your storage by default. Retro Toolbox uploads nothing here: another app you choose, such as Syncthing or FolderSync, carries the folder between your devices. With a folder hub, "up to date" means up to date with what the folder holds right now.</li>
+  </ul>
+  <p>You can switch later with <span class="ui">Change</span> on the Save Sync screen. Switching never touches your game folders.</p>
+  <p>The list of apps lives in the hub too. When a second device joins the same hub, it shows <span class="ui">This hub already covers</span> those apps and lists the ones installed there. Apps you add on one device reach the others.</p>
+
+  <h3 id="push-pull">Upload and download</h3>
+  <p>Each row says what it needs and offers one button:</p>
+  <ul>
+    <li><strong>Needs upload</strong>, button <span class="ui">Upload</span> (a push): this device has a newer save than the hub. It is copied to the hub.</li>
+    <li><strong>Needs download</strong>, button <span class="ui">Download</span> (a pull): another device pushed a newer save. It is copied into the game's folder here.</li>
+    <li><strong>Up to date</strong>: nothing to do.</li>
+  </ul>
+  <p>Close the game first. If the game is running, its row says <span class="ui">Close the game first</span> and upload and download wait. A download can also be refused when the recipe says the save needs a matching or newer version of the game than the one installed here.</p>
+  <p>Tap a row (or <span class="ui">Check</span> in its menu) to see what Save Sync found: whether the app is installed, where its saves are, and whether the copies in the hub are intact. Check changes nothing.</p>
+
+  <h3 id="history">Versions, backups and history</h3>
+  <p>Save Sync keeps more than the latest save, in three places:</p>
+  <ul>
+    <li><strong>Versions in the hub.</strong> Every upload is stored as a new version (the app calls it a "gen", short for generation), linked to the version it came from. The hub keeps the newest 20 versions of each save, plus any version that is still current.</li>
+    <li><strong>A backup per device in the hub.</strong> Before a download replaces a save, the save that was here is uploaded to the hub as this device's backup. There is one backup per device for each save. Put it back with <span class="ui">Restore a backup&hellip;</span> in the row's menu (the three dots).</li>
+    <li><strong>History on this device.</strong> Every save a download, restore or conflict choice replaces is copied first to <code>RetroToolbox/SaveSync/history</code> in your device storage. The newest 20 copies of each save are kept. You can reach them with any file manager.</li>
+  </ul>
+
+  <h3 id="conflicts">Conflicts</h3>
+  <p>A conflict is when two devices both changed the same save since they last synced. The row says <span class="ui">Both sides changed since the last sync</span> and offers <span class="ui">Choose version</span>.</p>
+  <p>You see each version side by side: the one <span class="ui">On this device</span> and the one from each other device, with its date and number of files. Tap <span class="ui">Keep this</span> on the one you want. The other one is not lost: the save it replaces is kept in this device's history first. The version you keep is uploaded as a new version, which settles the conflict on every device without asking again.</p>
+
+  <h3 id="recipes">Recipes</h3>
+  <p>A recipe tells Save Sync where an app keeps its saves, which files are the save and which belong to one device only (settings, the app's own backups, files it is still writing).</p>
+  <ul>
+    <li><strong>Published recipes.</strong> Recipes for apps such as Stardew Valley, Hollow Knight, Minecraft and the Switch emulators Eden and yuzu are published in the project's GitHub repository, in the <code>save_recipes</code> folder. Save Sync downloads the ones it needs. You can point it elsewhere in Settings, <span class="ui">Recipes source</span>.</li>
+    <li><strong>Adding an app.</strong> Tap <span class="ui">Add an app</span>. Every installed app with a launcher icon is listed. Each one says <span class="ui">Recipe available</span> (with <span class="ui">verified</span> when it has been checked), <span class="ui">Recipe ready</span>, <span class="ui">Already added</span>, or <span class="ui">No recipe yet</span>. Tick the ones you want and tap <span class="ui">Add</span>.</li>
+    <li><strong>Describing an app yourself.</strong> For an app with no recipe, hold its icon. Save Sync shows you the app's real save folder and asks three things: the folder, what counts as one save, and what should travel. <span class="ui">Save recipe</span> keeps it on this device and adds the app. The recipe then travels to your other devices through the hub. This step needs Shizuku or root, because it looks inside the app's folder.</li>
+    <li><strong>Confirming.</strong> A recipe that has not been verified asks once, <span class="ui">Are these the saves?</span>, showing the files it found. Tap <span class="ui">Use this place</span> if they look right.</li>
+  </ul>
+
+  <h2 id="shizuku">Shizuku: why Save Sync asks for it</h2>
+
+  <h3 id="shizuku-what">What Shizuku is</h3>
+  <p>Shizuku is a free, open-source app by RikkaApps. It lets other apps run commands with the same access as ADB, the shell you get when you connect a phone to a computer for debugging. It does this without root. You start it yourself, and each app has to ask your permission before it can use it.</p>
+
+  <h3 id="shizuku-why">Why Retro Toolbox needs it</h3>
+  <p>Most games and emulators keep their saves in their own folder, <code>Android/data/&lt;app&gt;</code>. Since Android 11, normal apps cannot open other apps' folders there, even with All files access. The shell can. So Save Sync reaches those folders through Shizuku.</p>
+  <p>Save Sync can use one of three access modes. The screen tells you which one it has:</p>
+  <ul>
+    <li><strong>Shizuku (shell).</strong> Shizuku started through wireless debugging. Reaches <code>Android/data</code>. This is what most people use.</li>
+    <li><strong>Root.</strong> Shizuku started on a rooted device, or, in the version of the app from GitHub releases, root through <code>su</code> directly. Root also reaches saves an app keeps in its private internal storage (<code>/data/data</code>), which the shell cannot open. The Google Play version does not call <code>su</code> itself; on a rooted device it gets root through Shizuku started with root.</li>
+    <li><strong>None.</strong> No access to game folders.</li>
+  </ul>
+  <p><strong>What works without it:</strong> choosing the hub, signing in to Google Drive, reading the hub, seeing which apps it covers, and adding apps from the catalog. Nothing can be uploaded, downloaded, checked or described, because all of that reads or writes the game's folder.</p>
+
+  <h3 id="shizuku-does">What Retro Toolbox does with it</h3>
+  <p>Only Save Sync uses Shizuku, and only while you use Save Sync. Each command is sent on its own to a small service that Shizuku starts for Retro Toolbox. The commands are:</p>
+  <ul>
+    <li>List, read, hash, copy, move and remove save files, and create a save folder (<code>sh</code> to list a folder, <code>test</code>, <code>stat</code>, <code>find</code>, <code>sha256sum</code>, <code>cp</code>, <code>mv</code>, <code>rm</code>, <code>chmod</code>, <code>mkdir</code>, <code>rmdir</code>). With root it also sets a new file's owner to match its folder (<code>chown</code>).</li>
+    <li>Check whether the game is running, so a save is never replaced under it (<code>pidof</code>).</li>
+    <li>Check whether the app is installed and which version it is (<code>pm path</code>, <code>dumpsys package</code>).</li>
+  </ul>
+  <p>Every path is checked before a command sees it. A command may only touch the folders of the app being synced (<code>Android/data/&lt;app&gt;</code> and <code>/data/data/&lt;app&gt;</code>) and Retro Toolbox's own <code>RetroToolbox/SaveSync</code> folder. Anything else is refused.</p>
+
+  <h3 id="shizuku-doesnt">What it does not do</h3>
+  <ul>
+    <li>It does not touch any folder outside the ones above.</li>
+    <li>It does not install or remove apps, or change system settings.</li>
+    <li>It is not used by any other part of Retro Toolbox.</li>
+    <li>It sends nothing anywhere. Saves go only to the hub you chose.</li>
+    <li>It does not root your device. Shizuku only has root if you started Shizuku with root.</li>
+  </ul>
+
+  <h2 id="setup">Set up Shizuku, step by step</h2>
+  <p>Shizuku's own guide has pictures and more detail: <a href="https://shizuku.rikka.app/guide/setup/">shizuku.rikka.app/guide/setup</a>.</p>
+  <ol>
+    <li><strong>Install Shizuku</strong> from <a href="https://play.google.com/store/apps/details?id=moe.shizuku.privileged.api">Google Play</a> or its <a href="https://github.com/RikkaApps/Shizuku/releases">GitHub releases</a>. Retro Toolbox needs Shizuku 11 or newer.</li>
+    <li><strong>Start Shizuku.</strong> Pick one:
+      <ul>
+        <li><strong>Wireless debugging</strong> (Android 11 and later, no computer). Turn on Developer options, then Wireless debugging, while connected to Wi-Fi. In Shizuku, start pairing. In Wireless debugging, tap Pair device with pairing code, and type the code into Shizuku's notification. Then tap Start in Shizuku. You only pair once.</li>
+        <li><strong>Root.</strong> On a rooted device, tap Start in Shizuku and allow the root request.</li>
+        <li><strong>A computer.</strong> On Android 10 and older, start it from a computer with ADB, as the guide explains.</li>
+      </ul>
+    </li>
+    <li><strong>Open Retro Toolbox, then Save Sync.</strong> If Shizuku is not running yet, you see <span class="ui">No access to game folders</span> and <span class="ui">Start Shizuku (wireless debugging, or root), then come back and refresh.</span> Tap <span class="ui">Retry</span>.</li>
+    <li><strong>Grant access.</strong> The card now says <span class="ui">Shizuku is running. Allow Retro Toolbox to use it.</span> Tap <span class="ui">Grant Shizuku access</span>. Shizuku asks whether to allow Retro Toolbox. Allow it.</li>
+    <li><strong>Check it worked.</strong> The card goes away and the screen shows <span class="ui">Access: Shizuku (shell)</span>. If Shizuku runs with root, it shows <span class="ui">Access: root</span>. Tap any row: the Check list shows <span class="ui">Access</span> with <span class="ui">Shizuku (shell)</span> or <span class="ui">root</span>.</li>
+  </ol>
+  <div class="card">
+    <p><strong>After a reboot.</strong> Shizuku started with wireless debugging (or a computer) stops when the device restarts. Start it again in Shizuku before you sync. You do not need to pair or grant access again. Newer Shizuku versions can start by themselves on some devices; see Shizuku's settings and guide.</p>
+  </div>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+
+  <h3 id="ts-reboot">Shizuku stopped after a reboot</h3>
+  <p>Save Sync shows <span class="ui">No access to game folders</span> again. Open Shizuku, make sure you are on Wi-Fi with Wireless debugging on, and tap Start. If it will not start, turn Wireless debugging off and on again. Then go back to Save Sync and tap <span class="ui">Retry</span> or the refresh button at the top.</p>
+
+  <h3 id="ts-denied">Permission denied</h3>
+  <p>If you tapped Deny in Shizuku's prompt, the card stays on <span class="ui">Shizuku is running. Allow Retro Toolbox to use it.</span> Tap <span class="ui">Grant Shizuku access</span> again. If no prompt appears, open the Shizuku app, find Retro Toolbox in its list of apps and allow it there, then refresh Save Sync.</p>
+  <p>The button only shows while Shizuku is running. If you see <span class="ui">Retry</span> instead, Shizuku is not running: start it first.</p>
+
+  <h3 id="ts-not-listed">An app is not listed</h3>
+  <ul>
+    <li><strong>Your apps are all under "Not on this device".</strong> Without access, Save Sync cannot look at what is installed, so every app the hub covers is folded into <span class="ui">Not on this device</span>. Set up Shizuku, then refresh.</li>
+    <li><strong>An app is missing from Add an app.</strong> The list shows apps with a launcher icon only. Search by name or package name.</li>
+    <li><strong>An app says "No recipe yet".</strong> You can still add it, and it waits for a recipe. Or hold its icon to <a href="#recipes">describe it yourself</a>.</li>
+    <li><strong>A row says "Open the app once so it makes its save folder."</strong> Start the game once and save, then refresh.</li>
+    <li><strong>A row says "Saves live in a folder only root can open. This device isn't rooted."</strong> That app keeps its saves in internal storage, which only root can reach. Shizuku started with wireless debugging cannot open it.</li>
+  </ul>
+
+  <h2 id="faq">FAQ</h2>
+
+  <h3 id="faq-drive">Is my Google Drive data private?</h3>
+  <p>Save Sync asks Google only for the <code>drive.file</code> permission. With it, Retro Toolbox can see and change only the files and folders it created itself, and nothing else in your Drive. The saves, and small files that list your devices and the games they sync, go straight from your device to your own Drive. Nothing reaches the developer. See the <a href="privacy.html">privacy policy</a>.</p>
+
+  <h3 id="faq-conflict">What happens on a conflict?</h3>
+  <p>Nothing is overwritten on its own. The row asks you to <span class="ui">Choose version</span>, and whichever you keep, the other is kept in this device's history first. See <a href="#conflicts">Conflicts</a>.</p>
+
+  <h3 id="faq-undo">Can I undo a sync?</h3>
+  <p>Yes. After a download, use <span class="ui">Restore a backup&hellip;</span> in the row's menu to put back the save that was here. Older copies are in <code>RetroToolbox/SaveSync/history</code> on the device, and the hub keeps the last 20 versions of each save. See <a href="#history">Versions, backups and history</a>.</p>
+
+  <h3 id="faq-shizuku-needed">Do I need Shizuku if my device is rooted?</h3>
+  <p>Not with the version from GitHub releases: it uses root directly when <code>su</code> is available. The Google Play version needs Shizuku, which you can start with root.</p>
+</main>
+
+<footer>
+  <a href="index.html">Retro Toolbox</a>
+  <a href="privacy.html">Privacy</a>
+  <a href="https://github.com/hiitsgabe/retro_toolbox">GitHub</a>
+  <a href="mailto:hi@gabeismy.name">Contact</a>
+</footer>
+</body>
+</html>
