@@ -13,9 +13,9 @@ import 'package:retro_toolbox/widgets/common/advanced_port.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
-/// Turns local folders into a catalog other apps consume via New Catalog
-/// Source: add folders, tweak how each appears, flip the server on, and share
-/// the consoles.json link.
+/// Turns local folders into a catalog other apps load as their catalog source
+/// (Settings > Library > Catalog source): add folders, tweak how each appears,
+/// flip the server on, and share the consoles.json link.
 class RtsServerScreen extends ConsumerWidget {
   const RtsServerScreen({super.key});
 
@@ -41,8 +41,8 @@ class RtsServerScreen extends ConsumerWidget {
         children: [
           const ToolDescription(
             icon: Icons.dns_rounded,
-            text: 'Shares folders on this device as a catalog. On another device, open New Catalog '
-                'Source and paste the link below — it browses and downloads straight from here. Same network.',
+            text: 'Shares folders on this device as a catalog. On another device, open Settings > Library > Catalog source '
+                '(with Games Library & downloads on) and paste the link below. It browses and downloads straight from here. Same network.',
           ),
           const SizedBox(height: 16),
           Card(
@@ -153,7 +153,7 @@ class RtsServerScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Paste in New Catalog Source on the other device.',
+            Text('Paste in Settings > Library > Catalog source on the other device.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
           ],
         ),
