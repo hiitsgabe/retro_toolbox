@@ -355,11 +355,11 @@ void main() {
     testWidgets('a console whose catalog lists updates has an Updates group, its folder in the download folder', (t) async {
       saved(general: {'downloadDir': '/roms'});
       await pump(t, consoleId: 'switch', consoles: const {'switch': _switch, 'psx': _psx});
-      expect(find.text('Updates folder'), findsOneWidget);
+      expect(find.text('Updates and DLC folder'), findsOneWidget);
       expect(find.text('/roms/updates'), findsOneWidget);
       await t.tap(rail('console psx'));
       await t.pumpAndSettle();
-      expect(find.text('Updates folder'), findsNothing);
+      expect(find.text('Updates and DLC folder'), findsNothing);
     });
 
     testWidgets('Keep files for updates is a change of its own; picking Same as the game follows the game again', (t) async {
@@ -394,7 +394,7 @@ void main() {
       await t.pump();
       s = c.read(settingsProvider).consoleSettings['switch']!;
       expect((s.updateDecompress, s.updateHandler, s.updatesDir), (null, null, '/sd/upd'));
-      Focus.of(t.element(find.text('Updates folder'))).requestFocus();
+      Focus.of(t.element(find.text('Updates and DLC folder'))).requestFocus();
       await t.pump();
       await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
       await t.pump();

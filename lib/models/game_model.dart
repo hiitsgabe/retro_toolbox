@@ -31,6 +31,10 @@ class Game {
   /// choices for updates.
   bool get isUpdate => addonKind == AddonKind.update;
 
+  /// An addon's game: its title without the format. A mod's folder is
+  /// named after it.
+  final String? addonOf;
+
   /// The game this entry stands for, with its versions and extras. Set by
   /// the list's grouping, never saved.
   final GameGroup? group;
@@ -47,6 +51,7 @@ class Game {
     this.dlcs = const [],
     this.mods = const [],
     this.addonKind,
+    this.addonOf,
     this.group,
   });
 
@@ -62,6 +67,7 @@ class Game {
     List<GameAddon>? dlcs,
     List<GameAddon>? mods,
     AddonKind? addonKind,
+    String? addonOf,
     GameGroup? group,
   }) {
     return Game(
@@ -76,6 +82,7 @@ class Game {
       dlcs: dlcs ?? this.dlcs,
       mods: mods ?? this.mods,
       addonKind: addonKind ?? this.addonKind,
+      addonOf: addonOf ?? this.addonOf,
       group: group ?? this.group,
     );
   }
@@ -107,6 +114,7 @@ class Game {
       mods: _addons(json['mods']),
       // isUpdate: saved before DLC and mods.
       addonKind: AddonKind.values.asNameMap()[json['addonKind']] ?? (json['isUpdate'] == true ? AddonKind.update : null),
+      addonOf: json['addonOf'] as String?,
     );
   }
 
@@ -122,6 +130,7 @@ class Game {
       if (dlcs.isNotEmpty) 'dlcs': [for (final d in dlcs) d.toJson()],
       if (mods.isNotEmpty) 'mods': [for (final m in mods) m.toJson()],
       if (addonKind != null) 'addonKind': addonKind!.name,
+      if (addonOf != null) 'addonOf': addonOf,
     };
   }
 

@@ -120,13 +120,22 @@ class DownloadNotifier extends StateNotifier<DownloadState> {
     }
   }
 
-  /// Every console's download and updates folder, once each.
+  /// Every console's download, updates and mods folder, once each, and each
+  /// game's folder under mods (a mod's partial file sits there).
   Future<Set<String>> _consoleDownloadDirs() async {
     final settings = _ref.read(settingsProvider.notifier);
     final consoles = await CatalogService().getConsoles();
-    return {
-      for (final consoleId in consoles.keys) ...[settings.getDownloadDir(consoleId), settings.updatesDir(consoleId)],
+    final dirs = {
+      for (final consoleId in consoles.keys) ...[settings.getDownloadDir(consoleId), settings.updatesDir(consoleId), settings.modsDir(consoleId)],
     }..remove('');
+    for (final consoleId in consoles.keys) {
+      final mods = Directory(settings.modsDir(consoleId));
+      if (mods.path.isEmpty || !await mods.exists()) continue;
+      await for (final e in mods.list(followLinks: false)) {
+        if (e is Directory) dirs.add(e.path);
+      }
+    }
+    return dirs;
   }
 
   /// On startup, clean up after a decompression a crash/kill interrupted: drop

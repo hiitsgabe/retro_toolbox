@@ -37,7 +37,7 @@ class UpdatesSetting extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         SettingsValueRow(
-          title: 'Updates folder',
+          title: 'Updates and DLC folder',
           subtitle: changed.contains(AppSettings.updatesDir) ? 'Default: ${fallback.isEmpty ? 'not chosen' : fallback}' : 'A folder named updates in the download folder',
           value: dir.isEmpty ? 'Not chosen' : dir,
           onTap: () => _pick(context, notifier),

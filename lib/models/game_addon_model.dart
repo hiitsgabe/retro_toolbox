@@ -31,5 +31,8 @@ class GameAddon {
   Map<String, dynamic> toJson() => {'kind': kind.name, 'label': label, 'size': size, 'url': url, 'fileName': fileName};
 
   /// This addon as a download of [game]'s console.
-  Game toGame(Game game) => Game(title: fileName, url: url, size: size, consoleId: game.consoleId, addonKind: kind);
+  Game toGame(Game game) =>
+      Game(title: fileName, url: url, size: size, consoleId: game.consoleId, addonKind: kind, addonOf: game.title.replaceFirst(_format, ''));
+
+  static final _format = RegExp(r'\.[A-Za-z0-9]{1,5}$');
 }
