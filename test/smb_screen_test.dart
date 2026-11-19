@@ -31,10 +31,11 @@ class _FakeService extends SmbService {
   Future<void> disconnect() async {}
 }
 
-/// A real notifier over [_FakeService], seeded as if a scan had found [hosts].
+/// A real notifier over [_FakeService], seeded as if a scan had found [hosts]
+/// (and failed with [error], when given).
 class _Scanned extends SmbNotifier {
-  _Scanned(SmbService service, List<SmbHost> hosts) : super(service: service) {
-    state = state.copyWith(discovered: hosts);
+  _Scanned(SmbService service, List<SmbHost> hosts, {String? error}) : super(service: service) {
+    state = state.copyWith(discovered: hosts, error: error);
   }
 }
 
@@ -109,5 +110,29 @@ void main() {
     expect(host.controller!.text, '10.0.0.5');
     expect(find.text('Connect'), findsOneWidget, reason: 'Advanced is open');
     expect(find.textContaining('Login refused'), findsWidgets);
+  });
+  testWidgets('the error shows once, under Connect, when Advanced is open', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await _pump(t, _Scanned(_FakeService(fail: true), const [_nas]));
+
+    await t.tap(find.text('nas'));
+    await _settle(t);
+
+    expect(find.textContaining('Login refused'), findsOneWidget);
+    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.textContaining('Login refused')), findsOneWidget);
+  });
+
+  testWidgets('the error shows once, under the list, when Advanced is closed', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await _pump(t, _Scanned(_FakeService(), const [_nas], error: 'Scan failed'));
+
+    expect(find.text('Scan failed'), findsOneWidget);
+    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Scan failed')), findsNothing);
+
+    await t.tap(find.text('Advanced'));
+    await _settle(t);
+
+    expect(find.text('Scan failed'), findsOneWidget);
+    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Scan failed')), findsOneWidget);
   });
 }

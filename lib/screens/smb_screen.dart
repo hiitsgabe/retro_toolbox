@@ -105,7 +105,8 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ),
         ],
-        if (state.error != null) ...[
+        // Open Advanced shows the error under its Connect button instead.
+        if (state.error != null && !_advanced.isExpanded) ...[
           const SizedBox(height: 16),
           Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
         ],
@@ -116,6 +117,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           child: ExpansionTile(
             controller: _advanced,
+            onExpansionChanged: (_) => setState(() {}),
             shape: const Border(),
             leading: const Icon(Icons.tune),
             title: const Text('Advanced', style: TextStyle(fontWeight: FontWeight.w600)),
