@@ -15,7 +15,9 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/image_memory.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -204,15 +206,18 @@ class _ThreeDsMenuState extends State<_ThreeDsMenu> {
         rows: rows,
         side: side,
         count: tiles.length,
-        card: (context, i) => StyledMenuCard(
-          key: ValueKey(tiles[i].label),
-          tile: tiles[i],
-          autofocus: widget.autofocusFirst && i == 0,
-          customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(side * 0.12)),
-          onFocusChange: (v) {
-            if (v) _focused.value = i;
-          },
-          face: (context, focused) => _Slot(focused: focused, child: _MenuFace(tile: tiles[i])),
+        // The slot pulses its own border: no DpadScope outline over it.
+        card: (context, i) => DpadOwnOutline(
+          child: StyledMenuCard(
+            key: ValueKey(tiles[i].label),
+            tile: tiles[i],
+            autofocus: widget.autofocusFirst && i == 0,
+            customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(side * 0.12)),
+            onFocusChange: (v) {
+              if (v) _focused.value = i;
+            },
+            face: (context, focused) => _Slot(focused: focused, child: _MenuFace(tile: tiles[i])),
+          ),
         ),
       ),
     );
@@ -328,16 +333,19 @@ class _ThreeDsGamesState extends State<_ThreeDsGames> {
   @override
   Widget build(BuildContext context) {
     return StyledGameList(
-      card: (context, game, {required autofocus}) => StyledGameCard(
-        game: game,
-        autofocus: autofocus,
-        radius: 12,
-        onFocusChange: (v) {
-          if (v) _focused.value = game;
-        },
-        face: (context, state, selected, focused) => _Slot(
-          focused: focused,
-          child: _GameFace(game: game, state: state, selected: selected),
+      card: (context, game, {required autofocus}) => DpadOwnOutline(
+        child: StyledGameCard(
+          game: game,
+          autofocus: autofocus,
+          radius: 12,
+          onFocusChange: (v) {
+            if (v) _focused.value = game;
+          },
+          face: (context, state, selected, focused) => _Slot(
+            focused: focused,
+            selected: selected,
+            child: _GameFace(game: game, state: state),
+          ),
         ),
       ),
       layout: (context, count, card, onNearEnd, controller) => _TopScreenLayout(
@@ -380,13 +388,13 @@ class _NearEnd extends StatelessWidget {
   }
 }
 
-/// A game's icon: its box art cropped to the square, its state in a corner.
+/// A game's icon: its box art cropped to the square, its state in the top
+/// left corner (the top right one folds over when it is selected).
 class _GameFace extends StatelessWidget {
-  const _GameFace({required this.game, required this.state, required this.selected});
+  const _GameFace({required this.game, required this.state});
 
   final Game game;
   final GameState state;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -398,8 +406,8 @@ class _GameFace extends StatelessWidget {
           _Cover(game: game, side: side),
           Positioned(
             top: 3,
-            right: 3,
-            child: GameStateBadges(state: state, selected: selected, size: (side * 0.22).clamp(14.0, 24.0)),
+            left: 3,
+            child: GameStateBadges(state: state, size: (side * 0.22).clamp(14.0, 24.0)),
           ),
         ]);
       }),
@@ -501,7 +509,7 @@ class _GameStrip extends ConsumerWidget {
     final console = CatalogService.consoleByIdSync(game.consoleId);
     final logo = console == null ? null : consoleLogoAsset(console);
     return _TopStrip(
-      art: _Slot(focused: false, child: _GameFace(game: game, state: state, selected: selected)),
+      art: _Slot(focused: false, selected: selected, child: _GameFace(game: game, state: state)),
       name: game.displayTitle,
       tint: console == null ? null : consoleBrandColor(console),
       lines: [
@@ -617,12 +625,14 @@ class _Chip extends StatelessWidget {
 }
 
 /// A card in its slot: a light frame (white 85%, 1.5 px grey border, 3 px
-/// padding) around the square icon, rounded 12%. Focused: the pulsing cyan border.
+/// padding) around the square icon, rounded 12%. Focused: the pulsing cyan
+/// border. A game's slot wears the selected mark ([selected] not null).
 class _Slot extends StatelessWidget {
-  const _Slot({required this.focused, required this.child});
+  const _Slot({required this.focused, required this.child, this.selected});
 
   final bool focused;
   final Widget child;
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
@@ -639,24 +649,31 @@ class _Slot extends StatelessWidget {
               boxShadow: [BoxShadow(color: _cyan.withValues(alpha: 0.55), blurRadius: 14, spreadRadius: 2)],
             ),
           ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(outer),
-            border: Border.all(color: const Color(0xFFB4B9C2), width: 1.5),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 4, offset: const Offset(0, 2)),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(3),
-            child: ClipRRect(key: const ValueKey('3ds-art'), borderRadius: BorderRadius.circular((side - 2 * inset) * 0.12), child: child),
+        _mark(
+          side,
+          outer,
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(outer),
+              border: Border.all(color: const Color(0xFFB4B9C2), width: 1.5),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.22), blurRadius: 4, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: ClipRRect(key: const ValueKey('3ds-art'), borderRadius: BorderRadius.circular((side - 2 * inset) * 0.12), child: child),
+            ),
           ),
         ),
         if (focused) Positioned(left: -3, top: -3, right: -3, bottom: -3, child: _PulseBorder(radius: outer + 3)),
       ]);
     });
   }
+
+  Widget _mark(double side, double radius, Widget frame) =>
+      selected == null ? frame : SelectedMark(selected: selected!, radius: radius, size: (side * 0.22).clamp(14.0, 24.0), child: frame);
 }
 
 /// 3 px cyan, its opacity going 0.55 to 1 and back every 0.8 s.

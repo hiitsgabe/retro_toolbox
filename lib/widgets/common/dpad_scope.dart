@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/osk/on_screen_keyboard.dart';
 
 /// Moves focus a page at a time (L1/R1 on handhelds map to PageUp/PageDown).
@@ -372,6 +373,25 @@ class _DpadScopeState extends State<DpadScope> {
     return rect.isFinite ? rect : null;
   }
 
+  /// The focused control's shape, from the ink that owns its focus (buttons,
+  /// list tiles and cards all draw one); null when it has none.
+  static ShapeBorder? _focusShape() {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    if (ctx == null || !ctx.mounted) return null;
+    ShapeBorder? shape;
+    var hops = 0;
+    ctx.visitAncestorElements((e) {
+      final w = e.widget;
+      if (w is InkResponse) {
+        shape = w.customBorder ?? (w.borderRadius == null ? null : RoundedRectangleBorder(borderRadius: w.borderRadius!));
+        return false;
+      }
+      // Past another focus owner, or too far up: the ink is not this control's.
+      return w is! Focus && ++hops < 8;
+    });
+    return shape;
+  }
+
   // Not DismissIntent: a page route registers a disabled DismissIntent action
   // that would shadow ours. Dialogs/sheets keep handling Escape themselves.
   void _back() {
@@ -450,7 +470,7 @@ class _DpadScopeState extends State<DpadScope> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.primary;
+    final tokens = StyleTokens.of(context);
     return Shortcuts(
       shortcuts: {..._shortcuts, if (widget.onScreenKeyboard) ..._oskShortcuts},
       // Below Shortcuts so repeats are dropped (and a cold focus woken) before
@@ -496,7 +516,7 @@ class _DpadScopeState extends State<DpadScope> {
                   child: RepaintBoundary(
                     child: CustomPaint(
                       key: const ValueKey('dpad-focus-outline'),
-                      painter: _OutlinePainter(this, color, _repaint),
+                      painter: _OutlinePainter(this, tokens.focus, tokens.buttonRadius, _repaint),
                     ),
                   ),
                 ),
@@ -513,27 +533,54 @@ class _Repaint extends ChangeNotifier {
   void ping() => notifyListeners();
 }
 
+/// The focus ring of the style's focus look ([FocusLook]): its colour (a
+/// still two-colour sweep for an animated frame, as the idle app paints no
+/// frames), width and gap, a glow when it has one; the focused control's own
+/// corners, else the style's button radius.
 class _OutlinePainter extends CustomPainter {
-  _OutlinePainter(this._state, this._color, Listenable repaint) : super(repaint: repaint);
+  _OutlinePainter(this._state, this._look, this._radius, Listenable repaint) : super(repaint: repaint);
 
   final _DpadScopeState _state;
-  final Color _color;
+  final FocusLook _look;
+  final double _radius;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = _state._painted = _state._focusRect();
     if (rect == null) return;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(rect.inflate(2), const Radius.circular(8)),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..color = _color,
-    );
+    // A look with no ring of its own (Vita's glow) still rings plain controls.
+    final width = _look.width > 0 ? _look.width : 2.0;
+    final out = _look.gap + width / 2 + 0.5;
+    final shape = _DpadScopeState._focusShape();
+    final corners = switch (shape) {
+      RoundedRectangleBorder(:final borderRadius) => borderRadius.resolve(TextDirection.ltr),
+      StadiumBorder() || CircleBorder() => BorderRadius.circular(rect.shortestSide / 2),
+      _ => BorderRadius.circular(_radius),
+    };
+    final source = shape is CircleBorder ? Rect.fromCircle(center: rect.center, radius: rect.shortestSide / 2) : rect;
+    final ring = corners.toRRect(source).inflate(out);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..color = _look.color;
+    if (_look.glow) {
+      canvas.drawRRect(
+        ring,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width + 4
+          ..color = _look.color.withValues(alpha: 0.5)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+    }
+    if (_look.color2 != null) {
+      paint.shader = LinearGradient(colors: [_look.color, _look.color2!]).createShader(rect);
+    }
+    canvas.drawRRect(ring, paint);
   }
 
   @override
-  bool shouldRepaint(_OutlinePainter old) => old._color != _color;
+  bool shouldRepaint(_OutlinePainter old) => old._look != _look || old._radius != _radius;
 }
 
 /// Tracks the top route of the app's navigator for [DpadScope].

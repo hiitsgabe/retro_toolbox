@@ -58,6 +58,9 @@ class _StyledMenuCardState extends State<StyledMenuCard> with FocusedLook {
       child: InkWell(
         borderRadius: widget.customBorder == null ? BorderRadius.circular(20) : null,
         customBorder: widget.customBorder,
+        // The style's face draws focus: no grey wash over it.
+        focusColor: Colors.transparent,
+        hoverColor: Colors.transparent,
         onTap: widget.tile.onTap,
         autofocus: widget.autofocus,
         onHighlightChanged: (v) => setState(() => _pressed = v),

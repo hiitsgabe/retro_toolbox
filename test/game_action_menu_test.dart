@@ -148,27 +148,44 @@ void main() {
     expect(onCard(t, GameGridItem), isTrue);
   });
 
-  testWidgets('enter opens the menu; Download runs the action and closes it; focus returns', (t) async {
-    await pump(t, const GameRow(game: _game));
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter);
-    await t.pumpAndSettle();
+  // The grid card has no buttons of its own any more: favourite, download and
+  // select are reached through the page, as from a row.
+  for (final (name, card) in <(String, Widget)>[('row', const GameRow(game: _game)), ('grid item', const GameGridItem(game: _game))]) {
+    testWidgets('$name: enter opens the menu; Download runs the action and closes it; focus returns', (t) async {
+      await pump(t, card);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
 
-    expect(inPage(find.text(_game.title)), findsOneWidget);
-    expect(inPage(find.text('Ready')), findsOneWidget);
-    expect(inPage(find.text('Download')), findsOneWidget);
-    expect(inPage(find.text('Add to favourites')), findsOneWidget);
-    expect(inPage(find.text('Select')), findsOneWidget);
+      expect(inPage(find.text(_game.title)), findsOneWidget);
+      expect(inPage(find.text('Ready')), findsOneWidget);
+      expect(inPage(find.text('Download')), findsOneWidget);
+      expect(inPage(find.text('Add to favourites')), findsOneWidget);
+      expect(inPage(find.text('Select')), findsOneWidget);
 
-    // First action button is focused.
-    expect(Focus.of(t.element(inPage(find.text('Download')))).hasFocus, isTrue);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter);
-    await t.pumpAndSettle();
+      // First action button is focused.
+      expect(Focus.of(t.element(inPage(find.text('Download')))).hasFocus, isTrue);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
 
-    expect(find.byType(GameDetailsPage), findsNothing);
-    expect(ran, [(_game, GameAction.download)]);
-    expect(onCard(t, GameRow), isTrue);
-  });
+      expect(find.byType(GameDetailsPage), findsNothing);
+      expect(ran, [(_game, GameAction.download)]);
+      expect(onCard(t, card.runtimeType), isTrue);
+    });
+
+    testWidgets('$name: favourite and select buttons use the providers', (t) async {
+      await pump(t, card);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      await t.tap(inPage(find.text('Add to favourites')));
+      await t.pumpAndSettle();
+      expect(favorites.toggled, [_game.gameId]);
+      await t.tap(inPage(find.text('Select')));
+      await t.pumpAndSettle();
+      expect(catalog.toggled, [_game.gameId]);
+    });
+  }
 
   testWidgets('an action still runs, with a live ref, after the card unmounts', (t) async {
     final show = ValueNotifier(true);
@@ -211,19 +228,6 @@ void main() {
     expect(t.getTopLeft(inPage(find.text('Cancel'))).dx, lessThan(t.getTopLeft(inPage(find.text('Pause'))).dx));
   });
 
-  testWidgets('favourite and select buttons use the providers', (t) async {
-    await pump(t, const GameRow(game: _game));
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter);
-    await t.pumpAndSettle();
-    await t.tap(inPage(find.text('Add to favourites')));
-    await t.pumpAndSettle();
-    expect(favorites.toggled, [_game.gameId]);
-    await t.tap(inPage(find.text('Select')));
-    await t.pumpAndSettle();
-    expect(catalog.toggled, [_game.gameId]);
-  });
-
   testWidgets('selectable: false has no Select button', (t) async {
     await pump(t, const GameRow(game: _game, selectable: false));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -248,6 +252,13 @@ void main() {
   testWidgets('tapping the card body opens the menu (touch)', (t) async {
     await pump(t, const GameRow(game: _game));
     await t.tap(find.text('Ready').first, warnIfMissed: false);
+    await t.pumpAndSettle();
+    expect(find.byType(GameDetailsPage), findsOneWidget);
+  });
+
+  testWidgets('tapping a grid card opens the menu (touch)', (t) async {
+    await pump(t, const GameGridItem(game: _game));
+    await t.tap(find.byType(GameGridItem));
     await t.pumpAndSettle();
     expect(find.byType(GameDetailsPage), findsOneWidget);
   });

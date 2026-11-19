@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
@@ -45,7 +46,9 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
         selectable: true,
         child: InkWell(
           focusNode: jumpFocus,
-          focusColor: Colors.transparent, // DpadScope draws the one outline
+          // The style's face draws focus (or DpadScope's outline does): no wash.
+          focusColor: Colors.transparent,
+          hoverColor: Colors.transparent,
           autofocus: widget.autofocus,
           borderRadius: BorderRadius.circular(widget.radius),
           onTap: () => tapGameCard(context, ref, game, focus: jumpFocus),
@@ -64,14 +67,14 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
   }
 }
 
-/// The game's state as small badges, for the styles' faces: selected (check
-/// circle), downloading/extracting (progress ring), downloaded/extracted
-/// (check icon in the classic card's border colour), failed (warning).
+/// The game's state as small badges, for the styles' faces: downloading/
+/// extracting (progress ring), downloaded/extracted (check icon in the classic
+/// card's border colour), failed (warning). Selection is not here: the style
+/// marks it round the whole card (see [SelectedMark]).
 class GameStateBadges extends StatelessWidget {
-  const GameStateBadges({super.key, required this.state, required this.selected, this.size = 20});
+  const GameStateBadges({super.key, required this.state, this.size = 20});
 
   final GameState state;
-  final bool selected;
   final double size;
 
   @override
@@ -79,7 +82,6 @@ class GameStateBadges extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final status = state.status;
     final badges = [
-      if (selected) _badge(const ValueKey('badge-selected'), Icon(Icons.check_circle, size: size * 0.8, color: scheme.primary)),
       if (state.isActive)
         _badge(
           const ValueKey('badge-progress'),

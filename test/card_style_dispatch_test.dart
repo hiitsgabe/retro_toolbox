@@ -215,19 +215,19 @@ void main() {
 
   group('GameStateBadges', () {
     final g = _game(1);
-    for (final (status, selected, badges) in [
-      (GameStatus.ready, false, <String>[]),
-      (GameStatus.ready, true, ['badge-selected']),
-      (GameStatus.downloading, false, ['badge-progress']),
-      (GameStatus.extracting, false, ['badge-progress']),
-      (GameStatus.downloaded, false, ['badge-done']),
-      (GameStatus.extracted, true, ['badge-selected', 'badge-done']),
-      (GameStatus.downloadFailed, false, ['badge-failed']),
-      (GameStatus.extractionFailed, false, ['badge-failed']),
+    // Selection is drawn round the card by the style (SelectedMark), not here.
+    for (final (status, badges) in [
+      (GameStatus.ready, <String>[]),
+      (GameStatus.downloading, ['badge-progress']),
+      (GameStatus.extracting, ['badge-progress']),
+      (GameStatus.downloaded, ['badge-done']),
+      (GameStatus.extracted, ['badge-done']),
+      (GameStatus.downloadFailed, ['badge-failed']),
+      (GameStatus.extractionFailed, ['badge-failed']),
     ]) {
-      testWidgets('${status.name}${selected ? ', selected' : ''}: ${badges.isEmpty ? 'none' : badges.join(', ')}', (t) async {
+      testWidgets('${status.name}: ${badges.isEmpty ? 'none' : badges.join(', ')}', (t) async {
         await t.pumpWidget(MaterialApp(
-          home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: status, currentProgress: 0.4), selected: selected)),
+          home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: status, currentProgress: 0.4))),
         ));
         for (final k in ['badge-selected', 'badge-progress', 'badge-done', 'badge-failed']) {
           expect(find.byKey(ValueKey(k)), badges.contains(k) ? findsOneWidget : findsNothing, reason: k);
@@ -237,10 +237,10 @@ void main() {
 
     testWidgets('a done check takes the classic border colour of its state', (t) async {
       Color? doneColor(WidgetTester t) => t.widget<Icon>(find.descendant(of: find.byKey(const ValueKey('badge-done')), matching: find.byType(Icon))).color;
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: GameStatus.downloaded), selected: false))));
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: GameStatus.downloaded)))));
       final scheme = Theme.of(t.element(find.byType(GameStateBadges))).colorScheme;
       expect(doneColor(t), scheme.secondaryContainer);
-      await t.pumpWidget(MaterialApp(home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: GameStatus.extracted), selected: false))));
+      await t.pumpWidget(MaterialApp(home: Scaffold(body: GameStateBadges(state: GameState(game: g, status: GameStatus.extracted)))));
       expect(doneColor(t), scheme.inversePrimary);
     });
   });

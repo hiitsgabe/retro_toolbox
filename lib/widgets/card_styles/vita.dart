@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
@@ -275,24 +276,31 @@ class _VitaCell extends StatelessWidget {
 
 /// The glossy sphere: [art] clipped to a circle under a highlight on its upper
 /// half, a rim and a soft shadow; [focused] grows it to 1.08 with a glow.
+/// A game's bubble also wears the selected mark ([selected] not null).
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.art, required this.focused, this.corner});
+  const _Bubble({required this.art, required this.focused, this.corner, this.selected});
 
   final Widget art;
   final bool focused;
 
   /// Drawn over the top right, outside the clip (badges).
   final Widget? corner;
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
     final d = _VitaMetrics.of(context).bubble;
+    final bubble = _bubble(d);
     return AnimatedScale(
       key: const ValueKey('vita-focus-scale'),
       scale: focused ? 1.08 : 1,
       duration: const Duration(milliseconds: 140),
       curve: Curves.easeOut,
-      child: Stack(
+      child: selected == null ? bubble : SelectedMark(selected: selected!, circle: true, size: (d * 0.2).clamp(18.0, 28.0), child: bubble),
+    );
+  }
+
+  Widget _bubble(double d) => Stack(
         clipBehavior: Clip.none,
         children: [
           AnimatedContainer(
@@ -363,9 +371,7 @@ class _Bubble extends StatelessWidget {
           ),
           if (corner != null) Positioned(top: -d * 0.02, right: -d * 0.02, child: corner!),
         ],
-      ),
-    );
-  }
+      );
 }
 
 class _VitaMenuCell extends StatelessWidget {
@@ -503,13 +509,14 @@ class _VitaGameCell extends StatelessWidget {
 }
 
 /// A game's bubble: its box art cropped to the circle, its state badges on
-/// the top right.
+/// the top right, the selected mark round it.
 Widget _gameFace(BuildContext context, Game game, GameState state, bool selected, bool focused) {
   final d = _VitaMetrics.of(context).bubble;
   return _Bubble(
     focused: focused,
     art: GameBoxart(game: game, size: d, fill: true, placeholder: _Placeholder(game: game)),
-    corner: GameStateBadges(state: state, selected: selected, size: (d * 0.2).clamp(18.0, 28.0)),
+    corner: GameStateBadges(state: state, size: (d * 0.2).clamp(18.0, 28.0)),
+    selected: selected,
   );
 }
 

@@ -8,6 +8,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
@@ -155,8 +156,8 @@ void tapGameCard(BuildContext context, WidgetRef ref, Game game, {bool selectabl
   showGameActionMenu(context, game, selectable: selectable);
 }
 
-/// Outlines the card whose game the second screen shows. The d-pad outline
-/// is hidden after a touch; this one is not.
+/// Outlines the card whose game the second screen shows, in the style's
+/// focus colour. The d-pad outline is hidden after a touch; this one is not.
 class SecondScreenHighlight extends StatelessWidget {
   const SecondScreenHighlight({super.key, required this.shown, required this.child, this.radius = 0});
 
@@ -171,7 +172,7 @@ class SecondScreenHighlight extends StatelessWidget {
       position: DecorationPosition.foreground,
       decoration: shown
           ? BoxDecoration(
-              border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
+              border: Border.all(color: StyleTokens.of(context).focus.color, width: 2),
               borderRadius: BorderRadius.circular(radius),
             )
           : const BoxDecoration(),

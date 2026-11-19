@@ -157,21 +157,24 @@ void main() {
     expect(find.byType(GameDetailsPage), findsOneWidget);
   });
 
-  testWidgets('Start downloads the selected games once', (t) async {
-    catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/a.zip', 'con/b.zip'});
-    await pump(t, const GameRow(game: _a));
-    await focusCard(t);
-    await t.sendKeyEvent(LogicalKeyboardKey.f5);
-    await t.pumpAndSettle();
-    expect(find.text('Download 2 games?'), findsOneWidget);
-    expect(started, isEmpty);
-    await t.sendKeyEvent(LogicalKeyboardKey.enter); // A on the focused "Download"
-    await t.pumpAndSettle();
-    expect(started, hasLength(1));
-    expect(started.single.$1, [_a, _b]);
-    expect(started.single.$2, 'con');
-    expect(find.byType(GameDetailsPage), findsNothing);
-  });
+  // The grid card lost its download button: Start on it is the batch path.
+  for (final (name, card) in <(String, Widget)>[('row', const GameRow(game: _a)), ('grid item', const GameGridItem(game: _a))]) {
+    testWidgets('$name: Start downloads the selected games once', (t) async {
+      catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/a.zip', 'con/b.zip'});
+      await pump(t, card);
+      await focusCard(t);
+      await t.sendKeyEvent(LogicalKeyboardKey.f5);
+      await t.pumpAndSettle();
+      expect(find.text('Download 2 games?'), findsOneWidget);
+      expect(started, isEmpty);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter); // A on the focused "Download"
+      await t.pumpAndSettle();
+      expect(started, hasLength(1));
+      expect(started.single.$1, [_a, _b]);
+      expect(started.single.$2, 'con');
+      expect(find.byType(GameDetailsPage), findsNothing);
+    });
+  }
 
   testWidgets('B on the confirmation downloads nothing', (t) async {
     catalog.state = const CatalogState(games: [_a, _b], selectedGames: {'con/a.zip'});

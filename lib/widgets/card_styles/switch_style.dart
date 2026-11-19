@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
@@ -246,7 +247,8 @@ class SwitchMenuFace extends StatelessWidget {
 }
 
 /// A game: its box art covering the whole square (cropped to it), the state
-/// badges in the top right corner; the frame and the name above when [focused].
+/// badges in the top left corner, the selected mark over it; the frame and the
+/// name above when [focused].
 class SwitchGameFace extends StatelessWidget {
   const SwitchGameFace({super.key, required this.game, required this.state, required this.selected, required this.focused});
 
@@ -269,11 +271,12 @@ class SwitchGameFace extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   GameBoxart(game: game, size: art, fill: true, placeholder: _GamePlaceholder(game: game, size: art)),
-                  Positioned(top: 6, right: 6, child: GameStateBadges(state: state, selected: selected, size: 22)),
+                  Positioned(top: 6, left: 6, child: GameStateBadges(state: state, size: 22)),
                 ],
               ),
             ),
           ),
+          Positioned.fill(child: SelectedMark(selected: selected, radius: _radius, size: 24, child: const SizedBox.expand())),
           if (focused) const Positioned.fill(left: -_margin, top: -_margin, right: -_margin, bottom: -_margin, child: SwitchFocusFrame()),
           if (focused)
             Positioned(left: -60, right: -60, bottom: box.maxHeight + _margin + 2, child: Center(child: _GameName(game.displayTitle))),

@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
@@ -63,33 +65,32 @@ Widget _grid({
       ),
     );
 
-Widget _menuCard(MenuTile tile, bool autofocus) => _noWash(StyledMenuCard(
-      key: ValueKey(tile.label),
-      tile: tile,
-      autofocus: autofocus,
-      customBorder: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
-      face: (context, focused) => _Channel(
-        focused: focused,
-        builder: (context, radius) => _MenuArt(tile: tile),
+// The channel draws its own focus (blue border and glow): no DpadScope
+// outline over it.
+Widget _menuCard(MenuTile tile, bool autofocus) => DpadOwnOutline(
+      child: StyledMenuCard(
+        key: ValueKey(tile.label),
+        tile: tile,
+        autofocus: autofocus,
+        customBorder: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
+        face: (context, focused) => _Channel(
+          focused: focused,
+          builder: (context, radius) => _MenuArt(tile: tile),
+        ),
       ),
-    ));
+    );
 
-Widget _gameCard(Game game, bool autofocus) => _noWash(StyledGameCard(
-      key: ValueKey('wii-${game.gameId}'),
-      game: game,
-      autofocus: autofocus,
-      radius: 24,
-      face: (context, state, selected, focused) => _Channel(
-        focused: focused,
-        builder: (context, radius) => _GameArt(game: game, badges: GameStateBadges(state: state, selected: selected)),
-      ),
-    ));
-
-/// The channel draws its own focus: no grey wash from the ink under the rounded corners.
-Widget _noWash(Widget card) => Builder(
-      builder: (context) => Theme(
-        data: Theme.of(context).copyWith(focusColor: Colors.transparent, hoverColor: Colors.transparent),
-        child: card,
+Widget _gameCard(Game game, bool autofocus) => DpadOwnOutline(
+      child: StyledGameCard(
+        key: ValueKey('wii-${game.gameId}'),
+        game: game,
+        autofocus: autofocus,
+        radius: 24,
+        face: (context, state, selected, focused) => _Channel(
+          focused: focused,
+          selected: selected,
+          builder: (context, radius) => _GameArt(game: game, badges: GameStateBadges(state: state)),
+        ),
       ),
     );
 
@@ -97,36 +98,44 @@ Widget _noWash(Widget card) => Builder(
 /// height), a light grey border that turns blue under focus, its content
 /// inset 6 px.
 class _Channel extends StatelessWidget {
-  const _Channel({required this.focused, required this.builder});
+  const _Channel({required this.focused, required this.builder, this.selected});
 
   final bool focused;
   final Widget Function(BuildContext context, double radius) builder;
+
+  /// A game's channel wears the selected mark (not null).
+  final bool? selected;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final radius = box.maxHeight * 0.18;
-      return AnimatedContainer(
-        key: const ValueKey('wii-channel'),
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(radius),
-          gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.white, Color(0xFFEEF1F4)]),
-          border: Border.all(color: focused ? _wiiBlue : _frameGrey, width: 3),
-          boxShadow: [
-            if (focused)
-              BoxShadow(color: _wiiBlue.withValues(alpha: 0.55), blurRadius: 14)
-            else
-              BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 6, offset: const Offset(0, 2)),
-          ],
-        ),
-        padding: const EdgeInsets.all(_inset),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius - 3 - _inset),
-          child: builder(context, radius),
-        ),
-      );
+      final channel = _channel(context, radius);
+      return selected == null ? channel : SelectedMark(selected: selected!, radius: radius, size: (box.maxHeight * 0.14).clamp(18.0, 26.0), child: channel);
     });
+  }
+
+  Widget _channel(BuildContext context, double radius) {
+    return AnimatedContainer(
+      key: const ValueKey('wii-channel'),
+      duration: const Duration(milliseconds: 120),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        gradient: const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.white, Color(0xFFEEF1F4)]),
+        border: Border.all(color: focused ? _wiiBlue : _frameGrey, width: 3),
+        boxShadow: [
+          if (focused)
+            BoxShadow(color: _wiiBlue.withValues(alpha: 0.55), blurRadius: 14)
+          else
+            BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 6, offset: const Offset(0, 2)),
+        ],
+      ),
+      padding: const EdgeInsets.all(_inset),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius - 3 - _inset),
+        child: builder(context, radius),
+      ),
+    );
   }
 }
 

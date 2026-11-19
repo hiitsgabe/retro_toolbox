@@ -5,7 +5,9 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
-import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
+import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
@@ -39,28 +41,14 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
     final game = widget.game;
     if (widget.jumpTarget) watchJump(game.gameId);
     final aspectRatio = widget.aspectRatio;
-    final catalogNotifier = ref.read(catalogProvider.notifier);
     final gameState = ref.watch(gameStateProvider(game));
     final isSelected = ref.watch(gameSelectionProvider(game.gameId));
-    final isActive = gameState.isActive;
     final shown = widget.selectable && ref.watch(shownOnSecondScreenProvider(game.gameId));
+    final radius = StyleTokens.of(context).cardRadius;
 
-    Color? borderColor;
-    if (isSelected || isActive) {
-      borderColor = Theme.of(context).colorScheme.primary;
-    }
-    if (gameState.status == GameStatus.downloadFailed || gameState.status == GameStatus.extractionFailed) {
-      borderColor = Theme.of(context).colorScheme.tertiary;
-    }
-    if (gameState.status == GameStatus.downloaded) {
-      borderColor = Theme.of(context).colorScheme.secondaryContainer;
-    }
-    if (gameState.status == GameStatus.extracted) {
-      borderColor = Theme.of(context).colorScheme.inversePrimary;
-    }
-
-    // One focus stop per card (A opens the menu); inner controls are
-    // ExcludeFocus'd so the d-pad skips them but touch still hits them.
+    // One focus stop per card (A opens the game's page, X marks it, Start
+    // downloads the marked ones). Nothing on the face takes a tap of its own:
+    // favourite, download and select are on the page.
     return Material(
       type: MaterialType.transparency,
       child: GameCardActions(
@@ -70,31 +58,33 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
           focusNode: jumpFocus,
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(radius),
           onTap: () => tapGameCard(context, ref, game, selectable: widget.selectable, focus: jumpFocus),
           child: SecondScreenHighlight(
             shown: shown,
-            radius: 4,
-            child: _card(context, game, aspectRatio, catalogNotifier, gameState, isSelected, borderColor),
+            radius: radius,
+            child: SelectedMark(
+              selected: isSelected,
+              radius: radius,
+              child: _card(context, game, aspectRatio, gameState, radius),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _card(BuildContext context, Game game, double aspectRatio, CatalogNotifier catalogNotifier, GameState gameState, bool isSelected, Color? borderColor) {
+  Widget _card(BuildContext context, Game game, double aspectRatio, GameState gameState, double radius) {
+    final tokens = StyleTokens.of(context);
     return Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: borderColor ?? Theme.of(context).dividerColor.withValues(alpha: 0.2),
-            width: borderColor != null ? 3 : 1,
-          ),
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: tokens.panelLine),
         ),
         child: Tooltip(
           message: game.title,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(radius - 1),
             child: Stack(
               children: [
                 AspectRatio(
@@ -104,25 +94,6 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                     placeholder: _buildPlaceholder(context),
                   ),
                 ),
-                if (gameState.isInteractable || isSelected) ...[
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: ExcludeFocus(
-                        child: Checkbox(
-                          value: isSelected,
-                          onChanged: gameState.isInteractable ? (_) => catalogNotifier.toggleGameSelection(game.gameId) : null,
-                          shape: CircleBorder(),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -247,29 +218,9 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    height: 26,
-                    padding: EdgeInsets.zero,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.inversePrimary.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.9),
-                        width: 1,
-                      ),
-                    ),
-                    child: ExcludeFocus(
-                      child: GameActionButtons(
-                        game: game,
-                        gameState: gameState,
-                        isNarrow: true,
-                      ),
-                    ),
-                  ),
-                ),
+                // The state (progress, on disk, failed); the selected mark
+                // holds the top left.
+                Positioned(top: 6, right: 6, child: GameStateBadges(state: gameState)),
               ],
             ),
           ),

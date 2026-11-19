@@ -41,6 +41,14 @@ void main() {
       await snap(t, '${tag}_games_focused');
     }, skip: !screenshotsEnabled);
 
+    // A plain control (the header's filter button): DpadScope's ring in the
+    // style's focus look.
+    testWidgets('$tag games header focused', (t) async {
+      await launch(t, const HomeScreen(), style: style, overrides: gamesOverrides(snesGames()));
+      await key(t, LogicalKeyboardKey.arrowUp);
+      await snap(t, '${tag}_games_header_focused');
+    }, skip: !screenshotsEnabled);
+
     testWidgets('$tag games selected', (t) async {
       final games = snesGames();
       await launch(t, const HomeScreen(), style: style, overrides: gamesOverrides(games, selected: {games[1].gameId, games[3].gameId}));

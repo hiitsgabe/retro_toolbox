@@ -224,7 +224,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     panelRadius: 20,
     buttonRadius: 99,
     focus: FocusLook(color: Color(0xFFFFFFFF), width: 0, glow: true, zoom: 1.08),
-    selected: SelectedLook(marker: SelectedMarker.dashedRing, color: Color(0xFFFFFFFF), onColor: Color(0xFF1B3A6B), corner: Alignment.topRight, border: 2),
+    // Bottom right: the state badges hold the top right of the bubble.
+    selected: SelectedLook(marker: SelectedMarker.dashedRing, color: Color(0xFFFFFFFF), onColor: Color(0xFF1B3A6B), corner: Alignment.bottomRight, border: 2),
     backdrop: BackdropStyle(top: Color(0xFF3B78D8), bottom: Color(0xFF0F1A33)),
   );
 

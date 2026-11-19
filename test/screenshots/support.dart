@@ -76,6 +76,7 @@ void _restoreDevice() {
   Handheld.current = false;
   Handheld.framebuffer = false;
   debugDefaultTargetPlatformOverride = null;
+  debugDisableShadows = true;
 }
 
 /// Answers path_provider and holds the ROM fixtures; one per run, removed at
@@ -173,6 +174,8 @@ Future<ProviderContainer> launch(
   Handheld.current = _linuxHandheld;
   Handheld.framebuffer = _linuxHandheld;
   if (_linuxHandheld) debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+  // Tests paint elevation as a solid black ring; a device paints a shadow.
+  debugDisableShadows = false;
   addTearDown(_restoreDevice);
   // Overflows are findings at device sizes: log them, keep the stripes.
   _overflows.clear();
