@@ -10,7 +10,7 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
@@ -38,7 +38,7 @@ class _Queue extends StateNotifier<TaskQueueState> implements TaskQueueNotifier 
 }
 
 const _game = Game(title: 'Base.zip', url: 'https://api.example.com/base', size: 1, consoleId: 'switch');
-const _update = GameUpdate(label: 'v1', size: 1, url: 'https://api.example.com/update', fileName: 'Base [v1].nsz');
+const _update = GameAddon(label: 'v1', size: 1, url: 'https://api.example.com/update', fileName: 'Base [v1].nsz');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -109,7 +109,7 @@ void main() {
     final c = await container({});
     final games = c.read(gameStateManagerProvider.notifier);
     final inUpdates = _update.toGame(_game);
-    final inRoms = const GameUpdate(label: 'v1', size: 1, url: 'https://api.example.com/u2', fileName: 'Elsewhere [v1].nsz').toGame(_game);
+    final inRoms = const GameAddon(label: 'v1', size: 1, url: 'https://api.example.com/u2', fileName: 'Elsewhere [v1].nsz').toGame(_game);
     for (final g in [inUpdates, inRoms]) {
       games.registerTransientGame(g);
       games.resolveState(g.gameId);

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -45,7 +45,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   /// The Game of each update, by the update itself, built once: Game has no ==, and
   /// gameStateProvider keeps an entry per Game it has seen, so a new Game on
   /// every rebuild would leave an entry behind each time.
-  final _updateGames = <GameUpdate, Game>{};
+  final _updateGames = <GameAddon, Game>{};
 
   /// The same for each version of a multi-disc game: its entry is a copy.
   final _versionGames = <GameVersion, Game>{};

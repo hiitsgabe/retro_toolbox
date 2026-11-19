@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/storage_usage.dart';
 
@@ -31,7 +31,7 @@ Game _named(List<Game> games, String prefix) => games.singleWhere((g) => g.title
 int _gb(double n) => (n * 1024 * 1024 * 1024).round();
 
 /// One synthetic game `AAA` whose block holds the update entries in [feedTail].
-List<GameUpdate> _updatesOf(String feedTail, {String? updateDownloadUrl}) {
+List<GameAddon> _updatesOf(String feedTail, {String? updateDownloadUrl}) {
   final out = parseRegexListing(
     '<g id="AAA">G</g>$feedTail',
     Console.fromJson({
@@ -71,7 +71,7 @@ void main() {
   });
 
   test('a game keeps its updates through JSON, and saves none when it has none', () {
-    const update = GameUpdate(label: 'v1', size: 5, url: 'https://h/1/update', fileName: 'G [v1].nsz');
+    const update = GameAddon(label: 'v1', size: 5, url: 'https://h/1/update', fileName: 'G [v1].nsz');
     const game = Game(title: 'G.nsz', url: 'https://h/1/base', size: 1, consoleId: 'switch', updates: [update]);
     final back = Game.fromJson(jsonDecode(jsonEncode(game.toJson())) as Map<String, dynamic>);
     expect([for (final u in back.updates) (u.label, u.size, u.url, u.fileName)], [('v1', 5, 'https://h/1/update', 'G [v1].nsz')]);
@@ -110,8 +110,8 @@ void main() {
     expect(games.every((g) => g.updates.isEmpty), isTrue);
   });
 
-  test('the catalog cache is v3, so saved catalogs are read again with their updates', () {
-    expect(const Console(id: 'switch', name: 'Nintendo Switch', urls: []).cacheFile, 'catalog_v3_switch.json');
+  test('the catalog cache is v4, so saved catalogs are read again with their DLC and mods', () {
+    expect(const Console(id: 'switch', name: 'Nintendo Switch', urls: []).cacheFile, 'catalog_v4_switch.json');
   });
 
   test('an update with its own id fills update_download_url with it, not the game id', () {
@@ -134,7 +134,7 @@ void main() {
   });
 
   test('copyWith keeps the updates (the catalog adds details after parsing)', () {
-    const u = GameUpdate(label: 'v1', size: 5, url: 'https://h/1/update', fileName: 'G [v1].nsz');
+    const u = GameAddon(label: 'v1', size: 5, url: 'https://h/1/update', fileName: 'G [v1].nsz');
     const g = Game(title: 'G.nsz', url: 'https://h/1/base', size: 1, consoleId: 'switch', updates: [u]);
     expect(g.copyWith(details: const GameDetails(popularity: 3)).updates, [u]);
   });

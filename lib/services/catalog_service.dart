@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/utils/network.dart';
@@ -531,10 +532,17 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
     dotAll: true,
   );
   final matches = regExp.allMatches(html).toList();
-  final updateSource = console['update_regex'] as String?;
-  final updateExp = updateSource == null ? null : RegExp(updateSource.replaceAll('(?P<', '(?<'), multiLine: true, dotAll: true);
-  final updateUrlTemplate = console['update_download_url'] as String?;
-  final updateFormat = console['update_format'] as String? ?? (fileFormats.isEmpty ? '' : fileFormats.first);
+  RegExp? addonExp(String key) {
+    final source = console[key] as String?;
+    return source == null ? null : RegExp(source.replaceAll('(?P<', '(?<'), multiLine: true, dotAll: true);
+  }
+
+  final firstFormat = fileFormats.isEmpty ? '' : fileFormats.first;
+  final addonKeys = [
+    (AddonKind.update, 'updates', addonExp('update_regex'), console['update_download_url'] as String?, console['update_format'] as String? ?? firstFormat),
+    (AddonKind.dlc, 'dlcs', addonExp('dlc_regex'), console['dlc_download_url'] as String?, firstFormat),
+    (AddonKind.mod, 'mods', addonExp('mod_regex'), console['mod_download_url'] as String?, firstFormat),
+  ];
   final out = <Map<String, dynamic>>[];
 
   for (final (i, match) in matches.indexed) {
@@ -582,19 +590,15 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       'releaseDate': _parseReleaseDate(_tryNamedGroup(match, 'date')),
       'popularity': int.tryParse(_tryNamedGroup(match, 'popularity') ?? ''),
     }..removeWhere((_, v) => v == null);
-    // A game's updates are in its part of the feed: from its match to the
+    // A game's addons are in its part of the feed: from its match to the
     // next game's.
-    final updates = updateExp == null
-        ? const <Map<String, dynamic>>[]
-        : _updatesIn(
-            html.substring(match.start, i + 1 < matches.length ? matches[i + 1].start : html.length),
-            updateExp,
-            gameId: idGroup,
-            urlTemplate: updateUrlTemplate,
-            stem: _stem(title, fileFormats),
-            format: updateFormat,
-            baseUrl: baseUrl,
-          );
+    final block = html.substring(match.start, i + 1 < matches.length ? matches[i + 1].start : html.length);
+    final addons = {
+      for (final (kind, key, exp, urlTemplate, format) in addonKeys)
+        if (exp != null)
+          key: _addonsIn(block, exp,
+              kind: kind, gameId: idGroup, urlTemplate: urlTemplate, stem: _stem(title, fileFormats), format: format, baseUrl: baseUrl),
+    }..removeWhere((_, v) => v.isEmpty);
     out.add({
       'title': title,
       'url': fullUrl,
@@ -602,7 +606,7 @@ List<Map<String, dynamic>> _parseHtmlIsolate(List<dynamic> args) {
       'consoleId': console['id'],
       'metadata': metadata,
       if (details.isNotEmpty) 'details': details,
-      if (updates.isNotEmpty) 'updates': updates,
+      ...addons,
     });
   }
 
@@ -628,10 +632,11 @@ String _stem(String title, List<String> formats) {
   return title;
 }
 
-/// Every match of [exp] in [block] as an update map (GameUpdate.toJson).
-List<Map<String, dynamic>> _updatesIn(
+/// Every match of [exp] in [block] as a [kind] addon map (GameAddon.toJson).
+List<Map<String, dynamic>> _addonsIn(
   String block,
   RegExp exp, {
+  required AddonKind kind,
   required String? gameId,
   required String? urlTemplate,
   required String stem,
@@ -640,22 +645,39 @@ List<Map<String, dynamic>> _updatesIn(
 }) {
   final out = <Map<String, dynamic>>[];
   for (final m in exp.allMatches(block)) {
-    final label = _tryNamedGroup(m, 'label') ?? '';
+    final rawName = _tryNamedGroup(m, 'name');
+    final name = rawName == null || rawName.isEmpty ? null : _jsonUnescape(rawName);
+    final label = _tryNamedGroup(m, 'label') ?? name?.replaceFirst(RegExp(r'\.[A-Za-z0-9]{1,5}$'), '') ?? '';
     final href = _tryNamedGroup(m, 'url');
     final id = _tryNamedGroup(m, 'id') ?? gameId;
     final url = href != null && href.isNotEmpty
         ? (href.startsWith('http') ? href : Uri.parse(baseUrl).resolve(href).toString())
-        : (urlTemplate != null && id != null ? urlTemplate.replaceAll('<id>', id) : null);
+        // A template that wants the game's id has no link for a game without one.
+        : (urlTemplate != null && id != null && (gameId != null || !urlTemplate.contains('<game_id>'))
+            ? urlTemplate.replaceAll('<id>', id).replaceAll('<game_id>', gameId ?? '')
+            : null);
     if (url == null) continue;
     final size = _tryNamedGroup(m, 'size');
-    out.add({
-      'label': label,
-      'size': size == null ? 0 : _parseSizeBytesIsolate(size),
-      'url': url,
-      'fileName': '$stem [${label.isEmpty ? 'update' : label}]$format',
-    });
+    out.add(GameAddon(
+      kind: kind,
+      label: label,
+      size: size == null ? 0 : _parseSizeBytesIsolate(size),
+      url: url,
+      fileName: name != null ? name.replaceAll(_unsafeInFileName, '_') : '$stem [${label.isEmpty ? kind.name : label}]$format',
+    ).toJson());
   }
   return out;
+}
+
+final _unsafeInFileName = RegExp(r'[/\\:*?"<>|\x00-\x1f]');
+
+/// [raw] as captured from a JSON feed: `\"`, `\\` and `\uXXXX` decoded.
+String _jsonUnescape(String raw) {
+  try {
+    return jsonDecode('"$raw"') as String;
+  } catch (_) {
+    return raw;
+  }
 }
 
 /// A date group's digits as yyyymmdd: 8 digits as is, yyyymm and yyyy padded

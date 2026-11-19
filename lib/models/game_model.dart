@@ -1,7 +1,7 @@
 import 'package:retro_toolbox/models/game_metadata_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_group_model.dart';
-import 'package:retro_toolbox/models/game_update_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 
 class Game {
   final String title;
@@ -17,11 +17,19 @@ class Game {
 
   /// Updates the catalog lists for this game, newest last as the feed has
   /// them; empty when it lists none.
-  final List<GameUpdate> updates;
+  final List<GameAddon> updates;
 
-  /// An update of a catalog game (see GameUpdate.toGame): it downloads to the
-  /// console's updates folder, with the console's choices for updates.
-  final bool isUpdate;
+  /// DLC and mods the catalog lists for this game, in feed order.
+  final List<GameAddon> dlcs;
+  final List<GameAddon> mods;
+
+  /// Set when this is an addon of a catalog game (see GameAddon.toGame),
+  /// null for a game.
+  final AddonKind? addonKind;
+
+  /// An update downloads to the console's updates folder, with the console's
+  /// choices for updates.
+  bool get isUpdate => addonKind == AddonKind.update;
 
   /// The game this entry stands for, with its versions and extras. Set by
   /// the list's grouping, never saved.
@@ -36,7 +44,9 @@ class Game {
     this.details,
     this.discs = const [],
     this.updates = const [],
-    this.isUpdate = false,
+    this.dlcs = const [],
+    this.mods = const [],
+    this.addonKind,
     this.group,
   });
 
@@ -48,8 +58,10 @@ class Game {
     GameMetadata? metadata,
     GameDetails? details,
     List<Game>? discs,
-    List<GameUpdate>? updates,
-    bool? isUpdate,
+    List<GameAddon>? updates,
+    List<GameAddon>? dlcs,
+    List<GameAddon>? mods,
+    AddonKind? addonKind,
     GameGroup? group,
   }) {
     return Game(
@@ -61,7 +73,9 @@ class Game {
       details: details ?? this.details,
       discs: discs ?? this.discs,
       updates: updates ?? this.updates,
-      isUpdate: isUpdate ?? this.isUpdate,
+      dlcs: dlcs ?? this.dlcs,
+      mods: mods ?? this.mods,
+      addonKind: addonKind ?? this.addonKind,
       group: group ?? this.group,
     );
   }
@@ -88,8 +102,11 @@ class Game {
       consoleId: json['consoleId'],
       metadata: json['metadata'] != null ? GameMetadata.fromJson(json['metadata']) : null,
       details: json['details'] != null ? GameDetails.fromJson(json['details']) : null,
-      updates: [for (final u in (json['updates'] as List? ?? const [])) GameUpdate.fromJson(Map<String, dynamic>.from(u as Map))],
-      isUpdate: json['isUpdate'] == true,
+      updates: _addons(json['updates']),
+      dlcs: _addons(json['dlcs']),
+      mods: _addons(json['mods']),
+      // isUpdate: saved before DLC and mods.
+      addonKind: AddonKind.values.asNameMap()[json['addonKind']] ?? (json['isUpdate'] == true ? AddonKind.update : null),
     );
   }
 
@@ -102,9 +119,14 @@ class Game {
       'metadata': metadata?.toJson(),
       'details': details?.toJson(),
       if (updates.isNotEmpty) 'updates': [for (final u in updates) u.toJson()],
-      if (isUpdate) 'isUpdate': true,
+      if (dlcs.isNotEmpty) 'dlcs': [for (final d in dlcs) d.toJson()],
+      if (mods.isNotEmpty) 'mods': [for (final m in mods) m.toJson()],
+      if (addonKind != null) 'addonKind': addonKind!.name,
     };
   }
+
+  static List<GameAddon> _addons(Object? raw) =>
+      [for (final a in (raw as List? ?? const [])) GameAddon.fromJson(Map<String, dynamic>.from(a as Map))];
 
   String get filename {
     final segments = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).toList();
