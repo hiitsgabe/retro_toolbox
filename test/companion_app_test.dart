@@ -228,14 +228,13 @@ void main() {
     // The tab buttons and their counts, as on the main screen.
     Finder tab(String label) => find.ancestor(of: find.text(label), matching: find.byType(InkWell)).first;
     String? count(String label) => t.widgetList<Text>(find.descendant(of: tab(label), matching: find.byType(Text))).map((w) => w.data).where((d) => d != label).firstOrNull;
-    expect([for (final l in ['Downloads', 'Extractions', 'Queue', 'Completed', 'Failed']) count(l)], ['2', null, '1', '1', '1']);
+    expect([for (final l in ['Downloads', 'Extractions', 'Queue', 'Completed', 'Failed']) count(l)], ['1', null, '1', '1', '1']);
 
-    // Downloads: Sonic downloading with its bar and buttons, Streets queued.
+    // Downloads: Sonic downloading with its bar and buttons. Streets is queued, so only under Queue.
     expect(find.text('Sonic The Hedgehog'), findsOneWidget);
     expect(find.text('Downloading'), findsOneWidget);
     expect(find.text('40.0%'), findsOneWidget);
-    expect(find.text('Streets of Rage 2'), findsOneWidget);
-    expect(find.text('Dl. Queued'), findsOneWidget);
+    expect(find.text('Streets of Rage 2'), findsNothing);
     expect(find.byIcon(Icons.favorite), findsOneWidget, reason: "Sonic's heart");
 
     await t.tap(find.byTooltip('Pause'));
@@ -245,6 +244,11 @@ void main() {
       {'kind': 'game', 'gameId': sonic.gameId, 'action': 'pause'},
       {'kind': 'favorite', 'gameId': sonic.gameId},
     ]);
+
+    await t.tap(find.text('Queue'));
+    await t.pumpAndSettle();
+    expect(find.text('Streets of Rage 2'), findsOneWidget);
+    expect(find.text('Dl. Queued'), findsOneWidget);
 
     await t.tap(find.text('Failed'));
     await t.pumpAndSettle();

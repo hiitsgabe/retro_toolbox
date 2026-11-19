@@ -38,10 +38,28 @@ void main() {
     final done = _s('c', GameStatus.extracted, done: true);
     final failed = _s('f', GameStatus.extractionFailed);
     final tabs = classifyTasks([dl, paused, dlQ, ex, exQ, done, failed]);
-    expect(tabs.downloading, [dl, paused, dlQ]);
-    expect(tabs.extracting, [ex, exQ]);
+    expect(tabs.downloading, [dl, paused]);
+    expect(tabs.extracting, [ex]);
     expect(tabs.queued, [dlQ, exQ]);
     expect(tabs.completed, [done]);
     expect(tabs.failed, [failed]);
+  });
+
+  test('each task is in exactly one tab, so the badges add up to the tasks', () {
+    final tasks = [
+      _s('dl', GameStatus.downloading),
+      _s('p', GameStatus.downloadPaused),
+      _s('dq', GameStatus.downloadQueued),
+      _s('ex', GameStatus.extracting),
+      _s('eq', GameStatus.extractionQueued),
+      _s('net', GameStatus.extracting, transfer: true),
+      _s('netq', GameStatus.extractionQueued, transfer: true),
+      _s('c', GameStatus.extracted, done: true),
+      _s('f', GameStatus.downloadFailed),
+    ];
+    final tabs = classifyTasks(tasks);
+    final all = [...tabs.downloading, ...tabs.extracting, ...tabs.queued, ...tabs.completed, ...tabs.failed];
+    expect(all.length, tasks.length);
+    expect(all.toSet(), tasks.toSet());
   });
 }

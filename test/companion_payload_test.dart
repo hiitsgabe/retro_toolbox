@@ -76,7 +76,7 @@ void main() {
       st('dl', GameStatus.downloading),
     ]));
     expect(payload['mode'], 'tasks');
-    expect(titles(payload, 'downloading'), ['waiting', 'dl']);
+    expect(titles(payload, 'downloading'), ['dl']);
     expect(titles(payload, 'extracting'), ['unzip']);
     expect(titles(payload, 'queued'), ['waiting']);
     expect(titles(payload, 'completed'), ['done']);
@@ -90,7 +90,6 @@ void main() {
 
   test('at most 200 rows a tab', () {
     final payload = tasksPayload([for (var i = 0; i < 250; i++) st('g$i', GameStatus.downloadQueued)]);
-    expect(payload['tabs']['downloading'], hasLength(maxTaskRowsPerTab));
     expect(payload['tabs']['queued'], hasLength(maxTaskRowsPerTab));
   });
 

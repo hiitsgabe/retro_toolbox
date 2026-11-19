@@ -12,18 +12,20 @@ import 'package:retro_toolbox/widgets/footer/task_list_view.dart';
 ) {
   final downloading = <GameState>[], extracting = <GameState>[], queued = <GameState>[], completed = <GameState>[], failed = <GameState>[];
   for (final state in states) {
-    if (state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused || state.status == GameStatus.downloadQueued) {
+    // Queued work is only under Queue: listed in Downloads or Extractions too,
+    // it counted twice in the badges.
+    if (state.status == GameStatus.downloadQueued || state.status == GameStatus.extractionQueued) {
+      queued.add(state);
+    }
+    if (state.status == GameStatus.downloading || state.status == GameStatus.downloadPaused) {
       downloading.add(state);
     }
-    if (state.status == GameStatus.extracting || state.status == GameStatus.extractionQueued) {
-      if (state.status == GameStatus.extracting && state.isTransfer) {
+    if (state.status == GameStatus.extracting) {
+      if (state.isTransfer) {
         downloading.add(state);
       } else {
         extracting.add(state);
       }
-    }
-    if (state.status == GameStatus.downloadQueued || state.status == GameStatus.extractionQueued) {
-      queued.add(state);
     }
     if (state.hasJustCompleted && (state.status == GameStatus.downloaded || state.status == GameStatus.extracted)) {
       completed.add(state);
