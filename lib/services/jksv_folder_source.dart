@@ -1,23 +1,21 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:retro_toolbox/services/jksv_meta.dart';
+import 'package:retro_toolbox/services/jksv_source.dart';
 
-/// Bridges a folder of **emulator export zips** (each a `<TitleID>/<raw files>`
-/// archive, exactly what Eden/Yuzu "Export Save" produces) to the JKSV backup
-/// format (a zip whose root is the save root, plus a generated
-/// `.nx_save_meta.bin`). Also writes incoming Switch saves back out as export
-/// zips the user can re-import, keeping a timestamped copy of what it replaces.
 class EmuTitle {
   final String titleId;
   final File zip;
   const EmuTitle({required this.titleId, required this.zip});
 }
 
-class JksvBackend {
+/// Bridges a folder of **emulator export zips** (each a `<TitleID>/<raw files>`
+/// archive, exactly what Eden/Yuzu "Export Save" produces) to the JKSV backup
+/// format. Also writes incoming Switch saves back out as export zips the user
+/// can re-import, keeping a timestamped copy of what it replaces.
+class FolderJksvSource implements JksvSource {
   /// The user-chosen folder holding emulator export `*.zip` files.
   final Directory root;
 
@@ -25,7 +23,7 @@ class JksvBackend {
   /// when unknown — the caller falls back to the raw title id.
   final String Function(String titleId)? nameFor;
 
-  JksvBackend({required this.root, this.nameFor});
+  FolderJksvSource({required this.root, this.nameFor});
 
   static final _titleIdRe = RegExp(r'^([0-9A-Fa-f]{16})/');
 
@@ -58,6 +56,7 @@ class JksvBackend {
 
   /// JKSV-safe display name for a title (unsafe path chars replaced), matching
   /// how JKSV strips names on the remote.
+  @override
   String displayName(String titleId) {
     final raw = nameFor?.call(titleId) ?? titleId;
     return raw.split('').map((c) => RegExp(r'[a-zA-Z0-9 .\-_()\[\]]').hasMatch(c) ? c : '_').join().trim();
@@ -70,49 +69,29 @@ class JksvBackend {
     return null;
   }
 
-  /// Builds a JKSV-restorable zip for [titleId]: the export's save files moved
-  /// to the zip root (JKSV wants "root of zip = root of save"), plus a
-  /// `.nx_save_meta.bin` carrying the title id.
-  List<int> buildBackupZip(String titleId) {
+  @override
+  Future<List<String>> titleIds() async => [for (final t in listTitles()) t.titleId];
+
+  @override
+  Future<List<int>> backupZip(String titleId) async {
     final src = _zipFor(titleId);
     if (src == null) throw StateError('No export zip for $titleId');
-    final export = ZipDecoder().decodeBytes(src.readAsBytesSync());
-    final out = Archive();
-    final prefix = '$titleId/';
-    for (final e in export) {
-      if (!e.isFile) continue;
-      // Strip the `<TitleID>/` prefix so the save root sits at the zip root.
-      final lower = e.name.toUpperCase();
-      if (!lower.startsWith(prefix)) continue;
-      final rel = e.name.substring(prefix.length);
-      if (rel.isEmpty) continue;
-      final data = e.content as List<int>;
-      out.addFile(ArchiveFile(rel, data.length, data));
-    }
-    final meta = JksvMeta.encode(applicationId: int.parse(titleId, radix: 16));
-    out.addFile(ArchiveFile(JksvMeta.fileName, meta.length, meta));
-    return ZipEncoder().encode(out);
+    return exportToJksv(titleId, src.readAsBytesSync());
   }
 
-  /// Applies an incoming JKSV backup zip for [titleId] as a new export zip in
-  /// [root] (entries re-prefixed with `<TitleID>/`, meta dropped). Any existing
-  /// export for the title is moved to `backups/<TitleID>/<timestamp>.zip`
-  /// first. [timestamp] is injected so the caller controls naming.
-  void applyIncoming(String titleId, List<int> jksvZipBytes, {required String timestamp}) {
+  /// Writes an incoming JKSV backup for [titleId] as a new export zip in
+  /// [root]. Any existing export for the title is moved to
+  /// `backups/<TitleID>/<timestamp>.zip` first.
+  @override
+  Future<void> applyIncoming(String titleId, List<int> jksvZip, {required String timestamp}) async {
     final existing = _zipFor(titleId);
     if (existing != null) {
       final backupDir = Directory(p.join(root.path, 'backups', titleId))..createSync(recursive: true);
       existing.renameSync(p.join(backupDir.path, '$timestamp.zip'));
     }
 
-    final incoming = ZipDecoder().decodeBytes(Uint8List.fromList(jksvZipBytes));
     final export = Archive();
-    for (final e in incoming) {
-      if (!e.isFile) continue;
-      if (p.basename(e.name) == JksvMeta.fileName) continue;
-      final data = e.content as List<int>;
-      export.addFile(ArchiveFile('$titleId/${e.name}', data.length, data));
-    }
+    jksvToExportFiles(titleId, jksvZip).forEach((name, data) => export.addFile(ArchiveFile(name, data.length, data)));
     final name = displayName(titleId).isEmpty ? titleId : displayName(titleId);
     File(p.join(root.path, '$name [$titleId].zip')).writeAsBytesSync(ZipEncoder().encode(export));
   }

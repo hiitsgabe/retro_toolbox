@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:retro_toolbox/services/jksv_backend.dart';
+import 'package:retro_toolbox/services/jksv_folder_source.dart';
 import 'package:retro_toolbox/services/jksv_meta.dart';
 
 void main() {
@@ -19,17 +19,17 @@ void main() {
     File(p.join(root.path, fileName)).writeAsBytesSync(ZipEncoder().encode(archive));
   }
 
-  test('listTitles reads the title id from export zip contents', () {
+  test('titleIds reads the title id from export zip contents', () async {
     writeExportZip('South Park.zip', '010043600B6A6000', {'slot00': 'x'});
     File(p.join(root.path, 'not-a-zip.txt')).writeAsStringSync('nope');
-    final backend = JksvBackend(root: root);
-    expect(backend.listTitles().map((t) => t.titleId), ['010043600B6A6000']);
+    final source = FolderJksvSource(root: root);
+    expect(await source.titleIds(), ['010043600B6A6000']);
   });
 
-  test('buildBackupZip strips the TitleID prefix and adds meta', () {
+  test('backupZip strips the TitleID prefix and adds meta', () async {
     writeExportZip('game.zip', '010043600B6A6000', {'SP-Opt': 'opt', 'slot': 'data'});
-    final backend = JksvBackend(root: root);
-    final zip = backend.buildBackupZip('010043600B6A6000');
+    final source = FolderJksvSource(root: root);
+    final zip = await source.backupZip('010043600B6A6000');
     final archive = ZipDecoder().decodeBytes(zip);
     final names = archive.map((e) => e.name).toSet();
     // Save root at the zip root — no TitleID folder.
@@ -40,15 +40,15 @@ void main() {
     expect(meta.applicationId, 0x010043600B6A6000);
   });
 
-  test('applyIncoming writes an export zip and backs up the old one', () {
+  test('applyIncoming writes an export zip and backs up the old one', () async {
     writeExportZip('old.zip', '010043600B6A6000', {'slot': 'OLD'});
-    final backend = JksvBackend(root: root, nameFor: (_) => 'South Park');
+    final source = FolderJksvSource(root: root, nameFor: (_) => 'South Park');
 
     // Incoming JKSV backup: save files at root + meta.
     final jksv = Archive()
       ..addFile(ArchiveFile('slot', 3, 'NEW'.codeUnits))
       ..addFile(ArchiveFile(JksvMeta.fileName, 4, [1, 2, 3, 4]));
-    backend.applyIncoming('010043600B6A6000', ZipEncoder().encode(jksv), timestamp: '20260829-1200');
+    await source.applyIncoming('010043600B6A6000', ZipEncoder().encode(jksv), timestamp: '20260829-1200');
 
     // New export written with the TitleID prefix restored, meta dropped.
     final newZip = File(p.join(root.path, 'South Park [010043600B6A6000].zip'));

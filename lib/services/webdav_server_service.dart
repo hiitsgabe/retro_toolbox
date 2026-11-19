@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:retro_toolbox/services/jksv_backend.dart';
 import 'package:retro_toolbox/services/jksv_meta.dart';
+import 'package:retro_toolbox/services/jksv_source.dart';
 
 /// A received Switch backup waiting for the user to confirm the pull.
 class IncomingSave {
@@ -14,16 +14,16 @@ class IncomingSave {
   const IncomingSave({required this.titleId, required this.displayName, required this.bytes});
 }
 
-/// Minimal WebDAV server exposing [JksvBackend] as a tree JKSV can browse.
+/// Minimal WebDAV server exposing a [JksvSource] as a tree JKSV can browse.
 /// Tree: `/` → one collection per title (display name) → one `.zip` backup.
 /// Uploads (Switch→Android) are staged by title id (read from the zip's meta)
 /// and surfaced via [incoming] for the user to confirm.
 class WebDavServerService {
-  JksvBackend? _backend;
+  JksvSource? _source;
   HttpServer? _server;
 
   // Current listing: display name (as a path segment) → title id.
-  final Map<String, String> _nameToId = {};
+  Map<String, String> _nameToId = {};
   // Staged uploads: title id → zip bytes.
   final Map<String, List<int>> _staged = {};
 
@@ -33,9 +33,9 @@ class WebDavServerService {
   bool get running => _server != null;
   int get port => _server?.port ?? 0;
 
-  Future<void> start({required int port, required JksvBackend backend}) async {
+  Future<void> start({required int port, required JksvSource source}) async {
     await stop();
-    _backend = backend;
+    _source = source;
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _server!.listen(_handle, onError: (e) => debugPrint('webdav error: $e'));
   }
@@ -55,18 +55,33 @@ class WebDavServerService {
 
   void _refreshIncoming() {
     incoming.value = _staged.keys
-        .map((id) => IncomingSave(titleId: id, displayName: _backend?.displayName(id) ?? id, bytes: _staged[id]!.length))
+        .map((id) => IncomingSave(titleId: id, displayName: _source?.displayName(id) ?? id, bytes: _staged[id]!.length))
         .toList();
   }
 
-  void _rebuildListing() {
-    _nameToId.clear();
-    for (final t in _backend?.listTitles() ?? const <EmuTitle>[]) {
-      var name = _backend!.displayName(t.titleId);
-      if (name.isEmpty) name = t.titleId;
+  // Built aside and swapped in, so a request racing this await still sees
+  // the previous listing instead of a half-filled one.
+  Future<void> _rebuildListing() async {
+    final source = _source;
+    final listing = <String, String>{};
+    for (final id in await source?.titleIds() ?? const <String>[]) {
+      var name = source!.displayName(id);
+      if (name.isEmpty) name = id;
       // Disambiguate name clashes by suffixing the id.
-      if (_nameToId.containsKey(name)) name = '$name [${t.titleId}]';
-      _nameToId[name] = t.titleId;
+      if (listing.containsKey(name)) name = '$name [$id]';
+      listing[name] = id;
+    }
+    _nameToId = listing;
+  }
+
+  // A title listed but without a backup (a hub unit with no gens) is a 404,
+  // not a server error.
+  Future<List<int>?> _backupOrNull(String titleId) async {
+    try {
+      return await _source!.backupZip(titleId);
+    } catch (e) {
+      debugPrint('[jdkv] no backup for $titleId: $e');
+      return null;
     }
   }
 
@@ -120,7 +135,7 @@ class WebDavServerService {
   // PROPFIND Depth:1 — self plus immediate children.
   Future<void> _propfind(HttpRequest req) async {
     await req.drain<void>();
-    _rebuildListing();
+    await _rebuildListing();
     final segs = _segments(req);
     final responses = <String>[];
 
@@ -132,8 +147,11 @@ class WebDavServerService {
         responses.add(_collectionXml(href([name])));
       }
     } else if (segs.length == 1 && _nameToId.containsKey(segs[0])) {
-      final titleId = _nameToId[segs[0]]!;
-      final zip = _backend!.buildBackupZip(titleId);
+      final zip = await _backupOrNull(_nameToId[segs[0]]!);
+      if (zip == null) {
+        await _end(req, HttpStatus.notFound);
+        return;
+      }
       responses.add(_collectionXml(href([segs[0]])));
       responses.add(_fileXml(href([segs[0], '${segs[0]}.zip']), zip.length));
     } else {
@@ -160,7 +178,7 @@ class WebDavServerService {
 
   // GET /<name>/<file>.zip → build the JKSV backup zip on the fly.
   Future<void> _get(HttpRequest req) async {
-    _rebuildListing();
+    await _rebuildListing();
     final segs = _segments(req);
     if (segs.length != 2 || !_nameToId.containsKey(segs[0])) {
       debugPrint('[jdkv] GET 404 for ${segs.join('/')} (known: ${_nameToId.keys.toList()})');
@@ -170,7 +188,11 @@ class WebDavServerService {
     debugPrint('[jdkv] GET zip for ${segs[0]} (${_nameToId[segs[0]]})');
     activeTransfers.value++;
     try {
-      final zip = _backend!.buildBackupZip(_nameToId[segs[0]]!);
+      final zip = await _backupOrNull(_nameToId[segs[0]]!);
+      if (zip == null) {
+        await _end(req, HttpStatus.notFound);
+        return;
+      }
       req.response.statusCode = HttpStatus.ok;
       req.response.headers
         ..set(HttpHeaders.contentTypeHeader, 'application/zip')

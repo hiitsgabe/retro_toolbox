@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
-import 'package:retro_toolbox/services/jksv_backend.dart';
+import 'package:retro_toolbox/services/jksv_folder_source.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 import 'package:retro_toolbox/services/webdav_server_service.dart';
 
@@ -115,24 +115,24 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     (await SharedPreferences.getInstance()).setString(_folderKey, path);
   }
 
-  JksvBackend? _backend() {
+  FolderJksvSource? _source() {
     final folder = state.folder;
     if (folder == null) return null;
-    return JksvBackend(
+    return FolderJksvSource(
       root: Directory(folder),
       nameFor: (id) => _titleNames[id.toUpperCase()] ?? id,
     );
   }
 
   Future<void> enable() async {
-    final backend = _backend();
-    if (backend == null) {
+    final source = _source();
+    if (source == null) {
       state = state.copyWith(error: 'Pick a folder with your emulator save exports first.');
       return;
     }
     try {
       await _buildNameMap();
-      await _server.start(port: state.port, backend: backend);
+      await _server.start(port: state.port, source: source);
       final addresses = await WebDavServerService.localAddresses();
       state = state.copyWith(running: true, port: _server.port, addresses: addresses, clearError: true);
       if (Platform.isAndroid) {
@@ -171,11 +171,11 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
   /// Pull a confirmed incoming Switch save into the export folder (req #1/#2):
   /// backs up the current export, then writes the new one.
   Future<void> pull(String titleId, {required String timestamp}) async {
-    final backend = _backend();
+    final source = _source();
     final bytes = _server.takeStaged(titleId);
-    if (backend == null || bytes == null) return;
+    if (source == null || bytes == null) return;
     try {
-      backend.applyIncoming(titleId, bytes, timestamp: timestamp);
+      await source.applyIncoming(titleId, bytes, timestamp: timestamp);
     } catch (e) {
       state = state.copyWith(error: '$e');
     }
