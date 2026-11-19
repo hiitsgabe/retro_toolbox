@@ -59,6 +59,12 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           appBar: AppBar(
             title: const Text('SMB Share'),
             actions: [
+              const InfoButton(
+                icon: Icons.folder_shared_rounded,
+                title: 'SMB Share',
+                text:
+                    'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network.',
+              ),
               if (state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
             ],
           ),
@@ -76,12 +82,6 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const ToolDescription(
-          icon: Icons.folder_shared_rounded,
-          text:
-              'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network.',
-        ),
-        const SizedBox(height: 20),
         SizedBox(
           height: 52,
           child: FilledButton.icon(

@@ -202,7 +202,17 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     ref.listen(gameStateManagerProvider, _onGames);
     final ip = orderAddresses(_addresses, ref.watch(settingsProvider.select((s) => s.preferredLocalIp))).firstOrNull;
     return Scaffold(
-      appBar: AppBar(title: const Text('Download from link')),
+      appBar: AppBar(
+        title: const Text('Download from link'),
+        actions: const [
+          InfoButton(
+            icon: Icons.link,
+            title: 'Download from link',
+            text: 'Saves a file from an http or https link into a folder you choose, in the background. '
+                'Type or paste the link, or send it from your phone.',
+          ),
+        ],
+      ),
       body: Actions(
         actions: {
           // Not isEnabled-gated: the nearest Start binding wins even when disabled, so defer explicitly.
@@ -234,12 +244,6 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const ToolDescription(
-          icon: Icons.link,
-          text: 'Saves a file from an http or https link into a folder you choose, in the background. '
-              'Type or paste the link, or send it from your phone.',
-        ),
-        const SizedBox(height: 14),
         TextField(
           controller: _url,
           keyboardType: TextInputType.url,

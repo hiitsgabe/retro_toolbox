@@ -14,6 +14,7 @@ import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Words for a unit's plan.
@@ -353,20 +354,23 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Save Sync'),
-        actions: [IconButton(tooltip: 'Refresh', onPressed: busy ? null : n.refresh, icon: const Icon(Icons.refresh))],
+        actions: [
+          InfoButton(
+            icon: Icons.sync,
+            title: 'Save Sync',
+            text: "Pull a game's save before you play and push it after. Saves go to the hub: "
+                '${s.googleAvailable ? 'a Retro Toolbox Saves folder in your own Google Drive, or ' : ''}'
+                'a folder another app (Syncthing, FolderSync) carries between devices. '
+                'Every save this replaces is kept in history on this device.',
+            learnMore: Uri.parse('https://hiitsgabe.github.io/retro_toolbox/save-sync.html'),
+          ),
+          IconButton(tooltip: 'Refresh', onPressed: busy ? null : n.refresh, icon: const Icon(Icons.refresh)),
+        ],
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            ToolDescription(
-              icon: Icons.sync,
-              text: "Pull a game's save before you play and push it after. Saves go to the hub: "
-                  '${s.googleAvailable ? 'a Retro Toolbox Saves folder in your own Google Drive, or ' : ''}'
-                  'a folder another app (Syncthing, FolderSync) carries between devices. '
-                  'Every save this replaces is kept in history on this device.',
-            ),
-            const SizedBox(height: 12),
             // The first run has its own screen now; a chooser here as well
             // would be a second place to answer the same question.
             if (s.access == SyncAccess.none)
@@ -382,10 +386,17 @@ class _SaveSyncScreenState extends ConsumerState<SaveSyncScreen> {
                           : 'Start Shizuku (wireless debugging, or root), then come back and refresh.',
                     ),
                     const SizedBox(height: 8),
-                    if (s.shizukuRunning)
-                      FilledButton(onPressed: busy ? null : n.requestShizuku, child: const Text('Grant Shizuku access'))
-                    else
-                      OutlinedButton(onPressed: busy ? null : n.refresh, child: const Text('Retry')),
+                    Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      if (s.shizukuRunning)
+                        FilledButton(onPressed: busy ? null : n.requestShizuku, child: const Text('Grant Shizuku access'))
+                      else
+                        OutlinedButton(onPressed: busy ? null : n.refresh, child: const Text('Retry')),
+                      if (!Handheld.current)
+                        TextButton(
+                          onPressed: () => openLink(Uri.parse('https://hiitsgabe.github.io/retro_toolbox/save-sync.html#shizuku')),
+                          child: const Text('How to set up Shizuku'),
+                        ),
+                    ]),
                   ]),
                 ),
               )

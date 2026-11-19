@@ -61,6 +61,26 @@ void main() {
     expect(find.text('Rename selected (2)'), findsOneWidget);
   });
 
+  testWidgets('each section explains itself from a small (i) in its header', (t) async {
+    final dir = Directory.systemTemp.createTempSync('cc_info');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    FilePicker.platform = _Picker(dir.path);
+    t.view.physicalSize = const Size(1000, 2400);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+
+    await t.pumpWidget(const MaterialApp(home: CollectionCleanScreen()));
+    await t.tap(find.text('Choose folder'));
+    await t.pumpAndSettle();
+    const ghosts = 'Finds OS junk';
+    expect(find.textContaining(ghosts), findsNothing);
+    final card = find.ancestor(of: find.text('Ghost File Cleaner'), matching: find.byType(Card));
+    await t.tap(find.descendant(of: card, matching: find.byIcon(Icons.info_outline)));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.textContaining(ghosts)), findsOneWidget);
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Ghost File Cleaner')), findsOneWidget);
+  });
+
   test('renameSummary groups skips by reason', () {
     RenameSkip skip(String reason) => (entry: (path: '/a', from: 'a', to: 'b'), reason: reason);
     expect(CollectionCleanScreen.renameSummary((renamed: 3, skipped: [])), 'Renamed 3.');

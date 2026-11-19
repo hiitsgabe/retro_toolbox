@@ -37,15 +37,19 @@ class FpkgiServerScreen extends ConsumerWidget {
     final hasPs4 = ref.watch(appStateProvider).consolesList.any(FpkgiServerService.isPs4Console);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('FPKGi Server')),
+      appBar: AppBar(
+        title: const Text('FPKGi Server'),
+        actions: const [
+          InfoButton(
+            icon: Icons.cloud_upload_rounded,
+            title: 'FPKGi Server',
+            text: 'Hosts your PS4 library over the local network as an FPKGi shop. Packages and covers stream through this device with your Internet Archive sign-in, so the PS4 needs no credentials. Both must be on the same network.',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ToolDescription(
-            icon: Icons.cloud_upload_rounded,
-            text: 'Hosts your PS4 library over the local network as an FPKGi shop. Packages and covers stream through this device with your Internet Archive sign-in, so the PS4 needs no credentials. Both must be on the same network.',
-          ),
-          const SizedBox(height: 16),
           if (needsIa && !iaReady) ...[
             Card(
               margin: EdgeInsets.zero,

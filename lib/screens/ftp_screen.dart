@@ -76,6 +76,17 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
           appBar: AppBar(
             title: const Text('FTP'),
             actions: [
+              inClient
+                  ? const InfoButton(
+                      icon: Icons.cloud_download_rounded,
+                      title: 'FTP',
+                      text: 'Connect to an FTP server on your network to browse it, download files into the app, and upload files to it.',
+                    )
+                  : const InfoButton(
+                      icon: Icons.dns_rounded,
+                      title: 'FTP',
+                      text: 'Share a folder over FTP so other devices on your network can browse, download, and upload files to it.',
+                    ),
               if (inClient && state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
             ],
           ),
@@ -112,11 +123,6 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const ToolDescription(
-          icon: Icons.cloud_download_rounded,
-          text: 'Connect to an FTP server on your network to browse it, download files into the app, and upload files to it.',
-        ),
-        const SizedBox(height: 16),
         TextField(
           controller: _host,
           onChanged: (_) => setState(() {}),
@@ -234,11 +240,6 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const ToolDescription(
-          icon: Icons.dns_rounded,
-          text: 'Share a folder over FTP so other devices on your network can browse, download, and upload files to it.',
-        ),
-        const SizedBox(height: 16),
         Card(
           margin: EdgeInsets.zero,
           child: ListTile(

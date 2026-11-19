@@ -73,17 +73,21 @@ class _M3uScreenState extends State<M3uScreen> {
   Widget build(BuildContext context) {
     final sets = _sets;
     return Scaffold(
-      appBar: AppBar(title: const Text('M3U Playlists')),
+      appBar: AppBar(
+        title: const Text('M3U Playlists'),
+        actions: const [
+          InfoButton(
+            icon: Icons.playlist_play,
+            title: 'M3U Playlists',
+            text: 'Creates .m3u playlists for multi-disc games so emulators show one entry and '
+                'swap discs in-game. Pick a folder, scan for disc sets, then create the playlists.',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const ToolDescription(
-              icon: Icons.playlist_play,
-              text: 'Creates .m3u playlists for multi-disc games so emulators show one entry and '
-                  'swap discs in-game. Pick a folder, scan for disc sets, then create the playlists.',
-            ),
-            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(

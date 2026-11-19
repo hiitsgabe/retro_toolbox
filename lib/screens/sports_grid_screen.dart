@@ -32,6 +32,15 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
         appBar: AppBar(
           title: const Text('Sports'),
           actions: [
+            const InfoButton(
+              icon: Icons.sports_score,
+              title: 'Sports',
+              text: 'Update the rosters of classic sports games with real, '
+                  'current teams and players, then patch your own ROM. Pick a '
+                  'console or sport, choose a game, edit the squads, and go.\n\n'
+                  'ALPHA. This is new and rough, so expect bugs, keep a backup '
+                  'of your ROM, and report anything odd.',
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: SegmentedButton<bool>(
@@ -52,17 +61,6 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
             if (list.isEmpty) return _error('No patchers available.');
             return ListView(
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: ToolDescription(
-                    icon: Icons.sports_score,
-                    text: 'Update the rosters of classic sports games with real, '
-                        'current teams and players, then patch your own ROM. Pick a '
-                        'console or sport, choose a game, edit the squads, and go.\n\n'
-                        'ALPHA. This is new and rough, so expect bugs, keep a backup '
-                        'of your ROM, and report anything odd.',
-                  ),
-                ),
                 MenuGrid(tiles: _bySport ? _sportTiles(list) : _consoleTiles(list), shrinkWrap: true),
                 _contributeFooter(context),
               ],

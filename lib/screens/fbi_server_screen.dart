@@ -201,19 +201,23 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('FBI Server')),
+      appBar: AppBar(
+        title: const Text('FBI Server'),
+        actions: const [
+          InfoButton(
+            icon: Icons.install_mobile,
+            title: 'FBI Server',
+            text: 'Installs 3DS titles onto a console running FBI over the local network. Turn the server '
+                'on, then install a file you picked or a catalog title: it’s converted to .cia if needed.',
+          ),
+        ],
+      ),
       floatingActionButton: state.running
           ? FloatingActionButton.extended(onPressed: _installFile, icon: const Icon(Icons.file_open), label: const Text('Install a file'))
           : null,
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ToolDescription(
-            icon: Icons.install_mobile,
-            text: 'Installs 3DS titles onto a console running FBI over the local network. Turn the server '
-                'on, then install a file you picked or a catalog title — it’s converted to .cia if needed.',
-          ),
-          const SizedBox(height: 16),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(

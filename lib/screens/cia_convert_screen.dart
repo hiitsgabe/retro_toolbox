@@ -99,17 +99,21 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
   Widget build(BuildContext context) {
     final hasBoot9 = ref.watch(settingsProvider).boot9Path?.isNotEmpty ?? false;
     return Scaffold(
-      appBar: AppBar(title: const Text('3DS → CIA')),
+      appBar: AppBar(
+        title: const Text('3DS → CIA'),
+        actions: const [
+          InfoButton(
+            icon: Icons.sd_card_outlined,
+            title: '3DS → CIA',
+            text: 'Converts 3DS cartridge images (.3ds/.cci) into installable .cia, for use with the '
+                'FBI Server or your own backups. Encrypted dumps need your console’s boot9.bin or aes_keys.txt.',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const ToolDescription(
-              icon: Icons.sd_card_outlined,
-              text: 'Converts 3DS cartridge images (.3ds/.cci) into installable .cia — for use with the '
-                  'FBI Server or your own backups. Encrypted dumps need your console’s boot9.bin or aes_keys.txt.',
-            ),
-            const SizedBox(height: 16),
             Expanded(
               child: _activeTaskId != null
                   ? _progressUi(context)

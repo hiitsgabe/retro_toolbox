@@ -109,17 +109,21 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
 
   Widget _scaffold() {
     return Scaffold(
-      appBar: AppBar(title: const Text('New Catalog Source')),
+      appBar: AppBar(
+        title: const Text('New Catalog Source'),
+        actions: const [
+          InfoButton(
+            icon: Icons.playlist_add,
+            title: 'New Catalog Source',
+            text: 'Add a single console to your catalog from a URL. Turn on Internet Archive '
+                'for an archive.org item (ID or link); otherwise point at a directory-listing URL.',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const ToolDescription(
-              icon: Icons.playlist_add,
-              text: 'Add a single console to your catalog from a URL. Turn on Internet Archive '
-                  'for an archive.org item (ID or link); otherwise point at a directory-listing URL.',
-            ),
-            const SizedBox(height: 16),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Internet Archive'),

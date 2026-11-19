@@ -25,15 +25,19 @@ class TinfoilServerScreen extends ConsumerWidget {
     final host = addresses.isNotEmpty ? addresses.first : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tinfoil Server')),
+      appBar: AppBar(
+        title: const Text('Tinfoil Server'),
+        actions: const [
+          InfoButton(
+            icon: Icons.cloud_upload_rounded,
+            title: 'Tinfoil Server',
+            text: 'Hosts your game library over the local network so Tinfoil on your console can browse and install titles directly from this device. Both must be on the same network.',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ToolDescription(
-            icon: Icons.cloud_upload_rounded,
-            text: 'Hosts your game library over the local network so Tinfoil on your console can browse and install titles directly from this device. Both must be on the same network.',
-          ),
-          const SizedBox(height: 16),
           ..._authSections(context, ref),
           Card(
             margin: EdgeInsets.zero,

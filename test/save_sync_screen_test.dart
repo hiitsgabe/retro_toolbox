@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -197,6 +198,41 @@ void main() {
     final fake = await pump(t, const SaveSyncState(shizukuRunning: true));
     await t.tap(find.text('Grant Shizuku access'));
     expect(fake.calls.last, 'grant');
+  });
+
+  // url_launcher talks to this channel under flutter test; record the URLs.
+  List<String> launches(WidgetTester t) {
+    final urls = <String>[];
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+    t.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'launch') urls.add((call.arguments as Map)['url'] as String);
+      return true;
+    });
+    addTearDown(() => t.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+    return urls;
+  }
+
+  for (final running in [true, false]) {
+    testWidgets('without access the card links to the Shizuku setup (Shizuku ${running ? 'running' : 'stopped'})', (t) async {
+      final urls = launches(t);
+      await pump(t, SaveSyncState(shizukuRunning: running));
+      expect(find.text('No access to game folders'), findsOneWidget);
+      await t.tap(find.text('How to set up Shizuku'));
+      await t.pump();
+      expect(urls, ['https://hiitsgabe.github.io/retro_toolbox/save-sync.html#shizuku']);
+    });
+  }
+
+  testWidgets('the (i) explains Save Sync and links to its page', (t) async {
+    final urls = launches(t);
+    await pump(t, const SaveSyncState());
+    expect(find.textContaining("Pull a game's save before you play"), findsNothing);
+    await t.tap(find.byTooltip('About this screen'));
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.textContaining("Pull a game's save before you play")), findsOneWidget);
+    await t.tap(find.text('Learn more'));
+    await t.pump();
+    expect(urls, ['https://hiitsgabe.github.io/retro_toolbox/save-sync.html']);
   });
 
   testWidgets('the row takes its name from Android', (t) async {

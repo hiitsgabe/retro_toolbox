@@ -1,34 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-/// A short "what is this / what it's for" banner shown under a tool's header.
-class ToolDescription extends StatelessWidget {
+/// The (i) in a screen's AppBar: "what is this / what it's for" opens in a
+/// sheet, so the body starts with the controls.
+class InfoButton extends StatelessWidget {
   final IconData icon;
   final String text;
-  const ToolDescription({super.key, required this.icon, required this.text});
+  final String? title;
+  final Uri? learnMore;
+  final String tooltip;
+  const InfoButton({super.key, required this.icon, required this.text, this.title, this.learnMore, this.tooltip = 'About this screen'});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 22, color: scheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-            ),
+    return IconButton(icon: const Icon(Icons.info_outline), tooltip: tooltip, onPressed: () => _show(context));
+  }
+
+  Future<void> _show(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (context) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(children: [
+                Icon(icon, size: 24, color: scheme.primary),
+                if (title != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(title!, style: theme.textTheme.titleMedium)),
+                ],
+              ]),
+              const SizedBox(height: 12),
+              Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 16),
+              // A focused button keeps the d-pad inside the sheet, so up/down
+              // scroll a long text. The handheld has no browser for the link.
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                if (learnMore != null && !Handheld.current)
+                  TextButton.icon(onPressed: () => openLink(learnMore!), icon: const Icon(Icons.open_in_new, size: 16), label: const Text('Learn more')),
+                TextButton(autofocus: true, onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+              ]),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
+}
+
+/// Opens [uri] in the browser, as the About page does.
+Future<void> openLink(Uri uri) async {
+  if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
 }

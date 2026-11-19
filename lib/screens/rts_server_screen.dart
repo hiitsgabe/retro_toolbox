@@ -28,7 +28,17 @@ class RtsServerScreen extends ConsumerWidget {
     final host = addresses.isNotEmpty ? addresses.first : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Retro Tools Server')),
+      appBar: AppBar(
+        title: const Text('Retro Tools Server'),
+        actions: const [
+          InfoButton(
+            icon: Icons.dns_rounded,
+            title: 'Retro Tools Server',
+            text: 'Shares folders on this device as a catalog. On another device, open Settings > Library > Catalog source '
+                '(with Games Library & downloads on) and paste the link below. It browses and downloads straight from here. Same network.',
+          ),
+        ],
+      ),
       floatingActionButton: state.running
           ? null
           : FloatingActionButton.extended(
@@ -39,12 +49,6 @@ class RtsServerScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ToolDescription(
-            icon: Icons.dns_rounded,
-            text: 'Shares folders on this device as a catalog. On another device, open Settings > Library > Catalog source '
-                '(with Games Library & downloads on) and paste the link below. It browses and downloads straight from here. Same network.',
-          ),
-          const SizedBox(height: 16),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(

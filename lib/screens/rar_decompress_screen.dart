@@ -106,18 +106,22 @@ class _RarDecompressScreenState extends ConsumerState<RarDecompressScreen> {
     final theme = Theme.of(context);
     final canRun = _archivePath != null && _outputDir != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Rar Decompress')),
+      appBar: AppBar(
+        title: const Text('Rar Decompress'),
+        actions: const [
+          InfoButton(
+            icon: Icons.folder_zip_outlined,
+            title: 'Rar Decompress',
+            text: 'Extracts .rar and .zip archives to a folder. Pick an archive and an output '
+                'folder, then extract. RAR support is available on Android, macOS and Linux.',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ToolDescription(
-              icon: Icons.folder_zip_outlined,
-              text: 'Extracts .rar and .zip archives to a folder. Pick an archive and an output '
-                  'folder, then extract. RAR support is available on Android, macOS and Linux.',
-            ),
-            const SizedBox(height: 16),
             _fileRow(theme, Icons.insert_drive_file_outlined, 'Archive',
                 _archivePath != null ? p.basename(_archivePath!) : 'No file selected', _pickArchive),
             const SizedBox(height: 12),

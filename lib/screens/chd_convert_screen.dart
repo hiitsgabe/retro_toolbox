@@ -116,17 +116,21 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   Widget build(BuildContext context) {
     final ready = _chdmanReady;
     return Scaffold(
-      appBar: AppBar(title: const Text('CHD Converter')),
+      appBar: AppBar(
+        title: const Text('CHD Converter'),
+        actions: const [
+          InfoButton(
+            icon: Icons.compress,
+            title: 'CHD Converter',
+            text: 'Convert disc images to CHD to save space, or extract CHD back. Compresses '
+                '.cue/.gdi/.iso and extracts .chd. Needs the chdman tool (bundled with MAME).',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const ToolDescription(
-              icon: Icons.compress,
-              text: 'Convert disc images to CHD to save space, or extract CHD back. Compresses '
-                  '.cue/.gdi/.iso and extracts .chd. Needs the chdman tool (bundled with MAME).',
-            ),
-            const SizedBox(height: 16),
             Expanded(
               child: _activeTaskId != null
                   ? _progressUi(context)

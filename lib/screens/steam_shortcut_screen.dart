@@ -123,16 +123,18 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Steam Shortcuts')),
+      appBar: AppBar(
+        title: const Text('Steam Shortcuts'),
+        actions: const [
+          InfoButton(
+            icon: Icons.videogame_asset_rounded,
+            title: 'Steam Shortcuts',
+            text: 'Some launchers can run steam games using Gamehub or other emulators, but they require a .steam shortcut file. This tool creates .steam shortcut files that can be used with these launchers.',
+          ),
+        ],
+      ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: ToolDescription(
-              icon: Icons.videogame_asset_rounded,
-              text: 'Some launchers can run steam games using Gamehub or other emulators, but they require a .steam shortcut file. This tool creates .steam shortcut files that can be used with these launchers.',
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: TextField(

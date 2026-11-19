@@ -119,16 +119,20 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
     final keysPath = ref.watch(settingsProvider).nszKeysPath;
     final hasKeys = keysPath != null && keysPath.isNotEmpty;
     return Scaffold(
-      appBar: AppBar(title: const Text('NSZ Decompress')),
+      appBar: AppBar(
+        title: const Text('NSZ Decompress'),
+        actions: const [
+          InfoButton(
+            icon: Icons.unarchive_rounded,
+            title: 'NSZ Decompress',
+            text: 'Converts compressed .nsz files back into their original installable form. Pick a file and an output folder, then run. Requires your prod.keys.',
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            const ToolDescription(
-              icon: Icons.unarchive_rounded,
-              text: 'Converts compressed .nsz files back into their original installable form. Pick a file and an output folder, then run. Requires your prod.keys.',
-            ),
-            const SizedBox(height: 16),
             Expanded(child: hasKeys ? _decompressUi(context) : _keysWarning(context)),
           ],
         ),

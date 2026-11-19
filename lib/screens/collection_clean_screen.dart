@@ -44,18 +44,22 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
   Widget build(BuildContext context) {
     final dir = _dir;
     return Scaffold(
-      appBar: AppBar(title: const Text('Collection Clean')),
+      appBar: AppBar(
+        title: const Text('Collection Clean'),
+        actions: const [
+          InfoButton(
+            icon: Icons.cleaning_services,
+            title: 'Collection Clean',
+            text: 'Tidy up a game folder: remove duplicate ROMs, strip tags from filenames, '
+                'and delete OS junk files. Pick a folder, then scan and preview each cleanup '
+                'before applying it.',
+          ),
+        ],
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const ToolDescription(
-              icon: Icons.cleaning_services,
-              text: 'Tidy up a game folder: remove duplicate ROMs, strip tags from filenames, '
-                  'and delete OS junk files. Pick a folder, then scan and preview each cleanup '
-                  'before applying it.',
-            ),
-            const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: _pickFolder,
               icon: const Icon(Icons.folder_open),
@@ -229,6 +233,11 @@ class _CleanSectionState extends State<CleanSection> {
                 Icon(widget.icon, size: 20),
                 const SizedBox(width: 8),
                 Expanded(child: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w600))),
+                // Small, so the header row keeps its height.
+                IconButtonTheme(
+                  data: IconButtonThemeData(style: IconButton.styleFrom(iconSize: 18, visualDensity: VisualDensity.compact)),
+                  child: InfoButton(icon: widget.icon, title: widget.title, text: widget.description, tooltip: 'About ${widget.title}'),
+                ),
                 TextButton.icon(
                   onPressed: _busy ? null : _scan,
                   icon: _busy
@@ -238,8 +247,6 @@ class _CleanSectionState extends State<CleanSection> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            ToolDescription(icon: widget.icon, text: widget.description),
             if (rows != null && rows.isEmpty)
               const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nothing found.')),
             if (rows != null && rows.isNotEmpty) ...[

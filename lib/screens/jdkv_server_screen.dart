@@ -36,15 +36,19 @@ class _JdkvServerScreenState extends ConsumerState<JdkvServerScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('JDKV Server')),
+      appBar: AppBar(
+        title: const Text('JDKV Server'),
+        actions: const [
+          InfoButton(
+            icon: Icons.folder_shared_rounded,
+            title: 'JDKV Server',
+            text: 'Runs a WebDAV server so JKSV on your console can back up and restore game saves to this device over the local network. Point JKSV at the address shown below.',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const ToolDescription(
-            icon: Icons.folder_shared_rounded,
-            text: 'Runs a WebDAV server so JKSV on your console can back up and restore game saves to this device over the local network. Point JKSV at the address shown below.',
-          ),
-          const SizedBox(height: 16),
           _sourceCard(context, state, notifier),
           if (state.source.recipe == null) ...[
             const SizedBox(height: 12),
