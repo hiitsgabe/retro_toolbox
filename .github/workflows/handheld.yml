@@ -15,7 +15,7 @@ on:
 
 # Reusable workflows do not inherit the caller's env.
 env:
-  FLUTTER_VERSION: "3.35.7"
+  FLUTTER_VERSION: "3.47.2"
   FLUTTER_PI_COMMIT: c81869e033cd5b4c819c620e9124114a559b2067
   SERIOUS_PYTHON_APP: ${{ github.workspace }}/build/serious_python_app
   SERIOUS_PYTHON_SITE_PACKAGES: ${{ github.workspace }}/build/site-packages
