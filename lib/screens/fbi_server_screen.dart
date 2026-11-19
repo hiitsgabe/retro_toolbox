@@ -22,7 +22,10 @@ class FbiServerScreen extends ConsumerStatefulWidget {
 }
 
 class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
-  late final _ip = TextEditingController(text: ref.read(fbiServerProvider).threeDsIp);
+  // Made on first use, once the saved IP has loaded. Not `late final`: dispose
+  // would then build it when the field never showed, reading ref after unmount.
+  TextEditingController? _ipField;
+  TextEditingController get _ip => _ipField ??= TextEditingController(text: ref.read(fbiServerProvider).threeDsIp);
   final _search = TextEditingController();
   String _query = '';
   int _page = 0;
@@ -30,7 +33,7 @@ class _FbiServerScreenState extends ConsumerState<FbiServerScreen> {
 
   @override
   void dispose() {
-    _ip.dispose();
+    _ipField?.dispose();
     _search.dispose();
     super.dispose();
   }
