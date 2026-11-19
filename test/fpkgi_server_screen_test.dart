@@ -76,5 +76,6 @@ void main() {
     expect(find.textContaining('On the PS4'), findsOneWidget, reason: 'the steps are shown');
     expect(find.textContaining('(L2/R2 switch category)'), findsOneWidget);
     expect(find.textContaining('troca'), findsNothing);
+    expect(find.textContaining('—'), findsNothing, reason: 'no em dash in the steps');
   });
 }

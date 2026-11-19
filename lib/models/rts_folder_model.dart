@@ -1,6 +1,6 @@
 /// A local folder the Retro Tools Server exposes as one console/system in the
 /// generated catalog. [path] is the on-disk folder; the rest shape the entry
-/// other apps see via New Catalog Source.
+/// other apps see via the catalog source setting (Settings > Library).
 class RtsFolder {
   final String path;
   final String name;
