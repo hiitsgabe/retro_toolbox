@@ -3,20 +3,54 @@ import 'dart:io';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/hub_jksv_source.dart';
 import 'package:retro_toolbox/services/jksv_folder_source.dart';
+import 'package:retro_toolbox/services/jksv_source.dart';
+import 'package:retro_toolbox/services/save_sync/hub.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 import 'package:retro_toolbox/services/webdav_server_service.dart';
 
 const _portKey = 'jdkv_server_port_v2';
 const _folderKey = 'jdkv_export_folder';
+const _sourceKey = 'jdkv_source';
 final _titleIdInUrl = RegExp(r'01[0-9A-Fa-f]{14}');
+
+/// Where the server reads saves from: the export folder, or one Save Sync hub recipe.
+class JdkvSourceChoice {
+  const JdkvSourceChoice.folder() : recipe = null;
+  const JdkvSourceChoice.hub(String this.recipe);
+
+  /// The hub recipe id; null for the export folder.
+  final String? recipe;
+
+  String encode() => recipe == null ? 'folder' : 'hub:$recipe';
+
+  /// Anything unreadable is the folder, which every install before this used.
+  static JdkvSourceChoice decode(String? value) =>
+      value != null && value.length > 4 && value.startsWith('hub:') ? JdkvSourceChoice.hub(value.substring(4)) : const JdkvSourceChoice.folder();
+
+  @override
+  bool operator ==(Object other) => other is JdkvSourceChoice && other.recipe == recipe;
+
+  @override
+  int get hashCode => recipe.hashCode;
+}
+
+/// Opens the Save Sync hub; null when none is set up.
+typedef JdkvHubOpener = Future<({Hub hub, String deviceId})?> Function();
 
 class JdkvServerState {
   final bool running;
   final int port;
   final String? folder;
+  final JdkvSourceChoice source;
+
+  /// Whether Save Sync has a hub, and its recipes that can serve JKSV (id to name).
+  final bool hubConfigured;
+  final Map<String, String> hubRecipes;
   final List<String> addresses;
   final List<IncomingSave> incoming;
   final int activeTransfers;
@@ -26,6 +60,9 @@ class JdkvServerState {
     this.running = false,
     this.port = 9091,
     this.folder,
+    this.source = const JdkvSourceChoice.folder(),
+    this.hubConfigured = false,
+    this.hubRecipes = const {},
     this.addresses = const [],
     this.incoming = const [],
     this.activeTransfers = 0,
@@ -36,6 +73,9 @@ class JdkvServerState {
     bool? running,
     int? port,
     String? folder,
+    JdkvSourceChoice? source,
+    bool? hubConfigured,
+    Map<String, String>? hubRecipes,
     List<String>? addresses,
     List<IncomingSave>? incoming,
     int? activeTransfers,
@@ -46,6 +86,9 @@ class JdkvServerState {
         running: running ?? this.running,
         port: port ?? this.port,
         folder: folder ?? this.folder,
+        source: source ?? this.source,
+        hubConfigured: hubConfigured ?? this.hubConfigured,
+        hubRecipes: hubRecipes ?? this.hubRecipes,
         addresses: addresses ?? this.addresses,
         incoming: incoming ?? this.incoming,
         activeTransfers: activeTransfers ?? this.activeTransfers,
@@ -54,15 +97,21 @@ class JdkvServerState {
 }
 
 final jdkvServerProvider = StateNotifierProvider<JdkvServerNotifier, JdkvServerState>((ref) {
-  return JdkvServerNotifier();
+  return JdkvServerNotifier(openHub: () => ref.read(saveSyncProvider.notifier).openHub());
 });
 
 class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
   final _server = WebDavServerService();
   final _catalogService = CatalogService();
+  final JdkvHubOpener _openHub;
   Map<String, String> _titleNames = {};
 
-  JdkvServerNotifier() : super(const JdkvServerState()) {
+  /// The source the server was last started with: a pulled save goes back where it came from.
+  JksvSource? _live;
+
+  JdkvServerNotifier({JdkvHubOpener? openHub})
+      : _openHub = openHub ?? _noHub,
+        super(const JdkvServerState()) {
     _server.activeTransfers.addListener(() {
       if (mounted) state = state.copyWith(activeTransfers: _server.activeTransfers.value);
     });
@@ -82,7 +131,11 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     });
     SharedPreferences.getInstance().then((prefs) {
       if (!mounted) return;
-      state = state.copyWith(port: prefs.getInt(_portKey) ?? state.port, folder: prefs.getString(_folderKey));
+      state = state.copyWith(
+        port: prefs.getInt(_portKey) ?? state.port,
+        folder: prefs.getString(_folderKey),
+        source: JdkvSourceChoice.decode(prefs.getString(_sourceKey)),
+      );
       if (ServerMode.shouldRestore(prefs, 'jdkv')) enable();
     });
   }
@@ -115,24 +168,60 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     (await SharedPreferences.getInstance()).setString(_folderKey, path);
   }
 
-  FolderJksvSource? _source() {
+  Future<void> setSource(JdkvSourceChoice source) async {
+    state = state.copyWith(source: source);
+    (await SharedPreferences.getInstance()).setString(_sourceKey, source.encode());
+  }
+
+  static Future<({Hub hub, String deviceId})?> _noHub() async => null;
+
+  /// Reads which hub recipes can serve JKSV: folder units, one per title id
+  /// (Eden, Yuzu). Asked each time the screen opens, so a hub set up since shows.
+  Future<void> loadHubRecipes() async {
+    try {
+      final opened = await _openHub();
+      final recipes = opened == null ? const <String, HubRecipe>{} : await opened.hub.recipes();
+      if (!mounted) return;
+      state = state.copyWith(hubConfigured: opened != null, hubRecipes: {
+        for (final e in recipes.entries)
+          if (e.value.recipe['unit'] == 'folder') e.key: '${e.value.recipe['name'] ?? e.key}',
+      });
+    } catch (_) {
+      // A hub that cannot be read right now is still set up; Start shows why.
+      if (mounted) state = state.copyWith(hubConfigured: true);
+    }
+  }
+
+  String _nameFor(String id) => _titleNames[id.toUpperCase()] ?? id;
+
+  FolderJksvSource? _folderSource() {
     final folder = state.folder;
     if (folder == null) return null;
-    return FolderJksvSource(
-      root: Directory(folder),
-      nameFor: (id) => _titleNames[id.toUpperCase()] ?? id,
-    );
+    return FolderJksvSource(root: Directory(folder), nameFor: _nameFor);
   }
 
   Future<void> enable() async {
-    final source = _source();
-    if (source == null) {
+    final recipe = state.source.recipe;
+    final folderSource = _folderSource();
+    if (recipe == null && folderSource == null) {
       state = state.copyWith(error: 'Pick a folder with your emulator save exports first.');
       return;
     }
     try {
+      final JksvSource source;
+      if (recipe == null) {
+        source = folderSource!;
+      } else {
+        final opened = await _openHub();
+        if (opened == null) {
+          state = state.copyWith(error: 'Set up Save Sync first.');
+          return;
+        }
+        source = HubJksvSource(hub: opened.hub, recipe: recipe, deviceId: opened.deviceId, deviceName: 'Switch (JKSV)', nameFor: _nameFor);
+      }
       await _buildNameMap();
       await _server.start(port: state.port, source: source);
+      _live = source;
       final addresses = await WebDavServerService.localAddresses();
       state = state.copyWith(running: true, port: _server.port, addresses: addresses, clearError: true);
       if (Platform.isAndroid) {
@@ -168,10 +257,10 @@ class JdkvServerNotifier extends StateNotifier<JdkvServerState> {
     await ServerMode.remember('jdkv', false);
   }
 
-  /// Pull a confirmed incoming Switch save into the export folder (req #1/#2):
-  /// backs up the current export, then writes the new one.
+  /// Pull a confirmed incoming Switch save into the source it came through
+  /// (req #1/#2): a folder backs up the current export, then writes the new one.
   Future<void> pull(String titleId, {required String timestamp}) async {
-    final source = _source();
+    final source = _live;
     final bytes = _server.takeStaged(titleId);
     if (source == null || bytes == null) return;
     try {

@@ -21,6 +21,9 @@ abstract class JksvSource {
   Future<void> applyIncoming(String titleId, List<int> jksvZip, {required String timestamp});
 }
 
+/// [raw] with every character JKSV strips from names on the remote replaced.
+String jksvSafeName(String raw) => raw.split('').map((c) => RegExp(r'[a-zA-Z0-9 .\-_()\[\]]').hasMatch(c) ? c : '_').join().trim();
+
 /// Export layout (`<TitleID>/<rel>`, what Eden/Yuzu "Export Save" writes) to
 /// JKSV layout: the save root at the zip root (JKSV wants "root of zip = root
 /// of save"), plus a `.nx_save_meta.bin` carrying the title id.

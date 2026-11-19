@@ -15,11 +15,22 @@ import 'package:retro_toolbox/services/pick.dart';
 
 /// Controls the embedded WebDAV server that syncs emulator saves with JKSV on
 /// a Switch. Android→Switch (JKSV restores) and Switch→Android (confirm-to-pull).
-class JdkvServerScreen extends ConsumerWidget {
+class JdkvServerScreen extends ConsumerStatefulWidget {
   const JdkvServerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JdkvServerScreen> createState() => _JdkvServerScreenState();
+}
+
+class _JdkvServerScreenState extends ConsumerState<JdkvServerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(jdkvServerProvider.notifier).loadHubRecipes();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(jdkvServerProvider);
     final notifier = ref.read(jdkvServerProvider.notifier);
     final theme = Theme.of(context);
@@ -34,7 +45,11 @@ class JdkvServerScreen extends ConsumerWidget {
             text: 'Runs a WebDAV server so JKSV on your console can back up and restore game saves to this device over the local network. Point JKSV at the address shown below.',
           ),
           const SizedBox(height: 16),
-          _folderCard(context, state, notifier),
+          _sourceCard(context, state, notifier),
+          if (state.source.recipe == null) ...[
+            const SizedBox(height: 12),
+            _folderCard(context, state, notifier),
+          ],
           const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
@@ -45,7 +60,7 @@ class JdkvServerScreen extends ConsumerWidget {
                 title: const Text('Enable server'),
                 subtitle: Text(state.running ? 'Sharing saves with JKSV' : 'Off'),
                 value: state.running,
-                onChanged: state.folder == null ? null : (v) => v ? notifier.enable() : notifier.disable(),
+                onChanged: state.folder == null && state.source.recipe == null ? null : (v) => v ? notifier.enable() : notifier.disable(),
               ),
             ),
           ),
@@ -75,6 +90,41 @@ class JdkvServerScreen extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _sourceCard(BuildContext context, JdkvServerState state, JdkvServerNotifier notifier) {
+    final theme = Theme.of(context);
+    // The chosen recipe stays listed while the hub is read, or when it cannot be.
+    final ids = {...state.hubRecipes.keys, if (state.source.recipe case final id?) id};
+    Widget option(String title, JdkvSourceChoice? choice, {bool enabled = true, String? hint}) {
+      final selected = state.source == choice;
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        enabled: enabled && choice != null && !state.running,
+        leading: Icon(selected ? Icons.radio_button_checked : Icons.radio_button_unchecked, color: selected ? theme.colorScheme.primary : null),
+        title: Text(title),
+        subtitle: hint == null ? null : Text(hint),
+        onTap: choice == null ? null : () => notifier.setSource(choice),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Source', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            option('Exported saves folder', const JdkvSourceChoice.folder()),
+            if (!state.hubConfigured && ids.isEmpty) option('Save Sync', null, hint: 'Set up Save Sync first'),
+            for (final id in ids)
+              option('Save Sync: ${state.hubRecipes[id] ?? id}', JdkvSourceChoice.hub(id),
+                  enabled: state.hubConfigured, hint: state.hubConfigured ? null : 'Set up Save Sync first'),
+          ],
+        ),
       ),
     );
   }

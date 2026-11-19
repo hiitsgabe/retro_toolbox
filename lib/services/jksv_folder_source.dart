@@ -57,10 +57,7 @@ class FolderJksvSource implements JksvSource {
   /// JKSV-safe display name for a title (unsafe path chars replaced), matching
   /// how JKSV strips names on the remote.
   @override
-  String displayName(String titleId) {
-    final raw = nameFor?.call(titleId) ?? titleId;
-    return raw.split('').map((c) => RegExp(r'[a-zA-Z0-9 .\-_()\[\]]').hasMatch(c) ? c : '_').join().trim();
-  }
+  String displayName(String titleId) => jksvSafeName(nameFor?.call(titleId) ?? titleId);
 
   File? _zipFor(String titleId) {
     for (final t in listTitles()) {

@@ -41,6 +41,9 @@ Future<void> saveTo(WidgetTester t, String path) async {
     child: const MaterialApp(home: JdkvServerScreen()),
   ));
   await t.pump();
+  // The Source card above pushes the address rows below the default 800x600 view.
+  await t.ensureVisible(find.byTooltip('Save webdav.json'));
+  await t.pump();
   await t.tap(find.byTooltip('Save webdav.json'));
   // The write is real file I/O: wait for its snackbar instead of a fixed
   // number of pumps (flaky under a loaded full-suite run).

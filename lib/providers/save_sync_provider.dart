@@ -364,16 +364,13 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
         return 'The recipe for ${e.key} is not valid: $err';
       }
     }
-    final sync = await _sync();
-    final choice = sync.hubChoice;
-    if (choice == null) return null;
+    final opened = await openHub();
+    if (opened == null) return null;
+    final (:hub, :deviceId) = opened;
     for (final e in fetched.entries) {
       _recipes[e.key] = (e.value, 'repo');
     }
     final at = DateTime.now().toUtc();
-    final deviceId = await sync.deviceId(await _deviceModel());
-    final hub = Hub(_backend(choice));
-    await hub.open(deviceId: deviceId);
     await hub.putConfig(
       {for (final e in packageToRecipe.entries) e.key: ConfigEntry(recipe: e.value, updatedAt: at, by: deviceId)},
       deviceId: deviceId,
@@ -381,6 +378,18 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     );
     await refresh();
     return null;
+  }
+
+  /// The hub this device chose, opened, and this device's id in it. Null when
+  /// no hub is chosen yet. Never creates one: that is the owner's pick only.
+  Future<({Hub hub, String deviceId})?> openHub() async {
+    final sync = await _sync();
+    final choice = sync.hubChoice;
+    if (choice == null) return null;
+    final deviceId = await sync.deviceId(await _deviceModel());
+    final hub = Hub(_backend(choice));
+    await hub.open(deviceId: deviceId);
+    return (hub: hub, deviceId: deviceId);
   }
 
   /// Asks Android for the icon and label of any package not asked about yet.
