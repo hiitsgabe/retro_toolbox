@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/app_style.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _key = 'app_style';
@@ -30,7 +31,10 @@ class StyleNotifier extends StateNotifier<AppStyle> {
   /// Completes once the saved style is in.
   late final Future<void> loaded;
 
-  Future<void> setBackdrop(BackdropStyle b) => _save(state.copyWith(backdrop: b));
+  /// The card style's own backdrop picked back reads as not picked, so it
+  /// follows the card style again.
+  Future<void> setBackdrop(BackdropStyle b) =>
+      _save(b == StyleTokens.forStyle(state.cards).backdrop ? state.withStyleBackdrop() : state.copyWith(backdrop: b));
   Future<void> setCards(CardStyle c) => _save(state.copyWith(cards: c));
 
   Future<void> _save(AppStyle next) async {

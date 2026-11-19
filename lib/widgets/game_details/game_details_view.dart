@@ -324,39 +324,52 @@ class _Hero extends StatelessWidget {
       child: Stack(
         alignment: AlignmentDirectional.bottomStart,
         children: [
-          // The art stops short of the bottom, where the gradient is opaque:
-          // at a fractional scroll offset both edges are antialiased and a
-          // line of art would show through.
-          Positioned.fill(bottom: 2, child: ColoredBox(color: theme.colorScheme.surface)),
-          // The blur would spill onto the sheet below.
-          if (background != null) Positioned.fill(bottom: 2, child: ClipRect(child: background)),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
+          // The art melts into the page's backdrop: masked away at the
+          // bottom, where it used to end in the scaffold's colour. Without art
+          // the text sits on the backdrop like every other page.
+          if (background != null)
+            Positioned.fill(
+              child: ShaderMask(
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (r) => const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  // Dark under the app bar too, so the back button reads on bright art.
-                  colors: [
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.transparent,
-                    theme.scaffoldBackgroundColor.withValues(alpha: 0.75),
-                    theme.scaffoldBackgroundColor,
+                  colors: [Colors.white, Colors.white, Colors.transparent],
+                  stops: [0, 0.7, 1],
+                ).createShader(r),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(color: theme.colorScheme.surface),
+                    // The blur would spill onto the sheet below.
+                    ClipRect(child: background),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          // Dark under the app bar too, so the back button reads on bright art.
+                          colors: [
+                            Colors.black.withValues(alpha: 0.45),
+                            Colors.transparent,
+                            theme.colorScheme.surface.withValues(alpha: 0.75),
+                            theme.colorScheme.surface,
+                          ],
+                          stops: const [0, 0.25, 0.7, 1],
+                        ),
+                      ),
+                    ),
+                    // Wide, the text runs over the middle of the art: shade its side.
+                    if (!narrow)
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [theme.colorScheme.surface.withValues(alpha: 0.7), theme.colorScheme.surface.withValues(alpha: 0)],
+                            stops: const [0, 0.6],
+                          ),
+                        ),
+                      ),
                   ],
-                  stops: const [0, 0.25, 0.7, 1],
-                ),
-              ),
-            ),
-          ),
-          // Wide, the text runs over the middle of the art: shade its side.
-          if (!narrow)
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [theme.scaffoldBackgroundColor.withValues(alpha: 0.7), theme.scaffoldBackgroundColor.withValues(alpha: 0)],
-                    stops: const [0, 0.6],
-                  ),
                 ),
               ),
             ),

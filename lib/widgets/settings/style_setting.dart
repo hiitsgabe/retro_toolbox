@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 
@@ -26,23 +27,24 @@ class StyleSettingRows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final style = ref.watch(styleProvider);
     final notifier = ref.read(styleProvider.notifier);
-    final backdrop = style.backdrop;
-    final retro = backdropPresets.values.first;
+    final backdrop = style.shownBackdrop;
+    // The card style's own: what Reset goes back to.
+    final own = StyleTokens.forStyle(style.cards).backdrop;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SettingsHeader('Background', top: 0),
       SettingsSegmentedRow<BackdropKind>(
         title: 'Background',
         options: [for (final k in BackdropKind.values) (k, k.label)],
         selected: backdrop.kind,
-        changed: backdrop.kind != _defaults.backdrop.kind,
+        changed: backdrop.kind != own.kind,
         onChanged: (k) => notifier.setBackdrop(backdrop.copyWith(kind: k)),
-        onReset: () => notifier.setBackdrop(backdrop.copyWith(kind: _defaults.backdrop.kind)),
+        onReset: () => notifier.setBackdrop(backdrop.copyWith(kind: own.kind)),
       ),
       if (backdrop.kind != BackdropKind.image)
         _ColoursRow(
           top: backdrop.top,
           bottom: backdrop.bottom,
-          changed: backdrop.top != retro.$1 || backdrop.bottom != retro.$2,
+          own: (own.top, own.bottom),
           onPick: (pair) => notifier.setBackdrop(backdrop.copyWith(top: pair.$1, bottom: pair.$2)),
         )
       else
@@ -70,19 +72,21 @@ class StyleSettingRows extends ConsumerWidget {
 /// The seven presets as swatches: one focus stop each, left/right moves
 /// between them, A (or a tap) picks.
 class _ColoursRow extends StatelessWidget {
-  const _ColoursRow({required this.top, required this.bottom, required this.changed, required this.onPick});
+  const _ColoursRow({required this.top, required this.bottom, required this.own, required this.onPick});
 
   final Color top;
   final Color bottom;
-  final bool changed;
+
+  /// The card style's own pair, which Reset picks.
+  final (Color, Color) own;
   final ValueChanged<(Color, Color)> onPick;
 
   @override
   Widget build(BuildContext context) {
-    final retro = backdropPresets.values.first;
+    final changed = (top, bottom) != own;
     return SettingsRowFrame(
       minHeight: changed ? 72 : 64,
-      onReset: changed ? () => onPick(retro) : null,
+      onReset: changed ? () => onPick(own) : null,
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -103,7 +107,7 @@ class _ColoursRow extends StatelessWidget {
             ),
           ]),
         ),
-        if (changed) ...[const SizedBox(width: 16), ResetPill(onPressed: () => onPick(retro))],
+        if (changed) ...[const SizedBox(width: 16), ResetPill(onPressed: () => onPick(own))],
       ]),
     );
   }

@@ -6,11 +6,13 @@ import 'package:mesh_gradient/mesh_gradient.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 
+import 'backdrop_clock.dart';
 import 'paint_swirl.dart';
 
-/// What sits behind a menu. Ported from Kitchentable's backdrop.
+/// What sits behind every page (app.dart puts it there). Ported from
+/// Kitchentable's backdrop.
 ///
-/// The menus draw on top of this, so it is the look of the screen rather than
+/// The pages draw on top of this, so it is the look of the screen rather than
 /// a ground colour. [still] is a screen that cannot afford motion (the
 /// framebuffer handheld): the animated kinds then draw one frame.
 class Backdrop extends StatelessWidget {
@@ -42,6 +44,7 @@ class Backdrop extends StatelessWidget {
     BackdropKind.aurora => still ? _Flat(style: style) : _Aurora(style: style),
     BackdropKind.drift => _Drift(style: style, still: still),
     BackdropKind.flat => _Flat(style: style),
+    BackdropKind.dots => _Dots(style: style),
     BackdropKind.image => _Picture(style: style),
   };
 }
@@ -61,6 +64,38 @@ class _Flat extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Flat with a grid of dots in the top colour (Classic's own).
+class _Dots extends StatelessWidget {
+  const _Dots({required this.style}) : super(key: const ValueKey('backdrop-dots'));
+
+  final BackdropStyle style;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(foregroundPainter: _DotsPainter(style), child: _Flat(style: style));
+}
+
+class _DotsPainter extends CustomPainter {
+  _DotsPainter(this.style);
+
+  final BackdropStyle style;
+
+  static const step = 18.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Faint: the grid is texture under the menus, not a pattern to look at.
+    final dot = Paint()..color = style.top.withValues(alpha: 0.22);
+    for (var y = step / 2; y < size.height; y += step) {
+      for (var x = step / 2; x < size.width; x += step) {
+        canvas.drawCircle(Offset(x, y), 1.1, dot);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DotsPainter old) => old.style != style;
 }
 
 /// The fluid one, and with Paint the only part of the app that leans on a
@@ -108,7 +143,8 @@ class _DriftState extends State<_Drift> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     if (!widget.still) {
-      _clock = AnimationController(vsync: this, duration: const Duration(seconds: 60))..repeat();
+      const period = Duration(seconds: 60);
+      _clock = AnimationController(vsync: this, duration: period, value: backdropPhase(period))..repeat();
     }
   }
 

@@ -12,6 +12,7 @@ import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/backdrop/backdrop.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -31,13 +32,66 @@ class _NoOpPageTransitionsBuilder extends PageTransitionsBuilder {
   }
 }
 
+/// [inner] with the style's backdrop behind every page, so no screen has to
+/// opt in: scaffolds are transparent by default and the page brings its own
+/// ground through the transition. Dialogs and sheets are not pages and keep
+/// their panel.
+class _BackdropPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _BackdropPageTransitionsBuilder(this.inner);
+
+  final PageTransitionsBuilder inner;
+
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition => inner.delegatedTransition;
+
+  @override
+  Duration get transitionDuration => inner.transitionDuration;
+
+  @override
+  Duration get reverseTransitionDuration => inner.reverseTransitionDuration;
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    return inner.buildTransitions(route, context, animation, secondaryAnimation, _PageBackdrop(child: child));
+  }
+}
+
+class _PageBackdrop extends StatelessWidget {
+  const _PageBackdrop({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Backdrop(style: StyleTokens.of(context).backdrop, child: child);
+}
+
+/// The default transitions per platform, or none on the framebuffer, each
+/// with the backdrop behind the page. Built once: a theme that is new on every
+/// app rebuild animates to itself.
+PageTransitionsTheme _pageTransitions({required bool still}) {
+  final builders = const PageTransitionsTheme().builders;
+  PageTransitionsBuilder inner(TargetPlatform p) => still ? _NoOpPageTransitionsBuilder() : builders[p] ?? const ZoomPageTransitionsBuilder();
+  return PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _BackdropPageTransitionsBuilder(inner(p))});
+}
+
+final _movingPages = _pageTransitions(still: false);
+final _stillPages = _pageTransitions(still: true);
+
 /// The app's theme for a card style: every colour, radius and Material
 /// control comes from the style's [StyleTokens], so screens follow the style
 /// without asking which one is active. Always dark: screens are designed for
 /// a dark palette and look broken when a device's system theme is light.
-/// Framebuffer mode drops page transitions.
-ThemeData appTheme(CardStyle style) {
-  final k = StyleTokens.forStyle(style);
+/// Framebuffer mode drops page transitions. [backdrop] is the one picked in
+/// Style; null keeps the style's own.
+ThemeData appTheme(CardStyle style, {BackdropStyle? backdrop}) {
+  final base = StyleTokens.forStyle(style);
+  final k = backdrop == null ? base : base.copyWith(backdrop: backdrop);
   final scheme = _scheme(k);
   final panel = k.solidPanel;
   final muted = scheme.onSurfaceVariant;
@@ -57,7 +111,8 @@ ThemeData appTheme(CardStyle style) {
     hoverColor: k.accent.withValues(alpha: 0.08),
     useMaterial3: true,
     fontFamily: 'ChakraPetch',
-    scaffoldBackgroundColor: k.surface,
+    // The page's backdrop shows through; see _BackdropPageTransitionsBuilder.
+    scaffoldBackgroundColor: Colors.transparent,
     canvasColor: k.surface,
     dividerColor: scheme.outlineVariant,
     extensions: [k],
@@ -179,7 +234,7 @@ ThemeData appTheme(CardStyle style) {
     ),
     popupMenuTheme: PopupMenuThemeData(color: panel, surfaceTintColor: Colors.transparent, shape: panelShape),
     textSelectionTheme: TextSelectionThemeData(cursorColor: k.accent, selectionColor: k.accent.withValues(alpha: 0.32), selectionHandleColor: k.accent),
-    pageTransitionsTheme: Handheld.framebuffer ? PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: _NoOpPageTransitionsBuilder()}) : null,
+    pageTransitionsTheme: Handheld.framebuffer ? _stillPages : _movingPages,
   );
 }
 
@@ -235,13 +290,13 @@ class RetroToolboxApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final builtInKeyboard = ref.watch(settingsProvider.select((s) => s.useOnScreenKeyboard));
-    final cards = ref.watch(styleProvider.select((s) => s.cards));
+    final style = ref.watch(styleProvider);
     final app = MaterialApp(
       navigatorKey: navigatorKey,
       navigatorObservers: [DpadScope.routeObserver, HomeScreen.routeObserver],
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
-      theme: appTheme(cards),
+      theme: appTheme(style.cards, backdrop: style.backdrop),
       builder: (context, child) => DpadScope(
         navigatorKey: navigatorKey,
         onScreenKeyboard: Handheld.current || builtInKeyboard,

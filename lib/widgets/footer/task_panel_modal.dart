@@ -121,7 +121,7 @@ class _TaskPanelFrameState extends State<TaskPanelFrame> with SingleTickerProvid
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
       ),
       child: Column(

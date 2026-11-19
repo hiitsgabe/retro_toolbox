@@ -227,7 +227,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           }),
         },
         child: Scaffold(
-          backgroundColor: scheme.surface,
           body: SafeArea(
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               SettingsTopBar(
@@ -355,7 +354,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SettingsTopBar(crumbs: const [], back: Navigator.of(context).canPop()),
@@ -452,9 +450,7 @@ class _RowsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: scheme.surface,
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SettingsTopBar(crumbs: [title], back: true, page: true),

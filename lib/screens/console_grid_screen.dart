@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
@@ -61,44 +60,41 @@ class ConsoleGridScreen extends ConsumerWidget {
     }
 
     final showToggle = appState.consolesList.isNotEmpty && kit == null;
-    return MenuBackdrop(
-      child: Scaffold(
-        backgroundColor: MenuBackdrop.scaffoldColor,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(96),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 16, 12, 8),
-              child: Row(
-                children: [
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(96),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 16, 12, 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  tooltip: 'Back',
+                  onPressed: () => Navigator.maybePop(context),
+                ),
+                const Spacer(),
+                Text(
+                  'Games Library',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                if (showToggle)
                   IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    tooltip: 'Back',
-                    onPressed: () => Navigator.maybePop(context),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Games Library',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  if (showToggle)
-                    IconButton(
-                      icon: Icon(_viewIcon(appState.consoleViewMode)),
-                      tooltip: 'Change view',
-                      onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
-                    )
-                  else
-                    const SizedBox(width: 48),
-                ],
-              ),
+                    icon: Icon(_viewIcon(appState.consoleViewMode)),
+                    tooltip: 'Change view',
+                    onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
+                  )
+                else
+                  const SizedBox(width: 48),
+              ],
             ),
           ),
         ),
-        body: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: body,
-        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: body,
       ),
     );
   }

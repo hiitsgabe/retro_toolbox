@@ -14,6 +14,7 @@ import 'package:retro_toolbox/services/catalog_logins.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/storage_usage.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_rows.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
@@ -295,7 +296,7 @@ String settingsSectionSummary(SettingsSection section, WidgetRef ref) {
       return 'LaunchBox ${lb ? 'on' : 'off'}, ${_plural(favorites, 'favorite')}';
     case SettingsSection.style:
       final style = ref.watch(styleProvider);
-      return '${style.backdrop.kind.label}, ${style.cards.label} cards';
+      return '${style.shownBackdrop.kind.label}, ${style.cards.label} cards';
     case SettingsSection.downloads:
       final dir = notifier.getGeneralSetting<String>(AppSettings.downloadDir) ?? '';
       final extract = notifier.getGeneralSetting<bool>(AppSettings.autoExtract) ?? true;

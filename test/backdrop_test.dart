@@ -12,7 +12,7 @@ Future<void> pump(WidgetTester t, BackdropStyle s, {bool still = false}) async {
 }
 
 void main() {
-  for (final kind in [BackdropKind.flat, BackdropKind.paint, BackdropKind.aurora, BackdropKind.drift]) {
+  for (final kind in [BackdropKind.flat, BackdropKind.paint, BackdropKind.aurora, BackdropKind.drift, BackdropKind.dots]) {
     testWidgets('${kind.name} draws its backdrop under the child', (t) async {
       await pump(t, BackdropStyle(kind: kind));
       expect(find.byKey(ValueKey('backdrop-${kind.name}')), findsOneWidget);

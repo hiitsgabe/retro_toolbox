@@ -1,6 +1,5 @@
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
-import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
@@ -26,47 +25,44 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
   @override
   Widget build(BuildContext context) {
     final patchers = ref.watch(patchersProvider);
-    return MenuBackdrop(
-      child: Scaffold(
-        backgroundColor: MenuBackdrop.scaffoldColor,
-        appBar: AppBar(
-          title: const Text('Sports'),
-          actions: [
-            const InfoButton(
-              icon: Icons.sports_score,
-              title: 'Sports',
-              text: 'Update the rosters of classic sports games with real, '
-                  'current teams and players, then patch your own ROM. Pick a '
-                  'console or sport, choose a game, edit the squads, and go.\n\n'
-                  'ALPHA. This is new and rough, so expect bugs, keep a backup '
-                  'of your ROM, and report anything odd.',
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, icon: Icon(Icons.videogame_asset), label: Text('Console')),
-                  ButtonSegment(value: true, icon: Icon(Icons.sports), label: Text('Sport')),
-                ],
-                selected: {_bySport},
-                onSelectionChanged: (s) => setState(() => _bySport = s.first),
-              ),
-            ),
-          ],
-        ),
-        body: patchers.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => _error('$e'),
-          data: (list) {
-            if (list.isEmpty) return _error('No patchers available.');
-            return ListView(
-              children: [
-                MenuGrid(tiles: _bySport ? _sportTiles(list) : _consoleTiles(list), shrinkWrap: true),
-                _contributeFooter(context),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Sports'),
+        actions: [
+          const InfoButton(
+            icon: Icons.sports_score,
+            title: 'Sports',
+            text: 'Update the rosters of classic sports games with real, '
+                'current teams and players, then patch your own ROM. Pick a '
+                'console or sport, choose a game, edit the squads, and go.\n\n'
+                'ALPHA. This is new and rough, so expect bugs, keep a backup '
+                'of your ROM, and report anything odd.',
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, icon: Icon(Icons.videogame_asset), label: Text('Console')),
+                ButtonSegment(value: true, icon: Icon(Icons.sports), label: Text('Sport')),
               ],
-            );
-          },
-        ),
+              selected: {_bySport},
+              onSelectionChanged: (s) => setState(() => _bySport = s.first),
+            ),
+          ),
+        ],
+      ),
+      body: patchers.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => _error('$e'),
+        data: (list) {
+          if (list.isEmpty) return _error('No patchers available.');
+          return ListView(
+            children: [
+              MenuGrid(tiles: _bySport ? _sportTiles(list) : _consoleTiles(list), shrinkWrap: true),
+              _contributeFooter(context),
+            ],
+          );
+        },
       ),
     );
   }

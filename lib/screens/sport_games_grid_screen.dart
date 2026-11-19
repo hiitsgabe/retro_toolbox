@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
@@ -35,12 +34,9 @@ class SportGamesGridScreen extends ConsumerWidget {
           ),
         ),
     ];
-    return MenuBackdrop(
-      child: Scaffold(
-        backgroundColor: MenuBackdrop.scaffoldColor,
-        appBar: AppBar(title: Text(title)),
-        body: tiles.isEmpty ? const Center(child: Text('No games here.')) : MenuGrid(tiles: tiles),
-      ),
+    return Scaffold(
+      appBar: AppBar(title: Text(title)),
+      body: tiles.isEmpty ? const Center(child: Text('No games here.')) : MenuGrid(tiles: tiles),
     );
   }
 

@@ -10,7 +10,8 @@
 // handheld framebuffer build); empty renders 1280x720.
 // OUT: where the PNGs and overflows.txt go (default build/screenshots).
 // CARDS: one card style for styles_test, and the theme every other test
-// renders in (default classic). BACKDROP: the backdrop for styles_test.
+// renders in (default classic). BACKDROP: the backdrop for styles_test
+// (default drift; `style` picks none, so each card style shows its own).
 // ONLY: comma separated screen names for tools_test and servers_test.
 
 import 'dart:convert';
@@ -143,8 +144,8 @@ Future<void> loadFonts(WidgetTester t) async {
 
 /// The app theme, with a fallback for glyphs ChakraPetch lacks (a device
 /// falls back to its system font).
-ThemeData shotTheme(CardStyle cards) {
-  final t = appTheme(cards);
+ThemeData shotTheme(CardStyle cards, {BackdropStyle? backdrop}) {
+  final t = appTheme(cards, backdrop: backdrop);
   const fb = ['Roboto', 'DejaVuSansMono'];
   return t.copyWith(
     textTheme: t.textTheme.apply(fontFamilyFallback: fb),
@@ -202,14 +203,17 @@ Future<ProviderContainer> launch(
     container: c,
     // Follows the style as the app does, so Settings > Style restyles it.
     child: Consumer(
-      builder: (context, ref, _) => MaterialApp(
+      builder: (context, ref, _) {
+        final style = ref.watch(styleProvider);
+        return MaterialApp(
         navigatorKey: nav,
         navigatorObservers: [DpadScope.routeObserver],
         debugShowCheckedModeBanner: false,
-        theme: shotTheme(ref.watch(styleProvider.select((s) => s.cards))),
+        theme: shotTheme(style.cards, backdrop: style.backdrop),
         builder: (context, child) => RepaintBoundary(key: _boundary, child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!)),
         home: home,
-      ),
+      );
+      },
     ),
   ));
   await frames(t);

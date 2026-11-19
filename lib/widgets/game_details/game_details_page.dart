@@ -12,6 +12,7 @@ import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
@@ -139,7 +140,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
               // Down would land on it and the rest of the page is unreachable.
               // B and touch still go back.
               leading: const ExcludeFocus(child: BackButton()),
-              backgroundColor: past ? Theme.of(context).scaffoldBackgroundColor : null,
+              // Past the hero the page scrolls under it: the solid panel, not the
+              // transparent scaffold.
+              backgroundColor: past ? StyleTokens.of(context).solidPanel : null,
               title: past ? Text(game.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
             ),
           ),

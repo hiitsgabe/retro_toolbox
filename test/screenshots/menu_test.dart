@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
@@ -13,9 +14,18 @@ void main() {
   final overrides = [patchersProvider.overrideWith((ref) async => [])];
 
   // 3DS shows only the focused tile's name; its slots are keyed by label.
+  // Switch on a phone is one row wider than the screen and builds lazily:
+  // walk focus right until the tile is built, then bring it on screen.
   Future<void> open(WidgetTester t, String label) async {
     final text = find.text(label);
-    await t.tap(text.evaluate().isEmpty ? find.byKey(ValueKey(label)) : text);
+    final slot = find.byKey(ValueKey(label));
+    for (var i = 0; i < 8 && text.evaluate().isEmpty && slot.evaluate().isEmpty; i++) {
+      await key(t, LogicalKeyboardKey.arrowRight);
+    }
+    final target = text.evaluate().isEmpty ? slot : text;
+    await t.ensureVisible(target);
+    await frames(t, 4);
+    await t.tap(target);
     await frames(t, 8);
   }
 

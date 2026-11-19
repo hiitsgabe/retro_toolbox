@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -21,11 +22,28 @@ void main() {
       expect(AppStyle.fromJson({'backdrop': {'kind': 'nope'}, 'cards': 'nope'}), const AppStyle());
     });
 
-    test('the default is Flat in the Retro Toolbox colours with Classic cards', () {
+    test('the default picks no backdrop: Classic cards show their own', () {
       const s = AppStyle();
-      expect(s.backdrop.kind, BackdropKind.flat);
-      expect((s.backdrop.top, s.backdrop.bottom), backdropPresets['Retro Toolbox']);
+      expect(s.backdrop, isNull);
+      expect(s.toJson().containsKey('backdrop'), isFalse);
       expect(s.cards, CardStyle.classic);
+      expect(s.shownBackdrop, StyleTokens.classic.backdrop);
+    });
+
+    test('a save holding the old default backdrop reads as not picked', () {
+      // Every save had a backdrop, and it was the default unless changed.
+      final old = AppStyle.fromJson({'backdrop': const BackdropStyle().toJson(), 'cards': 'switchStyle'});
+      expect(old.backdrop, isNull);
+      expect(old.shownBackdrop, StyleTokens.switchStyle.backdrop);
+      final picked = AppStyle.fromJson({'backdrop': const BackdropStyle(kind: BackdropKind.aurora).toJson(), 'cards': 'switchStyle'});
+      expect(picked.shownBackdrop, const BackdropStyle(kind: BackdropKind.aurora));
+    });
+
+    test('each card style has a backdrop of its own', () {
+      final own = {for (final c in CardStyle.values) c: AppStyle(cards: c).shownBackdrop};
+      expect(own.values.toSet(), hasLength(CardStyle.values.length));
+      expect(own[CardStyle.classic]!.kind, BackdropKind.dots);
+      expect(own.values, isNot(contains(const BackdropStyle())));
     });
   });
 
@@ -37,7 +55,7 @@ void main() {
       final c = ProviderContainer();
       addTearDown(c.dispose);
       await c.read(styleProvider.notifier).loaded;
-      expect(c.read(styleProvider).backdrop.kind, BackdropKind.drift);
+      expect(c.read(styleProvider).backdrop!.kind, BackdropKind.drift);
       expect(c.read(styleProvider).cards, CardStyle.wii);
     });
 
@@ -48,11 +66,35 @@ void main() {
       final n = c.read(styleProvider.notifier);
       await n.loaded;
       await n.setCards(CardStyle.switchStyle);
-      await n.setBackdrop(c.read(styleProvider).backdrop.copyWith(kind: BackdropKind.paint));
+      await n.setBackdrop(c.read(styleProvider).shownBackdrop.copyWith(kind: BackdropKind.paint));
       final prefs = await SharedPreferences.getInstance();
       final again = AppStyle.fromJson(jsonDecodeMap(prefs.getString('app_style')!));
       expect(again.cards, CardStyle.switchStyle);
-      expect(again.backdrop.kind, BackdropKind.paint);
+      expect(again.backdrop!.kind, BackdropKind.paint);
+    });
+
+    test('a picked backdrop stays when the card style changes', () async {
+      SharedPreferences.setMockInitialValues({});
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final n = c.read(styleProvider.notifier);
+      await n.loaded;
+      await n.setBackdrop(const BackdropStyle(kind: BackdropKind.drift));
+      await n.setCards(CardStyle.wii);
+      expect(c.read(styleProvider).shownBackdrop, const BackdropStyle(kind: BackdropKind.drift));
+    });
+
+    test('picking the card style\'s own backdrop back is no pick', () async {
+      SharedPreferences.setMockInitialValues({});
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final n = c.read(styleProvider.notifier);
+      await n.loaded;
+      await n.setBackdrop(const BackdropStyle(kind: BackdropKind.drift));
+      await n.setBackdrop(StyleTokens.classic.backdrop);
+      expect(c.read(styleProvider).backdrop, isNull);
+      await n.setCards(CardStyle.vita);
+      expect(c.read(styleProvider).shownBackdrop, StyleTokens.vita.backdrop);
     });
   });
 }

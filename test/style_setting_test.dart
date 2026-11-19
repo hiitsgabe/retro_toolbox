@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
@@ -62,7 +63,7 @@ void main() {
     await pump(t);
     await t.tap(find.text('Aurora'));
     await t.pump();
-    expect(style().backdrop.kind, BackdropKind.aurora);
+    expect(style().shownBackdrop.kind, BackdropKind.aurora);
     await t.tap(find.text('Wii'));
     await t.pump();
     expect(style().cards, CardStyle.wii);
@@ -73,8 +74,8 @@ void main() {
     await t.tap(swatch('Teal on black'));
     await t.pump();
     final (top, bottom) = backdropPresets['Teal on black']!;
-    expect(style().backdrop.top, top);
-    expect(style().backdrop.bottom, bottom);
+    expect(style().shownBackdrop.top, top);
+    expect(style().shownBackdrop.bottom, bottom);
   });
 
   testWidgets('Image hides Colours and shows Picture; Choose stores the path', (t) async {
@@ -86,7 +87,7 @@ void main() {
     expect(find.text('None'), findsOneWidget);
     await t.tap(find.text('Picture'));
     await t.pump();
-    expect(style().backdrop.imagePath, '/pics/wall.png');
+    expect(style().shownBackdrop.imagePath, '/pics/wall.png');
     expect(find.text('wall.png'), findsOneWidget);
   });
 
@@ -96,7 +97,7 @@ void main() {
     await t.pump();
     await t.tap(find.text('Picture'));
     await t.pump();
-    expect(style().backdrop.imagePath, isNull);
+    expect(style().shownBackdrop.imagePath, isNull);
   });
 
   /// Tabs until focus is inside [row], then presses X (Reset) on it.
@@ -123,8 +124,9 @@ void main() {
     expect(find.text('Reset'), findsOneWidget);
     await t.tap(find.text('Reset'));
     await t.pump();
-    expect(style().backdrop.top, backdropPresets['Retro Toolbox']!.$1);
-    expect(style().backdrop.bottom, backdropPresets['Retro Toolbox']!.$2);
+    // Back to Classic's own colours, and with its own kind that is no pick at all.
+    expect(style().shownBackdrop, StyleTokens.classic.backdrop);
+    expect(style().backdrop, isNull);
     expect(find.text('Reset'), findsNothing);
 
     await t.tap(find.text('Image'));
@@ -134,12 +136,26 @@ void main() {
     expect(find.text('Reset'), findsOneWidget);
     await t.tap(find.text('Reset'));
     await t.pump();
-    expect(style().backdrop.imagePath, isNull);
-    expect(style().backdrop.kind, BackdropKind.image);
+    expect(style().shownBackdrop.imagePath, isNull);
+    expect(style().shownBackdrop.kind, BackdropKind.image);
     expect(find.text('Reset'), findsNothing);
 
     await pressX(t, find.byType(SettingsSegmentedRow<BackdropKind>));
-    expect(style().backdrop.kind, BackdropKind.flat);
+    expect(style().shownBackdrop.kind, StyleTokens.classic.backdrop.kind);
+  });
+
+  testWidgets('Reset goes back to the card style\'s own backdrop', (t) async {
+    await pump(t);
+    await t.tap(find.text('Switch'));
+    await t.pump();
+    expect(style().backdrop, isNull);
+    expect(style().shownBackdrop, StyleTokens.switchStyle.backdrop);
+    await t.tap(find.text('Drift'));
+    await t.pump();
+    expect(style().backdrop, StyleTokens.switchStyle.backdrop.copyWith(kind: BackdropKind.drift));
+    await pressX(t, find.byType(SettingsSegmentedRow<BackdropKind>));
+    expect(style().backdrop, isNull);
+    expect(style().shownBackdrop.kind, BackdropKind.flat);
   });
 
   testWidgets('d-pad: one stop per swatch, right moves, A picks', (t) async {
@@ -158,6 +174,6 @@ void main() {
     expect(has('Pink on black'), isTrue);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pump();
-    expect(style().backdrop.top, backdropPresets['Pink on black']!.$1);
+    expect(style().shownBackdrop.top, backdropPresets['Pink on black']!.$1);
   });
 }

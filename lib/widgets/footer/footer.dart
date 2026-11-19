@@ -5,6 +5,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 
 class Footer extends ConsumerWidget {
@@ -54,8 +55,8 @@ class Footer extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: hasActiveTasks
-                    ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1)
-                    : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    ? Color.alphaBlend(Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1), StyleTokens.of(context).bar)
+                    : StyleTokens.of(context).bar,
                 border: Border(
                   top: BorderSide(
                     color: hasActiveTasks

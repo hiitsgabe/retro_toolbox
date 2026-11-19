@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
-import 'package:retro_toolbox/widgets/backdrop/menu_backdrop.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
@@ -189,22 +188,19 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       );
     }
 
-    return MenuBackdrop(
-      child: Scaffold(
-        backgroundColor: MenuBackdrop.scaffoldColor,
-        appBar: AppBar(
-          centerTitle: true,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset('assets/icon.png', height: 30),
-              const SizedBox(width: 10),
-              const Text('Retro Toolbox', style: TextStyle(fontWeight: FontWeight.w600)),
-            ],
-          ),
+    return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset('assets/icon.png', height: 30),
+            const SizedBox(width: 10),
+            const Text('Retro Toolbox', style: TextStyle(fontWeight: FontWeight.w600)),
+          ],
         ),
-        body: MenuGrid(tiles: tiles),
       ),
+      body: MenuGrid(tiles: tiles),
     );
   }
 }

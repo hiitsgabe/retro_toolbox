@@ -11,12 +11,14 @@ import 'fakes.dart';
 
 void main() {
   screenshotSetUp();
-  final kind = BackdropKind.values.byName(const String.fromEnvironment('BACKDROP', defaultValue: 'drift'));
+  // 'style': no backdrop picked, so each card style shows its own.
+  const backdrop = String.fromEnvironment('BACKDROP', defaultValue: 'drift');
+  final kind = backdrop == 'style' ? null : BackdropKind.values.byName(backdrop);
   final only = const String.fromEnvironment('CARDS');
 
   for (final cards in CardStyle.values) {
     if (only.isNotEmpty && cards.name != only) continue;
-    final style = AppStyle(backdrop: BackdropStyle(kind: kind), cards: cards);
+    final style = AppStyle(backdrop: kind == null ? null : BackdropStyle(kind: kind), cards: cards);
     final tag = 'styles_${cards.name}';
 
     testWidgets('$tag menu', (t) async {

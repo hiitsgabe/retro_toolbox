@@ -143,6 +143,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     required this.buttonRadius,
     required this.focus,
     required this.selected,
+    required this.backdrop,
     this.success = const Color(0xFF5EE3A1),
     this.warning = const Color(0xFFFFB547),
     this.error = const Color(0xFFFF6B81),
@@ -172,6 +173,10 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
   final FocusLook focus;
   final SelectedLook selected;
 
+  /// What is behind every screen: the style's own until one is picked in
+  /// Style (appTheme puts the picked one here).
+  final BackdropStyle backdrop;
+
   static const areaPalette = <AppArea, Color>{
     AppArea.games: Color(0xFFE8443A),
     AppArea.saves: Color(0xFFF2B632),
@@ -189,6 +194,11 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
   /// and cannot be see-through.
   Color get solidPanel => Color.alphaBlend(panel, surface);
 
+  /// [panel] for bars that sit on the backdrop all the time (the game list's
+  /// header and footer): never more than 85% opaque, so the backdrop shows
+  /// through in the styles whose panel is solid too.
+  Color get bar => panel.a <= 0.85 ? panel : panel.withValues(alpha: 0.85);
+
   static const classic = StyleTokens(
     accent: Color(0xFFB8A1FF),
     onAccent: Color(0xFF1D0F4A),
@@ -200,6 +210,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     buttonRadius: 4,
     focus: FocusLook(color: Color(0xFFFFFFFF), lift: true),
     selected: SelectedLook(marker: SelectedMarker.badgeAndBorder, color: Color(0xFFB8A1FF), onColor: Color(0xFF1D0F4A), corner: Alignment.topLeft, border: 2),
+    // In the Retro Toolbox colours, so Style shows that swatch as the one picked.
+    backdrop: BackdropStyle(kind: BackdropKind.dots, top: Color(0xFF7C4DEF), bottom: Color(0xFF17102B)),
   );
 
   static const vita = StyleTokens(
@@ -213,6 +225,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     buttonRadius: 99,
     focus: FocusLook(color: Color(0xFFFFFFFF), width: 0, glow: true, zoom: 1.08),
     selected: SelectedLook(marker: SelectedMarker.dashedRing, color: Color(0xFFFFFFFF), onColor: Color(0xFF1B3A6B), corner: Alignment.topRight, border: 2),
+    backdrop: BackdropStyle(top: Color(0xFF3B78D8), bottom: Color(0xFF0F1A33)),
   );
 
   static const threeDs = StyleTokens(
@@ -226,11 +239,13 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     buttonRadius: 6,
     focus: FocusLook(color: Color(0xFF3FC7F0), pulse: true),
     selected: SelectedLook(marker: SelectedMarker.foldedCorner, color: Color(0xFF3FC7F0), onColor: Color(0xFF04232A), corner: Alignment.topRight),
+    backdrop: BackdropStyle(top: Color(0xFF4A4F58), bottom: Color(0xFF2A2D33)),
   );
 
   static const wii = StyleTokens(
     accent: Color(0xFF34BEED),
-    onAccent: Color(0xFFFFFFFF),
+    // Dark ink: white on Wii blue is about 2.2:1, too faint for a label.
+    onAccent: Color(0xFF06283A),
     surface: Color(0xFF1F2A33),
     panel: Color(0x1FF2F4F6),
     panelLine: Color(0x4DD3D8DE),
@@ -238,7 +253,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     panelRadius: 14,
     buttonRadius: 99,
     focus: FocusLook(color: Color(0xFF34BEED), glow: true),
-    selected: SelectedLook(marker: SelectedMarker.tintAndPill, color: Color(0xFF34BEED), onColor: Color(0xFFFFFFFF), corner: Alignment.bottomCenter),
+    selected: SelectedLook(marker: SelectedMarker.tintAndPill, color: Color(0xFF34BEED), onColor: Color(0xFF06283A), corner: Alignment.bottomCenter),
+    backdrop: BackdropStyle(top: Color(0xFFF2F4F6), bottom: Color(0xFF1F2A33)),
   );
 
   static const switchStyle = StyleTokens(
@@ -252,6 +268,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     buttonRadius: 8,
     focus: FocusLook(color: Color(0xFF00C3E3), color2: Color(0xFF2E7DFF), gap: 4),
     selected: SelectedLook(marker: SelectedMarker.checkAndBar, color: Color(0xFF00C3E3), onColor: Color(0xFF04232A), corner: Alignment.topRight, bar: 4),
+    backdrop: BackdropStyle(top: Color(0xFF3A3D42), bottom: Color(0xFF15171A)),
   );
 
   static StyleTokens forStyle(CardStyle style) => switch (style) {
@@ -282,6 +299,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     Map<AppArea, Color>? areas,
     FocusLook? focus,
     SelectedLook? selected,
+    BackdropStyle? backdrop,
   }) =>
       StyleTokens(
         accent: accent ?? this.accent,
@@ -298,6 +316,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         areas: areas ?? this.areas,
         focus: focus ?? this.focus,
         selected: selected ?? this.selected,
+        backdrop: backdrop ?? this.backdrop,
       );
 
   @override
@@ -316,7 +335,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       other.error == error &&
       mapEquals(other.areas, areas) &&
       other.focus == focus &&
-      other.selected == selected;
+      other.selected == selected &&
+      other.backdrop == backdrop;
 
   @override
   int get hashCode => Object.hash(
@@ -334,6 +354,7 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         Object.hashAll(areas.values),
         focus,
         selected,
+        backdrop,
       );
 
   @override
@@ -356,6 +377,12 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       areas: {for (final a in AppArea.values) a: c(area(a), other.area(a))},
       focus: FocusLook.lerp(focus, other.focus, t),
       selected: SelectedLook.lerp(selected, other.selected, t),
+      backdrop: t < 0.5 ? backdrop : other.backdrop,
     );
   }
+}
+
+extension ShownBackdrop on AppStyle {
+  /// The backdrop on screen: the picked one, else the card style's own.
+  BackdropStyle get shownBackdrop => backdrop ?? StyleTokens.forStyle(cards).backdrop;
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// A status colour hardcoded in lib/ instead of read from the style.
 final _hardcodedStatus = RegExp(r'Colors\.(green|orange|red|redAccent|amberAccent|greenAccent|orangeAccent)\b');
 
+/// WCAG contrast ratio of two opaque colours.
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance(), lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
+
 void main() {
   test('the five sets carry the spec values', () {
     expect(StyleTokens.forStyle(CardStyle.classic).accent, const Color(0xFFB8A1FF));
@@ -26,6 +33,12 @@ void main() {
       expect((k.success, k.warning, k.error), (const Color(0xFF5EE3A1), const Color(0xFFFFB547), const Color(0xFFFF6B81)), reason: s.name);
       expect(k.area(AppArea.tools), const Color(0xFF4A7BF0), reason: s.name);
     }
+  });
+
+  test('Wii puts dark ink on its blue', () {
+    expect(StyleTokens.wii.onAccent, const Color(0xFF06283A));
+    // White on Wii blue, as it was, is the failure this guards.
+    expect(_contrast(const Color(0xFFFFFFFF), StyleTokens.wii.accent), lessThan(4.5));
   });
 
   test('lerp lands on both ends', () {
@@ -46,7 +59,19 @@ void main() {
       expect(t.colorScheme.onPrimary, k.onAccent);
       expect(t.colorScheme.surface, k.surface);
       expect(t.colorScheme.error, k.error);
-      expect(t.scaffoldBackgroundColor, k.surface);
+      // The page's backdrop shows through every scaffold.
+      expect(t.scaffoldBackgroundColor, Colors.transparent);
+    });
+
+    test('${style.name}: a label on the accent reads at 4.5:1 or better', () {
+      expect(_contrast(k.onAccent, k.accent), greaterThanOrEqualTo(4.5));
+      expect(_contrast(k.selected.onColor, k.selected.color), greaterThanOrEqualTo(4.5));
+    });
+
+    test('${style.name}: a picked backdrop goes into the theme, none keeps the style\'s own', () {
+      expect(appTheme(style).extension<StyleTokens>()!.backdrop, k.backdrop);
+      const picked = BackdropStyle(kind: BackdropKind.aurora);
+      expect(appTheme(style, backdrop: picked).extension<StyleTokens>()!.backdrop, picked);
     });
 
     testWidgets('${style.name}: a Switch and a FilledButton take the accent', (t) async {

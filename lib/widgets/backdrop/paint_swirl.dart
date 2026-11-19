@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'package:retro_toolbox/models/app_style.dart';
 
+import 'backdrop_clock.dart';
+
 /// The swirling paint, drawn by `shaders/paint_swirl.frag`, which is a port
 /// of the MIT licensed Balatro background from React Bits.
 ///
@@ -38,8 +40,11 @@ class _PaintSwirlState extends State<PaintSwirl>
     vsync: this,
     // Long and looping, read as seconds rather than as a fraction: the shader
     // wants a clock, not a progress bar.
-    duration: const Duration(minutes: 10),
+    duration: _period,
+    value: backdropPhase(_period),
   )..repeat();
+
+  static const _period = Duration(minutes: 10);
 
   ui.FragmentShader? _shader;
 
