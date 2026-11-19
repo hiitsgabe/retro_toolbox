@@ -6,18 +6,20 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/models/console_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/link_download.dart';
 
-/// Serves a Tinfoil "shop": an index of the catalog's Switch games plus a
-/// streaming proxy that injects source auth (IA S3 / bearer / cookie). Games
-/// already in the console's download folder are served from disk instead.
+/// Serves a Tinfoil "shop": an index of the catalog's Switch games, their
+/// updates and DLC, plus a streaming proxy that injects source auth (IA S3 /
+/// bearer / cookie). Files already on the device are served from disk instead.
 class TinfoilEntry {
+  /// The game, or the addon as a Game (GameAddon.toGame).
   final Game game;
   final Console console;
   final String fileName;
 
-  /// The game's file in the download folder, when it is there.
+  /// The file on the device (download or updates folder), when it is there.
   final String? localPath;
   const TinfoilEntry({required this.game, required this.console, required this.fileName, this.localPath});
 }
@@ -40,14 +42,27 @@ class TinfoilServerService {
   /// read the title ID from the filename as `[0100..]`. Titles here lack it, so
   /// we inject the ID pulled from the URL before the extension.
   static String _fileName(Game game) {
-    final raw = game.title.split('/').last;
-    final safe = raw.split('').map((ch) => RegExp(r"[a-zA-Z0-9 .\-_()\[\]']").hasMatch(ch) ? ch : '_').join();
+    final safe = _safe(game.title.split('/').last);
     final tid = titleIdFor(game);
     if (tid == null || safe.contains(tid)) return safe;
     final dot = safe.lastIndexOf('.');
     final base = dot > 0 ? safe.substring(0, dot) : safe;
     final ext = dot > 0 ? safe.substring(dot) : '';
     return '$base [$tid]$ext';
+  }
+
+  /// [name] with anything but letters, digits and plain punctuation as `_`.
+  static String _safe(String name) => name.split('').map((ch) => RegExp(r"[a-zA-Z0-9 .\-_()\[\]']").hasMatch(ch) ? ch : '_').join();
+
+  /// [update] of [game] as Tinfoil names it: the update's title id is the
+  /// base id with its last 3 digits set to 800. Null without a base id.
+  static String? _updateFileName(Game game, GameAddon update) {
+    final tid = titleIdFor(game);
+    if (tid == null) return null;
+    final safe = _safe(game.title.split('/').last);
+    final dot = safe.lastIndexOf('.');
+    final base = dot > 0 ? safe.substring(0, dot) : safe;
+    return _safe('$base [${tid.substring(0, 13)}800][${update.label}]${p.extension(update.fileName)}');
   }
 
   /// Switch files in [dir] by name without extension (a download stays
@@ -71,47 +86,64 @@ class TinfoilServerService {
   static const fastInstallFolder = 'Fast install';
   static const allGamesFolder = 'All games';
 
-  /// Builds the Tinfoil index JSON and the route map keyed `<consoleId>/<idx>`.
-  /// [hostPort] is the address the Switch reached us on (its Host header).
-  /// [localFiles] gives a console's [localSwitchFiles]: those games are listed
-  /// with the local file's extension and size. [folder] picks a sub-shop
-  /// ([fastInstallFolder] lists just the local games); null is the full shop.
-  static (Map<String, dynamic>, Map<String, TinfoilEntry>) buildIndex(Map<Console, List<Game>> gamesByConsole, String hostPort, {Map<String, String> Function(Console)? localFiles, String? folder}) {
+  /// Builds the Tinfoil index JSON and the route map keyed `<consoleId>/<idx>`,
+  /// with a game's updates and DLC after it as `<consoleId>/<idx>u<n>` and
+  /// `<consoleId>/<idx>d<n>`. [hostPort] is the address the Switch reached us
+  /// on (its Host header). [localFiles] gives a console's [localSwitchFiles]
+  /// for games, [addonFiles] the same for addons: those are listed with the
+  /// local file's extension and size. [folder] picks a sub-shop
+  /// ([fastInstallFolder] lists just the local files); null is the full shop.
+  static (Map<String, dynamic>, Map<String, TinfoilEntry>) buildIndex(Map<Console, List<Game>> gamesByConsole, String hostPort,
+      {Map<String, String> Function(Console)? localFiles, Map<String, String> Function(Console)? addonFiles, String? folder}) {
     final files = <Map<String, dynamic>>[];
     final localOnly = <Map<String, dynamic>>[];
     final routes = <String, TinfoilEntry>{};
-    gamesByConsole.forEach((console, games) {
+    var games = 0, updates = 0, dlcs = 0;
+    gamesByConsole.forEach((console, consoleGames) {
       final local = localFiles?.call(console) ?? const {};
-      for (var i = 0; i < games.length; i++) {
-        final game = games[i];
-        final localPath = local[p.basenameWithoutExtension(game.filename)];
-        var fileName = _fileName(game);
+      final localAddons = addonFiles?.call(console) ?? const {};
+      void add(String key, Game game, String fileName, Map<String, String> onDisk) {
+        final localPath = onDisk[p.basenameWithoutExtension(game.filename)];
         var size = game.size;
         if (localPath != null) {
           fileName = p.setExtension(fileName, p.extension(localPath).toLowerCase());
           size = File(localPath).lengthSync();
         }
-        final entry = TinfoilEntry(game: game, console: console, fileName: fileName, localPath: localPath);
-        final key = '${console.id}/$i';
-        routes[key] = entry;
+        routes[key] = TinfoilEntry(game: game, console: console, fileName: fileName, localPath: localPath);
         final file = {
-          'url': 'http://$hostPort/dl/$key/${Uri.encodeComponent(entry.fileName)}',
+          'url': 'http://$hostPort/dl/$key/${Uri.encodeComponent(fileName)}',
           'size': size,
         };
         files.add(file);
         if (localPath != null) localOnly.add(file);
       }
+
+      for (var i = 0; i < consoleGames.length; i++) {
+        final game = consoleGames[i];
+        add('${console.id}/$i', game, _fileName(game), local);
+        games++;
+        for (final (j, update) in game.updates.indexed) {
+          final name = _updateFileName(game, update);
+          if (name == null) continue;
+          add('${console.id}/${i}u$j', update.toGame(game), name, localAddons);
+          updates++;
+        }
+        for (final (j, dlc) in game.dlcs.indexed) {
+          add('${console.id}/${i}d$j', dlc.toGame(game), _safe(dlc.fileName), localAddons);
+          dlcs++;
+        }
+      }
     });
     return (
       switch (folder) {
-        fastInstallFolder => {'files': localOnly, 'success': 'Retro Toolbox — ${localOnly.length} games ready for fast install'},
-        allGamesFolder => {'files': files, 'success': 'Retro Toolbox — ${files.length} games'},
+        fastInstallFolder => {'files': localOnly, 'success': 'Retro Toolbox: ${localOnly.length} ready for fast install'},
+        allGamesFolder => {'files': files, 'success': 'Retro Toolbox: $games games, $updates updates, $dlcs DLC'},
         _ => {
             'files': files,
             'locations': [
               {'url': 'http://$hostPort/${Uri.encodeComponent(fastInstallFolder)}/', 'title': fastInstallFolder, 'action': 'add'},
             ],
-            'success': 'Retro Toolbox — ${files.length} games, ${localOnly.length} ready for fast install',
+            'success': 'Retro Toolbox: $games games, $updates updates, $dlcs DLC, ${localOnly.length} ready for fast install',
           },
       },
       routes,
@@ -123,6 +155,7 @@ class TinfoilServerService {
   Future<Map<Console, List<Game>>> Function()? _loadGames;
   Map<String, String> Function(Console)? _authHeaders;
   String? Function(Console)? _downloadDir;
+  String? Function(Console)? _updatesDir;
   static final ValueNotifier<int> activeTransfers = ValueNotifier(0);
 
   bool get running => _server != null;
@@ -133,11 +166,13 @@ class TinfoilServerService {
     required Future<Map<Console, List<Game>>> Function() loadGames,
     required Map<String, String> Function(Console) authHeaders,
     String? Function(Console)? downloadDir,
+    String? Function(Console)? updatesDir,
   }) async {
     await stop();
     _loadGames = loadGames;
     _authHeaders = authHeaders;
     _downloadDir = downloadDir;
+    _updatesDir = updatesDir;
     _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
     _server!.listen(_handle, onError: (e) => debugPrint('tinfoil server error: $e'));
   }
@@ -172,6 +207,7 @@ class TinfoilServerService {
   }
 
   Map<String, String> _localFiles(Console c) => localSwitchFiles(_downloadDir?.call(c));
+  Map<String, String> _addonFiles(Console c) => localSwitchFiles(_updatesDir?.call(c));
 
   /// Streams [file], honouring a single `bytes=a-b` / `bytes=a-` Range.
   static Future<void> serveFile(HttpRequest req, File file) async {
@@ -218,7 +254,7 @@ class TinfoilServerService {
 
   Future<void> _serveIndex(HttpRequest req, {String? folder}) async {
     final games = await _loadGames!();
-    final (index, routes) = buildIndex(games, _hostPort(req), localFiles: _localFiles, folder: folder);
+    final (index, routes) = buildIndex(games, _hostPort(req), localFiles: _localFiles, addonFiles: _addonFiles, folder: folder);
     _routes = routes;
     req.response.headers.contentType = ContentType.json;
     req.response.write(jsonEncode(index));
@@ -229,7 +265,7 @@ class TinfoilServerService {
     if (_routes.isEmpty) {
       // Route map lives in memory; rebuild if the app restarted between the
       // Switch fetching the index and starting the download.
-      final (_, routes) = buildIndex(await _loadGames!(), _hostPort(req), localFiles: _localFiles);
+      final (_, routes) = buildIndex(await _loadGames!(), _hostPort(req), localFiles: _localFiles, addonFiles: _addonFiles);
       _routes = routes;
     }
     final entry = _routes[key];
