@@ -164,19 +164,45 @@ class _FileExplorerScreenState extends ConsumerState<FileExplorerScreen> {
     if (dir == null || paths.length != 1) return;
     final archive = paths.single, name = p.basename(archive);
     final out = p.join(dir, FileOps.uniqueName(dir, p.basenameWithoutExtension(archive)));
-    if (!await _confirm('Extract?', 'Extract $name into\n$out', 'Extract') || !mounted) return;
-    _enqueue(TaskType.archiveExtraction, 'Extract $name', 'Extracting', name, {'archivePath': archive, 'outputDir': out});
+    final deleteOriginals = ValueNotifier(false);
+    if (!await _confirm('Extract?', 'Extract $name into\n$out', 'Extract', deleteOriginals: deleteOriginals) || !mounted) return;
+    _enqueue(TaskType.archiveExtraction, 'Extract $name', 'Extracting', name, {
+      'archivePath': archive,
+      'outputDir': out,
+      'deleteOriginals': deleteOriginals.value,
+    });
     setState(() => _selected = {});
   }
 
   /// Asks before a background job. Focus starts on [action] for the d-pad;
-  /// Back (B / Escape) cancels.
-  Future<bool> _confirm(String title, String message, String action) async =>
+  /// Back (B / Escape) cancels. With [deleteOriginals] it also offers the
+  /// tools' "Delete original when done".
+  Future<bool> _confirm(String title, String message, String action, {ValueNotifier<bool>? deleteOriginals}) async =>
       await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(title),
-          content: Text(message),
+          content: deleteOriginals == null
+              ? Text(message)
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(message),
+                    const SizedBox(height: 12),
+                    ValueListenableBuilder(
+                      valueListenable: deleteOriginals,
+                      builder: (_, value, __) => CheckboxListTile(
+                        value: value,
+                        onChanged: (v) => deleteOriginals.value = v ?? false,
+                        title: const Text('Delete original when done'),
+                        subtitle: const Text('Only after a successful extraction, with every part of a multi-part archive.'),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                  ],
+                ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
             FilledButton(autofocus: true, onPressed: () => Navigator.pop(ctx, true), child: Text(action)),

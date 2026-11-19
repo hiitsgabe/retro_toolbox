@@ -28,6 +28,7 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
   String? _outputDir;
   String? _result;
   bool _failed = false;
+  bool _deleteOriginals = false;
 
   void _showPickError(Object e) {
     if (!mounted) return;
@@ -104,6 +105,7 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
       'nszFilePath': _nszPath!,
       'outputDir': _outputDir!,
       'keysPath': keysPath,
+      'deleteOriginals': _deleteOriginals,
     });
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -218,7 +220,16 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
         const SizedBox(height: 12),
         _fileRow(context, Icons.folder_outlined, 'Output folder',
             _outputDir ?? 'No folder selected', _pickOutput),
-        const SizedBox(height: 24),
+        const SizedBox(height: 12),
+        CheckboxListTile(
+          value: _deleteOriginals,
+          onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
+          title: const Text('Delete original when done'),
+          subtitle: const Text('Only after a successful decompress.'),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(

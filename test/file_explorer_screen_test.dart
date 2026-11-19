@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -298,10 +299,34 @@ void main() {
     expect(task.type, TaskType.archiveExtraction);
     expect(task.params['archivePath'], p.join(root.path, 'game.zip'));
     expect(task.params['outputDir'], p.join(root.path, 'game'));
+    expect(task.params['deleteOriginals'], isFalse);
     expect(find.text('Extracting game.zip'), findsOneWidget);
 
     await settleTask(tester, container);
     expect(find.text('Extracting game.zip'), findsNothing);
+    expect(File(p.join(root.path, 'game.zip')).existsSync(), isTrue);
+    container.dispose(); // stops the queue's timer, started in fake time by the queued extraction
+  });
+
+  testWidgets('Extract here with Delete original when done removes the archive once it is out', (tester) async {
+    File(p.join(root.path, 'game.zip')).writeAsBytesSync(ZipEncoder().encode(Archive()..addFile(ArchiveFile.string('game.iso', 'iso'))));
+    final container = await open(tester);
+
+    await openDialog(tester, 'game.zip', 'Extract here');
+    final box = find.widgetWithText(CheckboxListTile, 'Delete original when done');
+    expect(tester.widget<CheckboxListTile>(box).value, isFalse); // off by default
+    expect(focusedOn('Extract'), isTrue);
+    await tester.tap(box);
+    await tester.pump();
+    expect(tester.widget<CheckboxListTile>(box).value, isTrue);
+    await tester.tap(find.widgetWithText(FilledButton, 'Extract'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(container.read(taskQueueProvider).tasks.single.params['deleteOriginals'], isTrue);
+
+    await settleTask(tester, container);
+    expect(container.read(taskQueueProvider).tasks.single.status, TaskQueueStatus.completed);
+    expect(File(p.join(root.path, 'game', 'game.iso')).readAsStringSync(), 'iso');
+    expect(File(p.join(root.path, 'game.zip')).existsSync(), isFalse);
     container.dispose(); // stops the queue's timer, started in fake time by the queued extraction
   });
 }

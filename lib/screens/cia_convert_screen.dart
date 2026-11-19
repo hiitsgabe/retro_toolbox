@@ -30,6 +30,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
   String? _inputPath;
   String? _outputDir;
   String? _activeTaskId;
+  bool _deleteOriginals = false;
 
   void _snack(String m) {
     if (!mounted) return;
@@ -84,6 +85,7 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
       'outputDir': _outputDir!,
       'boot9Path': ref.read(settingsProvider).boot9Path,
       'ignoreEncryption': false,
+      'deleteOriginals': _deleteOriginals,
     });
     setState(() => _activeTaskId = taskId);
   }
@@ -171,7 +173,16 @@ class _CiaConvertScreenState extends ConsumerState<CiaConvertScreen> {
         _fileRow(theme, Icons.insert_drive_file_outlined, '3DS image', _inputPath != null ? p.basename(_inputPath!) : 'No file selected', _pickInput),
         const SizedBox(height: 12),
         _fileRow(theme, Icons.folder_outlined, 'Output folder', _outputDir ?? 'No folder selected', _pickOutput),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        CheckboxListTile(
+          value: _deleteOriginals,
+          onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
+          title: const Text('Delete original when done'),
+          subtitle: const Text('Only after a successful conversion.'),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(onPressed: canRun ? _enqueue : null, icon: const Icon(Icons.sync, size: 18), label: const Text('Add to task list')),

@@ -223,6 +223,7 @@ class TaskQueueService {
                 taskId: task.params['taskId'] as String,
                 archivePath: task.params['archivePath'] as String,
                 outputDir: task.params['outputDir'] as String,
+                deleteOriginals: task.params['deleteOriginals'] as bool? ?? false,
               );
           break;
       }
@@ -257,6 +258,7 @@ class TaskQueueService {
       nszFilePath: task.params['nszFilePath'] as String,
       outputDir: task.params['outputDir'] as String,
       keysPath: task.params['keysPath'] as String? ?? '',
+      deleteOriginals: task.params['deleteOriginals'] as bool? ?? false,
     );
   }
 
@@ -284,6 +286,7 @@ class TaskQueueService {
       outputDir: task.params['outputDir'] as String,
       boot9Path: task.params['boot9Path'] as String?,
       ignoreEncryption: task.params['ignoreEncryption'] as bool? ?? false,
+      deleteOriginals: task.params['deleteOriginals'] as bool? ?? false,
     );
   }
 }
