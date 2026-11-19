@@ -435,6 +435,41 @@ void main() {
     expect(find.text('Save Sync'), findsWidgets);
   });
 
+  // Nothing on this device can opt out of a hub app, so ticks would promise
+  // a choice that is never read.
+  testWidgets('setup lists the apps that apply here, with nothing to tick', (t) async {
+    final fake = FakeNotifier(SaveSyncState(
+      hubKind: HubKind.folder,
+      access: SyncAccess.shizuku,
+      games: [
+        GameStatus(stardew, 'bundled', const Bound(binding)),
+        GameStatus(bundledRecipe('sea-of-stars'), 'bundled', const NotInstalled()),
+      ],
+    ));
+    bool? popped;
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (c) => TextButton(
+            onPressed: () async => popped = await Navigator.of(c).push(MaterialPageRoute<bool>(builder: (_) => const SaveSyncSetupScreen())),
+            child: const Text('go'),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    expect(find.text('Will apply here (1)'), findsOneWidget);
+    expect(find.text(stardew.name), findsOneWidget);
+    expect(find.text('Not on this device (1)'), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.textContaining('Adopt'), findsNothing);
+    await t.tap(find.widgetWithText(FilledButton, 'Open Save Sync'));
+    await t.pumpAndSettle();
+    expect(popped, isTrue);
+  });
+
   testWidgets('before the first refresh has read the hub, neither the first run nor a hub row shows', (t) async {
     await pump(t, const SaveSyncState(googleAvailable: true));
     expect(find.text('Where should saves go?'), findsNothing);

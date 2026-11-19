@@ -20,10 +20,6 @@ class SaveSyncSetupScreen extends ConsumerStatefulWidget {
 class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
   static const _steps = ['Where', 'Apps'];
 
-  /// Packages the owner left ticked. Null until the hub has been read once,
-  /// so the first paint cannot tick boxes it has not seen.
-  Set<String>? _chosen;
-
   bool get _onStep2 => ref.read(saveSyncProvider).hubKind != HubKind.none;
 
   @override
@@ -151,7 +147,6 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
 
     final here = [for (final g in s.games) if (g.bind is! NotInstalled) g];
     final elsewhere = [for (final g in s.games) if (g.bind is NotInstalled) g];
-    final chosen = _chosen ??= {for (final g in here) g.recipe.packages.first};
 
     if (s.games.isEmpty) {
       return Column(children: [
@@ -188,18 +183,16 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
         ),
       ),
       const SizedBox(height: 16),
+      // Plain rows: a hub app applies to every device that has it, and there
+      // is no per-device opt-out a tick could set.
       if (here.isNotEmpty) ...[
-        Text('Will apply here (${chosen.length})', style: theme.textTheme.titleSmall),
+        Text('Will apply here (${here.length})', style: theme.textTheme.titleSmall),
         for (final g in here)
-          CheckboxListTile(
+          ListTile(
             contentPadding: EdgeInsets.zero,
-            value: chosen.contains(g.recipe.packages.first),
+            dense: true,
             title: Text(s.appInfo[g.recipe.packages.first]?.label ?? g.recipe.name),
             subtitle: Text(g.recipe.packages.first, style: theme.textTheme.bodySmall),
-            onChanged: (on) => setState(() {
-              final key = g.recipe.packages.first;
-              on == true ? chosen.add(key) : chosen.remove(key);
-            }),
           ),
       ],
       // Shown rather than filtered away: a handheld that quietly drops apps
@@ -230,10 +223,7 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
           ),
       ],
       const SizedBox(height: 16),
-      FilledButton(
-        onPressed: _done,
-        child: Text(here.isEmpty ? 'Open Save Sync' : 'Adopt ${chosen.length}'),
-      ),
+      FilledButton(onPressed: _done, child: const Text('Open Save Sync')),
     ]);
   }
 
