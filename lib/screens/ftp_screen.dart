@@ -32,6 +32,16 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
   bool _srvPrefilled = false;
 
   @override
+  void initState() {
+    super.initState();
+    // A running server (restored at boot, or left on) is what the user came
+    // back to, so do not hide it behind the client form.
+    Future.microtask(() {
+      if (mounted && ref.read(ftpProvider).serverRunning) ref.read(ftpProvider.notifier).setMode(FtpMode.server);
+    });
+  }
+
+  @override
   void dispose() {
     _host.dispose();
     _port.dispose();
