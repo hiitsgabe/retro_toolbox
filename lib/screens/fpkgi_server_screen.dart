@@ -220,7 +220,7 @@ class FpkgiServerScreen extends ConsumerWidget {
               '3. Copy the saved config.json to /user/data/FPKGi/ on the PS4 via FTP.\n'
               '4. In FPKGi, press triangle (settings) and make sure "Populate via web" is ON, then press triangle again to save.\n'
               '5. Reopen FPKGi — it fetches the catalog from this device.\n'
-              '6. Browse and install like a store (L2/R2 troca categoria).',
+              '6. Browse and install like a store (L2/R2 switch category).',
             ),
           ],
         ),

@@ -71,4 +71,10 @@ void main() {
     await _pump(t, const {'snes': _snes}, state: const FpkgiServerState(running: true, addresses: ['10.0.0.2']));
     expect(_switch(t).onChanged, isNotNull);
   });
+  testWidgets('the PS4 steps are all in English', (t) async {
+    await _pump(t, const {'ps4': _ps4}, state: const FpkgiServerState(running: true, addresses: ['10.0.0.2']));
+    expect(find.textContaining('On the PS4'), findsOneWidget, reason: 'the steps are shown');
+    expect(find.textContaining('(L2/R2 switch category)'), findsOneWidget);
+    expect(find.textContaining('troca'), findsNothing);
+  });
 }
