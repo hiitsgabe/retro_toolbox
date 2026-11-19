@@ -17,6 +17,13 @@ const _iaDownloadBase = 'https://archive.org/download/';
 
 class CatalogService {
   static final Map<String, Map<String, Console>> _consolesCache = {};
+
+  static const _pageRetries = 3;
+
+  /// The wait before a failed catalog page's first retry; each next retry
+  /// waits one more of it.
+  @visibleForTesting
+  static Duration pageRetryDelay = const Duration(seconds: 2);
   final BoxartService _boxartService = BoxartService();
 
   Future<Map<String, Console>> getConsoles([String consolesFilePath = 'consoles.json']) async {
@@ -248,19 +255,34 @@ class CatalogService {
       final total = console.urls.length;
       var done = 0;
       Object? firstError;
+      var pagesFailed = false;
       onProgress?.call(0, total);
+      // Pages load in parallel; one that fails is retried on its own
+      // ([_pageRetries] times, waiting longer each time) before it is given up.
+      Future<List<Game>> page(String url) async {
+        for (var attempt = 0;; attempt++) {
+          try {
+            return await _fetchFromUrl(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken);
+          } catch (e) {
+            debugPrint('Catalog ${console.id}: page $url failed (attempt ${attempt + 1}): $e');
+            if (attempt == _pageRetries) rethrow;
+            await Future<void>.delayed(pageRetryDelay * (attempt + 1));
+          }
+        }
+      }
+
       final results = await Future.wait(
-        console.urls.map((url) =>
-            _fetchFromUrl(client, url, console, iaAccessKey: iaAccessKey, iaSecretKey: iaSecretKey, authToken: authToken).then((games) {
-          onProgress?.call(++done, total);
-          return games;
-        }).catchError((Object e) {
-          // Keep partial results when only some pages fail; surface the
-          // error only when every page failed (e.g. auth required).
-          firstError ??= e;
-          onProgress?.call(++done, total);
-          return <Game>[];
-        })),
+        console.urls.map((url) => page(url).then((games) {
+              onProgress?.call(++done, total);
+              return games;
+            }).catchError((Object e) {
+              // Keep partial results when only some pages fail; surface the
+              // error only when every page failed (e.g. auth required).
+              firstError ??= e;
+              pagesFailed = true;
+              onProgress?.call(++done, total);
+              return <Game>[];
+            })),
       );
       if (firstError != null && results.every((r) => r.isEmpty)) {
         throw firstError!;
@@ -281,9 +303,9 @@ class CatalogService {
       final boxartStart = sw.elapsedMilliseconds;
       catalog = await _boxartService.mutateGamesWithBoxarts(catalog, console);
       debugPrint('Catalog ${console.id}: box art in ${sw.elapsedMilliseconds - boxartStart} ms');
-      // An empty list would be cached as a "catalog" and hide the failure
-      // until the user clears the cache.
-      if (catalog.isNotEmpty) {
+      // An empty list, or one missing a page that failed, would be cached as
+      // the catalog and hide the failure until the user clears the cache.
+      if (catalog.isNotEmpty && !pagesFailed) {
         await _status(onStatus, 'Saving catalog');
         final cacheFile = await _getCacheFile(console.cacheFile);
         await cacheFile.writeAsString(await compute(_encodeGamesIsolate, catalog));
