@@ -156,7 +156,8 @@ class TinfoilServerService {
   Map<String, String> Function(Console)? _authHeaders;
   String? Function(Console)? _downloadDir;
   String? Function(Console)? _updatesDir;
-  static final ValueNotifier<int> activeTransfers = ValueNotifier(0);
+  // Per server: FPKGi and RTS share the helpers below but count their own.
+  final activeTransfers = ValueNotifier<int>(0);
 
   bool get running => _server != null;
   int get port => _server?.port ?? 0;
@@ -209,8 +210,9 @@ class TinfoilServerService {
   Map<String, String> _localFiles(Console c) => localSwitchFiles(_downloadDir?.call(c));
   Map<String, String> _addonFiles(Console c) => localSwitchFiles(_updatesDir?.call(c));
 
-  /// Streams [file], honouring a single `bytes=a-b` / `bytes=a-` Range.
-  static Future<void> serveFile(HttpRequest req, File file) async {
+  /// Streams [file], honouring a single `bytes=a-b` / `bytes=a-` Range,
+  /// counted in [transfers] while it runs.
+  static Future<void> serveFile(HttpRequest req, File file, {required ValueNotifier<int> transfers}) async {
     final length = await file.length();
     var start = 0, end = length - 1;
     final m = RegExp(r'bytes=(\d*)-(\d*)').firstMatch(req.headers.value(HttpHeaders.rangeHeader) ?? '');
@@ -237,7 +239,7 @@ class TinfoilServerService {
       res.headers.set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$length');
     }
     res.contentLength = end - start + 1;
-    activeTransfers.value++;
+    transfers.value++;
     try {
       if (req.method == 'HEAD') {
         await res.close();
@@ -245,7 +247,7 @@ class TinfoilServerService {
         await file.openRead(start, end + 1).pipe(res);
       }
     } finally {
-      activeTransfers.value--;
+      transfers.value--;
     }
   }
 
@@ -276,12 +278,12 @@ class TinfoilServerService {
     }
     final local = entry.localPath;
     if (local != null && File(local).existsSync()) {
-      await serveFile(req, File(local));
+      await serveFile(req, File(local), transfers: activeTransfers);
       return;
     }
 
     final headers = _authHeaders!(entry.console);
-    await proxyUpstream(req, url: entry.game.url, headers: headers);
+    await proxyUpstream(req, url: entry.game.url, headers: headers, transfers: activeTransfers);
   }
 
   /// Streams [url] to [req] through the storage host's redirects, injecting
@@ -292,15 +294,16 @@ class TinfoilServerService {
   /// `<saveTo>.part` and renamed into place only if the whole body arrived;
   /// any failure deletes the part. A compressed body or an HTML page is never
   /// copied, and while one transfer writes a part, others just proxy.
+  /// Counted in [transfers] while it runs.
   static Future<void> proxyUpstream(HttpRequest req,
-      {required String url, required Map<String, String> headers, File? saveTo}) async {
+      {required String url, required Map<String, String> headers, required ValueNotifier<int> transfers, File? saveTo}) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 30);
     // A proxy must forward bytes verbatim: auto-decompressing while forwarding
     // the upstream (compressed) Content-Length corrupts the file so Tinfoil
     // reports "failed to open nsp".
     client.autoUncompress = false;
-    activeTransfers.value++;
+    transfers.value++;
     String? claimed;
     try {
       // Follow redirects with the data request itself (auth on every hop),
@@ -404,7 +407,7 @@ class TinfoilServerService {
       }
     } finally {
       if (claimed != null) _partsInFlight.remove(claimed);
-      activeTransfers.value--;
+      transfers.value--;
       client.close();
     }
   }

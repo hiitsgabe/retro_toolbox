@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/link_download.dart';
@@ -31,6 +32,7 @@ void main() {
           req,
           url: 'http://127.0.0.1:${upstream.port}/game.zip',
           headers: const {},
+          transfers: ValueNotifier(0),
           saveTo: saveTo,
         );
       } catch (_) {

@@ -47,8 +47,8 @@ class TinfoilServerNotifier extends StateNotifier<TinfoilServerState> {
   final _catalogService = CatalogService();
 
   TinfoilServerNotifier(this._ref) : super(const TinfoilServerState()) {
-    TinfoilServerService.activeTransfers.addListener(() {
-      if (mounted) state = state.copyWith(activeTransfers: TinfoilServerService.activeTransfers.value);
+    _service.activeTransfers.addListener(() {
+      if (mounted) state = state.copyWith(activeTransfers: _service.activeTransfers.value);
     });
     SharedPreferences.getInstance().then((prefs) {
       final port = prefs.getInt(_portKey);

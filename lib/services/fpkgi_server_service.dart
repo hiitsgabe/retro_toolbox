@@ -144,6 +144,7 @@ class FpkgiServerService {
   Future<Map<Console, List<Game>>> Function()? _loadGames;
   Map<String, String> Function(Console)? _authHeaders;
   String? Function(Console)? _downloadDir;
+  final activeTransfers = ValueNotifier<int>(0);
 
   bool get running => _server != null;
   int get port => _server?.port ?? 0;
@@ -227,10 +228,10 @@ class FpkgiServerService {
     }
     final local = entry.localPath;
     if (local != null && File(local).existsSync()) {
-      await TinfoilServerService.serveFile(req, File(local));
+      await TinfoilServerService.serveFile(req, File(local), transfers: activeTransfers);
       return;
     }
-    await TinfoilServerService.proxyUpstream(req, url: entry.game.url, headers: _authHeaders!(entry.console));
+    await TinfoilServerService.proxyUpstream(req, url: entry.game.url, headers: _authHeaders!(entry.console), transfers: activeTransfers);
   }
 
   /// Streams one cover from the FPKGi icons item (also access-restricted).
@@ -243,6 +244,6 @@ class FpkgiServerService {
     }
     final console = _routes.isEmpty ? null : _routes.values.first.console;
     final headers = console == null ? <String, String>{} : _authHeaders!(console);
-    await TinfoilServerService.proxyUpstream(req, url: 'https://archive.org/download/$iconItem/$cusa.png', headers: headers);
+    await TinfoilServerService.proxyUpstream(req, url: 'https://archive.org/download/$iconItem/$cusa.png', headers: headers, transfers: activeTransfers);
   }
 }

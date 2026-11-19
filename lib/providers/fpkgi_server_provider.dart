@@ -50,8 +50,8 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
   FpkgiServerNotifier(this._ref, {CatalogService? catalog})
       : _catalogService = catalog ?? CatalogService(),
         super(const FpkgiServerState()) {
-    TinfoilServerService.activeTransfers.addListener(() {
-      if (mounted) state = state.copyWith(activeTransfers: TinfoilServerService.activeTransfers.value);
+    _service.activeTransfers.addListener(() {
+      if (mounted) state = state.copyWith(activeTransfers: _service.activeTransfers.value);
     });
     SharedPreferences.getInstance().then((prefs) {
       final port = prefs.getInt(_portKey);

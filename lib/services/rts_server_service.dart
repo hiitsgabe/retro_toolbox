@@ -202,12 +202,7 @@ class RtsServerService {
     // other file in the folder.
     final copy = local.values.where((l) => p.basename(l) == name).firstOrNull;
     if (copy != null) {
-      activeTransfers.value++;
-      try {
-        await TinfoilServerService.serveFile(req, File(copy));
-      } finally {
-        activeTransfers.value--;
-      }
+      await TinfoilServerService.serveFile(req, File(copy), transfers: activeTransfers);
       return;
     }
     final game = games.where((g) => g.filename == name).firstOrNull;
@@ -226,12 +221,7 @@ class RtsServerService {
         // unwritable: stream without a copy
       }
     }
-    activeTransfers.value++;
-    try {
-      await TinfoilServerService.proxyUpstream(req, url: game.url, headers: lib.authHeaders(c), saveTo: saveTo);
-    } finally {
-      activeTransfers.value--;
-    }
+    await TinfoilServerService.proxyUpstream(req, url: game.url, headers: lib.authHeaders(c), transfers: activeTransfers, saveTo: saveTo);
   }
 
   void _send(HttpRequest req, String body, ContentType type) {
