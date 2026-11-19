@@ -45,9 +45,11 @@ final fpkgiServerProvider = StateNotifierProvider<FpkgiServerNotifier, FpkgiServ
 class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
   final Ref _ref;
   final _service = FpkgiServerService();
-  final _catalogService = CatalogService();
+  final CatalogService _catalogService;
 
-  FpkgiServerNotifier(this._ref) : super(const FpkgiServerState()) {
+  FpkgiServerNotifier(this._ref, {CatalogService? catalog})
+      : _catalogService = catalog ?? CatalogService(),
+        super(const FpkgiServerState()) {
     TinfoilServerService.activeTransfers.addListener(() {
       if (mounted) state = state.copyWith(activeTransfers: TinfoilServerService.activeTransfers.value);
     });
@@ -83,6 +85,12 @@ class FpkgiServerNotifier extends StateNotifier<FpkgiServerState> {
   }
 
   Future<void> enable() async {
+    // With no PS4 system there is nothing to serve. The screen blocks the
+    // switch for the same reason, but a boot restore comes straight here.
+    if (!(await _catalogService.getConsoles()).values.any(FpkgiServerService.isPs4Console)) {
+      state = state.copyWith(running: false, error: 'Not started: no PS4 system in the catalog');
+      return;
+    }
     try {
       await _service.start(
         port: state.port,

@@ -81,7 +81,8 @@ class FpkgiServerScreen extends ConsumerWidget {
                 title: const Text('Enable server'),
                 subtitle: Text(state.running ? 'Serving PS4 games' : 'Off'),
                 value: state.running,
-                onChanged: (v) => v ? notifier.enable() : notifier.disable(),
+                // Off stays reachable; on needs a PS4 system (the notice above says so).
+                onChanged: hasPs4 || state.running ? (v) => v ? notifier.enable() : notifier.disable() : null,
               ),
             ),
           ),
