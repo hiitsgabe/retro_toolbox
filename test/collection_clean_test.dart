@@ -76,8 +76,34 @@ void main() {
     test('scan+applyRenames strips tags on disk', () {
       write('Zelda (USA) [!].sfc', 5);
       final renames = service.scanRenames(dir);
-      expect(service.applyRenames(dir, renames), 1);
+      final result = service.applyRenames(dir, renames);
+      expect(result.renamed, 1);
+      expect(result.skipped, isEmpty);
       expect(File(p.join(dir.path, 'Zelda.sfc')).existsSync(), true);
+    });
+
+    test('applyRenames reports the renames it skips because the name exists', () {
+      write('Mario (USA).nes', 5);
+      write('Zelda.sfc', 5); // already clean, so Zelda (USA) has nowhere to go
+      write('Zelda (USA).sfc', 5);
+      write('Metroid (USA).sfc', 5); // both clean to Metroid.sfc: the second loses
+      write('Metroid (Europe).sfc', 5);
+      final renames = service.scanRenames(dir);
+      expect(renames, hasLength(4));
+
+      final result = service.applyRenames(dir, renames);
+      expect(result.renamed, 2);
+      expect(result.skipped.map((s) => s.reason), [CollectionCleanService.nameExists, CollectionCleanService.nameExists]);
+      final skippedFrom = result.skipped.map((s) => s.entry.from).toSet();
+      expect(skippedFrom, hasLength(2));
+      expect(skippedFrom, contains('Zelda (USA).sfc'));
+      expect(skippedFrom.intersection({'Metroid (USA).sfc', 'Metroid (Europe).sfc'}), hasLength(1));
+      // The skipped files are left as they were.
+      for (final name in skippedFrom) {
+        expect(File(p.join(dir.path, name)).existsSync(), true);
+      }
+      expect(File(p.join(dir.path, 'Mario.nes')).existsSync(), true);
+      expect(File(p.join(dir.path, 'Metroid.sfc')).existsSync(), true);
     });
 
     test('scan+applyDelete removes ghosts recursively, spares real files', () {

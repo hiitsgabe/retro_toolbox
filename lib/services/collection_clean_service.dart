@@ -8,6 +8,13 @@ typedef FileEntry = ({String path, int size});
 /// A proposed rename produced by the clean-names scan.
 typedef RenameEntry = ({String path, String from, String to});
 
+/// A rename [CollectionCleanService.applyRenames] left undone, and why.
+typedef RenameSkip = ({RenameEntry entry, String reason});
+
+/// What [CollectionCleanService.applyRenames] did: how many it renamed and
+/// which it skipped, so the caller can say so instead of a bare count.
+typedef RenameResult = ({int renamed, List<RenameSkip> skipped});
+
 /// A junk file/folder found by the ghost scan.
 typedef GhostEntry = ({String path, String name, int size, bool isDir});
 
@@ -23,6 +30,11 @@ class CollectionCleanService {
     '.gen', '.smd', '.gg', '.sms', '.pce', '.n64', '.z64', '.v64', '.gcm', '.wbfs',
     '.wad', '.pbp', '.cso', '.pkg',
   };
+
+  // Skip reasons for applyRenames, worded for the user.
+  static const nameExists = 'name already exists';
+  static const outsideFolder = 'outside the folder';
+  static const renameFailed = 'rename failed';
 
   static const _ghostFileNames = {'.DS_Store', 'Thumbs.db', 'desktop.ini'};
   static const _ghostDirNames = {'__MACOSX', '.AppleDouble'};
@@ -149,21 +161,30 @@ class CollectionCleanService {
   }
 
   /// Renames each [from]→[to] within [base] when the target does not exist.
-  /// Returns how many succeeded.
-  int applyRenames(Directory base, List<RenameEntry> renames) {
+  /// Never overwrites: a target that exists (two files cleaning to the same
+  /// name included) is skipped and reported, like every other skip.
+  RenameResult applyRenames(Directory base, List<RenameEntry> renames) {
     var count = 0;
+    final skipped = <RenameSkip>[];
     for (final r in renames) {
       final dest = p.join(p.dirname(r.path), r.to);
-      if (_resolveWithin(r.path, '${base.path}${Platform.pathSeparator}') == null) continue;
-      if (File(dest).existsSync() || Directory(dest).existsSync()) continue;
+      if (_resolveWithin(r.path, '${base.path}${Platform.pathSeparator}') == null) {
+        skipped.add((entry: r, reason: outsideFolder));
+        continue;
+      }
+      if (File(dest).existsSync() || Directory(dest).existsSync()) {
+        skipped.add((entry: r, reason: nameExists));
+        continue;
+      }
       try {
         File(r.path).renameSync(dest);
         count++;
       } on FileSystemException {
-        // Skip on error, matches the source's leniency.
+        // Skip on error, matches the source's leniency, but say so.
+        skipped.add((entry: r, reason: renameFailed));
       }
     }
-    return count;
+    return (renamed: count, skipped: skipped);
   }
 
   static String? _resolveWithin(String path, String rootWithSep) {

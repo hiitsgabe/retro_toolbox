@@ -17,7 +17,7 @@ void main() {
             CleanRow(path: '/a', title: 'a', subtitle: 's'),
             CleanRow(path: '/b', title: 'b', subtitle: 's'),
           ],
-          apply: (rows) async => applied = rows.length,
+          apply: (rows) async => '${applied = rows.length} item(s) processed.',
         ),
       ),
     ));

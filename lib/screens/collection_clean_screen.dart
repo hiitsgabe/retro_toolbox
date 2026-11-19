@@ -12,6 +12,19 @@ import 'package:retro_toolbox/services/pick.dart';
 class CollectionCleanScreen extends StatefulWidget {
   const CollectionCleanScreen({super.key});
 
+  /// "Renamed 3, skipped 2 (name already exists)." Skips are grouped by reason
+  /// so a collision never reads as a rename that happened.
+  static String renameSummary(RenameResult result) {
+    final skipped = result.skipped;
+    if (skipped.isEmpty) return 'Renamed ${result.renamed}.';
+    final byReason = <String, int>{};
+    for (final s in skipped) {
+      byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
+    }
+    final why = byReason.length == 1 ? byReason.keys.single : byReason.entries.map((e) => '${e.value} ${e.key}').join(', ');
+    return 'Renamed ${result.renamed}, skipped ${skipped.length} ($why).';
+  }
+
   @override
   State<CollectionCleanScreen> createState() => _CollectionCleanScreenState();
 }
@@ -68,7 +81,7 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
                           subtitle: '${_fmtSize(d.size)} — duplicate',
                         ))
                     .toList(),
-                apply: (rows) async => _service.applyDelete(dir, rows.map((r) => r.path)),
+                apply: (rows) async => '${_service.applyDelete(dir, rows.map((r) => r.path))} item(s) processed.',
               ),
               CleanSection(
                 title: 'Clean File Names',
@@ -84,10 +97,10 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
                           to: r.to,
                         ))
                     .toList(),
-                apply: (rows) async => _service.applyRenames(
+                apply: (rows) async => CollectionCleanScreen.renameSummary(_service.applyRenames(
                   dir,
                   rows.map<RenameEntry>((r) => (path: r.path, from: r.title, to: r.to!)).toList(),
-                ),
+                )),
               ),
               CleanSection(
                 title: 'Ghost File Cleaner',
@@ -102,7 +115,7 @@ class _CollectionCleanScreenState extends State<CollectionCleanScreen> {
                           subtitle: '${g.isDir ? 'folder' : 'file'} — ${_fmtSize(g.size)}',
                         ))
                     .toList(),
-                apply: (rows) async => _service.applyDelete(dir, rows.map((r) => r.path)),
+                apply: (rows) async => '${_service.applyDelete(dir, rows.map((r) => r.path))} item(s) processed.',
               ),
             ],
           ],
@@ -129,7 +142,8 @@ class CleanSection extends StatefulWidget {
   final String description;
   final String applyLabel;
   final Future<List<CleanRow>> Function() scan;
-  final Future<int> Function(List<CleanRow> selected) apply;
+  /// Applies the selected rows and returns what happened, for the snackbar.
+  final Future<String> Function(List<CleanRow> selected) apply;
 
   const CleanSection({
     required this.title,
@@ -190,8 +204,8 @@ class _CleanSectionState extends State<CleanSection> {
     if (ok != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final n = await widget.apply(selected);
-      _snack('${widget.title}: $n item(s) processed.');
+      final summary = await widget.apply(selected);
+      _snack('${widget.title}: $summary');
       await _scan();
     } catch (e) {
       _snack('$e');
