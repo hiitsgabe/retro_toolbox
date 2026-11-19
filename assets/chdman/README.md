@@ -6,7 +6,7 @@ tool (BSD-3-Clause, redistributable). How it's shipped per platform:
 | Platform | Source | Where it lives |
 |----------|--------|----------------|
 | macOS    | Homebrew `rom-tools`, committed | `assets/chdman/macos/` |
-| Linux    | built in release CI (`mame-tools`) | `assets/chdman/linux/` |
+| Linux    | `tool/build_chdman_linux.sh`, committed | `assets/chdman/linux/` |
 | Windows  | built in release CI (Chocolatey `mame`) | `assets/chdman/windows/` |
 | Android  | `tool/build_chdman_android.sh`, committed | `android/app/src/main/jniLibs/<abi>/libchdman.so` |
 
@@ -16,8 +16,11 @@ Each `<os>` folder has a `manifest.txt` listing the files to extract — the
 binary (`chdman` / `chdman.exe`) first, then any bundled shared libraries. At
 runtime `ChdService` copies them into the app support dir (libs load via
 `@loader_path` on macOS / `$ORIGIN` on Linux, so they sit next to the binary)
-and runs the binary. The Linux and Windows folders ship empty (`.gitkeep`) in
-git; the release workflow fills them on each build.
+and runs the binary. The Windows folder ships empty (`.gitkeep`) in git; the
+release workflow fills it on each build.
+
+The Linux binary is a static build (libstdc++ included) that needs only glibc
+2.38+, so it ships alone. Rebuild it on Ubuntu 24.04, the release runner.
 
 Resolution order on desktop: user-set path → bundled folder → system `PATH`.
 
