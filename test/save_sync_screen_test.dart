@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
@@ -468,6 +471,74 @@ void main() {
     await t.tap(find.widgetWithText(FilledButton, 'Open Save Sync'));
     await t.pumpAndSettle();
     expect(popped, isTrue);
+  });
+
+  testWidgets('Use a folder opens the picker at the default, and only a picked folder becomes the hub', (t) async {
+    final fake = FakeNotifier(const SaveSyncState(hubKind: HubKind.none));
+    final asked = <String>[];
+    String? answer;
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        home: SaveSyncSetupScreen(pickFolder: (_, initialDir) async {
+          asked.add(initialDir);
+          return answer;
+        }),
+      ),
+    ));
+    await t.tap(find.text('Use a folder'));
+    await t.pumpAndSettle();
+    expect(asked, [fake.defaultHubFolder]);
+    expect(fake.calls, isEmpty);
+    expect(find.text('Where should saves go?'), findsOneWidget);
+
+    answer = '/storage/emulated/0/Handheld Saves';
+    await t.tap(find.text('Use a folder'));
+    await t.pumpAndSettle();
+    expect(fake.calls, ['folder /storage/emulated/0/Handheld Saves']);
+  });
+
+  // Plain tests, not testWidgets: disk IO hangs under the widget binding's fake clock.
+  group('the picker starts at', () {
+    late Directory tmp;
+    setUp(() async => tmp = await Directory.systemTemp.createTemp('hub_start_'));
+    tearDown(() async => tmp.delete(recursive: true));
+
+    test('the folder itself when it already exists', () async {
+      final dir = await Directory(p.join(tmp.path, 'Saves')).create();
+      expect(await hubPickerStart(dir.path), dir.path);
+    });
+
+    test('the folder, made for it, when it does not exist yet', () async {
+      final dir = p.join(tmp.path, 'Retro Toolbox Saves');
+      expect(await hubPickerStart(dir), dir);
+      expect(Directory(dir).existsSync(), isTrue);
+    });
+
+    test('its parent when the folder cannot be made', () async {
+      // A file where the parent folder should be makes the create fail, as missing permission would.
+      final blocker = await File(p.join(tmp.path, 'blocker')).create();
+      final dir = p.join(blocker.path, 'Saves');
+      expect(await hubPickerStart(dir), blocker.path);
+    });
+  });
+
+  testWidgets('a hub that will not open lets the owner pick the folder again', (t) async {
+    final fake = FakeNotifier(const SaveSyncState(hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Old', error: 'No hub here'));
+    final asked = <String>[];
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        home: SaveSyncSetupScreen(pickFolder: (_, initialDir) async {
+          asked.add(initialDir);
+          return '/storage/emulated/0/New';
+        }),
+      ),
+    ));
+    await t.tap(find.text('Pick the folder again'));
+    await t.pumpAndSettle();
+    expect(asked, ['/storage/emulated/0/Old']);
+    expect(fake.calls, ['folder /storage/emulated/0/New']);
   });
 
   testWidgets('before the first refresh has read the hub, neither the first run nor a hub row shows', (t) async {

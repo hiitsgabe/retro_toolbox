@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 
@@ -10,8 +14,23 @@ import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 /// Its own screen rather than cards on the list, because a first run is a
 /// sequence with an end, and because the list behind it has nothing to show
 /// until both answers exist.
+/// Where the hub picker opens for [dir]. The default folder only exists once a hub has been made in it, and the
+/// in-app browser cannot open a missing folder nor make one, so it is made here to keep the default pickable.
+/// Without permission to make it, the picker opens at its parent instead.
+Future<String> hubPickerStart(String dir) async {
+  try {
+    await Directory(dir).create(recursive: true);
+    return dir;
+  } on FileSystemException {
+    return p.dirname(dir);
+  }
+}
+
 class SaveSyncSetupScreen extends ConsumerStatefulWidget {
-  const SaveSyncSetupScreen({super.key});
+  const SaveSyncSetupScreen({super.key, this.pickFolder});
+
+  /// Tests hand in their own picker; null opens the one Save Sync uses to change the hub.
+  final Future<String?> Function(BuildContext context, String initialDir)? pickFolder;
 
   @override
   ConsumerState<SaveSyncSetupScreen> createState() => _SaveSyncSetupScreenState();
@@ -108,7 +127,7 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
         ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
-        onPressed: s.signingIn ? null : () => n.setHubFolder(),
+        onPressed: s.signingIn ? null : () => _pickHub(n.defaultHubFolder),
         icon: const Icon(Icons.folder),
         label: const Text('Use a folder'),
       ),
@@ -137,7 +156,7 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
             Text(s.error!, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 12),
             OutlinedButton(
-              onPressed: () => ref.read(saveSyncProvider.notifier).setHubFolder(),
+              onPressed: () => _pickHub(s.hubFolder.isEmpty ? ref.read(saveSyncProvider.notifier).defaultHubFolder : s.hubFolder),
               child: const Text('Pick the folder again'),
             ),
           ]),
@@ -225,6 +244,18 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
       const SizedBox(height: 16),
       FilledButton(onPressed: _done, child: const Text('Open Save Sync')),
     ]);
+  }
+
+  /// A cancelled picker leaves the step as it was.
+  Future<void> _pickHub(String initialDir) async {
+    final path = await (widget.pickFolder ?? _systemPicker)(context, initialDir);
+    if (path != null && mounted) await ref.read(saveSyncProvider.notifier).setHubFolder(path);
+  }
+
+  static Future<String?> _systemPicker(BuildContext context, String initialDir) async {
+    final start = await hubPickerStart(initialDir);
+    if (!context.mounted) return null;
+    return pickDirectory(context, title: 'Choose the hub folder', initialDir: start);
   }
 
   void _done() {
