@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/device_class.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
 
 /// One tile in a [MenuGrid]. Shows [assetPath] (a PNG on disk or bundled) when
 /// present and loadable, otherwise falls back to [icon].
@@ -25,7 +27,15 @@ class MenuTile {
 
   /// Optional brand accent. When set, the tile is a darkened gradient of this
   /// color (logo/label rendered light on top) instead of the neutral surface.
+  /// A cartridge does not use it: it takes its [area]'s colour.
   final Color? accentColor;
+
+  /// The part of the app the tile opens (a submenu's tiles take their
+  /// parent's). Classic draws a tile with an area as a cartridge.
+  final AppArea? area;
+
+  /// The tile's drawing in Classic's own icon set.
+  final PixelGlyph? pixelIcon;
 
   /// Optional smaller line under [label] (e.g. the console for a game tile).
   final String? subtitle;
@@ -46,6 +56,8 @@ class MenuTile {
     this.assetPath,
     this.bgAssetPath,
     this.accentColor,
+    this.area,
+    this.pixelIcon,
     this.subtitle,
     this.badge,
     this.brandLogo = false,
@@ -81,16 +93,21 @@ class MenuGrid extends StatelessWidget {
   }
 
   Widget _classic(BuildContext context) {
-    final fit = DeviceClass.of(context).menuFit(tiles.length);
-    if (fit == null) return _roomy();
+    final found = DeviceClass.of(context).menuFit(tiles.length);
+    if (found == null) return _roomy();
+    // Four to six cartridges squeezed into one low row leave each a sliver
+    // with an empty middle; two rows give them the height.
+    final fit = _cartridges && found.rows == 1 && tiles.length > 3 ? MenuFit((tiles.length / 2).ceil(), 2) : found;
     return LayoutBuilder(builder: (context, box) {
       const pad = 16.0, gap = 14.0;
       // Inside another scroll view there is no height to fill: square tiles.
       final fill = !shrinkWrap && box.hasBoundedHeight;
       final area = Size(box.maxWidth - 2 * pad, fill ? box.maxHeight - 2 * pad : double.infinity);
       final cell = fit.cell(area, gap: gap);
-      // The rows fill the height, the tiles no taller than 1.3 times their width.
-      final height = fill ? math.max(72.0, math.min(cell.height, cell.width * 1.3)) : cell.width;
+      // The rows fill the height, the tiles no taller than 1.3 times their
+      // width; a cartridge stands taller, as the real ones do.
+      final tallest = _cartridges ? 2.4 : 1.3;
+      final height = fill ? math.max(72.0, math.min(cell.height, cell.width * tallest)) : cell.width;
       final rows = (tiles.length / fit.columns).ceil();
       final content = rows * height + (rows - 1) * gap;
       // A grid that fits sits in the middle of the screen.
@@ -111,6 +128,8 @@ class MenuGrid extends StatelessWidget {
     });
   }
 
+  bool get _cartridges => tiles.any((t) => t.area != null);
+
   Widget _tile(BuildContext context, int i) => _MenuTileCard(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0);
 
   /// Roomy screens: as many 180 px tiles as the width takes, scrolling.
@@ -119,11 +138,11 @@ class MenuGrid extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       shrinkWrap: shrinkWrap,
       physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 180,
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
-        childAspectRatio: 1,
+        childAspectRatio: _cartridges ? 0.72 : 1,
       ),
       itemCount: tiles.length,
       itemBuilder: _tile,
@@ -166,6 +185,7 @@ class _MenuTileCardState extends State<_MenuTileCard> {
   Widget build(BuildContext context) {
     // Touch users never see a focus look (taps don't move focus).
     final showFocus = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    if (widget.tile.area != null) return _cartridge(context, showFocus);
     // The scale is outside the ink: DpadScope draws its outline round the
     // focused box as painted, so the ring grows with the tile.
     return AnimatedScale(
@@ -184,10 +204,56 @@ class _MenuTileCardState extends State<_MenuTileCard> {
       ),
     );
   }
+
+  /// Focus lifts the cartridge out of the row (the style's focus look says
+  /// so) with a shadow under it. The lift is outside the ink, so the ring
+  /// DpadScope draws round the focused box rises with it.
+  Widget _cartridge(BuildContext context, bool showFocus) {
+    final k = StyleTokens.of(context);
+    final shape = _cartridgeShape(k);
+    final look = k.focus;
+    return LayoutBuilder(builder: (context, box) {
+      final rise = look.lift && showFocus ? (box.maxHeight.isFinite ? (box.maxHeight * 0.055).clamp(6.0, 14.0) : 10.0) : 0.0;
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: rise),
+        duration: const Duration(milliseconds: 120),
+        builder: (context, y, child) => Transform.translate(offset: Offset(0, -y), child: child),
+        child: AnimatedScale(
+          scale: _pressed ? 0.96 : (showFocus ? look.zoom : 1),
+          duration: const Duration(milliseconds: 90),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              borderRadius: shape,
+              boxShadow: [if (rise > 0) BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 18, offset: Offset(0, rise))],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: shape,
+                // The lift and the ring are the focus; no wash over the label.
+                focusColor: Colors.transparent,
+                onTap: widget.tile.onTap,
+                autofocus: widget.autofocus,
+                onHighlightChanged: (v) => setState(() => _pressed = v),
+                onFocusChange: (v) => setState(() => _focused = v),
+                child: MenuTileFace(tile: widget.tile),
+              ),
+            ),
+          ),
+        ),
+      );
+    });
+  }
 }
 
-/// The visual face of a [MenuTile]: accent gradient (or neutral surface),
-/// optional background image, logo/icon and label. No interaction — wrap it in
+/// A cartridge's corners: the style's card radius on top, its button radius
+/// at the bottom edge.
+BorderRadius _cartridgeShape(StyleTokens k) => BorderRadius.vertical(top: Radius.circular(k.cardRadius), bottom: Radius.circular(k.buttonRadius));
+
+/// The visual face of a [MenuTile]: a cartridge when the tile has an area,
+/// else accent gradient (or neutral surface), optional background image,
+/// logo/icon and label. No interaction — wrap it in
 /// an InkWell/gesture detector (see [MenuGrid]) or reuse it standalone (e.g. CoverFlow).
 class MenuTileFace extends StatelessWidget {
   final MenuTile tile;
@@ -206,6 +272,7 @@ class MenuTileFace extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (tile.area != null) return _CartridgeFace(tile: tile, showLabel: this.showLabel && !_logoOnly, art: _cartridgeArt);
     final scheme = Theme.of(context).colorScheme;
     final showLabel = this.showLabel && !_logoOnly;
     return ClipRRect(
@@ -380,4 +447,161 @@ class MenuTileFace extends StatelessWidget {
 
   Widget _fallbackIcon(ColorScheme scheme, double size) =>
       Icon(tile.icon, size: size, color: _light ? Colors.white : scheme.primary);
+
+  /// What a cartridge's label of [label] size shows in [ink]: the brand logo
+  /// across most of its width when there is one, else the pixel icon, else
+  /// the Material icon.
+  Widget _cartridgeArt(Color ink, Size label) {
+    final size = label.shortestSide * 0.72;
+    final pixel = tile.pixelIcon;
+    final fallback = pixel != null ? PixelIcon(pixel, size: size, color: ink) : Icon(tile.icon, size: size, color: ink);
+    final path = tile.assetPath;
+    if (path == null || !_loadable(path)) return fallback;
+    final tint = tile.brandLogo ? ColorFilter.mode(ink, BlendMode.srcIn) : null;
+    return SizedBox(width: label.width * 0.84, height: label.height * 0.6, child: _image(path, fit: BoxFit.contain, tint: tint, fallback: fallback));
+  }
+}
+
+/// A [MenuTile] as a cartridge: a body in the surface tone, a label in the
+/// tile's area colour holding its art, the name in condensed caps under it
+/// and the subtitle in the area colour.
+class _CartridgeFace extends StatelessWidget {
+  const _CartridgeFace({required this.tile, required this.showLabel, required this.art});
+
+  final MenuTile tile;
+  final bool showLabel;
+  final Widget Function(Color ink, Size label) art;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = StyleTokens.of(context);
+    final area = k.area(tile.area!);
+    final floor = DeviceClass.of(context).textFloor;
+    final shape = _cartridgeShape(k);
+    return LayoutBuilder(builder: (context, box) {
+      final w = box.maxWidth;
+      final inset = (w * 0.09).clamp(5.0, 14.0);
+      final name = (w * 0.125).clamp(floor + 1, 19.0);
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color.lerp(k.surface, Colors.white, 0.14)!, Color.lerp(k.surface, Colors.white, 0.08)!],
+          ),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // The lip along the bottom edge, where the plastic folds under.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: inset * 0.6,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.25), borderRadius: BorderRadius.vertical(bottom: shape.bottomLeft)),
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(inset, inset * 1.1, inset, inset * 1.2),
+              child: Column(
+                children: [
+                  // The label is as tall as the body allows, never much
+                  // taller than wide; grip ridges take what is left.
+                  Expanded(
+                    child: LayoutBuilder(builder: (context, room) {
+                      final height = math.min(room.maxHeight, room.maxWidth * 1.5);
+                      return Column(children: [
+                        SizedBox(
+                          width: room.maxWidth,
+                          height: height,
+                          child: DecoratedBox(
+                            key: const ValueKey('cartridge-label'),
+                            decoration: BoxDecoration(color: area, borderRadius: BorderRadius.circular(3)),
+                            child: Center(child: art(k.surface, Size(room.maxWidth, height))),
+                          ),
+                        ),
+                        if (room.maxHeight - height >= 24) Expanded(child: Center(child: _Ridges(width: room.maxWidth * 0.5))),
+                      ]);
+                    }),
+                  ),
+                  if (showLabel) ...[
+                    SizedBox(height: inset * 0.7),
+                    // Room for two lines on every cartridge, so the labels
+                    // of a row line up whatever the names.
+                    SizedBox(
+                      height: name * 1.05 * 2 * MediaQuery.textScalerOf(context).scale(1),
+                      child: Center(
+                        child: Text(
+                          tile.label.toUpperCase(),
+                          semanticsLabel: tile.label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: k.titleFont,
+                            fontWeight: FontWeight.w700,
+                            fontSize: name,
+                            height: 1.05,
+                            letterSpacing: 0.6,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (tile.subtitle != null)
+                      Text(
+                        tile.subtitle!,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontFamily: StyleTokens.displayFont, fontWeight: FontWeight.w700, fontSize: floor, color: area),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            if (tile.badge != null)
+              Positioned(
+                top: inset * 0.35,
+                right: inset * 0.35,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: k.surface, borderRadius: BorderRadius.circular(k.buttonRadius)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    child: Text(
+                      tile.badge!,
+                      style: TextStyle(fontFamily: k.titleFont, fontWeight: FontWeight.w700, fontSize: floor, letterSpacing: 0.8, color: area),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// Grip ridges moulded into a cartridge's body.
+class _Ridges extends StatelessWidget {
+  const _Ridges({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: [
+          for (var i = 0; i < 3; i++)
+            Container(
+              width: width,
+              height: 2,
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(1)),
+            ),
+        ],
+      );
 }

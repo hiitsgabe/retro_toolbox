@@ -41,6 +41,21 @@ void main() {
     await snap(t, 'menu_home');
   }, skip: !screenshotsEnabled);
 
+  // As on an Android device (Odin 2, phone): Save Sync is on the menu too.
+  testWidgets('home menu android', (t) async {
+    MenuScreen.saveSyncShownForTest = true;
+    addTearDown(() => MenuScreen.saveSyncShownForTest = null);
+    await launch(t, const MenuScreen(), overrides: overrides);
+    await snap(t, 'menu_home_android');
+  }, skip: !screenshotsEnabled);
+
+  // Focus on the second tile: Classic lifts the cartridge.
+  testWidgets('home menu focused', (t) async {
+    await launch(t, const MenuScreen(), overrides: overrides);
+    await key(t, LogicalKeyboardKey.arrowRight);
+    await snap(t, 'menu_home_focused');
+  }, skip: !screenshotsEnabled);
+
   testWidgets('tools submenu', (t) async {
     await launch(t, const MenuScreen(), overrides: overrides);
     await open(t, 'Tools');

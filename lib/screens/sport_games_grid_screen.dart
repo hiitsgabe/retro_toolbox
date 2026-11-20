@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
@@ -27,6 +28,8 @@ class SportGamesGridScreen extends ConsumerWidget {
           // Show the axis the grid isn't grouped by, so each card still
           // identifies both sport and console.
           subtitle: byPlatform ? _cap(info.sport) : platformLabel(info.platform),
+          area: AppArea.sports,
+          pixelIcon: sportPixelIcon(info.sport),
           icon: sportIcon(info.sport),
           accentColor: sportBrandColor(info.sport),
           onTap: () => Navigator.of(context).push(

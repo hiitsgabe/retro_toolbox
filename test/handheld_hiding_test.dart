@@ -23,45 +23,37 @@ void main() {
   testWidgets('handheld: Servers holds only SMB, FTP and Retro Tools Server', (t) async {
     Handheld.current = true;
     await pumpMenu(t);
-    // Cover flow: first tap centres the card, second opens it.
-    await t.tap(find.text('Servers'));
-    await t.pumpAndSettle();
-    await t.tap(find.text('Servers'));
+    await t.tap(find.byKey(const ValueKey('Servers')));
     await t.pumpAndSettle();
     for (final l in ['SMB Share', 'FTP', 'Retro Tools Server']) {
-      expect(find.text(l), findsOneWidget, reason: l);
+      expect(find.byKey(ValueKey(l)), findsOneWidget, reason: l);
     }
     for (final l in ['Tinfoil Server', 'JDKV Server', 'FBI Server']) {
-      expect(find.text(l), findsNothing, reason: l);
+      expect(find.byKey(ValueKey(l)), findsNothing, reason: l);
     }
   });
 
   testWidgets('handheld: no unsupported tools', (t) async {
     Handheld.current = true;
     await pumpMenu(t);
-    // Cover flow: first tap centres the card, second opens it.
-    await t.tap(find.text('Tools'));
+    await t.tap(find.byKey(const ValueKey('Tools')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Tools'));
-    await t.pumpAndSettle();
-    expect(find.text('M3U Playlists'), findsOneWidget);
+    expect(find.byKey(const ValueKey('M3U Playlists')), findsOneWidget);
     for (final l in ['Steam Shortcuts', 'CHD Converter', 'NSZ Decompress', '3DS → CIA']) {
-      expect(find.text(l), findsNothing, reason: l);
+      expect(find.byKey(ValueKey(l)), findsNothing, reason: l);
     }
     // Shown only where RAR works (on Linux: when librar_native.so loaded).
-    expect(find.text('Rar Decompress'), ArchiveExtractService.rarSupported() ? findsOneWidget : findsNothing);
+    expect(find.byKey(const ValueKey('Rar Decompress')), ArchiveExtractService.rarSupported() ? findsOneWidget : findsNothing);
   });
 
   testWidgets('Console Info and Download from link only on the handheld', (t) async {
     for (final h in [true, false]) {
       Handheld.current = h;
       await pumpMenu(t);
-      await t.tap(find.text('Tools'));
+      await t.tap(find.byKey(const ValueKey('Tools')));
       await t.pumpAndSettle();
-      await t.tap(find.text('Tools'));
-      await t.pumpAndSettle();
-      expect(find.text('Console Info'), h ? findsOneWidget : findsNothing, reason: 'handheld: $h');
-      expect(find.text('Download from link'), h ? findsOneWidget : findsNothing, reason: 'handheld: $h');
+      expect(find.byKey(const ValueKey('Console Info')), h ? findsOneWidget : findsNothing, reason: 'handheld: $h');
+      expect(find.byKey(const ValueKey('Download from link')), h ? findsOneWidget : findsNothing, reason: 'handheld: $h');
       await t.pumpWidget(const SizedBox());
     }
   });
@@ -69,7 +61,7 @@ void main() {
   testWidgets('non-handheld: Servers tile present', (t) async {
     Handheld.current = false;
     await pumpMenu(t);
-    expect(find.text('Servers'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Servers')), findsOneWidget);
   });
 
   testWidgets('handheld: About has no open/copy controls', (t) async {

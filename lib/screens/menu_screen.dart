@@ -35,7 +35,9 @@ import 'package:retro_toolbox/screens/rts_server_screen.dart';
 import 'package:retro_toolbox/screens/fbi_server_screen.dart';
 import 'package:retro_toolbox/screens/fpkgi_server_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Root 3DS-style grid: the app's home screen. Owns the first-run setup wizard.
 class MenuScreen extends ConsumerStatefulWidget {
@@ -94,68 +96,200 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       if (library)
         MenuTile(
           label: 'Games Library',
+          area: AppArea.games,
+          pixelIcon: PixelIcons.games,
           icon: Icons.download,
           accentColor: const Color(0xFF2E6DB4),
           onTap: _openGamesLibrary,
         ),
       if (MenuScreen.saveSyncShownForTest ?? Platform.isAndroid)
-        MenuTile(label: 'Save Sync', icon: Icons.sync, accentColor: const Color(0xFF2E7D5B), badge: 'ALPHA', onTap: () => _push(const SaveSyncScreen())),
+        MenuTile(
+          label: 'Save Sync',
+          area: AppArea.saves,
+          pixelIcon: PixelIcons.saves,
+          icon: Icons.sync,
+          accentColor: const Color(0xFF2E7D5B),
+          badge: 'ALPHA',
+          onTap: () => _push(const SaveSyncScreen()),
+        ),
       MenuTile(
         label: 'Servers',
+        area: AppArea.servers,
+        pixelIcon: PixelIcons.servers,
         icon: Icons.dns,
         accentColor: const Color(0xFF167C80),
         onTap: () => _push(MenuGridScreen(title: 'Servers', tiles: [
           // Tinfoil, FBI and FPKGi are opt-in (Settings → Extra servers); the
           // handheld keeps the pure-Dart servers that make sense there.
           if (tinfoil && !Handheld.current)
-            MenuTile(label: 'Tinfoil Server', icon: Icons.cloud_upload, accentColor: const Color(0xFF167C80), onTap: () => _push(TinfoilServerScreen())),
+            MenuTile(
+              label: 'Tinfoil Server',
+              area: AppArea.servers,
+              pixelIcon: PixelIcons.tinfoil,
+              icon: Icons.cloud_upload,
+              accentColor: const Color(0xFF167C80),
+              onTap: () => _push(TinfoilServerScreen()),
+            ),
           if (!Handheld.current)
-            MenuTile(label: 'JDKV Server', icon: Icons.folder_shared, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const JdkvServerScreen())),
-          MenuTile(label: 'SMB Share', icon: Icons.folder_open, accentColor: const Color(0xFF7A5CA8), onTap: () => _push(const SmbScreen())),
-          MenuTile(label: 'FTP', icon: Icons.cloud_sync, accentColor: const Color(0xFFB4632E), onTap: () => _push(const FtpScreen())),
-          MenuTile(label: 'Retro Tools Server', icon: Icons.dns_rounded, accentColor: const Color(0xFF167C80), onTap: () => _push(const RtsServerScreen())),
+            MenuTile(
+              label: 'JDKV Server',
+              area: AppArea.servers,
+              pixelIcon: PixelIcons.jdkv,
+              icon: Icons.folder_shared,
+              accentColor: const Color(0xFF2E7D5B),
+              onTap: () => _push(const JdkvServerScreen()),
+            ),
+          MenuTile(
+            label: 'SMB Share',
+            area: AppArea.servers,
+            pixelIcon: PixelIcons.smb,
+            icon: Icons.folder_open,
+            accentColor: const Color(0xFF7A5CA8),
+            onTap: () => _push(const SmbScreen()),
+          ),
+          MenuTile(
+            label: 'FTP',
+            area: AppArea.servers,
+            pixelIcon: PixelIcons.ftp,
+            icon: Icons.cloud_sync,
+            accentColor: const Color(0xFFB4632E),
+            onTap: () => _push(const FtpScreen()),
+          ),
+          MenuTile(
+            label: 'Retro Tools Server',
+            area: AppArea.servers,
+            pixelIcon: PixelIcons.rts,
+            icon: Icons.dns_rounded,
+            accentColor: const Color(0xFF167C80),
+            onTap: () => _push(const RtsServerScreen()),
+          ),
           if (fbi && !Handheld.current)
-            MenuTile(label: 'FBI Server', icon: Icons.install_mobile, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const FbiServerScreen())),
+            MenuTile(
+              label: 'FBI Server',
+              area: AppArea.servers,
+              pixelIcon: PixelIcons.fbi,
+              icon: Icons.install_mobile,
+              accentColor: const Color(0xFF9C4DA0),
+              onTap: () => _push(const FbiServerScreen()),
+            ),
           if (fpkgi && !Handheld.current)
-            MenuTile(label: 'FPKGi Server', icon: Icons.install_desktop, accentColor: const Color(0xFF0A5BB0), onTap: () => _push(const FpkgiServerScreen())),
+            MenuTile(
+              label: 'FPKGi Server',
+              area: AppArea.servers,
+              pixelIcon: PixelIcons.fpkgi,
+              icon: Icons.install_desktop,
+              accentColor: const Color(0xFF0A5BB0),
+              onTap: () => _push(const FpkgiServerScreen()),
+            ),
         ])),
       ),
       MenuTile(
         label: 'Tools',
+        area: AppArea.tools,
+        pixelIcon: PixelIcons.tools,
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
         onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
           if (Handheld.current)
-            MenuTile(label: 'Console Info', icon: Icons.memory, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const ConsoleInfoScreen())),
+            MenuTile(
+              label: 'Console Info',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.consoleInfo,
+              icon: Icons.memory,
+              accentColor: const Color(0xFF3B6FB5),
+              onTap: () => _push(const ConsoleInfoScreen()),
+            ),
           if (Handheld.current)
-            MenuTile(label: 'Download from link', icon: Icons.link, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const LinkDownloadScreen())),
+            MenuTile(
+              label: 'Download from link',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.link,
+              icon: Icons.link,
+              accentColor: const Color(0xFF2E7D5B),
+              onTap: () => _push(const LinkDownloadScreen()),
+            ),
           if (!Handheld.current)
-            MenuTile(label: 'NSZ Decompress', icon: Icons.unarchive, accentColor: const Color(0xFFE56717), onTap: () => _push(const NszDecompressScreen())),
+            MenuTile(
+              label: 'NSZ Decompress',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.nsz,
+              icon: Icons.unarchive,
+              accentColor: const Color(0xFFE56717),
+              onTap: () => _push(const NszDecompressScreen()),
+            ),
           if (!Handheld.current)
-            MenuTile(label: 'Steam Shortcuts', icon: Icons.videogame_asset, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(SteamShortcutScreen())),
+            MenuTile(
+              label: 'Steam Shortcuts',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.steam,
+              icon: Icons.videogame_asset,
+              accentColor: const Color(0xFF3B6FB5),
+              onTap: () => _push(SteamShortcutScreen()),
+            ),
           if (library)
             MenuTile(
                 label: 'New Catalog Source',
+                area: AppArea.tools,
+                pixelIcon: PixelIcons.catalogSource,
                 icon: Icons.playlist_add,
                 accentColor: const Color(0xFF2E7D5B),
                 onTap: () => _push(const AddCatalogSourceScreen())),
           MenuTile(
               label: 'Collection Clean',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.clean,
               icon: Icons.cleaning_services,
               accentColor: const Color(0xFF9C4DA0),
               onTap: () => _push(const CollectionCleanScreen())),
-          MenuTile(label: 'File Explorer', icon: Icons.folder_copy, accentColor: const Color(0xFF2E7D5B), onTap: () => _push(const FileExplorerScreen())),
+          MenuTile(
+            label: 'File Explorer',
+            area: AppArea.tools,
+            pixelIcon: PixelIcons.explorer,
+            icon: Icons.folder_copy,
+            accentColor: const Color(0xFF2E7D5B),
+            onTap: () => _push(const FileExplorerScreen()),
+          ),
           if (!Handheld.current || ArchiveExtractService.rarSupported())
-            MenuTile(label: 'Rar Decompress', icon: Icons.folder_zip, accentColor: const Color(0xFFB4632E), onTap: () => _push(const RarDecompressScreen())),
-          MenuTile(label: 'M3U Playlists', icon: Icons.playlist_play, accentColor: const Color(0xFF3B6FB5), onTap: () => _push(const M3uScreen())),
+            MenuTile(
+              label: 'Rar Decompress',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.rar,
+              icon: Icons.folder_zip,
+              accentColor: const Color(0xFFB4632E),
+              onTap: () => _push(const RarDecompressScreen()),
+            ),
+          MenuTile(
+            label: 'M3U Playlists',
+            area: AppArea.tools,
+            pixelIcon: PixelIcons.m3u,
+            icon: Icons.playlist_play,
+            accentColor: const Color(0xFF3B6FB5),
+            onTap: () => _push(const M3uScreen()),
+          ),
           if (!Handheld.current)
-            MenuTile(label: 'CHD Converter', icon: Icons.compress, accentColor: const Color(0xFF167C80), onTap: () => _push(const ChdConvertScreen())),
+            MenuTile(
+              label: 'CHD Converter',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.chd,
+              icon: Icons.compress,
+              accentColor: const Color(0xFF167C80),
+              onTap: () => _push(const ChdConvertScreen()),
+            ),
           if (!Handheld.current)
-            MenuTile(label: '3DS → CIA', icon: Icons.sd_card, accentColor: const Color(0xFF9C4DA0), onTap: () => _push(const CiaConvertScreen())),
+            MenuTile(
+              label: '3DS → CIA',
+              area: AppArea.tools,
+              pixelIcon: PixelIcons.cia,
+              icon: Icons.sd_card,
+              accentColor: const Color(0xFF9C4DA0),
+              onTap: () => _push(const CiaConvertScreen()),
+            ),
         ])),
       ),
       MenuTile(
         label: 'Sports',
+        area: AppArea.sports,
+        pixelIcon: PixelIcons.sports,
         icon: Icons.sports_esports,
         accentColor: const Color(0xFF2E9E4F),
         badge: 'ALPHA',
@@ -163,12 +297,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       ),
       MenuTile(
         label: 'Settings',
+        area: AppArea.settings,
+        pixelIcon: PixelIcons.settings,
         icon: Icons.settings,
         accentColor: const Color(0xFF55606E),
         onTap: () => _push(const SettingsScreen(consoleId: null)),
       ),
       MenuTile(
         label: 'About',
+        area: AppArea.info,
+        pixelIcon: PixelIcons.info,
         icon: Icons.info_outline,
         accentColor: const Color(0xFF6C4AB6),
         onTap: () => _push(AboutScreen()),
@@ -181,6 +319,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         0,
         MenuTile(
           label: 'Tasks ($activeTasks)',
+          area: AppArea.tasks,
+          pixelIcon: PixelIcons.tasks,
           icon: Icons.sync,
           accentColor: const Color(0xFF8A5CF0),
           onTap: () => TaskPanelModal.show(context),
@@ -196,7 +336,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           children: [
             Image.asset('assets/icon.png', height: 30),
             const SizedBox(width: 10),
-            const Text('Retro Toolbox', style: TextStyle(fontWeight: FontWeight.w600)),
+            // The app's name keeps its own face in every style.
+            const Text('Retro Toolbox', style: TextStyle(fontFamily: StyleTokens.displayFont, fontWeight: FontWeight.w600)),
           ],
         ),
       ),

@@ -148,7 +148,15 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     this.warning = const Color(0xFFFFB547),
     this.error = const Color(0xFFFF6B81),
     this.areas = areaPalette,
+    this.titleFont = displayFont,
+    this.pixelIcons = false,
   });
+
+  /// Body text in every style: made for reading on small screens.
+  static const bodyFont = 'AtkinsonHyperlegible';
+
+  /// The app name and numbers.
+  static const displayFont = 'ChakraPetch';
 
   final Color accent;
   final Color onAccent;
@@ -170,6 +178,12 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
   final Color error;
 
   final Map<AppArea, Color> areas;
+
+  /// Titles and labels.
+  final String titleFont;
+
+  /// Icons from the pixel set (PixelIcons) where a screen has one.
+  final bool pixelIcons;
   final FocusLook focus;
   final SelectedLook selected;
 
@@ -212,6 +226,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     selected: SelectedLook(marker: SelectedMarker.badgeAndBorder, color: Color(0xFFB8A1FF), onColor: Color(0xFF1D0F4A), corner: Alignment.topLeft, border: 2),
     // In the Retro Toolbox colours, so Style shows that swatch as the one picked.
     backdrop: BackdropStyle(kind: BackdropKind.dots, top: Color(0xFF7C4DEF), bottom: Color(0xFF17102B)),
+    titleFont: 'SairaCondensed',
+    pixelIcons: true,
   );
 
   static const vita = StyleTokens(
@@ -298,6 +314,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     Color? warning,
     Color? error,
     Map<AppArea, Color>? areas,
+    String? titleFont,
+    bool? pixelIcons,
     FocusLook? focus,
     SelectedLook? selected,
     BackdropStyle? backdrop,
@@ -315,6 +333,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         warning: warning ?? this.warning,
         error: error ?? this.error,
         areas: areas ?? this.areas,
+        titleFont: titleFont ?? this.titleFont,
+        pixelIcons: pixelIcons ?? this.pixelIcons,
         focus: focus ?? this.focus,
         selected: selected ?? this.selected,
         backdrop: backdrop ?? this.backdrop,
@@ -335,6 +355,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       other.warning == warning &&
       other.error == error &&
       mapEquals(other.areas, areas) &&
+      other.titleFont == titleFont &&
+      other.pixelIcons == pixelIcons &&
       other.focus == focus &&
       other.selected == selected &&
       other.backdrop == backdrop;
@@ -353,6 +375,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         warning,
         error,
         Object.hashAll(areas.values),
+        titleFont,
+        pixelIcons,
         focus,
         selected,
         backdrop,
@@ -376,6 +400,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       warning: c(warning, other.warning),
       error: c(error, other.error),
       areas: {for (final a in AppArea.values) a: c(area(a), other.area(a))},
+      titleFont: t < 0.5 ? titleFont : other.titleFont,
+      pixelIcons: t < 0.5 ? pixelIcons : other.pixelIcons,
       focus: FocusLook.lerp(focus, other.focus, t),
       selected: SelectedLook.lerp(selected, other.selected, t),
       backdrop: t < 0.5 ? backdrop : other.backdrop,

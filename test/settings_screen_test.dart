@@ -19,10 +19,13 @@ import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
 import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
+import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
@@ -169,6 +172,20 @@ void main() {
       await t.tap(rail('network'));
       await t.pumpAndSettle();
       expect(find.text('Tinfoil (Switch)'), findsOneWidget);
+    });
+
+    testWidgets('in Classic each section in the rail shows its own pixel icon', (t) async {
+      saved();
+      await pump(t);
+      final shown = <PixelGlyph>{};
+      for (final s in [SettingsSection.library, SettingsSection.downloads, SettingsSection.network, SettingsSection.storage]) {
+        final icon = t.widget<PixelIcon>(find.descendant(of: rail(s.name), matching: find.byType(PixelIcon)));
+        expect(icon.glyph, s.pixel, reason: s.name);
+        expect(find.descendant(of: rail(s.name), matching: find.byType(SettingsIcon)), findsNothing, reason: s.name);
+        shown.add(icon.glyph);
+      }
+      expect(shown, hasLength(4));
+      expect(SettingsSection.values.map((s) => s.pixel).toSet(), hasLength(SettingsSection.values.length));
     });
 
     testWidgets('with the library off, Downloads and Consoles are not offered', (t) async {
@@ -516,6 +533,8 @@ void main() {
       await pump(t, size: const Size(400, 800));
       expect(rail('library'), findsNothing);
       expect(find.byKey(const ValueKey('section downloads')), findsOneWidget);
+      final icon = find.descendant(of: find.byKey(const ValueKey('section downloads')), matching: find.byType(PixelIcon));
+      expect(t.widget<PixelIcon>(icon).glyph, SettingsSection.downloads.pixel);
       expect(find.text('No folder, extract on, 5 at a time'), findsOneWidget); // its live summary
 
       await t.tap(find.byKey(const ValueKey('section downloads')));

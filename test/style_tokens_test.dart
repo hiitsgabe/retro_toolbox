@@ -74,6 +74,20 @@ void main() {
       expect(appTheme(style, backdrop: picked).extension<StyleTokens>()!.backdrop, picked);
     });
 
+    test('${style.name}: body text in Atkinson Hyperlegible, titles and labels in the style\'s face, display in Chakra Petch', () {
+      final text = appTheme(style).textTheme;
+      for (final s in [text.bodyLarge, text.bodyMedium, text.bodySmall]) {
+        expect(s?.fontFamily, 'AtkinsonHyperlegible');
+      }
+      for (final s in [text.titleLarge, text.titleMedium, text.titleSmall, text.labelLarge, text.labelMedium, text.labelSmall]) {
+        expect(s?.fontFamily, k.titleFont);
+      }
+      for (final s in [text.displayLarge, text.displayMedium, text.displaySmall, text.headlineLarge, text.headlineMedium, text.headlineSmall]) {
+        expect(s?.fontFamily, 'ChakraPetch');
+      }
+      expect(k.titleFont, style == CardStyle.classic ? 'SairaCondensed' : 'ChakraPetch');
+    });
+
     testWidgets('${style.name}: a Switch and a FilledButton take the accent', (t) async {
       await t.pumpWidget(MaterialApp(
         theme: appTheme(style),
@@ -110,6 +124,19 @@ void main() {
     await t.runAsync(() => c.read(styleProvider.notifier).setCards(CardStyle.switchStyle));
     await t.pumpAndSettle();
     expect(theme().colorScheme.primary, StyleTokens.switchStyle.accent);
+  });
+
+  test('every font family the theme names is bundled', () {
+    final pubspec = File('pubspec.yaml').readAsStringSync();
+    for (final family in ['ChakraPetch', 'SairaCondensed', 'AtkinsonHyperlegible']) {
+      expect(pubspec, contains('- family: $family'), reason: family);
+    }
+    final assets = RegExp(r'- asset: (assets/fonts/\S+)').allMatches(pubspec).map((m) => m.group(1)!).toList();
+    const added = ['SairaCondensed-SemiBold', 'SairaCondensed-Bold', 'AtkinsonHyperlegible-Regular', 'AtkinsonHyperlegible-Bold'];
+    expect(assets, containsAll(added.map((f) => 'assets/fonts/$f.ttf')));
+    for (final a in assets) {
+      expect(File(a).existsSync(), isTrue, reason: a);
+    }
   });
 
   test('no status colour is hardcoded in lib/ outside the card styles', () {

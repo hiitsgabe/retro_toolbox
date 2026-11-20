@@ -66,12 +66,12 @@ void main() {
   testWidgets('menu: Games Library only when enabled', (t) async {
     saved(false);
     await pump(t, const MenuScreen());
-    expect(find.text('Games Library'), findsNothing);
-    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Games Library')), findsNothing);
+    expect(find.byKey(const ValueKey('Settings')), findsOneWidget);
 
     saved(true);
     await pump(t, const MenuScreen());
-    expect(find.text('Games Library'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Games Library')), findsOneWidget);
   });
 
   testWidgets('handheld: Download from link does not need the library', (t) async {
@@ -80,12 +80,9 @@ void main() {
     addTearDown(() => Handheld.current = was);
     saved(false);
     await pump(t, const MenuScreen());
-    // Cover flow: first tap centres the card, second opens it.
-    await t.tap(find.text('Tools'));
+    await t.tap(find.byKey(const ValueKey('Tools')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Tools'));
-    await t.pumpAndSettle();
-    expect(find.text('Download from link'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Download from link')), findsOneWidget);
   });
 
   testWidgets('settings: off hides library settings; enabling asks first', (t) async {

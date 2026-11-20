@@ -292,7 +292,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               key: ValueKey('rail ${s.name}'),
               focusNode: _sectionNode(s),
               autofocus: s == _section && widget.consoleId == null,
-              icon: s.icon,
+              section: s,
               label: s.label,
               hint: s.hint,
               selected: s == _section,
@@ -379,7 +379,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           height: 40,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
-                          child: SettingsIcon(s.icon, color: scheme.primary),
+                          child: SectionIcon(s, color: scheme.primary),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -541,7 +541,7 @@ class _RailTile extends StatelessWidget {
     required this.selected,
     required this.onFocused,
     required this.onTap,
-    this.icon,
+    this.section,
     this.hint,
     this.badge = 0,
     this.autofocus = false,
@@ -552,7 +552,8 @@ class _RailTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onFocused;
   final VoidCallback onTap;
-  final String? icon;
+  /// Null for a console's tile, which has no icon.
+  final SettingsSection? section;
   final String? hint;
   final int badge;
   final bool autofocus;
@@ -561,7 +562,7 @@ class _RailTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final fg = selected ? scheme.onSecondaryContainer : scheme.onSurface;
-    final console = icon == null;
+    final console = section == null;
     return SettingsTile(
       focusNode: focusNode,
       autofocus: autofocus,
@@ -574,13 +575,13 @@ class _RailTile extends StatelessWidget {
       minHeight: console ? 52 : 60,
       padding: EdgeInsets.symmetric(horizontal: console ? 14 : 12, vertical: 8),
       child: Row(children: [
-        if (icon != null) ...[
+        if (section != null) ...[
           Container(
             width: 36,
             height: 36,
             alignment: Alignment.center,
             decoration: BoxDecoration(color: selected ? scheme.primary : scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)),
-            child: SettingsIcon(icon!, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+            child: SectionIcon(section!, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
           ),
           const SizedBox(width: 12),
         ],

@@ -121,16 +121,32 @@ Map<String, Object> basePrefs({AppStyle style = const AppStyle(), Map<String, Ob
       ...extra,
     };
 
+/// The font families in pubspec.yaml, each with its asset files.
+Map<String, List<String>> pubspecFonts() {
+  final fonts = <String, List<String>>{};
+  List<String>? current;
+  for (final line in File('pubspec.yaml').readAsLinesSync()) {
+    final family = RegExp(r'^\s*- family: (\S+)').firstMatch(line);
+    final asset = RegExp(r'^\s*- asset: (\S+)').firstMatch(line);
+    if (family != null) current = fonts[family.group(1)!] = [];
+    if (asset != null && current != null) current.add(asset.group(1)!);
+  }
+  return fonts;
+}
+
 bool _fontsLoaded = false;
 Future<void> loadFonts(WidgetTester t) async {
   if (_fontsLoaded) return;
   await t.runAsync(() async {
     Future<ByteData> bytes(String path) => File(path).readAsBytes().then((b) => b.buffer.asByteData());
-    final chakra = FontLoader('ChakraPetch');
-    for (final w in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
-      chakra.addFont(bytes('assets/fonts/ChakraPetch-$w.ttf'));
+    // Every family pubspec.yaml bundles, so a font added there shows here.
+    for (final MapEntry(key: family, value: assets) in pubspecFonts().entries) {
+      final loader = FontLoader(family);
+      for (final a in assets) {
+        loader.addFont(bytes(a));
+      }
+      await loader.load();
     }
-    await chakra.load();
     final root = Platform.environment['FLUTTER_ROOT'] ?? '${Platform.environment['HOME']}/flutter';
     final mf = '$root/bin/cache/artifacts/material_fonts';
     await (FontLoader('MaterialIcons')..addFont(bytes('$mf/MaterialIcons-Regular.otf'))).load();

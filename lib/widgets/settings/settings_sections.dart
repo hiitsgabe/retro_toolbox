@@ -16,6 +16,8 @@ import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/storage_usage.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/settings/accounts_rows.dart';
 import 'package:retro_toolbox/widgets/settings/catalog_source_setting.dart';
 import 'package:retro_toolbox/widgets/settings/version_grouping_setting.dart';
@@ -40,24 +42,41 @@ import 'package:retro_toolbox/widgets/settings/updates_setting.dart';
 import 'package:retro_toolbox/widgets/settings/sports_cache_settings.dart';
 import 'package:retro_toolbox/widgets/settings/tools_setting.dart';
 
-/// The parts of Settings, in rail order. [icon]: SVG elements for SettingsIcon.
+/// The parts of Settings, in rail order. [icon]: SVG elements for SettingsIcon;
+/// [pixel]: the same in the pixel set.
 enum SettingsSection {
-  library('Library', 'Catalog, metadata, favorites', SettingsIcons.library),
-  style('Style', 'Background and cards', SettingsIcons.style),
-  downloads('Downloads', 'Folder, extraction, discs', SettingsIcons.downloads),
-  consoles('Consoles', 'Changes for one console', SettingsIcons.consoles),
-  screens('Screens & controls', 'Dual screen, keyboard', SettingsIcons.screens),
-  network('Network & servers', 'Address, install servers', SettingsIcons.network),
-  keys('Keys', 'Switch keys, 3DS boot9', SettingsIcons.keys),
-  accounts('Accounts & sync', 'Catalog logins, Google', SettingsIcons.accounts),
-  sports('Sports', 'Roster patcher', SettingsIcons.sports),
-  storage('Storage', 'Caches, space, permissions', SettingsIcons.storage);
+  library('Library', 'Catalog, metadata, favorites', SettingsIcons.library, PixelIcons.library),
+  style('Style', 'Background and cards', SettingsIcons.style, PixelIcons.style),
+  downloads('Downloads', 'Folder, extraction, discs', SettingsIcons.downloads, PixelIcons.downloads),
+  consoles('Consoles', 'Changes for one console', SettingsIcons.consoles, PixelIcons.consoles),
+  screens('Screens & controls', 'Dual screen, keyboard', SettingsIcons.screens, PixelIcons.screens),
+  network('Network & servers', 'Address, install servers', SettingsIcons.network, PixelIcons.network),
+  keys('Keys', 'Switch keys, 3DS boot9', SettingsIcons.keys, PixelIcons.keys),
+  accounts('Accounts & sync', 'Catalog logins, Google', SettingsIcons.accounts, PixelIcons.accounts),
+  sports('Sports', 'Roster patcher', SettingsIcons.sports, PixelIcons.roster),
+  storage('Storage', 'Caches, space, permissions', SettingsIcons.storage, PixelIcons.storage);
 
-  const SettingsSection(this.label, this.hint, this.icon);
+  const SettingsSection(this.label, this.hint, this.icon, this.pixel);
 
   final String label;
   final String hint;
   final String icon;
+  final PixelGlyph pixel;
+}
+
+/// A section's icon: the pixel one in a style that draws with the pixel set,
+/// else the line one.
+class SectionIcon extends StatelessWidget {
+  const SectionIcon(this.section, {super.key, this.size = 20, this.color});
+
+  final SettingsSection section;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => StyleTokens.of(context).pixelIcons
+      ? PixelIcon(section.pixel, size: size, color: color)
+      : SettingsIcon(section.icon, size: size, color: color);
 }
 
 /// Where a settings row can send the user: a console's page, another section.

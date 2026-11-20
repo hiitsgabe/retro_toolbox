@@ -107,12 +107,12 @@ ThemeData appTheme(CardStyle style, {BackdropStyle? backdrop}) {
   final panelShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(k.panelRadius), side: BorderSide(color: k.panelLine));
   final disabledFg = scheme.onSurface.withValues(alpha: 0.38);
   final disabledBg = scheme.onSurface.withValues(alpha: 0.12);
-  return ThemeData(
+  final theme = ThemeData(
     colorScheme: scheme,
     focusColor: k.accent.withValues(alpha: 0.24),
     hoverColor: k.accent.withValues(alpha: 0.08),
     useMaterial3: true,
-    fontFamily: 'ChakraPetch',
+    fontFamily: StyleTokens.displayFont,
     // The page's backdrop shows through; see _BackdropPageTransitionsBuilder.
     scaffoldBackgroundColor: Colors.transparent,
     canvasColor: k.surface,
@@ -205,7 +205,7 @@ ThemeData appTheme(CardStyle style, {BackdropStyle? backdrop}) {
     dialogTheme: DialogThemeData(backgroundColor: panel, surfaceTintColor: Colors.transparent, shape: panelShape),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: scheme.surfaceContainerHighest,
-      contentTextStyle: TextStyle(color: scheme.onSurface, fontFamily: 'ChakraPetch'),
+      contentTextStyle: TextStyle(color: scheme.onSurface, fontFamily: StyleTokens.bodyFont),
       actionTextColor: k.accent,
     ),
     expansionTileTheme: ExpansionTileThemeData(
@@ -237,6 +237,26 @@ ThemeData appTheme(CardStyle style, {BackdropStyle? backdrop}) {
     popupMenuTheme: PopupMenuThemeData(color: panel, surfaceTintColor: Colors.transparent, shape: panelShape),
     textSelectionTheme: TextSelectionThemeData(cursorColor: k.accent, selectionColor: k.accent.withValues(alpha: 0.32), selectionHandleColor: k.accent),
     pageTransitionsTheme: Handheld.framebuffer ? _stillPages : _movingPages,
+  );
+  return theme.copyWith(textTheme: _faces(theme.textTheme, k));
+}
+
+/// Body text in [StyleTokens.bodyFont], titles and labels in the style's
+/// face; display and headline sizes (the app name, numbers) keep
+/// [StyleTokens.displayFont].
+TextTheme _faces(TextTheme t, StyleTokens k) {
+  TextStyle? body(TextStyle? s) => s?.copyWith(fontFamily: StyleTokens.bodyFont);
+  TextStyle? title(TextStyle? s) => s?.copyWith(fontFamily: k.titleFont);
+  return t.copyWith(
+    bodyLarge: body(t.bodyLarge),
+    bodyMedium: body(t.bodyMedium),
+    bodySmall: body(t.bodySmall),
+    titleLarge: title(t.titleLarge),
+    titleMedium: title(t.titleMedium),
+    titleSmall: title(t.titleSmall),
+    labelLarge: title(t.labelLarge),
+    labelMedium: title(t.labelMedium),
+    labelSmall: title(t.labelSmall),
   );
 }
 

@@ -50,11 +50,13 @@ class ConsoleDropdown extends StatelessWidget {
                   'No catalog',
                   style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
                 ),
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                ),
+                // From the theme: the dropdown does not merge this with the
+                // text around it, so a bare style has no font family.
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
                 icon: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   color: Theme.of(context).colorScheme.primary,

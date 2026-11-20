@@ -88,3 +88,15 @@ flutter:
           weight: 600
         - asset: assets/fonts/ChakraPetch-Bold.ttf
           weight: 700
+    # OFL, licences next to the files.
+    - family: SairaCondensed
+      fonts:
+        - asset: assets/fonts/SairaCondensed-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SairaCondensed-Bold.ttf
+          weight: 700
+    - family: AtkinsonHyperlegible
+      fonts:
+        - asset: assets/fonts/AtkinsonHyperlegible-Regular.ttf
+        - asset: assets/fonts/AtkinsonHyperlegible-Bold.ttf
+          weight: 700

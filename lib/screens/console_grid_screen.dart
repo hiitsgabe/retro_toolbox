@@ -5,11 +5,13 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Grid of consoles. Tapping a console selects it (which starts its catalog
 /// load) and opens the game list (HomeScreen).
@@ -144,6 +146,8 @@ class ConsoleGridScreen extends ConsumerWidget {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     return MenuTile(
       label: console.name,
+      area: AppArea.games,
+      pixelIcon: PixelIcons.games,
       icon: Icons.videogame_asset,
       assetPath: consoleLogoAsset(console),
       accentColor: consoleBrandColor(console),

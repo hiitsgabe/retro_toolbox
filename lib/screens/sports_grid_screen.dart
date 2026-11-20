@@ -5,9 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
 import 'package:retro_toolbox/screens/sport_games_grid_screen.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Level 1 of the Sports flow: cards grouped by console (default) or by sport,
@@ -76,6 +78,8 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
       for (final platform in platforms)
         MenuTile(
           label: platformLabel(platform),
+          area: AppArea.sports,
+          pixelIcon: PixelIcons.games,
           icon: Icons.videogame_asset,
           assetPath: platformLogoAsset(platform),
           accentColor: platformBrandColor(platform),
@@ -96,6 +100,8 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
       for (final sport in sports)
         MenuTile(
           label: _cap(sport),
+          area: AppArea.sports,
+          pixelIcon: sportPixelIcon(sport),
           icon: sportIcon(sport),
           accentColor: sportBrandColor(sport),
           onTap: () => Navigator.of(context).push(

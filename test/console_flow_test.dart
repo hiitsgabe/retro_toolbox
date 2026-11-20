@@ -79,29 +79,29 @@ void main() {
   testWidgets('console page lists consoles and loads no catalog, even with a saved console', (t) async {
     await pumpApp(t, prefs: {'selected_console': 'b'});
     expect(catalog.loaded, isEmpty);
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Beta'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Alpha')), findsOneWidget);
+    expect(find.byKey(const ValueKey('Beta')), findsOneWidget);
   });
 
   testWidgets('console page keeps the list while a catalog is loading or has failed', (t) async {
     await pumpApp(t);
     catalog.state = catalog.state.copyWith(loading: true, errorMessage: 'Failed to load catalog: timeout');
     await t.pump();
-    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Alpha')), findsOneWidget);
     expect(find.text('Failed to load catalog: timeout'), findsNothing);
     expect(find.text('Retry'), findsNothing);
   });
 
   testWidgets('picking a console opens its games and loads only that catalog', (t) async {
     await pumpApp(t);
-    await t.tap(find.text('Beta'));
+    await t.tap(find.byKey(const ValueKey('Beta')));
     await t.pumpAndSettle();
     expect(catalog.loaded, ['b']);
   });
 
   testWidgets('a failed console offers Retry and Choose another console (autofocused) that returns to the list', (t) async {
     await pumpApp(t, failWith: 'No games found for Beta.');
-    await t.tap(find.text('Beta'));
+    await t.tap(find.byKey(const ValueKey('Beta')));
     await t.pumpAndSettle();
 
     expect(find.text('No games found for Beta.'), findsOneWidget);
@@ -117,7 +117,7 @@ void main() {
     await t.tap(find.text('Choose another console'));
     await t.pumpAndSettle();
     expect(find.byType(ConsoleGridScreen), findsOneWidget);
-    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.byKey(const ValueKey('Alpha')), findsOneWidget);
     expect(find.text('No games found for Beta.'), findsNothing);
   });
 }

@@ -55,13 +55,10 @@ void main() {
   testWidgets('Tools no longer holds Save Sync', (t) async {
     MenuScreen.saveSyncShownForTest = true;
     await pump(t);
-    // Cover flow: first tap centres the card, second opens it.
-    await t.tap(find.text('Tools'));
+    await t.tap(find.byKey(const ValueKey('Tools')));
     await t.pumpAndSettle();
-    await t.tap(find.text('Tools'));
-    await t.pumpAndSettle();
-    expect(find.text('M3U Playlists'), findsOneWidget);
-    expect(find.text('Save Sync'), findsNothing);
+    expect(find.byKey(const ValueKey('M3U Playlists')), findsOneWidget);
+    expect(find.byKey(const ValueKey('Save Sync')), findsNothing);
   });
 
   testWidgets('hidden where it was hidden before', (t) async {

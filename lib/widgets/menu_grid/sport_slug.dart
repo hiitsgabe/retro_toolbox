@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Art (logo + color + icon) for sport and game cards.
 ///
@@ -316,6 +318,15 @@ Color sportBrandColor(String sport) =>
     _sportColors[sport.toLowerCase()] ?? const Color(0xFF55606E);
 
 IconData sportIcon(String sport) => _sportIcons[sport.toLowerCase()] ?? Icons.sports;
+
+/// [sportIcon] in Classic's pixel set; the football stands in for a sport
+/// without its own.
+PixelGlyph sportPixelIcon(String sport) => switch (sport.toLowerCase()) {
+      'basketball' => PixelIcons.basketball,
+      'hockey' => PixelIcons.hockey,
+      'baseball' => PixelIcons.baseball,
+      _ => PixelIcons.sports,
+    };
 
 const Map<String, Color> _sportColors = {
   'soccer': Color(0xFF2E9E4F),
