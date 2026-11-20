@@ -345,10 +345,24 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     state = state.copyWith(tasks: tasks, isExtracting: _hasActiveExtractions(tasks));
     gameStateManager.updateExtractionState(taskId, ExtractionStatus.extracting, 0.0);
     final cancel = _cancels[taskId] = Completer<void>();
-    // outputDir is a fresh folder made for this task, so a cancel removes it whole.
+    // A cancel removes only what this task wrote: a fresh folder goes whole,
+    // but Rar Decompress extracts into a folder the user picked (by default
+    // the archive's own), where only the entries added since the start go.
+    final out = Directory(outputDir);
+    final existed = await out.exists();
+    final before = existed ? await out.list().map((e) => path.basename(e.path)).toSet() : const <String>{};
     Future<void> discard() async {
       try {
-        await Directory(outputDir).delete(recursive: true);
+        if (!existed) {
+          await out.delete(recursive: true);
+          return;
+        }
+        final added = await out.list().where((e) => !before.contains(path.basename(e.path))).toList();
+        for (final e in added) {
+          try {
+            await e.delete(recursive: true);
+          } catch (_) {}
+        }
       } catch (_) {}
     }
 

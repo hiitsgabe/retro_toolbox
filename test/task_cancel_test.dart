@@ -111,4 +111,25 @@ void main() {
     await until(() => !out.existsSync());
     expect(c.read(extractionProvider).tasks, isEmpty); // neither completed nor failed
   });
+
+  test('cancelling an extraction into an existing folder removes only what it added', () async {
+    random('src/big.bin', 24 << 20);
+    // Rar Decompress extracts into the folder the user picked, by default the archive's own.
+    final roms = Directory(at('roms'))..createSync();
+    await FileOps.zip([at('src/big.bin')], at('roms/big.zip'));
+    final keep = File(at('roms/big.txt'))..writeAsStringSync('mine');
+    final before = roms.listSync().map((e) => p.basename(e.path)).toSet();
+    Set<String> added() => roms.listSync().map((e) => p.basename(e.path)).toSet().difference(before);
+    final c = container();
+    final notifier = c.read(extractionProvider.notifier);
+    unawaited(notifier.archiveExtract(taskId: 't', archivePath: at('roms/big.zip'), outputDir: roms.path));
+    await until(() => added().isNotEmpty); // the extraction started writing
+
+    notifier.cancel('t');
+    await until(() => !roms.existsSync() || added().isEmpty);
+    expect(roms.existsSync(), isTrue);
+    expect(keep.readAsStringSync(), 'mine');
+    expect(File(at('roms/big.zip')).existsSync(), isTrue);
+    expect(c.read(extractionProvider).tasks, isEmpty);
+  });
 }
