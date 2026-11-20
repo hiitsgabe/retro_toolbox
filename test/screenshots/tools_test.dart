@@ -148,30 +148,28 @@ void main() {
     testWidgets('tool chd filled', (t) => filled(t, 'chd_convert', const ChdConvertScreen(), (root) async {
           picker.file = '$root/psx/Crash Bandicoot (USA).cue';
           picker.dir = '$root/psx';
-          await tapAll(t, 'Choose');
+          await tapAll(t, 'Disc image');
         }), skip: !screenshotsEnabled);
   }
   if (want('cia_convert')) {
     testWidgets('tool cia filled', (t) => filled(t, 'cia_convert', const CiaConvertScreen(), (root) async {
           picker.file = '$root/3ds/Pokemon X (USA).3ds';
           picker.dir = '$root/3ds';
-          await tapAll(t, 'Choose file');
-          await tapAll(t, 'Choose');
+          await tapAll(t, '3DS image');
         }), skip: !screenshotsEnabled);
   }
   if (want('nsz_decompress')) {
     testWidgets('tool nsz filled', (t) => filled(t, 'nsz_decompress', const NszDecompressScreen(), (root) async {
           picker.file = '$root/switch/Celeste [0100A410000E0000][v0].nsz';
           picker.dir = '$root/switch';
-          await tapAll(t, 'Choose file');
-          await tapAll(t, 'Choose');
+          await tapAll(t, 'NSZ file');
         }), skip: !screenshotsEnabled);
   }
   if (want('rar_decompress')) {
     testWidgets('tool rar filled', (t) => filled(t, 'rar_decompress', const RarDecompressScreen(), (root) async {
           picker.file = '${Directory.current.path}/test/fixtures/sample.rar';
           picker.dir = '$root/snes';
-          await tapAll(t, 'Choose');
+          await tapAll(t, 'Archive');
         }), skip: !screenshotsEnabled);
   }
   if (want('m3u')) {

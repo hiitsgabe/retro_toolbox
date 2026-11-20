@@ -126,7 +126,8 @@ void main() {
       await t.pumpWidget(_app(screen));
       await t.pump();
       expect(find.textContaining(text), findsNothing);
-      final info = find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.info_outline));
+      // In the header: the AppBar, or the kit's header row.
+      final info = find.byIcon(Icons.info_outline);
       expect(info, findsOneWidget);
 
       await t.tap(info);

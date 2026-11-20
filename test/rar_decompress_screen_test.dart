@@ -6,11 +6,12 @@ import 'package:retro_toolbox/screens/rar_decompress_screen.dart';
 void main() {
   testWidgets('renders with extract disabled until a file and folder are picked', (tester) async {
     await tester.pumpWidget(const ProviderScope(child: MaterialApp(home: RarDecompressScreen())));
-    expect(find.text('Rar Decompress'), findsOneWidget);
-    expect(find.text('Extract'), findsOneWidget);
-    expect(find.text('No file selected'), findsOneWidget);
+    // Classic's title and button labels are in caps.
+    expect(find.text('RAR DECOMPRESS'), findsOneWidget);
+    expect(find.text('EXTRACT'), findsOneWidget);
+    expect(find.text('Choose a .zip or .rar'), findsOneWidget);
 
-    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Extract'));
+    final button = tester.widget<FilledButton>(find.byKey(const ValueKey('kit-primary')));
     expect(button.onPressed, isNull);
   });
 }

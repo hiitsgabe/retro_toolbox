@@ -1,26 +1,25 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
-import 'package:retro_toolbox/models/extraction_model.dart';
 import 'package:retro_toolbox/providers/extraction_provider.dart';
-import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/chd_service.dart';
-import 'package:retro_toolbox/widgets/tool_description.dart';
-import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Convert disc images to/from CHD via chdman. Compresses .cue/.gdi/.iso and
-/// extracts .chd back. Blocks with a "chdman required" card until a binary is
-/// resolvable (a user-set path, a bundled asset, or one on PATH).
+/// extracts .chd back. Until a chdman is found (a user-set path, a bundled
+/// one, or one on PATH) the status says so and Start is off; the form stays.
 class ChdConvertScreen extends ConsumerStatefulWidget {
-  const ChdConvertScreen({super.key});
+  const ChdConvertScreen({super.key, this.chdmanAvailable});
+
+  /// Tests: whether a chdman resolves from the set path.
+  final Future<bool> Function(String? path)? chdmanAvailable;
 
   @override
   ConsumerState<ChdConvertScreen> createState() => _ChdConvertScreenState();
@@ -29,10 +28,13 @@ class ChdConvertScreen extends ConsumerStatefulWidget {
 class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   String? _inputPath;
   String? _outputDir;
+
+  /// The output folder was picked, not taken from the input's.
+  bool _outputPicked = false;
   bool? _chdmanReady;
-  String? _activeTaskId;
   bool _deleteOriginals = false;
   bool _isoAsCd = false;
+  (String, String)? _error;
 
   @override
   void initState() {
@@ -41,13 +43,12 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
   }
 
   Future<void> _checkChdman() async {
-    final ready = await ChdService.isAvailable(ref.read(settingsProvider).chdmanPath);
+    final ready = await (widget.chdmanAvailable ?? ChdService.isAvailable)(ref.read(settingsProvider).chdmanPath);
     if (mounted) setState(() => _chdmanReady = ready);
   }
 
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  void _fail(String line, Object e) {
+    if (mounted) setState(() => _error = (line, '$e'));
   }
 
   Future<void> _pickChdman() async {
@@ -56,9 +57,10 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
       if (path == null || !mounted) return;
       await ref.read(settingsProvider.notifier).setChdmanPath(path);
       ChdService.debugReset();
+      setState(() => _error = null);
       await _checkChdman();
     } catch (e) {
-      _snack('$e');
+      _fail('Could not use that file', e);
     }
   }
 
@@ -73,267 +75,145 @@ class _ChdConvertScreenState extends ConsumerState<ChdConvertScreen> {
       if (path == null || !mounted) return;
       setState(() {
         _inputPath = path;
-        _outputDir ??= p.dirname(path);
+        if (!_outputPicked) _outputDir = p.dirname(path);
+        _error = null;
       });
     } catch (e) {
-      _snack('$e');
+      _fail('Could not open the file picker', e);
     }
   }
 
   Future<void> _pickOutput() async {
-    final dir = await pickDirectory(context, title: 'Select output folder');
-    if (dir == null || !mounted) return;
-    setState(() => _outputDir = dir);
+    try {
+      final dir = await pickDirectory(context, title: 'Select output folder', initialDir: _outputDir);
+      if (dir == null || !mounted) return;
+      setState(() {
+        _outputDir = dir;
+        _outputPicked = true;
+        _error = null;
+      });
+    } catch (e) {
+      _fail('Could not open the folder picker', e);
+    }
   }
 
   void _enqueue() {
-    if (_inputPath == null || _outputDir == null) return;
-    final name = p.basename(_inputPath!);
-    int size = 0;
-    try {
-      size = File(_inputPath!).lengthSync();
-    } catch (_) {}
-    final game = Game(title: name, url: 'https://manual/${Uri.encodeComponent(name)}', size: size, consoleId: 'manual');
-    final taskId = game.gameId;
-    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
-    ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.chdConversion, {
-      'taskId': taskId,
-      'inputPath': _inputPath!,
-      'outputDir': _outputDir!,
+    final input = _inputPath, out = _outputDir;
+    if (input == null || out == null) return;
+    enqueueToolTask(ref, TaskType.chdConversion, input, {
+      'inputPath': input,
+      'outputDir': out,
       'chdmanPath': ref.read(settingsProvider).chdmanPath,
       'deleteOriginals': _deleteOriginals,
       'isoAsCd': _isoAsCd,
     });
-    // Stay on the page and track progress here instead of popping to the queue.
-    setState(() => _activeTaskId = taskId);
+    // The tool stays: the status shows the queued disc, and the slot is free
+    // for the next one.
+    setState(() {
+      _inputPath = null;
+      if (!_outputPicked) _outputDir = null;
+    });
   }
 
-  void _reset() => setState(() {
-        _activeTaskId = null;
-        _inputPath = null;
-      });
+  static String _outName(QueuedTask t) {
+    final input = '${t.params['inputPath']}';
+    return '${p.basenameWithoutExtension(input)}${ChdService.planFor(input)?.outExt ?? '.chd'}';
+  }
+
+  StatusPanel _status() {
+    final error = _error;
+    if (_chdmanReady == false) {
+      return StatusPanel.missingRequirement(
+        title: 'chdman not found',
+        detail: 'CHD conversion is done by chdman, part of the MAME tools. Many handhelds (Batocera, Knulli) and desktops already have it.',
+        actionLabel: 'Locate chdman',
+        onAction: _pickChdman,
+      );
+    }
+    if (error != null) return StatusPanel.error(line: error.$1, details: error.$2);
+    return toolTaskStatus(
+      ref.watch(taskQueueProvider),
+      ref.watch(extractionProvider),
+      TaskType.chdConversion,
+      name: (t) => p.basename('${t.params['inputPath']}'),
+      saved: (t) => savedIn(_outName(t), '${t.params['outputDir']}'),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final ready = _chdmanReady;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('CHD Converter'),
-        actions: const [
-          InfoButton(
-            icon: Icons.compress,
-            title: 'CHD Converter',
-            text: 'Convert disc images to CHD to save space, or extract CHD back. Compresses '
-                '.cue/.gdi/.iso and extracts .chd. Needs the chdman tool (bundled with MAME).',
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Expanded(
-              child: _activeTaskId != null
-                  ? _progressUi(context)
-                  : ready == null
-                      ? const Center(child: HammerLoader())
-                      : (ready ? _convertUi(context) : _chdmanWarning(context)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _progressUi(BuildContext context) {
-    final theme = Theme.of(context);
-    final task = ref.watch(extractionProvider).getTaskState(_activeTaskId!);
-    final status = task?.status ?? ExtractionStatus.extracting;
-    final progress = task?.progress ?? 0.0;
-    final verb = _inputPath != null && ChdService.modeForInput(_inputPath!) == ChdMode.extract ? 'Extracting' : 'Compressing';
-
-    if (status == ExtractionStatus.failed) {
-      return _resultCard(theme, Icons.error_outline, theme.colorScheme.error, 'Conversion failed',
-          task?.error ?? 'Unknown error', 'Try again');
-    }
-    if (status == ExtractionStatus.completed) {
-      return _resultCard(theme, Icons.check_circle, StyleTokens.of(context).success, 'Done',
-          'Saved to $_outputDir', 'Convert another');
-    }
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$verb…', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 16),
-          LinearProgressIndicator(value: progress > 0 ? progress : null),
-          const SizedBox(height: 8),
-          Text(progress > 0 ? '${(progress * 100).round()}%' : 'Starting…',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 8),
-          Text('You can leave this screen — it keeps running in the task list.',
-              textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-        ],
-      ),
-    );
-  }
-
-  Widget _resultCard(ThemeData theme, IconData icon, Color color, String title, String detail, String action) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 40, color: color),
-          const SizedBox(height: 12),
-          Text(title, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(detail, textAlign: TextAlign.center, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 20),
-          FilledButton(onPressed: _reset, child: Text(action)),
-        ],
-      ),
-    );
-  }
-
-  Widget _convertUi(BuildContext context) {
-    final theme = Theme.of(context);
     final input = _inputPath;
     final plan = input == null ? null : ChdService.planFor(input, isoAsCd: _isoAsCd);
-    final canRun = input != null && _outputDir != null && plan != null;
-    final action = input == null
-        ? ''
-        : (ChdService.modeForInput(input) == ChdMode.extract ? 'Extract → .cue/.bin' : 'Compress → .chd');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fileRow(theme, Icons.insert_drive_file_outlined, 'Disc image',
-            input != null ? p.basename(input) : 'No file selected', _pickInput),
-        const SizedBox(height: 12),
-        _fileRow(theme, Icons.folder_outlined, 'Output folder', _outputDir ?? 'No folder selected', _pickOutput),
-        if (input != null && plan == null) ...[
-          const SizedBox(height: 12),
-          Text('Unsupported file type.', style: TextStyle(color: theme.colorScheme.error)),
-        ],
-        if (action.isNotEmpty && plan != null) ...[
-          const SizedBox(height: 12),
-          Text(action, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        ],
-        const SizedBox(height: 12),
-        CheckboxListTile(
-          value: _deleteOriginals,
-          onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
-          title: const Text('Delete original when done'),
-          subtitle: const Text('Only after a successful conversion. A .cue/.gdi takes its track files with it.'),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-        ),
-        ExpansionTile(
-          title: const Text('Advanced'),
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(bottom: 8),
-          expandedCrossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('.iso format', style: theme.textTheme.labelMedium),
-            const SizedBox(height: 8),
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('DVD (createdvd)')),
-                ButtonSegment(value: true, label: Text('CD (createcd)')),
-              ],
-              selected: {_isoAsCd},
-              onSelectionChanged: (s) => setState(() => _isoAsCd = s.first),
+    final extract = input != null && ChdService.modeForInput(input) == ChdMode.extract;
+    final ready = _chdmanReady == true;
+    final canRun = ready && input != null && _outputDir != null && plan != null;
+    final String summary;
+    if (_chdmanReady == null) {
+      summary = 'Looking for chdman';
+    } else if (!ready) {
+      summary = 'Needs chdman';
+    } else if (input == null) {
+      summary = 'Pick a disc image';
+    } else if (plan == null) {
+      summary = 'chdman cannot read this file';
+    } else {
+      summary = '${p.basename(input)} to ${extract ? '.cue/.bin' : '.chd'}';
+    }
+    return KitScaffold(
+      title: 'CHD Converter',
+      subtitle: 'Shrink disc images to .chd, or extract them',
+      icon: Icons.compress,
+      glyph: PixelIcons.chd,
+      area: AppArea.tools,
+      info: const InfoButton(
+        icon: Icons.compress,
+        title: 'CHD Converter',
+        text: 'Convert disc images to CHD to save space, or extract CHD back. Compresses '
+            '.cue/.gdi/.iso and extracts .chd. Needs the chdman tool (bundled with MAME).\n\n'
+            'Delete original only runs after a successful conversion; a .cue or .gdi takes its track files with it.\n\n'
+            'For .iso: DVD is the standard for PS2/PSP. Pick CD for AetherSX2/NetherSX2, which only boot CD CHDs '
+            '(current PCSX2 builds read both).',
+      ),
+      body: KitColumns(
+        endFirstWhenStacked: true,
+        start: [
+          const KitLabel('Input'),
+          KitPanel(children: [
+            Slot(label: 'Disc image', path: input, emptyText: 'Choose a .cue, .gdi, .iso or .chd', onPick: _pickInput, autofocus: true),
+            Slot(label: 'Save to', folder: true, path: _outputDir, emptyText: 'Same folder as the image', onPick: _pickOutput),
+          ]),
+          const KitLabel('Options'),
+          OptionList(children: [
+            OptionToggle(
+              title: 'Delete original',
+              subtitle: 'Only after it converts, with the .cue tracks',
+              value: _deleteOriginals,
+              onChanged: (v) => setState(() => _deleteOriginals = v),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'DVD is the standard for PS2/PSP. Pick CD for AetherSX2/NetherSX2, which only boot CD CHDs '
-              '(current PCSX2 builds read both).',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: canRun ? _enqueue : null,
-            icon: const Icon(Icons.compress, size: 18),
-            label: const Text('Add to task list'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _chdmanWarning(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.build_circle_outlined, size: 40, color: scheme.primary),
-                        const SizedBox(height: 12),
-                        Text('chdman required', style: theme.textTheme.titleMedium),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'CHD conversion is done by chdman, part of the MAME tools. Many handhelds '
-                    '(Batocera, Knulli) and desktops already have it. If it is not found '
-                    'automatically, point the app at a chdman binary.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: FilledButton.icon(
-                      onPressed: _pickChdman,
-                      icon: const Icon(Icons.folder_open, size: 18),
-                      label: const Text('Select chdman binary'),
-                    ),
-                  ),
-                ],
+            OptionExpander(subtitle: '.iso as DVD or CD', children: [
+              OptionChoice<bool>(
+                title: 'DVD',
+                subtitle: 'The standard for PS2 and PSP',
+                value: false,
+                groupValue: _isoAsCd,
+                onSelected: (v) => setState(() => _isoAsCd = v),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _fileRow(ThemeData theme, IconData icon, String label, String value, VoidCallback? onPick) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                Text(value, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(onPressed: onPick, child: const Text('Choose')),
+              OptionChoice<bool>(
+                title: 'CD',
+                subtitle: 'For AetherSX2 and NetherSX2',
+                value: true,
+                groupValue: _isoAsCd,
+                onSelected: (v) => setState(() => _isoAsCd = v),
+              ),
+            ]),
+          ]),
         ],
+        end: [_status()],
+      ),
+      actionBar: ActionBar(
+        primary: KitAction(extract ? 'Extract to CUE/BIN' : 'Compress to CHD', canRun ? _enqueue : null, icon: extract ? Icons.unarchive_outlined : Icons.compress),
+        hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+        summary: summary,
       ),
     );
   }

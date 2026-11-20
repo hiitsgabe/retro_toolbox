@@ -12,6 +12,7 @@ import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/cia_convert_screen.dart';
 import 'package:retro_toolbox/screens/nsz_decompress_screen.dart';
 import 'package:retro_toolbox/screens/rar_decompress_screen.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// The native picker, answering every file pick with [path].
@@ -55,8 +56,8 @@ void main() {
   });
   tearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(pathProvider, null));
 
-  /// Opens [screen] over a home route (the tools pop back to it), with [picked]
-  /// as the file every Choose returns.
+  /// Opens [screen] over a home route, with [picked]
+  /// as the file every file pick returns.
   Future<_FakeQueue> open(WidgetTester t, Widget screen, String picked) async {
     FilePicker.platform = _Picker(picked);
     final queue = _FakeQueue();
@@ -67,21 +68,23 @@ void main() {
     await t.pumpWidget(UncontrolledProviderScope(container: c, child: MaterialApp(navigatorKey: nav, home: const Text('home'))));
     nav.currentState!.push(MaterialPageRoute<void>(builder: (_) => screen));
     await t.pumpAndSettle();
-    await t.tap(find.text('Choose').first);
+    // The empty file slot is the first one.
+    await t.tap(find.byType(Slot).first);
     await t.pumpAndSettle();
     return queue;
   }
 
-  Finder checkbox() => find.widgetWithText(CheckboxListTile, 'Delete original when done');
+  Finder toggle() => find.widgetWithText(OptionToggle, 'Delete original');
 
   Future<Map<String, dynamic>> enqueue(WidgetTester t, _FakeQueue queue, String button, {required bool tick}) async {
-    expect(t.widget<CheckboxListTile>(checkbox()).value, isFalse); // off by default
+    expect(t.widget<OptionToggle>(toggle()).value, isFalse); // off by default
     if (tick) {
-      await t.tap(checkbox());
+      await t.tap(toggle());
       await t.pump();
-      expect(t.widget<CheckboxListTile>(checkbox()).value, isTrue);
+      expect(t.widget<OptionToggle>(toggle()).value, isTrue);
     }
-    await t.tap(find.text(button));
+    // Classic's labels are in caps.
+    await t.tap(find.text(button.toUpperCase()));
     await t.pump();
     return queue.enqueued.single.$2;
   }
@@ -89,7 +92,7 @@ void main() {
   for (final tick in [true, false]) {
     testWidgets('NSZ Decompress sends deleteOriginals: $tick', (t) async {
       final queue = await open(t, const NszDecompressScreen(), '/roms/game.nsz');
-      final params = await enqueue(t, queue, 'Add to task list', tick: tick);
+      final params = await enqueue(t, queue, 'Unpack to NSP', tick: tick);
       expect(queue.enqueued.single.$1, TaskType.nszDecompression);
       expect(params['nszFilePath'], '/roms/game.nsz');
       expect(params['deleteOriginals'], tick);
@@ -105,7 +108,7 @@ void main() {
 
     testWidgets('3DS to CIA sends deleteOriginals: $tick', (t) async {
       final queue = await open(t, const CiaConvertScreen(), '/roms/game.3ds');
-      final params = await enqueue(t, queue, 'Add to task list', tick: tick);
+      final params = await enqueue(t, queue, 'Convert to CIA', tick: tick);
       expect(queue.enqueued.single.$1, TaskType.cia3dsConversion);
       expect(params['inputPath'], '/roms/game.3ds');
       expect(params['deleteOriginals'], tick);

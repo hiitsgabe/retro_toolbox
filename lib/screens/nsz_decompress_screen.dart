@@ -1,22 +1,22 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
-import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
-import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/services/key_files.dart';
 import 'package:retro_toolbox/services/pick.dart';
-import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
+import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
-/// Standalone NSZ→NSP decompression: pick a .nsz, an output folder, and run.
-/// Requires prod.keys — the UI blocks with a keys picker until one is set.
+/// Standalone NSZ to NSP decompression: pick a .nsz, an output folder, and
+/// run. Requires prod.keys: until one is set the status asks for it and Start
+/// is off; the form stays.
 class NszDecompressScreen extends ConsumerStatefulWidget {
   const NszDecompressScreen({super.key});
 
@@ -27,23 +27,20 @@ class NszDecompressScreen extends ConsumerStatefulWidget {
 class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
   String? _nszPath;
   String? _outputDir;
-  String? _result;
-  bool _failed = false;
+  bool _outputPicked = false;
   bool _deleteOriginals = false;
+  (String, String)? _error;
 
-  void _showPickError(Object e) {
-    if (!mounted) return;
-    setState(() {
-      _failed = true;
-      _result = '$e';
-    });
+  void _fail(String line, Object e) {
+    if (mounted) setState(() => _error = (line, '$e'));
   }
 
   Future<void> _pickKeys() async {
     try {
       await chooseKeyFile(context, ref, KeyFile.switchKeys);
+      if (mounted) setState(() => _error = null);
     } catch (e) {
-      _showPickError(e);
+      _fail('Could not use that file', e);
     }
   }
 
@@ -60,228 +57,120 @@ class _NszDecompressScreenState extends ConsumerState<NszDecompressScreen> {
         _nszPath = path;
         // Decompressing next to the source is almost always what's wanted, and
         // it saves a second pick.
-        _outputDir ??= p.dirname(path);
-        _result = null;
-        _failed = false;
+        if (!_outputPicked) _outputDir = p.dirname(path);
+        _error = null;
       });
     } catch (e) {
-      _showPickError(e);
+      _fail('Could not open the file picker', e);
     }
   }
 
   Future<void> _pickOutput() async {
     try {
-      final dir = await pickDirectory(context, title: 'Select output folder');
+      final dir = await pickDirectory(context, title: 'Select output folder', initialDir: _outputDir);
       if (dir == null || !mounted) return;
       setState(() {
         _outputDir = dir;
-        _result = null;
-        _failed = false;
+        _outputPicked = true;
+        _error = null;
       });
     } catch (e) {
-      _showPickError(e);
+      _fail('Could not open the folder picker', e);
     }
   }
 
-  /// Hand the decompression to the task queue so it runs in the background and
-  /// shows in the task list — the user can leave this screen and keep browsing.
+  /// Hands the decompression to the task queue, so it runs in the background
+  /// and shows in the task list. The tool stays: the status shows the queued
+  /// file, and the slot is free for the next one.
   void _enqueueDecompress() {
     final keysPath = ref.read(settingsProvider).nszKeysPath;
-    if (_nszPath == null || _outputDir == null || keysPath == null) return;
-
-    // Register a transient game so the task shows in the task manager. The
-    // gameId (not the raw path) is the task key, and nszFilePath carries the
-    // real path, so the two never disagree.
-    final name = p.basename(_nszPath!);
-    int size = 0;
-    try {
-      size = File(_nszPath!).lengthSync();
-    } catch (_) {}
-    final game = Game(title: name, url: 'https://manual/${Uri.encodeComponent(name)}', size: size, consoleId: 'manual');
-    final taskId = game.gameId;
-    ref.read(gameStateManagerProvider.notifier).registerTransientGame(game);
-
-    ref.read(taskQueueProvider.notifier).enqueue(taskId, TaskType.nszDecompression, {
-      'taskId': taskId,
-      'nszFilePath': _nszPath!,
-      'outputDir': _outputDir!,
+    final nsz = _nszPath, out = _outputDir;
+    if (nsz == null || out == null || keysPath == null) return;
+    // The gameId (not the raw path) is the task key, and nszFilePath carries
+    // the real path, so the two never disagree.
+    enqueueToolTask(ref, TaskType.nszDecompression, nsz, {
+      'nszFilePath': nsz,
+      'outputDir': out,
       'keysPath': keysPath,
       'deleteOriginals': _deleteOriginals,
     });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Decompression added to the task list')),
+    setState(() {
+      _nszPath = null;
+      if (!_outputPicked) _outputDir = null;
+    });
+  }
+
+  StatusPanel _status(bool hasKeys) {
+    final error = _error;
+    if (!hasKeys) {
+      return StatusPanel.missingRequirement(
+        title: 'prod.keys needed',
+        detail: 'An .nsz is a compressed and encrypted game file. To unpack it, the app needs the encryption keys '
+            '(a prod.keys file, sometimes alongside title.keys) dumped from a modded console.',
+        actionLabel: 'Locate prod.keys',
+        onAction: _pickKeys,
+        linkLabel: 'Open Settings > Keys',
+        onLink: () => SettingsScreen.open(context, section: SettingsSection.keys),
+      );
+    }
+    if (error != null) return StatusPanel.error(line: error.$1, details: error.$2);
+    return toolTaskStatus(
+      ref.watch(taskQueueProvider),
+      ref.watch(extractionProvider),
+      TaskType.nszDecompression,
+      name: (t) => p.basename('${t.params['nszFilePath']}'),
+      saved: (t) => savedIn('${p.basenameWithoutExtension('${t.params['nszFilePath']}')}.nsp', '${t.params['outputDir']}'),
+      failed: 'Could not unpack',
     );
-    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final keysPath = ref.watch(settingsProvider).nszKeysPath;
     final hasKeys = keysPath != null && keysPath.isNotEmpty;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('NSZ Decompress'),
-        actions: const [
-          InfoButton(
-            icon: Icons.unarchive_rounded,
-            title: 'NSZ Decompress',
-            text: 'Converts compressed .nsz files back into their original installable form. Pick a file and an output folder, then run. Requires your prod.keys.',
-          ),
-        ],
+    final nsz = _nszPath;
+    final canRun = hasKeys && nsz != null && _outputDir != null;
+    return KitScaffold(
+      title: 'NSZ Decompress',
+      subtitle: 'Unpack .nsz back to installable .nsp',
+      icon: Icons.unarchive,
+      glyph: PixelIcons.nsz,
+      area: AppArea.tools,
+      info: const InfoButton(
+        icon: Icons.unarchive_rounded,
+        title: 'NSZ Decompress',
+        text: 'Converts compressed .nsz files back into their original installable form. Pick a file and an output folder, then run. Requires your prod.keys.\n\n'
+            'Only use keys and games from a console you personally own. This tool is for managing your own '
+            'legally-owned backups; we do not support or condone piracy.',
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Expanded(child: hasKeys ? _decompressUi(context) : _keysWarning(context)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _keysWarning(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.vpn_key_rounded, size: 40, color: scheme.primary),
-                        const SizedBox(height: 12),
-                        Text('prod.keys required', style: theme.textTheme.titleMedium),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'An .nsz is a compressed and encrypted game file. To unpack it, '
-                    'the app needs the encryption keys (a prod.keys file, sometimes alongside '
-                    'title.keys) dumped from a modded console.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: scheme.errorContainer.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: scheme.error.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.shield_outlined, size: 20, color: scheme.error),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Only use keys and games from a console you personally own. This tool is '
-                            'for managing your own legally-owned backups; we do not support or '
-                            'condone piracy.',
-                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.center, children: [
-                      FilledButton.icon(onPressed: _pickKeys, icon: const Icon(Icons.folder_open, size: 18), label: const Text('Choose file')),
-                      OutlinedButton(
-                        onPressed: () => SettingsScreen.open(context, section: SettingsSection.keys),
-                        child: const Text('Open Settings > Keys'),
-                      ),
-                    ]),
-                  ),
-                ],
-              ),
+      body: KitColumns(
+        endFirstWhenStacked: true,
+        start: [
+          const KitLabel('Input'),
+          KitPanel(children: [
+            Slot(label: 'NSZ file', path: nsz, emptyText: 'Choose an .nsz', onPick: _pickNsz, autofocus: true),
+            Slot(label: 'Save to', folder: true, path: _outputDir, emptyText: 'Same folder as the file', onPick: _pickOutput),
+          ]),
+          const KitLabel('Options'),
+          OptionList(children: [
+            OptionToggle(
+              title: 'Delete original',
+              subtitle: 'Only after it unpacks',
+              value: _deleteOriginals,
+              onChanged: (v) => setState(() => _deleteOriginals = v),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _decompressUi(BuildContext context) {
-    final theme = Theme.of(context);
-    final canRun = _nszPath != null && _outputDir != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _fileRow(context, Icons.insert_drive_file_outlined, 'NSZ file',
-            _nszPath != null ? p.basename(_nszPath!) : 'No file selected', _pickNsz),
-        const SizedBox(height: 12),
-        _fileRow(context, Icons.folder_outlined, 'Output folder',
-            _outputDir ?? 'No folder selected', _pickOutput),
-        const SizedBox(height: 12),
-        CheckboxListTile(
-          value: _deleteOriginals,
-          onChanged: (v) => setState(() => _deleteOriginals = v ?? false),
-          title: const Text('Delete original when done'),
-          subtitle: const Text('Only after a successful decompress.'),
-          controlAffinity: ListTileControlAffinity.leading,
-          contentPadding: EdgeInsets.zero,
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: canRun ? _enqueueDecompress : null,
-            icon: const Icon(Icons.compress, size: 18),
-            label: const Text('Add to task list'),
-          ),
-        ),
-        if (_result != null) ...[
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(_failed ? Icons.error_outline : Icons.check_circle,
-                  color: _failed ? theme.colorScheme.error : StyleTokens.of(context).success, size: 18),
-              const SizedBox(width: 8),
-              Expanded(child: Text(_result!, style: TextStyle(color: _failed ? theme.colorScheme.error : null))),
-            ],
-          ),
+          ]),
         ],
-      ],
-    );
-  }
-
-  Widget _fileRow(BuildContext context, IconData icon, String label, String value, VoidCallback? onPick) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
+        end: [_status(hasKeys)],
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                Text(value, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(onPressed: onPick, child: const Text('Choose')),
-        ],
+      actionBar: ActionBar(
+        primary: KitAction('Unpack to NSP', canRun ? _enqueueDecompress : null, icon: Icons.unarchive_outlined),
+        hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+        summary: !hasKeys
+            ? 'Needs prod.keys'
+            : nsz == null
+                ? 'Pick an .nsz'
+                : '${p.basename(nsz)} to .nsp',
       ),
     );
   }

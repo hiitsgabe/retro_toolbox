@@ -17,3 +17,4 @@ export 'slot.dart';
 export 'status_panel.dart';
 export 'steps.dart';
 export 'wizard_shell.dart';
+export 'tool_tasks.dart';
