@@ -20,6 +20,8 @@ class WizardShell extends StatelessWidget {
     this.onBack,
     this.nextLabel = 'Next',
     this.backLabel = 'Back',
+    this.leaveLabel,
+    this.backEnabled = true,
     this.summary,
     this.hints = const [],
     this.icon,
@@ -44,6 +46,14 @@ class WizardShell extends StatelessWidget {
   final VoidCallback? onBack;
   final String nextLabel;
   final String backLabel;
+
+  /// With no [onBack]: a button that leaves the wizard ("Cancel", "Not now"),
+  /// on B too. A desktop has no back key, so the first step needs one.
+  final String? leaveLabel;
+
+  /// False while work runs: Back and the leave button show disabled, and B
+  /// neither steps back nor leaves.
+  final bool backEnabled;
   final String? summary;
   final List<KitHint> hints;
   final IconData? icon;
@@ -57,10 +67,19 @@ class WizardShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final back = onBack;
+    final leave = leaveLabel;
+    final KitAction? secondary;
+    if (back != null) {
+      secondary = KitAction(backLabel, backEnabled ? back : null, button: PadButton.b);
+    } else if (leave != null) {
+      secondary = KitAction(leave, backEnabled ? () => Navigator.of(context).maybePop() : null, button: PadButton.b);
+    } else {
+      secondary = null;
+    }
     return PopScope(
-      canPop: back == null,
+      canPop: back == null && backEnabled,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) back?.call();
+        if (!didPop && backEnabled) back?.call();
       },
       child: KitScaffold(
         title: name,
@@ -74,7 +93,7 @@ class WizardShell extends StatelessWidget {
         body: body,
         actionBar: ActionBar(
           primary: KitAction(nextLabel, onNext),
-          secondary: back == null ? null : KitAction(backLabel, back, button: PadButton.b),
+          secondary: secondary,
           hints: hints,
           summary: summary,
         ),

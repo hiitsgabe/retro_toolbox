@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
@@ -498,7 +499,7 @@ void main() {
     await pump(t, const SaveSyncState(hubKind: HubKind.none, googleAvailable: true, access: SyncAccess.shizuku));
     await t.pumpAndSettle();
     expect(find.byType(SaveSyncSetupScreen), findsOneWidget);
-    expect(find.text('Save Sync'), findsWidgets);
+    expect(find.text('Step 1 of 2 · Where'), findsOneWidget);
   });
 
   // Nothing on this device can opt out of a hub app, so ticks would promise
@@ -526,12 +527,13 @@ void main() {
     ));
     await t.tap(find.text('go'));
     await t.pumpAndSettle();
-    expect(find.text('Will apply here (1)'), findsOneWidget);
+    expect(find.text('WILL APPLY HERE (1)'), findsOneWidget);
     expect(find.text(stardew.name), findsOneWidget);
-    expect(find.text('Not on this device (1)'), findsOneWidget);
+    expect(find.text('NOT ON THIS DEVICE (1)'), findsOneWidget);
     expect(find.byType(Checkbox), findsNothing);
     expect(find.textContaining('Adopt'), findsNothing);
-    await t.tap(find.widgetWithText(FilledButton, 'Open Save Sync'));
+    expect(find.text('Step 2 of 2 · Apps'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'OPEN SAVE SYNC'));
     await t.pumpAndSettle();
     expect(popped, isTrue);
   });
@@ -549,16 +551,85 @@ void main() {
         }),
       ),
     ));
-    await t.tap(find.text('Use a folder'));
+    await t.tap(find.widgetWithText(FilledButton, 'USE A FOLDER'));
     await t.pumpAndSettle();
     expect(asked, [fake.defaultHubFolder]);
     expect(fake.calls, isEmpty);
     expect(find.text('Where should saves go?'), findsOneWidget);
 
     answer = '/storage/emulated/0/Handheld Saves';
-    await t.tap(find.text('Use a folder'));
+    await t.tap(find.widgetWithText(FilledButton, 'USE A FOLDER'));
     await t.pumpAndSettle();
     expect(fake.calls, ['folder /storage/emulated/0/Handheld Saves']);
+  });
+
+  // One question, one choice list; the bar's button says what the choice
+  // does, in the words the website quotes.
+  testWidgets('Where is one choice, Drive first when the build has Google; Start does the chosen one', (t) async {
+    final fake = FakeNotifier(const SaveSyncState(hubKind: HubKind.none, googleAvailable: true));
+    final asked = <String>[];
+    final nav = GlobalKey<NavigatorState>();
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        navigatorKey: nav,
+        builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
+        home: SaveSyncSetupScreen(pickFolder: (_, initialDir) async {
+          asked.add(initialDir);
+          return null;
+        }),
+      ),
+    ));
+    await t.pump();
+    expect(find.text('Step 1 of 2 · Where'), findsOneWidget);
+    expect(t.widget<KitRow>(find.widgetWithText(KitRow, 'Google Drive')).selected, isTrue);
+    expect(primary('Sign in with Google'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pump();
+    expect(fake.calls, ['google']);
+
+    await t.tap(find.text('A folder'));
+    await t.pump();
+    expect(t.widget<KitRow>(find.widgetWithText(KitRow, 'A folder')).selected, isTrue);
+    expect(primary('Use a folder'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pumpAndSettle();
+    expect(asked, [fake.defaultHubFolder]);
+  });
+
+  testWidgets('Not now puts the first question off; there is no way back from Apps but out', (t) async {
+    final fake = FakeNotifier(const SaveSyncState(hubKind: HubKind.none));
+    Object? popped = 'open';
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
+      child: MaterialApp(
+        home: Builder(
+          builder: (c) => TextButton(
+            onPressed: () async => popped = await Navigator.of(c).push(MaterialPageRoute<bool>(builder: (_) => const SaveSyncSetupScreen())),
+            child: const Text('go'),
+          ),
+        ),
+      ),
+    ));
+    await t.tap(find.text('go'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(OutlinedButton, 'NOT NOW'));
+    await t.pumpAndSettle();
+    expect(popped, isNull);
+    expect(find.text('go'), findsOneWidget);
+  });
+
+  testWidgets('Needs a look says why each recipe was not loaded', (t) async {
+    final fake = FakeNotifier(SaveSyncState(
+      hubKind: HubKind.folder,
+      games: [GameStatus(stardew, 'bundled', const Bound(binding))],
+      recipeProblems: const {'odd.json': 'unknown key "rooot"'},
+    ));
+    await t.pumpWidget(ProviderScope(overrides: [saveSyncProvider.overrideWith((ref) => fake)], child: const MaterialApp(home: SaveSyncSetupScreen())));
+    await t.pump();
+    expect(find.text('NEEDS A LOOK (1)'), findsOneWidget);
+    expect(find.text('unknown key "rooot"'), findsOneWidget);
+    expect(find.text('No recipe for this one yet'), findsNothing);
   });
 
   // Plain tests, not testWidgets: disk IO hangs under the widget binding's fake clock.
@@ -613,8 +684,10 @@ void main() {
   testWidgets('a build without Google offers only the folder', (t) async {
     await pump(t, const SaveSyncState(hubKind: HubKind.none));
     await t.pumpAndSettle();
-    expect(find.text('Use a folder'), findsOneWidget);
-    expect(find.textContaining('Sign in with Google'), findsNothing);
+    expect(find.text('A folder'), findsOneWidget);
+    expect(find.text('Google Drive'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'USE A FOLDER'), findsOneWidget);
+    expect(find.textContaining(RegExp('Sign in with Google', caseSensitive: false)), findsNothing);
   });
 
   // Where saves go is a setup decision: the header names it, the (i) changes it.
@@ -677,8 +750,10 @@ void main() {
     // Not pumpAndSettle: the progress bar never settles while signing in.
     await t.pump();
     await t.pump();
-    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Sign in with Google')).onPressed, isNull);
-    expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Use a folder')).onPressed, isNull);
+    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'SIGN IN WITH GOOGLE')).onPressed, isNull);
+    // The other choice waits too: picking it would start a second sign-up.
+    expect(t.widget<KitRow>(find.widgetWithText(KitRow, 'A folder')).onTap, isNull);
+    expect(find.text('Signing in to Google'), findsOneWidget);
     // One on the setup screen, one on the list behind it.
     expect(find.byType(LinearProgressIndicator), findsWidgets);
   });

@@ -69,12 +69,12 @@ void main() {
     expect(find.text('National teams'), findsOneWidget);
     expect(find.text('0 of 2 leagues'), findsOneWidget);
     expect(find.textContaining('holds up to 2 leagues'), findsOneWidget);
-    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Next')).onPressed, isNull);
+    expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNull);
 
     await t.tap(box('Liga MX · Mexico'));
     await t.pumpAndSettle();
     expect(find.text('Liga MX → Group 1 (England, 20 teams)'), findsOneWidget);
-    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Next')).onPressed, isNotNull);
+    expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNotNull);
 
     await t.tap(box('Brasileirão · Brazil'));
     await t.pumpAndSettle();
@@ -110,14 +110,16 @@ void main() {
     expect(find.textContaining(RegExp(r'\d+ of \d+ leagues')), findsNothing);
     expect(find.text('National teams'), findsNothing);
     expect(find.text('Select a league'), findsOneWidget);
-    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Next')).onPressed, isNull);
+    expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNull);
+    // The fetch is the step's action, and the button says so.
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text('LOAD ROSTERS')), findsOneWidget);
 
     await t.tap(find.text('Select a league'));
     await t.pumpAndSettle();
     await t.tap(find.text('Liga MX · Mexico').last);
     await t.pumpAndSettle();
     expect(find.text('Liga MX · Mexico'), findsOneWidget);
-    expect(t.widget<FilledButton>(find.widgetWithText(FilledButton, 'Next')).onPressed, isNotNull);
+    expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNotNull);
   });
 
   testWidgets('WE2002 Teams step: one list in slot order, every team with a slot', (t) async {

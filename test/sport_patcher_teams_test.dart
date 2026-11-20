@@ -291,7 +291,8 @@ void main() {
           playersPatched: 610,
           notes: ["Anaheim Ducks skipped: 1 goalie(s) in the list, NHL 94 needs 2; the slot keeps the cartridge's team"],
         ));
-    expect(find.text('Teams: 27   Players: 610'), findsOneWidget);
+    expect(find.text('Patched 27 teams, 610 players'), findsOneWidget);
+    expect(find.text('NHL 2026 - NHL 94.sfc'), findsOneWidget);
     expect(find.textContaining('Anaheim Ducks skipped'), findsOneWidget);
   });
 }

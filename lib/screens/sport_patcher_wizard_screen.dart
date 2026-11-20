@@ -31,10 +31,14 @@ import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 import 'package:retro_toolbox/services/formation_cache_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
-/// One patch flow per game, in the app's own wizard idiom: step dots up top,
-/// one focused step at a time, Back/Next footer. The ROM comes first so the
-/// team editor can show the game's own kit designs.
+/// One patch flow per game on the kit's wizard frame: the game and "Step n of
+/// m" up top, one step at a time, Back on B and the step's action on Start in
+/// the bar. The ROM comes first so the team editor can show the game's own
+/// kit designs.
 ///
 /// After fetch the rosters become a full editor (reorder teams, add/delete
 /// teams, edit each squad). Team order is the ROM slot order, so it replaces a
@@ -201,6 +205,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   @override
   void dispose() {
+    _stepFocus.dispose();
     _pickFocus.dispose();
     _teamFocus.dispose();
     _teamUpFocus.dispose();
@@ -304,13 +309,8 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   PatcherInfo get info => widget.info;
   _Step get _step => _steps[_index];
 
-  /// Short screens (small handhelds): the full header, paddings and footer
-  /// left almost no room for the step itself.
+  /// Short screens (small handhelds): denser team rows.
   bool get _compact => MediaQuery.sizeOf(context).height < 640;
-
-  /// Very short screens (a 16:9 handheld in landscape is ~360dp tall): the
-  /// Back/Next buttons move into the top bar and step blurbs are dropped.
-  bool get _short => MediaQuery.sizeOf(context).height < 480;
 
   /// The rosters step has something to choose only for soccer (league), a
   /// multi-source game, or a source that exposes a season. Otherwise there's
@@ -536,7 +536,10 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         _docs = docs;
         // The art and the patch label name the season actually fetched.
         if (_isSoccer) _season = docs.first.season ?? _season;
-        if (_step == _Step.rosters) _index++;
+        if (_step == _Step.rosters) {
+          _index++;
+          _focusStep();
+        }
       });
       _loadSlotInfo();
     } catch (e) {
@@ -812,123 +815,87 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     }
     setState(() => _index++);
     _enterStep();
+    _focusStep();
+  }
+
+  /// B and Back: drop an armed swap, else go back a step. Never while busy.
+  void _back() {
+    if (_busy) return;
+    if (_teamSwapFrom != null) {
+      final from = _teamSwapFrom!;
+      setState(() => _teamSwapFrom = null);
+      _focusTeam(_teamSwapDoc, from);
+    } else if (_index > 0) {
+      setState(() => _index--);
+      _focusStep();
+    }
+  }
+
+  /// Holds the step's body, so a new step can take focus from the button
+  /// that moved to it.
+  final _stepFocus = FocusNode(debugLabel: 'patcher-step');
+
+  /// With a pad, onto the new step's first control: focus left on the bar
+  /// would make the d-pad hunt for it. Not a text field: on a pad that opens
+  /// the keyboard before the user has chosen to type.
+  void _focusStep() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+      bool field(FocusNode n) => n.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+      _stepFocus.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal && !field(n)).firstOrNull?.requestFocus();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = _primary;
-    // B steps back; on the first step (nothing to lose yet) it leaves. Never
-    // while busy.
-    return PopScope(
-      canPop: _index == 0 && !_busy && _teamSwapFrom == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop || _busy) return;
-        if (_teamSwapFrom != null) {
-          final from = _teamSwapFrom!;
-          setState(() => _teamSwapFrom = null);
-          _focusTeam(_teamSwapDoc, from);
-        } else if (_index > 0) {
-          setState(() => _index--);
-        }
-      },
-      child: Actions(
-        actions: {
-          if (primary != null) PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
-        },
-        child: _scaffold(),
-      ),
-    );
-  }
-
-  Widget _scaffold() {
     final theme = Theme.of(context);
-    final accent = sportBrandColor(info.sport);
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _header(theme, accent),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: AbsorbPointer(absorbing: _busy, child: _body(theme)),
-                ),
-              ),
-            ),
-            if (!_short) _footer(theme),
-          ],
+    final primary = _primaryAction;
+    return WizardShell(
+      name: gameName(info),
+      step: _index,
+      count: _steps.length,
+      stepName: _label(_step),
+      icon: sportIcon(info.sport),
+      glyph: sportPixelIcon(info.sport),
+      area: AppArea.sports,
+      info: InfoButton(
+        icon: sportIcon(info.sport),
+        title: gameName(info),
+        text: "Pick your ROM, load this season's rosters, edit the teams, then patch. The patch writes a new copy and leaves your ROM as it is, "
+            'but keep a backup of it anyway. Use your own dump of the original game.',
+      ),
+      body: Focus(
+        focusNode: _stepFocus,
+        skipTraversal: true,
+        canRequestFocus: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: AbsorbPointer(absorbing: _busy, child: _body(theme)),
+          ),
         ),
       ),
+      onNext: primary.onPressed,
+      nextLabel: primary.label,
+      // B steps back; on the first step (nothing to lose yet) it leaves.
+      // Never while busy.
+      onBack: _index > 0 || _busy || _teamSwapFrom != null ? _back : null,
+      backLabel: _teamSwapFrom != null ? 'Cancel swap' : 'Back',
+      backEnabled: !_busy,
+      leaveLabel: 'Cancel',
+      // The league, where the step itself does not name it.
+      summary: (_step == _Step.look || _step == _Step.patch) && _docs.isNotEmpty && !_busy ? _leagueLabel : null,
     );
   }
 
-  Widget _header(ThemeData theme, Color accent) {
-    if (_compact) {
-      // One row: back, game, and the step as text instead of the dot rail.
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
-        child: Row(
-          children: [
-            IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.maybePop(context)),
-            Icon(sportIcon(info.sport), color: accent, size: 20),
-            const SizedBox(width: 8),
-            Expanded(child: Text(gameName(info), style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
-            Text('${_index + 1}/${_steps.length} · ${_label(_step)}', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
-            if (_short) ...[const SizedBox(width: 12), ..._navButtons()],
-          ],
-        ),
-      );
-    }
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.maybePop(context)),
-              Icon(sportIcon(info.sport), color: accent),
-              const SizedBox(width: 10),
-              Expanded(child: Text(gameName(info), style: theme.textTheme.titleLarge)),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              for (var i = 0; i < _steps.length; i++) ...[
-                _stepDot(theme, i),
-                if (i < _steps.length - 1)
-                  Expanded(
-                    child: Container(
-                      height: 2,
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      color: i < _index ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepDot(ThemeData theme, int i) {
-    final active = i == _index, done = i < _index;
-    final color = done || active ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest;
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: color,
-          child: done
-              ? const Icon(Icons.check, size: 18, color: Colors.white)
-              : Text('${i + 1}', style: TextStyle(color: active ? Colors.white : theme.colorScheme.onSurfaceVariant)),
-        ),
-        const SizedBox(height: 6),
-        Text(_label(_steps[i]), style: theme.textTheme.labelSmall),
-      ],
-    );
+  /// The bar's primary, what Start does: Next, Load rosters (the fetch is
+  /// the Rosters step's forward action), Patch ROM, then Close.
+  KitAction get _primaryAction {
+    final run = _primary;
+    if (_step == _Step.patch) return KitAction(_result != null ? 'Close' : 'Patch ROM', run);
+    if (_step == _Step.rosters && _docs.isEmpty) return KitAction('Load rosters', run);
+    return KitAction('Next', run);
   }
 
   static String _label(_Step s) => switch (s) {
@@ -939,26 +906,24 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         _Step.patch => 'Patch',
       };
 
-  Widget _sectionTitle(ThemeData theme, IconData icon, String title, String subtitle) => Column(
+  Widget _sectionTitle(ThemeData theme, IconData icon, String title, String subtitle) {
+    final t = KitType.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 2, bottom: 8),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Icon(icon, color: theme.colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(child: Text(title, style: theme.textTheme.titleMedium))
+            Icon(icon, size: 18, color: t.k.accent),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: t.row.copyWith(fontSize: t.size(15)), maxLines: 1, overflow: TextOverflow.ellipsis)),
           ]),
-          if (!_short) ...[
-            SizedBox(height: _compact ? 2 : 6),
-            Text(
-              subtitle,
-              maxLines: _compact ? 2 : null,
-              overflow: _compact ? TextOverflow.ellipsis : null,
-              style: (_compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-          SizedBox(height: _compact ? 8 : 16),
+          const SizedBox(height: 2),
+          Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.subtitle),
         ],
-      );
+      ),
+    );
+  }
 
   Widget _body(ThemeData theme) {
     final content = switch (_step) {
@@ -968,18 +933,12 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
       _Step.look => _lookStep(theme),
       _Step.patch => _patchStep(theme),
     };
-    return Padding(
-      padding: _compact ? const EdgeInsets.fromLTRB(16, 8, 16, 4) : const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: content),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            _statusRow(theme, Icons.error_outline, theme.colorScheme.error, _error!),
-          ],
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: content),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: kitGap), child: StatusPanel.error(line: _error!)),
+      ],
     );
   }
 
@@ -990,7 +949,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     if (_busy) return GameTriviaLoader(status: _status, seed: info.gameId.hashCode.abs());
     return ListView(
       children: [
-        _sectionTitle(theme, Icons.tune, 'Rosters', 'Pick your options, then Next downloads the league data.'),
+        _sectionTitle(theme, Icons.tune, 'Rosters', 'Pick your options, then Load rosters downloads the league data.'),
         _sourceAndSeason(theme),
         if (_isSoccer) info.multiLeague ? _leagueChecklist(theme) : _leaguePicker(theme),
         if (_isSoccer && info.supportsNationFill) _leftSlotsChoice(theme),
@@ -1634,28 +1593,19 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
           KeyedSubtree(key: const ValueKey('rom-lookup-skeleton'), child: _romLookupSkeleton(theme)),
           const SizedBox(height: 16),
         ],
-        Container(
+        Padding(
           key: const ValueKey('rom-note'),
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  romExpectation(info.gameId),
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ),
-            ],
-          ),
+          padding: const EdgeInsets.only(bottom: kitGap),
+          child: KitPanel(padding: const EdgeInsets.all(12), divided: false, children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.album_outlined, size: 18, color: KitType.of(context).muted),
+                const SizedBox(width: 10),
+                Expanded(child: Text(romExpectation(info.gameId), style: KitType.of(context).subtitle)),
+              ],
+            ),
+          ]),
         ),
         // A found card (on the device or in the library) is the way to go; the
         // file picker would just repeat it, so it collapses into a small link.
@@ -1674,26 +1624,16 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
             ),
           )
         else
-          Container(
-            key: const ValueKey('rom-file-row'),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
+          KitPanel(key: const ValueKey('rom-file-row'), children: [
+            Slot(
+              label: 'Game file',
+              value: _romPath == null ? null : p.basename(_romPath!),
+              emptyText: 'Choose the game file',
+              icon: Icons.sd_card_outlined,
+              focusNode: _pickFocus,
+              onPick: _pickRom,
             ),
-            child: Row(
-              children: [
-                const Icon(Icons.insert_drive_file_outlined, size: 20),
-                const SizedBox(width: 10),
-                Expanded(child: Text(_romPath == null ? 'No ROM selected' : p.basename(_romPath!), overflow: TextOverflow.ellipsis)),
-                OutlinedButton(
-                  focusNode: _pickFocus,
-                  onPressed: _pickRom,
-                  child: Text(_romPath != null ? 'Change' : 'Choose'),
-                ),
-              ],
-            ),
-          ),
+          ]),
       ],
     );
   }
@@ -2047,121 +1987,61 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
     if (_busy) {
       return GameTriviaLoader(status: _status, progress: _progress, seed: info.gameId.hashCode.abs() + 1);
     }
-    if (_result != null) {
+    final t = KitType.of(context);
+    final result = _result;
+    if (result != null) {
       return ListView(
         children: [
-          _sectionTitle(theme, Icons.check_circle, 'Done', 'The patched ROM has been written.'),
-          Card(
-            color: theme.colorScheme.primaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(p.basename(_result!.outputPath), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 6),
-                  Text('Teams: ${_result!.teamsPatched}   Players: ${_result!.playersPatched}'),
-                  for (final note in _result!.notes) ...[
-                    const SizedBox(height: 6),
-                    Text(note, style: theme.textTheme.bodySmall),
-                  ],
-                ],
-              ),
-            ),
-          ),
+          StatusPanel.done(summary: 'Patched ${result.teamsPatched} teams, ${result.playersPatched} players'),
+          const SizedBox(height: kitGap),
+          KitPanel(padding: const EdgeInsets.all(12), divided: false, children: [
+            Text('Saved as', style: t.subtitle),
+            Text(p.basename(result.outputPath), style: t.row),
+            const SizedBox(height: 2),
+            PathText(p.dirname(result.outputPath), style: t.subtitle),
+            for (final note in result.notes) ...[
+              const SizedBox(height: 6),
+              Text(note, style: t.body),
+            ],
+          ]),
         ],
       );
     }
     final outDir = _outputDir ?? _defaultOutputDir();
     return ListView(
       children: [
-        _sectionTitle(theme, Icons.build, 'Patch', 'Choose where to save, then Patch writes the edited rosters.'),
-        Text('Output folder', style: theme.textTheme.labelLarge),
-        const SizedBox(height: 4),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
+        _sectionTitle(theme, Icons.build, 'Patch', 'Choose where to save, then Patch ROM writes a patched copy there.'),
+        KitPanel(children: [
+          Slot(
+            label: 'Output folder',
+            path: outDir.isEmpty ? null : outDir,
+            emptyText: 'Choose a folder',
+            folder: true,
+            onPick: () async {
+              final dir = await pickDirectory(context, title: 'Select output folder');
+              if (dir != null && mounted) setState(() => _outputDir = dir);
+            },
           ),
-          child: Row(
-            children: [
-              const Icon(Icons.folder_outlined, size: 20),
-              const SizedBox(width: 10),
-              Expanded(child: Text(outDir.isEmpty ? 'No folder' : outDir, overflow: TextOverflow.ellipsis)),
-              OutlinedButton(
-                onPressed: () async {
-                  final dir = await pickDirectory(context, title: 'Select output folder');
-                  if (dir != null && mounted) setState(() => _outputDir = dir);
-                },
-                child: const Text('Change'),
-              ),
-            ],
-          ),
+          if (_language != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: Row(children: [
+                Expanded(child: Text('Game language', style: t.row)),
+                DropdownButton<String>(
+                  value: _language,
+                  underline: const SizedBox.shrink(),
+                  items: [for (final l in info.languages) DropdownMenuItem(value: l, child: Text(languageName(l)))],
+                  onChanged: (v) => setState(() => _language = v ?? _language),
+                ),
+              ]),
+            ),
+        ]),
+        const SizedBox(height: kitGap),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Text('Your ROM stays as it is; still, keep a backup of it.', style: t.subtitle),
         ),
-        if (_language != null) ...[
-          const SizedBox(height: 16),
-          Text('Game language', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 4),
-          DropdownButton<String>(
-            value: _language,
-            isExpanded: true,
-            items: [for (final l in info.languages) DropdownMenuItem(value: l, child: Text(languageName(l)))],
-            onChanged: (v) => setState(() => _language = v ?? _language),
-          ),
-        ],
       ],
-    );
-  }
-
-  Widget _statusRow(ThemeData theme, IconData icon, Color color, String text) => Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color))),
-        ],
-      );
-
-  /// Back (when there is a previous step) and the step's primary action.
-  List<Widget> _navButtons() {
-    final isPatch = _step == _Step.patch;
-    final dense = _short ? VisualDensity.compact : null;
-    return [
-      if (_index > 0)
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: dense),
-          onPressed: _busy ? null : () => setState(() => _index--),
-          child: const Text('Back'),
-        ),
-      if (_short) const SizedBox(width: 4) else const Spacer(),
-      if (isPatch && _result != null)
-        FilledButton.icon(
-          style: FilledButton.styleFrom(visualDensity: dense),
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.check),
-          label: const Text('Close'),
-        )
-      else if (isPatch)
-        FilledButton.icon(
-          style: FilledButton.styleFrom(visualDensity: dense),
-          onPressed: (_busy || _romPath == null) ? null : _patch,
-          icon: const Icon(Icons.build),
-          label: const Text('Patch ROM'),
-        )
-      else
-        FilledButton(
-          style: FilledButton.styleFrom(visualDensity: dense),
-          onPressed: (_canAdvance && !_busy) ? _next : null,
-          child: const Text('Next'),
-        ),
-    ];
-  }
-
-  Widget _footer(ThemeData theme) {
-    return Container(
-      padding: _compact ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4) : const EdgeInsets.all(16),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)))),
-      child: Row(children: _navButtons()),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 
 void main() {
   late GlobalKey<NavigatorState> key;
@@ -51,7 +52,7 @@ void main() {
 
   testWidgets('Start advances when the step can advance', (t) async {
     await pump(t);
-    expect(find.text('Next'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text('NEXT')), findsOneWidget);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     // Now on the Patch step: the step advanced past Teams.
@@ -87,5 +88,48 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
     expect(popped, isTrue);
+  });
+
+  Finder secondary(String label) => find.descendant(of: find.byKey(const ValueKey('kit-secondary')), matching: find.text(label));
+
+  testWidgets('the header names the game and the step; Back and the step action are in the bar, never in the header', (t) async {
+    await pump(t, step: 2);
+    expect(find.text('Step 3 of 4 · Teams'), findsOneWidget);
+    expect(find.byKey(const ValueKey('kit-back')), findsNothing);
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(secondary('BACK'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    await t.pumpAndSettle();
+    expect(find.text('Step 2 of 4 · Rosters'), findsOneWidget);
+  });
+
+  // A desktop has no back key: the first step still has a way out.
+  testWidgets('the first step offers Cancel, which leaves', (t) async {
+    await pump(t, step: 0);
+    expect(secondary('CANCEL'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    await t.pumpAndSettle();
+    expect(popped, isTrue);
+  });
+
+  testWidgets('an armed swap turns Back into Cancel swap', (t) async {
+    await pump(t, step: 2);
+    await t.tap(find.byIcon(Icons.swap_vert).first);
+    await t.pumpAndSettle();
+    expect(secondary('CANCEL SWAP'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    await t.pumpAndSettle();
+    expect(secondary('BACK'), findsOneWidget);
+    expect(find.text('Step 3 of 4 · Teams'), findsOneWidget);
+  });
+
+  testWidgets('the Patch step: Patch ROM in the bar, and with a pad the focus lands on the output folder', (t) async {
+    await pump(t, step: 2);
+    await t.sendKeyEvent(LogicalKeyboardKey.f5);
+    await t.pumpAndSettle();
+    expect(find.text('Step 4 of 4 · Patch'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text('PATCH ROM')), findsOneWidget);
+    final focused = FocusManager.instance.primaryFocus!.context!;
+    expect(focused.findAncestorWidgetOfExactType<Slot>()?.label, 'Output folder');
   });
 }

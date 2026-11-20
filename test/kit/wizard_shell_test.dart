@@ -62,4 +62,47 @@ void main() {
     expect(pressed, 0);
     expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNull);
   });
+
+  // A desktop has no back key: the first step still needs a button out.
+  testWidgets('leaveLabel on the first step: a button that leaves, and B leaves too', (t) async {
+    await pumpKit(t, pushed(WizardShell(name: 'Setup', step: 0, count: 3, stepName: 'Catalog', body: const SizedBox(), onNext: () {}, leaveLabel: 'Cancel')),
+        mode: InputMode.gamepad);
+    await t.pumpAndSettle();
+    final leave = find.byKey(const ValueKey('kit-secondary'));
+    expect(find.descendant(of: leave, matching: find.text('CANCEL')), findsOneWidget);
+    expect(find.descendant(of: leave, matching: find.text('B')), findsOneWidget);
+    await t.tap(leave);
+    await t.pumpAndSettle();
+    expect(find.text('first page'), findsOneWidget);
+  });
+
+  testWidgets('leaveLabel gives way to Back once there is a step to go back to', (t) async {
+    var back = 0;
+    await pumpKit(t, WizardShell(name: 'Setup', step: 1, count: 3, stepName: 'Downloads', body: const SizedBox(), onNext: () {}, onBack: () => back++, leaveLabel: 'Cancel'));
+    expect(find.text('CANCEL'), findsNothing);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    expect(back, 1);
+  });
+
+  // Work in flight: going back would leave it running behind a page that
+  // no longer shows it.
+  testWidgets('backEnabled false: Back is disabled and B neither steps back nor leaves', (t) async {
+    var back = 0;
+    await pumpKit(t, pushed(WizardShell(name: 'Setup', step: 1, count: 3, stepName: 'Downloads', body: const SizedBox(), onNext: null, onBack: () => back++, backEnabled: false)));
+    await t.pumpAndSettle();
+    expect(t.widget<OutlinedButton>(find.byKey(const ValueKey('kit-secondary'))).onPressed, isNull);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+    await t.pumpAndSettle();
+    expect(back, 0);
+    expect(find.text('first page'), findsNothing);
+  });
+
+  testWidgets('backEnabled false on a first step: B does not leave', (t) async {
+    await pumpKit(t, pushed(WizardShell(name: 'Setup', step: 0, count: 3, stepName: 'Catalog', body: const SizedBox(), onNext: null, leaveLabel: 'Cancel', backEnabled: false)));
+    await t.pumpAndSettle();
+    expect(t.widget<OutlinedButton>(find.byKey(const ValueKey('kit-secondary'))).onPressed, isNull);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonB);
+    await t.pumpAndSettle();
+    expect(find.text('first page'), findsNothing);
+  });
 }

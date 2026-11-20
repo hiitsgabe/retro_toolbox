@@ -352,7 +352,7 @@ void main() {
       // and the expectation note, and has focus: A uses it at once.
       final use = t.getTopLeft(ft.find.text('Use this file')).dy;
       expect(use, lessThan(t.getTopLeft(ft.find.text('Pick a file instead')).dy));
-      expect(use, lessThan(t.getTopLeft(ft.find.byIcon(Icons.info_outline)).dy));
+      expect(use, lessThan(t.getTopLeft(ft.find.byKey(const ValueKey('rom-note'))).dy));
       expect(focused(t, 'Use this file'), isTrue);
 
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -392,7 +392,7 @@ void main() {
     testWidgets('a file found late takes no focus from the picker', (t) async {
       touch('Winning Eleven 2002 (Japan).bin');
       await pump(t);
-      Focus.of(t.element(ft.find.text('Choose'))).requestFocus();
+      Focus.of(t.element(ft.find.text('Choose the game file'))).requestFocus();
       await t.pump();
 
       await settleLookup(t);
@@ -405,14 +405,14 @@ void main() {
       // The library is on too, with no match: both lookups must end.
       await pump(t, catalog: [const Game(title: 'Gran Turismo (USA)', url: 'https://x/Gran Turismo (USA).zip', size: 1, consoleId: 'psx')]);
       expect(ft.find.byKey(skeleton), findsOneWidget);
-      Focus.of(t.element(ft.find.text('Choose'))).requestFocus();
+      Focus.of(t.element(ft.find.text('Choose the game file'))).requestFocus();
       await t.pump();
 
       await settleLookup(t);
       expect(ft.find.byKey(skeleton), findsNothing);
       expect(ft.find.byKey(const ValueKey('rom-local-card')), findsNothing);
       expect(ft.find.byKey(const ValueKey('rom-catalog-card')), findsNothing);
-      expect(focused(t, 'Choose'), isTrue);
+      expect(focused(t, 'Choose the game file'), isTrue);
     });
 
     testWidgets('a library match comes first, its download focused', (t) async {
@@ -440,7 +440,7 @@ void main() {
       await t.pumpAndSettle();
       // Off the ROM step at once: the rosters step is showing.
       expect(ft.find.text('Use downloaded file'), findsNothing);
-      expect(ft.find.text('Pick your options, then Next downloads the league data.'), findsOneWidget);
+      expect(ft.find.text('Pick your options, then Load rosters downloads the league data.'), findsOneWidget);
     });
 
     testWidgets('a download queued before shows as in progress, with no second Download', (t) async {

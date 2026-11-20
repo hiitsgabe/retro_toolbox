@@ -32,13 +32,15 @@ void main() {
     Handheld.current = true;
     await pumpSetup(t);
     expect(find.textContaining('paste'), findsNothing);
-    expect(find.textContaining('Import a JSON file or load one from a URL'), findsOneWidget);
+    expect(find.text('Paste JSON'), findsNothing);
+    expect(find.text('From a link'), findsOneWidget);
+    expect(find.text('From a file'), findsOneWidget);
   });
 
   testWidgets('setup wizard: other platforms still mention pasting', (t) async {
     Handheld.current = false;
     await pumpSetup(t);
-    expect(find.textContaining('paste it directly'), findsOneWidget);
+    expect(find.text('Paste JSON'), findsOneWidget);
   });
 
   Future<void> openAddTeam(WidgetTester t) async {

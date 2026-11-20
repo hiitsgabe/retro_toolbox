@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,12 +12,18 @@ import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
-import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
-import 'package:retro_toolbox/widgets/settings/accounts_setting.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
+import 'package:retro_toolbox/widgets/settings/ia_credentials_setting.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
-/// First-run onboarding: catalog source → download directory & defaults →
-/// optional Internet Archive connection and LaunchBox metadata.
+/// Where the console catalog comes from: the one in the app, or the user's.
+enum _Source { builtIn, link, file, paste }
+
+/// First-run onboarding: catalog source, download directory and defaults,
+/// then optional logins and LaunchBox metadata.
 class SetupWizardScreen extends ConsumerStatefulWidget {
   /// Start on this step. Lets tests and screenshots render later steps.
   @visibleForTesting
@@ -44,22 +51,20 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   late int _step = widget.initialStep;
   bool _busy = false;
-  bool _catalogReady = false;
-  bool _usingExample = false;
-  bool _changingCatalog = false;
-  String? _catalogSummary;
   String? _catalogError;
+  _Source _source = _Source.builtIn;
+
+  /// Where the catalog in use came from, when this screen loaded one; null:
+  /// the one that was there when it opened (the built-in one on a first run).
+  _Source? _loaded;
+  String? _loadedFile;
 
   /// Only a choice until Finish: the import is a 110 MB download.
   bool _wantLaunchbox = false;
 
-  /// Short screens (small handhelds): the header, paddings and footer left
-  /// little room for the step.
-  bool get _compact => MediaQuery.sizeOf(context).height < 640;
-
-  /// Very short screens (a 16:9 handheld in landscape is ~360dp tall): the
-  /// step buttons move into the top bar and step blurbs are dropped.
-  bool get _short => MediaQuery.sizeOf(context).height < 480;
+  /// Holds the step's body, so a new step can take focus from the button
+  /// that moved to it.
+  final _body = FocusNode(debugLabel: 'setup-step');
 
   @override
   void initState() {
@@ -72,12 +77,26 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   @override
   void dispose() {
+    _body.dispose();
     _urlController.dispose();
     _pasteController.dispose();
     super.dispose();
   }
 
-  Future<void> _installCatalog(Future<void> Function() action) async {
+  /// Moves to [step] and, with a pad, onto its first control: focus left on
+  /// the (i) or the bar would make the d-pad hunt for the question.
+  void _go(int step) {
+    setState(() => _step = step);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+      // Not a text field: on a pad that opens the keyboard before the user
+      // has chosen to type.
+      bool field(FocusNode n) => n.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+      _body.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal && !field(n)).firstOrNull?.requestFocus();
+    });
+  }
+
+  Future<void> _installCatalog(Future<void> Function() action, _Source? from) async {
     setState(() {
       _busy = true;
       _catalogError = null;
@@ -85,18 +104,9 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     try {
       await action();
       await ref.read(appStateProvider.notifier).reloadConsoles();
-      final count = ref.read(appStateProvider).consolesList.length;
-      setState(() {
-        _catalogReady = count > 0;
-        _usingExample = false;
-        _changingCatalog = false;
-        _catalogSummary = '$count console${count == 1 ? '' : 's'} loaded';
-      });
+      if (mounted) setState(() => _loaded = from);
     } catch (e) {
-      setState(() {
-        _catalogReady = false;
-        _catalogError = '$e';
-      });
+      if (mounted) setState(() => _catalogError = '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -106,21 +116,36 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     final path = await pickFile(context, title: 'Select a catalog JSON file', extensions: ['json']);
     if (path == null || !mounted) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
-    await _installCatalog(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()));
+    await _installCatalog(() => _catalogService.setCatalogFromJson(File(path).readAsStringSync()), _Source.file);
+    if (mounted && _loaded == _Source.file) setState(() => _loadedFile = path);
   }
 
   Future<void> _loadUrl() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(url);
-    await _installCatalog(() => _catalogService.setCatalogFromUrl(url));
+    await _installCatalog(() => _catalogService.setCatalogFromUrl(url), _Source.link);
   }
 
   Future<void> _loadPaste() async {
     final json = _pasteController.text.trim();
     if (json.isEmpty) return;
     await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
-    await _installCatalog(() => _catalogService.setCatalogFromJson(json));
+    await _installCatalog(() => _catalogService.setCatalogFromJson(json), _Source.paste);
+  }
+
+  /// Back to the catalog that comes with the app, after loading another.
+  Future<void> _useBuiltIn() async {
+    await ref.read(settingsProvider.notifier).setCatalogSourceUrl(null);
+    await _installCatalog(_catalogService.resetCatalog, null);
+  }
+
+  void _choose(_Source source) {
+    setState(() {
+      _source = source;
+      _catalogError = null;
+    });
+    if (source == _Source.builtIn && _loaded != null) _useBuiltIn();
   }
 
   // B on step 0 and Finish both leave; a second press before markSeen
@@ -155,454 +180,270 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     launchbox.startImport(ref, context);
   }
 
-  /// What Start does: the enabled primary nav action of this step.
-  VoidCallback? get _primary {
-    if (_busy) return null;
-    if (_step == _steps.length - 1) return _finish;
-    return () => setState(() => _step += 1); // Next, or Skip for now on step 0
-  }
-
   /// B: previous step; on the first step, leave as skipped.
   void _back() {
     if (_busy) return;
     if (_step > 0) {
-      setState(() => _step -= 1);
+      _go(_step - 1);
     } else {
       _leave();
     }
   }
 
+  /// The catalog in use is the one the chosen row stands for.
+  bool _ready(int count) => count > 0 && (_source == _Source.builtIn ? _loaded == null : _loaded == _source);
+
+  /// Start on the Catalog step: on to the next step once the chosen catalog
+  /// is in, else what the chosen row needs (load the link, pick the file).
+  /// With no catalog at all, Skip for now: one can be added in Settings.
+  KitAction _catalogPrimary(int count) {
+    void next() => _go(1);
+    if (_ready(count)) return KitAction('Next', next);
+    return switch (_source) {
+      _Source.builtIn => KitAction('Skip for now', next),
+      _Source.link => KitAction('Load', _urlController.text.trim().isEmpty ? null : _loadUrl),
+      _Source.file => KitAction('Choose file', _importFile),
+      _Source.paste => KitAction('Use pasted JSON', _pasteController.text.trim().isEmpty ? null : _loadPaste),
+    };
+  }
+
+  static String _sourceName(_Source s) => switch (s) {
+        _Source.builtIn => 'Built-in',
+        _Source.link => 'From a link',
+        _Source.file => 'From a file',
+        _Source.paste => 'Pasted',
+      };
+
   @override
   Widget build(BuildContext context) {
-    // A bundled catalog loads asynchronously at startup and may only arrive
-    // after this screen is pushed — detect it reactively, not in initState.
-    final bundledCount = ref.watch(appStateProvider).consolesList.length;
-    if (!_catalogReady && !_changingCatalog && !_busy && _catalogError == null && bundledCount > 0) {
-      _catalogReady = true;
-      _usingExample = true;
-      _catalogSummary = '$bundledCount console${bundledCount == 1 ? '' : 's'} already available';
-    }
-    final theme = Theme.of(context);
-    final primary = _primary;
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _back();
-      },
-      child: Actions(
-        actions: {
-          if (primary != null)
-            PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => primary()),
-        },
-        child: _scaffold(theme),
+    final consoles = ref.watch(appStateProvider).consolesList;
+    final count = consoles.length;
+    final KitAction primary = switch (_step) {
+      0 => _catalogPrimary(count),
+      1 => KitAction('Next', () => _go(2)),
+      _ => KitAction('Finish', _finish),
+    };
+    final step = switch (_step) {
+      0 => _catalogStep(context, consoles),
+      1 => _downloadsStep(context),
+      _ => _connectionsStep(context, consoles),
+    };
+    return WizardShell(
+      name: 'Games Library setup',
+      step: _step,
+      count: _steps.length,
+      stepName: _steps[_step],
+      icon: Icons.download,
+      glyph: PixelIcons.games,
+      area: AppArea.games,
+      info: const InfoButton(
+        icon: Icons.download,
+        title: 'Games Library setup',
+        text: 'Three quick choices before the first visit: where the consoles come from, where games are saved, and the logins and game info '
+            'you want. The built-in catalog works out of the box; you can switch to your own JSON later in Settings > Library. '
+            'Everything here can be changed later in Settings.',
       ),
+      body: Focus(focusNode: _body, skipTraversal: true, canRequestFocus: false, child: step),
+      onNext: _busy ? null : primary.onPressed,
+      nextLabel: primary.label,
+      onBack: _back,
+      backLabel: _step == 0 ? 'Not now' : 'Back',
+      backEnabled: !_busy,
+      summary: _step == 0 && _ready(count) ? '${_sourceName(_source)} · $count console${count == 1 ? '' : 's'}' : null,
     );
   }
 
-  Widget _scaffold(ThemeData theme) {
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _header(theme),
-            Expanded(
-              child: Align(
-                // Centred on big screens; on short ones every line counts.
-                alignment: _compact ? Alignment.topCenter : Alignment.center,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 640),
-                  child: SingleChildScrollView(
-                    padding: _compact ? const EdgeInsets.fromLTRB(16, 8, 16, 12) : const EdgeInsets.all(24),
-                    child: switch (_step) {
-                      0 => _catalogStep(theme),
-                      1 => _downloadsStep(theme),
-                      _ => _connectionsStep(theme),
-                    },
-                  ),
-                ),
-              ),
+  Widget _catalogStep(BuildContext context, List<Console> consoles) {
+    final count = consoles.length;
+    final builtInLine = _loaded == null && count > 0 ? '$count console${count == 1 ? '' : 's'}, works right away' : 'The catalog that comes with the app';
+    final choices = <(_Source, String, String)>[
+      (_Source.builtIn, 'Built-in catalog', builtInLine),
+      (_Source.link, 'From a link', 'A catalog JSON URL'),
+      (_Source.file, 'From a file', 'Import a JSON file'),
+      // A handheld has no clipboard worth pasting from.
+      if (!Handheld.current) (_Source.paste, 'Paste JSON', 'Type or paste it here'),
+    ];
+    final input = switch (_source) {
+      _Source.builtIn => null,
+      _Source.link => KitPanel(children: [
+          FieldSlot(
+            label: 'Catalog URL',
+            controller: _urlController,
+            hint: 'https://…/consoles.json',
+            icon: Icons.link,
+            enabled: !_busy,
+            keyboardType: TextInputType.url,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _loadUrl(),
+          ),
+        ]),
+      _Source.file => KitPanel(children: [
+          Slot(
+            label: 'Catalog file',
+            value: _loaded == _Source.file && _loadedFile != null ? p.basename(_loadedFile!) : null,
+            emptyText: 'Import from file',
+            onPick: _busy ? null : _importFile,
+          ),
+        ]),
+      _Source.paste => KitPanel(children: [
+          FieldSlot(
+            label: 'Catalog JSON',
+            controller: _pasteController,
+            hint: '[ { "name": "…", "url": "…" } ]',
+            icon: Icons.data_object,
+            enabled: !_busy,
+            onChanged: (_) => setState(() {}),
+          ),
+        ]),
+    };
+    final status = _busy
+        ? const StatusPanel.working(items: [WorkItem('Loading the catalog')])
+        : _catalogError != null
+            ? StatusPanel.error(line: "Couldn't load that catalog", details: _catalogError)
+            : _loaded != null && _ready(count)
+                ? StatusPanel.done(summary: '$count console${count == 1 ? '' : 's'} loaded')
+                : const StatusPanel.hidden();
+    return KitColumns(
+      start: [
+        const KitLabel('Where the consoles come from'),
+        OptionList(children: [
+          for (final (i, (source, title, line)) in choices.indexed)
+            OptionChoice<_Source>(
+              autofocus: i == 0,
+              title: title,
+              subtitle: line,
+              value: source,
+              groupValue: _source,
+              onSelected: _busy ? null : _choose,
             ),
-            if (!_short) _footer(theme),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _header(ThemeData theme) {
-    if (_compact) {
-      // One row: the step as text instead of the dot rail.
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
-        child: Row(
-          children: [
-            Image.asset('assets/icon.png', width: 24),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Quick setup', style: theme.textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
-            Text('${_step + 1}/${_steps.length} · ${_steps[_step]}',
-                style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary)),
-            if (_short) ...[const SizedBox(width: 12), ..._navButtons()],
-          ],
-        ),
-      );
-    }
-    return Container(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Image.asset('assets/icon.png', width: 32),
-              const SizedBox(width: 12),
-              Text('Welcome — quick setup', style: theme.textTheme.titleLarge),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              for (var i = 0; i < _steps.length; i++) ...[
-                _stepDot(theme, i),
-                if (i < _steps.length - 1)
-                  Expanded(
-                    child: Container(
-                      height: 2,
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      color: i < _step ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _stepDot(ThemeData theme, int i) {
-    final active = i == _step;
-    final done = i < _step;
-    final color = done || active ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest;
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 16,
-          backgroundColor: color,
-          child: done
-              ? const Icon(Icons.check, size: 18, color: Colors.white)
-              : Text('${i + 1}', style: TextStyle(color: active ? Colors.white : theme.colorScheme.onSurfaceVariant)),
-        ),
-        const SizedBox(height: 6),
-        Text(_steps[i], style: theme.textTheme.labelSmall),
+        ]),
+        if (input != null) input,
       ],
+      // Status first in its column: under the choices it would load below
+      // the fold on a short screen.
+      end: [status, const KitLabel("You'll get"), _ConsolePreview(consoles: consoles)],
     );
   }
 
-  Widget _sectionTitle(ThemeData theme, IconData icon, String title, String subtitle) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [Icon(icon, color: theme.colorScheme.primary), const SizedBox(width: 10), Text(title, style: theme.textTheme.titleMedium)]),
-        if (!_short) ...[
-          SizedBox(height: _compact ? 2 : 6),
-          Text(subtitle,
-              style: (_compact ? theme.textTheme.bodySmall : theme.textTheme.bodyMedium)?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        ],
-        SizedBox(height: _compact ? 10 : 20),
-      ],
-    );
-  }
-
-  Widget _catalogStep(ThemeData theme) {
-    // Inputs collapse once a catalog is loaded; the loaded card summarises it
-    // and offers a Change button to bring the inputs back.
-    final showInputs = !_catalogReady || _usingExample || _changingCatalog;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle(theme, Icons.dataset_outlined, 'Catalog source',
-            Handheld.current
-                ? 'Provide a console catalog. Import a JSON file or load one from a URL.'
-                : 'Provide a console catalog. Import a JSON file, load one from a URL, or paste it directly.'),
-        if (_catalogReady && _usingExample) ...[
-          Card(
-            color: theme.colorScheme.primaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle, color: theme.colorScheme.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Example catalog included — ${_catalogSummary ?? 'ready to use'}',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _busy ? null : () => setState(() => _step = 1),
-                    child: const Text('Use example data'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        if (_catalogReady && !_usingExample && !_changingCatalog)
-          Card(
-            color: theme.colorScheme.primaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle, color: theme.colorScheme.primary),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _catalogSummary ?? 'Catalog loaded',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  TextButton(
-                    onPressed: _busy ? null : () => setState(() => _changingCatalog = true),
-                    child: const Text('Change'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        if (showInputs) ...[
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _urlController,
-                  enabled: !_busy,
-                  decoration: const InputDecoration(
-                    labelText: 'Catalog URL',
-                    hintText: 'https://…/consoles.json',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.link),
-                  ),
-                  onSubmitted: (_) => _loadUrl(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton(onPressed: _busy ? null : _loadUrl, child: const Text('Load')),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _importFile,
-            icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Import from file'),
-          ),
-          if (!Handheld.current) ...[
-          const SizedBox(height: 16),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(top: 8),
-            title: Text('Paste JSON', style: theme.textTheme.bodyMedium),
-            children: [
-              TextField(
-                controller: _pasteController,
-                enabled: !_busy,
-                maxLines: 6,
-                decoration: const InputDecoration(
-                  hintText: '[ { "name": "…", "url": "…" } ]',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.tonal(onPressed: _busy ? null : _loadPaste, child: const Text('Use pasted JSON')),
-              ),
-            ],
-          ),
-          ],
-          const SizedBox(height: 16),
-          if (_busy) const LinearProgressIndicator(),
-          if (_catalogError != null)
-            _statusRow(theme, Icons.error_outline, theme.colorScheme.error, _catalogError!),
-        ],
-      ],
-    );
-  }
-
-  Widget _downloadsStep(ThemeData theme) {
+  Widget _downloadsStep(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     final notifier = ref.read(settingsProvider.notifier);
     final dir = settings.generalSettings.downloadDir ?? '';
     final autoExtract = settings.generalSettings.autoExtract ?? true;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle(theme, Icons.folder_open, 'Download directory & defaults',
-            'Where games are saved, and what happens after a download.'),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.folder, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  dir.isEmpty ? 'No directory selected' : dir,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              OutlinedButton(
-                onPressed: () async {
-                  final picked = await pickDirectory(context, title: 'Select download folder');
-                  if (picked == null) return;
-                  await notifier.saveDownloadDirectory(picked);
-                  await notifier.setGeneralSetting(AppSettings.downloadDir, picked);
-                },
-                child: const Text('Choose'),
-              ),
-            ],
-          ),
+    return KitColumns(start: [
+      const KitLabel('Where games go'),
+      KitPanel(children: [
+        Slot(
+          label: 'Download folder',
+          path: dir.isEmpty ? null : dir,
+          emptyText: 'Choose a folder',
+          folder: true,
+          autofocus: true,
+          onPick: () async {
+            final picked = await pickDirectory(context, title: 'Select download folder');
+            if (picked == null) return;
+            await notifier.saveDownloadDirectory(picked);
+            await notifier.setGeneralSetting(AppSettings.downloadDir, picked);
+          },
         ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Auto extract after download'),
-          subtitle: const Text('Unzip archives automatically'),
+      ]),
+      const KitLabel('After a download'),
+      OptionList(children: [
+        OptionToggle(
+          title: 'Extract after download',
+          subtitle: 'Unzip archives automatically',
           value: autoExtract,
           onChanged: (v) => notifier.setGeneralSetting(AppSettings.autoExtract, v),
         ),
-      ],
-    );
+      ]),
+    ]);
   }
 
-  Widget _connectionsStep(ThemeData theme) {
+  Widget _connectionsStep(BuildContext context, List<Console> consoles) {
     // Consoles whose catalog defines a sign-in form (username/password). Listed
     // only here in the wizard so users can connect them during onboarding.
     final settings = ref.watch(settingsProvider);
-    final consoles = ref.watch(appStateProvider).consolesList;
     final signinConsoles = consoles.where((c) => c.authSignin != null).toList();
     // The IA login only matters when some console's games come from IA.
     final needsIa = consoles.any((c) => c.usesInternetArchive);
     bool authed(Console c) =>
         (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
     final metadataOn = ref.watch(launchboxProvider).manifest != null;
+    String state(bool on) => on ? 'Connected' : 'Not connected';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle(theme, Icons.hub_outlined, 'Connections (optional)',
-            'Connect accounts for restricted sources. You can do this later in Settings.'),
-        if (needsIa)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: const AccountsSetting(),
-            ),
-          ),
-        if (!needsIa && signinConsoles.isEmpty)
-          Text('No accounts needed for this catalog.',
-              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-        for (final c in signinConsoles) ...[
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ExpansionTile(
-                key: ValueKey('signin_${c.id}_${authed(c)}'),
-                initiallyExpanded: false,
-                shape: const Border(),
-                collapsedShape: const Border(),
-                tilePadding: EdgeInsets.zero,
-                leading: const Icon(Icons.vpn_key_outlined),
-                title: Text(c.name),
-                subtitle: Text(authed(c) ? 'Connected' : 'Not connected'),
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                children: [ConsoleAuthSetting(console: c)],
-              ),
-            ),
-          ),
-        ],
-        SizedBox(height: _compact ? 12 : 24),
-        _sectionTitle(theme, Icons.auto_awesome, 'Improve with LaunchBox (optional)',
-            'Ratings, genres, descriptions and artwork for your games. Downloads about 110 MB once and indexes it on this device.'),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Download LaunchBox metadata'),
-          subtitle: metadataOn ? const Text('Already on') : null,
-          value: metadataOn || _wantLaunchbox,
-          onChanged: metadataOn ? null : (v) => setState(() => _wantLaunchbox = v),
+    final logins = [
+      if (needsIa)
+        OptionAction(
+          title: 'Internet Archive',
+          subtitle: state(settings.hasIaCredentials),
+          onTap: () => showKitSheet<void>(context, area: AppArea.games, title: 'Internet Archive', subtitle: 'For consoles whose games come from it', builder: (_) => const IaCredentialsSetting()),
         ),
-      ],
-    );
-  }
-
-  Widget _statusRow(ThemeData theme, IconData icon, Color color, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: TextStyle(color: color))),
-        ],
-      ),
-    );
-  }
-
-  /// Back, Skip (step 1 without a catalog) and Next/Finish.
-  List<Widget> _navButtons() {
-    final isLast = _step == _steps.length - 1;
-    final canNext = _step != 0 || _catalogReady;
-    final dense = _short ? VisualDensity.compact : null;
-    return [
-      if (_step > 0)
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: dense),
-          onPressed: _busy ? null : () => setState(() => _step -= 1),
-          child: const Text('Back'),
-        ),
-      if (_short) const SizedBox(width: 4) else const Spacer(),
-      // No catalog yet? Let the user move on and add one later in Settings.
-      if (_step == 0 && !_catalogReady) ...[
-        TextButton(
-          style: TextButton.styleFrom(visualDensity: dense),
-          onPressed: _busy ? null : () => setState(() => _step += 1),
-          child: const Text('Skip for now'),
-        ),
-        const SizedBox(width: 8),
-      ],
-      if (!isLast)
-        FilledButton(
-          style: FilledButton.styleFrom(visualDensity: dense),
-          onPressed: canNext && !_busy ? () => setState(() => _step += 1) : null,
-          child: const Text('Next'),
-        )
-      else
-        FilledButton.icon(
-          style: FilledButton.styleFrom(visualDensity: dense),
-          onPressed: _busy ? null : _finish,
-          icon: const Icon(Icons.check),
-          label: const Text('Finish'),
+      for (final c in signinConsoles)
+        OptionAction(
+          title: c.name,
+          subtitle: state(authed(c)),
+          onTap: () => showKitSheet<void>(context, area: AppArea.games, title: '${c.name} sign-in', subtitle: 'Needed to download its games', builder: (_) => ConsoleAuthSetting(console: c)),
         ),
     ];
-  }
-
-  Widget _footer(ThemeData theme) {
-    return Container(
-      padding: _compact ? const EdgeInsets.symmetric(horizontal: 12, vertical: 4) : const EdgeInsets.all(16),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)))),
-      child: Row(children: _navButtons()),
+    return KitColumns(
+      start: [
+        const KitLabel('Logins'),
+        if (logins.isEmpty)
+          KitPanel(children: [
+            Padding(padding: const EdgeInsets.all(12), child: Text('No accounts needed for this catalog.', style: KitType.of(context).body)),
+          ])
+        else ...[
+          OptionList(children: logins),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Text('Optional. You can sign in later in Settings.', style: KitType.of(context).subtitle),
+          ),
+        ],
+      ],
+      end: [
+        const KitLabel('Game info'),
+        OptionList(children: [
+          OptionToggle(
+            title: 'Download LaunchBox metadata',
+            subtitle: metadataOn ? 'Already on' : 'Ratings, genres, descriptions and artwork. About 110 MB, once.',
+            value: metadataOn || _wantLaunchbox,
+            onChanged: metadataOn ? null : (v) => setState(() => _wantLaunchbox = v),
+          ),
+        ]),
+      ],
     );
+  }
+}
+
+/// The consoles the catalog in use brings, as small tags.
+class _ConsolePreview extends StatelessWidget {
+  const _ConsolePreview({required this.consoles});
+
+  static const _shown = 18;
+
+  final List<Console> consoles;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = KitType.of(context);
+    final k = t.k;
+    final more = consoles.length - _shown;
+    Widget tag(String s) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(k.buttonRadius.clamp(4, 6).toDouble())),
+          child: Text(s, style: t.subtitle.copyWith(color: t.ink)),
+        );
+    return KitPanel(padding: const EdgeInsets.all(12), divided: false, children: [
+      if (consoles.isEmpty)
+        Text('No consoles yet. A catalog can be added later in Settings > Library.', style: t.body)
+      else ...[
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final c in consoles.take(_shown)) tag(c.name),
+          if (more > 0) tag('+$more more'),
+        ]),
+        const SizedBox(height: 10),
+        Text('You can change it later in Settings > Library.', style: t.subtitle),
+      ],
+    ]);
   }
 }

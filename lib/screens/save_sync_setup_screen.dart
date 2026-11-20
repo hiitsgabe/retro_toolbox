@@ -6,7 +6,11 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
-import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/services/save_sync/engine.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
+import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// The two decisions a handheld needs before it can sync anything: where the
 /// saves go, and which of the apps already named there apply here.
@@ -41,209 +45,156 @@ class _SaveSyncSetupScreenState extends ConsumerState<SaveSyncSetupScreen> {
 
   bool get _onStep2 => ref.read(saveSyncProvider).hubKind != HubKind.none;
 
+  /// The row chosen on Where; null: Google Drive when the build has it.
+  HubKind? _choice;
+
+  /// The step last built: the hub arriving moves to Apps, and a pad's focus
+  /// goes with it.
+  int? _shown;
+
+  /// Holds the step's body, so a new step can take focus from the button
+  /// that moved to it.
+  final _body = FocusNode(debugLabel: 'save-sync-setup-step');
+
+  @override
+  void dispose() {
+    _body.dispose();
+    super.dispose();
+  }
+
+  void _focusStep() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || FocusManager.instance.highlightMode != FocusHighlightMode.traditional) return;
+      _body.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull?.requestFocus();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final s = ref.watch(saveSyncProvider);
+    final n = ref.read(saveSyncProvider.notifier);
     final step = s.hubKind == HubKind.none || s.hubKind == HubKind.unknown ? 0 : 1;
-    return Scaffold(
-      body: SafeArea(
-        child: Column(children: [
-          _header(theme, step),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: step == 0 ? _whereStep(theme, s) : _appsStep(theme, s),
-                ),
-              ),
-            ),
-          ),
-        ]),
+    if (_shown != null && _shown != step) _focusStep();
+    _shown = step;
+    final drive = s.googleAvailable && (_choice ?? HubKind.drive) == HubKind.drive;
+    final KitAction primary;
+    if (step == 0) {
+      primary = drive
+          ? KitAction('Sign in with Google', s.signingIn ? null : n.signInWithGoogle)
+          : KitAction('Use a folder', s.signingIn ? null : () => _pickHub(n.defaultHubFolder));
+    } else {
+      primary = KitAction('Open Save Sync', s.loading ? null : _done);
+    }
+    return WizardShell(
+      name: 'Save Sync setup',
+      step: step,
+      count: _steps.length,
+      stepName: _steps[step],
+      icon: Icons.sync,
+      glyph: PixelIcons.saves,
+      area: AppArea.saves,
+      info: const InfoButton(
+        icon: Icons.sync,
+        title: 'Save Sync setup',
+        text: 'Google Drive keeps your saves in a folder in your own Drive, and Retro Toolbox sees only the files it puts there. '
+            'A folder works without Google: another app, such as Syncthing or FolderSync, carries it between your handhelds. '
+            'Then Save Sync lists the apps the hub already covers.',
       ),
+      body: Focus(
+        focusNode: _body,
+        skipTraversal: true,
+        canRequestFocus: false,
+        child: step == 0 ? _whereStep(context, s, drive) : _appsStep(context, s),
+      ),
+      onNext: primary.onPressed,
+      nextLabel: primary.label,
+      // A desktop has no back key: the first question can be put off.
+      leaveLabel: step == 0 ? 'Not now' : null,
     );
   }
 
-  Widget _header(ThemeData theme, int step) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.sync, size: 28),
-            const SizedBox(width: 12),
-            Text('Save Sync', style: theme.textTheme.titleLarge),
-          ]),
-          const SizedBox(height: 20),
-          Row(children: [
-            for (var i = 0; i < _steps.length; i++) ...[
-              _stepDot(theme, i, step),
-              if (i < _steps.length - 1)
-                Expanded(
-                  child: Container(
-                    height: 2,
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                    color: i < step ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-                  ),
-                ),
-            ],
-          ]),
+  Widget _whereStep(BuildContext context, SaveSyncState s, bool drive) {
+    final t = KitType.of(context);
+    final pick = s.signingIn ? null : (HubKind k) => setState(() => _choice = k);
+    return KitColumns(
+      start: [
+        Padding(padding: const EdgeInsets.fromLTRB(2, 2, 2, 0), child: Text('Where should saves go?', style: t.row.copyWith(fontSize: t.size(16)))),
+        OptionList(children: [
+          if (s.googleAvailable)
+            OptionChoice<HubKind>(
+              autofocus: true,
+              title: 'Google Drive',
+              subtitle: 'A folder in your own Drive. Retro Toolbox sees only the files it puts there.',
+              value: HubKind.drive,
+              groupValue: drive ? HubKind.drive : HubKind.folder,
+              onSelected: pick,
+            ),
+          OptionChoice<HubKind>(
+            autofocus: !s.googleAvailable,
+            title: 'A folder',
+            subtitle: 'Works without Google: another app, such as Syncthing, carries it between your handhelds.',
+            value: HubKind.folder,
+            groupValue: drive ? HubKind.drive : HubKind.folder,
+            onSelected: pick,
+          ),
         ]),
-      );
-
-  Widget _stepDot(ThemeData theme, int i, int step) {
-    final active = i == step;
-    final done = i < step;
-    return Column(children: [
-      CircleAvatar(
-        radius: 16,
-        backgroundColor: done || active ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
-        child: done
-            ? const Icon(Icons.check, size: 18, color: Colors.white)
-            : Text('${i + 1}', style: TextStyle(color: active ? Colors.white : theme.colorScheme.onSurfaceVariant)),
-      ),
-      const SizedBox(height: 6),
-      Text(_steps[i], style: theme.textTheme.labelSmall),
-    ]);
-  }
-
-  Widget _whereStep(ThemeData theme, SaveSyncState s) {
-    final n = ref.read(saveSyncProvider.notifier);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Where should saves go?', style: theme.textTheme.titleMedium),
-      const SizedBox(height: 8),
-      Text(
-        'Google Drive keeps them in a folder in your own Drive, and Retro Toolbox sees only the files it puts there. '
-        'A folder works without Google: another app carries it between your handhelds.',
-        style: theme.textTheme.bodyMedium,
-      ),
-      const SizedBox(height: 16),
-      if (s.googleAvailable)
-        FilledButton.icon(
-          onPressed: s.signingIn ? null : n.signInWithGoogle,
-          icon: const Icon(Icons.login),
-          label: const Text('Sign in with Google'),
-        ),
-      const SizedBox(height: 8),
-      OutlinedButton.icon(
-        onPressed: s.signingIn ? null : () => _pickHub(n.defaultHubFolder),
-        icon: const Icon(Icons.folder),
-        label: const Text('Use a folder'),
-      ),
-      if (s.signInError != null) ...[
-        const SizedBox(height: 12),
-        Text(s.signInError!, style: TextStyle(color: theme.colorScheme.error)),
+        // Under the choices, not beside them: the list keeps its width
+        // whether or not there is something to say.
+        if (s.signingIn) const StatusPanel.working(items: [WorkItem('Signing in to Google')]),
+        if (s.signInError != null) StatusPanel.error(line: s.signInError!),
       ],
-      if (s.signingIn) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator()),
-    ]);
+    );
   }
 
-  Widget _appsStep(ThemeData theme, SaveSyncState s) {
-    if (s.loading) {
-      return Column(children: [
-        const SizedBox(height: 24),
-        const Center(child: HammerLoader()),
-        const SizedBox(height: 12),
-        Text('Reading the hub…', style: theme.textTheme.bodyMedium),
+  Widget _appsStep(BuildContext context, SaveSyncState s) {
+    final t = KitType.of(context);
+    if (s.loading) return KitColumns(start: const [StatusPanel.working(items: [WorkItem('Reading the hub…')])]);
+    if (s.error != null) {
+      return KitColumns(start: [
+        StatusPanel.missingRequirement(
+          title: "Couldn't read the hub",
+          detail: s.error,
+          actionLabel: 'Pick the folder again',
+          onAction: () => _pickHub(s.hubFolder.isEmpty ? ref.read(saveSyncProvider.notifier).defaultHubFolder : s.hubFolder),
+        ),
       ]);
     }
-    if (s.error != null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s.error!, style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => _pickHub(s.hubFolder.isEmpty ? ref.read(saveSyncProvider.notifier).defaultHubFolder : s.hubFolder),
-              child: const Text('Pick the folder again'),
-            ),
-          ]),
-        ),
-      );
+    if (s.games.isEmpty) {
+      return const EmptyState(icon: Icons.inbox_outlined, glyph: PixelIcons.saves, line: 'This hub is empty. Open Save Sync and add the first app.');
     }
 
     final here = [for (final g in s.games) if (g.bind is! NotInstalled) g];
     final elsewhere = [for (final g in s.games) if (g.bind is NotInstalled) g];
+    String name(GameStatus g) => s.appInfo[g.recipe.packages.first]?.label ?? g.recipe.name;
+    Widget row(String title, String subtitle) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          child: KitRowText(title: title, subtitle: subtitle),
+        );
 
-    if (s.games.isEmpty) {
-      return Column(children: [
-        const SizedBox(height: 24),
-        Icon(Icons.inbox, size: 48, color: theme.colorScheme.onSurfaceVariant),
-        const SizedBox(height: 12),
-        Text('This hub is empty.', style: theme.textTheme.titleMedium),
-        const SizedBox(height: 4),
-        Text(
-          'Nothing has been added yet. Open Save Sync and add the first app.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _done, child: const Text('Open Save Sync')),
-      ]);
-    }
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Card(
-        color: theme.colorScheme.primaryContainer,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Icon(Icons.check_circle, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'This hub already covers ${s.games.length} app${s.games.length == 1 ? '' : 's'}.',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-          ]),
-        ),
-      ),
-      const SizedBox(height: 16),
-      // Plain rows: a hub app applies to every device that has it, and there
-      // is no per-device opt-out a tick could set.
-      if (here.isNotEmpty) ...[
-        Text('Will apply here (${here.length})', style: theme.textTheme.titleSmall),
-        for (final g in here)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: Text(s.appInfo[g.recipe.packages.first]?.label ?? g.recipe.name),
-            subtitle: Text(g.recipe.packages.first, style: theme.textTheme.bodySmall),
-          ),
+    return KitColumns(
+      start: [
+        StatusPanel.done(summary: 'This hub already covers ${s.games.length} app${s.games.length == 1 ? '' : 's'}.'),
+        // Plain rows: a hub app applies to every device that has it, and there
+        // is no per-device opt-out a tick could set.
+        if (here.isNotEmpty) ...[
+          KitLabel('Will apply here (${here.length})'),
+          KitPanel(children: [for (final g in here) row(name(g), g.recipe.packages.first)]),
+        ],
       ],
-      // Shown rather than filtered away: a handheld that quietly drops apps
-      // leaves the owner wondering what happened to them.
-      if (elsewhere.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text('Not on this device (${elsewhere.length})', style: theme.textTheme.titleSmall),
-        for (final g in elsewhere)
-          Opacity(
-            opacity: 0.5,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              title: Text(s.appInfo[g.recipe.packages.first]?.label ?? g.recipe.name),
-              subtitle: Text(g.recipe.packages.first, style: theme.textTheme.bodySmall),
-            ),
-          ),
+      end: [
+        // Shown rather than filtered away: a handheld that quietly drops apps
+        // leaves the owner wondering what happened to them.
+        if (elsewhere.isNotEmpty) ...[
+          KitLabel('Not on this device (${elsewhere.length})'),
+          Opacity(opacity: 0.55, child: KitPanel(children: [for (final g in elsewhere) row(name(g), g.recipe.packages.first)])),
+        ],
+        if (s.recipeProblems.isNotEmpty) ...[
+          KitLabel('Needs a look (${s.recipeProblems.length})'),
+          KitPanel(children: [for (final e in s.recipeProblems.entries) row(e.key, e.value)]),
+        ],
+        if (elsewhere.isEmpty && s.recipeProblems.isEmpty) Text('Every app the hub covers is on this device.', style: t.subtitle),
       ],
-      if (s.recipeProblems.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text('Needs a look (${s.recipeProblems.length})', style: theme.textTheme.titleSmall),
-        for (final e in s.recipeProblems.entries)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: Text(e.key),
-            subtitle: Text('No recipe for this one yet', style: theme.textTheme.bodySmall),
-          ),
-      ],
-      const SizedBox(height: 16),
-      FilledButton(onPressed: _done, child: const Text('Open Save Sync')),
-    ]);
+    );
   }
 
   /// A cancelled picker leaves the step as it was.
