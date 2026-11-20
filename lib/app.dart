@@ -93,7 +93,12 @@ final _stillPages = _pageTransitions(still: true);
 /// Style; null keeps the style's own.
 ThemeData appTheme(CardStyle style, {BackdropStyle? backdrop}) {
   final base = StyleTokens.forStyle(style);
-  final k = backdrop == null ? base : base.copyWith(backdrop: backdrop);
+  return tokenTheme(backdrop == null ? base : base.copyWith(backdrop: backdrop));
+}
+
+/// The whole theme from one set of tokens ([appTheme]'s, or a screen's in its
+/// area: [StyleTokens.inArea]).
+ThemeData tokenTheme(StyleTokens k) {
   final scheme = _scheme(k);
   final panel = k.solidPanel;
   final muted = scheme.onSurfaceVariant;

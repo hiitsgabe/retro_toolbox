@@ -102,6 +102,9 @@ class SelectedLook {
   /// Bottom bar height (0 = none).
   final double bar;
 
+  SelectedLook copyWithColor(Color color, Color onColor) =>
+      SelectedLook(marker: marker, color: color, onColor: onColor, corner: corner, border: border, bar: bar);
+
   static SelectedLook lerp(SelectedLook a, SelectedLook b, double t) {
     final pick = t < 0.5 ? a : b;
     return SelectedLook(
@@ -150,6 +153,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     this.areas = areaPalette,
     this.titleFont = displayFont,
     this.pixelIcons = false,
+    this.areaAccent = false,
+    this.titleCaps = false,
   });
 
   /// Body text in every style: made for reading on small screens.
@@ -184,6 +189,13 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
 
   /// Icons from the pixel set (PixelIcons) where a screen has one.
   final bool pixelIcons;
+
+  /// A screen that belongs to an app area takes the area's colour as its
+  /// accent ([inArea]).
+  final bool areaAccent;
+
+  /// Screen titles in capitals.
+  final bool titleCaps;
   final FocusLook focus;
   final SelectedLook selected;
 
@@ -203,6 +215,16 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
   };
 
   Color area(AppArea a) => areas[a]!;
+
+  /// The tokens for a screen of [a]: the area's colour as the accent where
+  /// the style says so, else these.
+  StyleTokens inArea(AppArea? a) {
+    if (a == null || !areaAccent) return this;
+    final c = area(a);
+    // Dark ink on the light area colours, white on the deep ones.
+    final ink = c.computeLuminance() > 0.3 ? Color.lerp(c, const Color(0xFF000000), 0.82)! : const Color(0xFFFFFFFF);
+    return copyWith(accent: c, onAccent: ink, panelLine: c.withValues(alpha: 0.16), selected: selected.copyWithColor(c, ink));
+  }
 
   /// [panel] laid on [surface]: for sheets and dialogs, which cover content
   /// and cannot be see-through.
@@ -228,6 +250,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     backdrop: BackdropStyle(kind: BackdropKind.dots, top: Color(0xFF7C4DEF), bottom: Color(0xFF17102B)),
     titleFont: 'SairaCondensed',
     pixelIcons: true,
+    areaAccent: true,
+    titleCaps: true,
   );
 
   static const vita = StyleTokens(
@@ -316,6 +340,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
     Map<AppArea, Color>? areas,
     String? titleFont,
     bool? pixelIcons,
+    bool? areaAccent,
+    bool? titleCaps,
     FocusLook? focus,
     SelectedLook? selected,
     BackdropStyle? backdrop,
@@ -335,6 +361,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         areas: areas ?? this.areas,
         titleFont: titleFont ?? this.titleFont,
         pixelIcons: pixelIcons ?? this.pixelIcons,
+        areaAccent: areaAccent ?? this.areaAccent,
+        titleCaps: titleCaps ?? this.titleCaps,
         focus: focus ?? this.focus,
         selected: selected ?? this.selected,
         backdrop: backdrop ?? this.backdrop,
@@ -357,6 +385,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       mapEquals(other.areas, areas) &&
       other.titleFont == titleFont &&
       other.pixelIcons == pixelIcons &&
+      other.areaAccent == areaAccent &&
+      other.titleCaps == titleCaps &&
       other.focus == focus &&
       other.selected == selected &&
       other.backdrop == backdrop;
@@ -377,6 +407,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
         Object.hashAll(areas.values),
         titleFont,
         pixelIcons,
+        areaAccent,
+        titleCaps,
         focus,
         selected,
         backdrop,
@@ -402,6 +434,8 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
       areas: {for (final a in AppArea.values) a: c(area(a), other.area(a))},
       titleFont: t < 0.5 ? titleFont : other.titleFont,
       pixelIcons: t < 0.5 ? pixelIcons : other.pixelIcons,
+      areaAccent: t < 0.5 ? areaAccent : other.areaAccent,
+      titleCaps: t < 0.5 ? titleCaps : other.titleCaps,
       focus: FocusLook.lerp(focus, other.focus, t),
       selected: SelectedLook.lerp(selected, other.selected, t),
       backdrop: t < 0.5 ? backdrop : other.backdrop,
