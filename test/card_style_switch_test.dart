@@ -15,7 +15,9 @@ import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/switch_style.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -294,6 +296,41 @@ void main() {
       await t.pump(const Duration(milliseconds: 1000));
       expect(frame(), _cyan);
       expect((t.widget<DecoratedBox>(find.byKey(const ValueKey('switch-frame'))).decoration as BoxDecoration).border!.top.width, 4);
+    });
+
+    testWidgets('a tap opens a tile, and the frame and the name move to it', (t) async {
+      await pump(t, menu(tiles()));
+      final frame = find.byKey(const ValueKey('switch-frame'));
+      expect(frame, findsNothing, reason: 'touch focus is not drawn before a tap');
+
+      final opened = <String>[];
+      for (final label in ['Three', 'Two']) {
+        await t.tap(art(label));
+        await t.pump(const Duration(milliseconds: 300));
+        expect(tapped, opened..add(label), reason: 'one tap opens');
+        expect(frame, findsOneWidget);
+        expect(t.widget<SwitchMenuFace>(find.ancestor(of: frame, matching: find.byType(SwitchMenuFace))).tile.label, label);
+        expect(find.byKey(const ValueKey('switch-name')), findsOneWidget);
+        expect(t.widget<Text>(find.byKey(const ValueKey('switch-name'))).data, label);
+      }
+    });
+
+    testWidgets('a tap opens a game, and the frame and the name move to it', (t) async {
+      await pump(t, gameList(), overrides: catalogOf(games));
+      final frame = find.byKey(const ValueKey('switch-frame'));
+      expect(frame, findsNothing);
+      await t.tap(card(3));
+      // The page's first frame is offstage (the hero pass): pump twice.
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 300));
+      expect(find.byType(GameDetailsPage), findsOneWidget, reason: 'one tap opens');
+      Navigator.of(t.element(find.byType(GameDetailsPage))).pop();
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 600));
+      expect(find.byType(GameDetailsPage), findsNothing);
+      expect(frame, findsOneWidget);
+      expect(t.widget<SwitchGameFace>(find.ancestor(of: frame, matching: find.byType(SwitchGameFace))).game, games[3]);
+      expect(find.descendant(of: card(3), matching: find.byKey(const ValueKey('switch-name'))), findsOneWidget);
     });
 
     testWidgets('the game list is a vertical grid of squares', (t) async {

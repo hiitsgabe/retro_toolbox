@@ -29,6 +29,11 @@ void main() {
     await frames(t, 4);
     await t.tap(target);
     await frames(t, 8);
+    // 3DS: the first tap on a slot that is not selected only selects it.
+    if (slot.evaluate().isNotEmpty && find.byKey(const ValueKey('3ds-menu')).evaluate().isNotEmpty) {
+      await t.tap(target);
+      await frames(t, 8);
+    }
   }
 
   testWidgets('home menu', (t) async {
@@ -54,6 +59,17 @@ void main() {
     launchboxLoaded(c);
     await snap(t, 'menu_settings_top');
   }, skip: !screenshotsEnabled);
+
+  // The L1/R1 hint shows only after gamepad input (any key), not after a tap.
+  for (final pad in [false, true]) {
+    testWidgets('settings hint ${pad ? 'gamepad' : 'touch'}', (t) async {
+      final c = await launch(t, const SettingsScreen(showControllerHints: true), overrides: [...overrides, ...consolesOverrides()]);
+      await realWait(t, 600);
+      launchboxLoaded(c);
+      if (pad) await key(t, LogicalKeyboardKey.shiftLeft);
+      await snap(t, 'menu_settings_hint_${pad ? 'gamepad' : 'touch'}');
+    }, skip: !screenshotsEnabled);
+  }
 
   testWidgets('settings style', (t) async {
     await launch(t, const SettingsScreen(section: SettingsSection.style), overrides: [...overrides, ...consolesOverrides()]);

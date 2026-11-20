@@ -52,6 +52,7 @@ Widget switchGameList(BuildContext context) => StyledGameList(
             game: game,
             autofocus: autofocus,
             radius: _radius,
+            tapFocus: TapFocus.focusAndRun,
             onFocusChange: (focused) {
               if (focused) _reveal(card, before: _gridTop, after: _gridEdge);
             },
@@ -172,6 +173,7 @@ class SwitchMenuRow extends StatelessWidget {
           tile: tile,
           autofocus: autofocusFirst && i == 0,
           customBorder: _cardShape,
+          tapFocus: TapFocus.focusAndRun,
           onFocusChange: (focused) {
             if (focused) _reveal(card, before: before, after: after);
           },

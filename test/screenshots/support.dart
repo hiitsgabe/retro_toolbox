@@ -26,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/models/app_style.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/device_class.dart';
@@ -214,8 +215,11 @@ Future<ProviderContainer> launch(
         navigatorObservers: [DpadScope.routeObserver],
         debugShowCheckedModeBanner: false,
         theme: shotTheme(style.cards, backdrop: style.backdrop),
-        builder: (context, child) =>
-            RepaintBoundary(key: _boundary, child: TextFloor(child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!))),
+        // The input mode listener as the app has it: hints follow the last input.
+        builder: (context, child) => RepaintBoundary(
+          key: _boundary,
+          child: TextFloor(child: InputModeListener(child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!))),
+        ),
         home: home,
       );
       },

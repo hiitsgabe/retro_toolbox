@@ -13,7 +13,15 @@ import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 /// The behaviour of a classic game card (letter jump target, X/Y/hold-A,
 /// tap or A opens the game, the second screen outline) around a style's [face].
 class StyledGameCard extends ConsumerStatefulWidget {
-  const StyledGameCard({super.key, required this.game, required this.face, this.autofocus = false, this.radius = 4, this.onFocusChange});
+  const StyledGameCard({
+    super.key,
+    required this.game,
+    required this.face,
+    this.autofocus = false,
+    this.radius = 4,
+    this.onFocusChange,
+    this.tapFocus = TapFocus.none,
+  });
 
   final Game game;
 
@@ -25,6 +33,7 @@ class StyledGameCard extends ConsumerStatefulWidget {
   /// Corner radius of the ink and of the second screen outline.
   final double radius;
   final ValueChanged<bool>? onFocusChange;
+  final TapFocus tapFocus;
 
   @override
   ConsumerState<StyledGameCard> createState() => _StyledGameCardState();
@@ -51,7 +60,9 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
           hoverColor: Colors.transparent,
           autofocus: widget.autofocus,
           borderRadius: BorderRadius.circular(widget.radius),
-          onTap: () => tapGameCard(context, ref, game, focus: jumpFocus),
+          onTap: () {
+            if (tapFocus(widget.tapFocus, jumpFocus)) tapGameCard(context, ref, game, focus: jumpFocus);
+          },
           onFocusChange: (v) {
             setFocused(v);
             widget.onFocusChange?.call(v);

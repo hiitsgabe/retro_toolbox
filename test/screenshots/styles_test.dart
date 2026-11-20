@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_style.dart';
@@ -26,6 +27,24 @@ void main() {
       await key(t, LogicalKeyboardKey.arrowRight);
       await snap(t, '${tag}_menu_focused');
     }, skip: !screenshotsEnabled);
+
+    // Touch has no hover: on 3DS a tap selects (the strip names Tools), on
+    // Switch it opens, and the frame is on Tools once its page is closed.
+    if (cards == CardStyle.threeDs || cards == CardStyle.switchStyle) {
+      testWidgets('$tag menu tapped', (t) async {
+        await launch(t, const MenuScreen(), style: style, overrides: [patchersProvider.overrideWith((ref) async => [])]);
+        final ink = find.descendant(of: find.byKey(const ValueKey('Tools')), matching: find.byType(InkWell)).first;
+        await t.ensureVisible(ink);
+        await frames(t, 4);
+        await t.tap(ink);
+        await frames(t, 8);
+        if (cards == CardStyle.switchStyle) {
+          await t.state<NavigatorState>(find.byType(Navigator).first).maybePop();
+          await frames(t, 8);
+        }
+        await snap(t, '${tag}_menu_tapped');
+      }, skip: !screenshotsEnabled);
+    }
 
     testWidgets('$tag consoles', (t) async {
       await launch(t, const ConsoleGridScreen(), style: style, overrides: consolesOverrides());

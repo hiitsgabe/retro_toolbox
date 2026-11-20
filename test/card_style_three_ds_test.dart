@@ -22,6 +22,7 @@ import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -159,6 +160,30 @@ void main() {
       expect(taps, [rows, rows + 1]);
     });
 
+    testWidgets('touch has no hover: a tap selects a slot (the strip names it), a tap on the selected slot opens it', (t) async {
+      await pump(t, Scaffold(body: MenuGrid(tiles: tiles)), size: const Size(900, 520));
+      final focus = find.byKey(const ValueKey('3ds-focus'));
+      expect(stripName(t), 'Tile 0');
+      expect(focus, findsNothing, reason: 'touch focus is not drawn before a tap');
+
+      await t.tap(menuCard('Tile 3'));
+      await t.pump(_frame);
+      expect(taps, isEmpty, reason: 'the first tap only selects');
+      expect(stripName(t), 'Tile 3');
+      expect(find.descendant(of: menuCard('Tile 3'), matching: focus), findsOneWidget, reason: 'the tapped slot shows it is the one');
+
+      await t.tap(menuCard('Tile 3'));
+      await t.pump(_frame);
+      expect(taps, [3]);
+
+      await t.tap(menuCard('Tile 1'));
+      await t.pump(_frame);
+      expect(taps, [3], reason: 'another slot is selected first again');
+      expect(stripName(t), 'Tile 1');
+      expect(find.descendant(of: menuCard('Tile 1'), matching: focus), findsOneWidget);
+      expect(focus, findsOneWidget, reason: 'one slot is the selected one');
+    });
+
     testWidgets('a brand logo is drawn white with no label in the art; a plain tile or a missing logo shows the icon', (t) async {
       await pump(t, Scaffold(body: MenuGrid(tiles: tiles)));
       final logo = find.descendant(of: menuCard('Tile 0'), matching: find.byType(SvgPicture));
@@ -209,6 +234,21 @@ void main() {
       expect(badge(2, 'badge-selected'), findsOneWidget);
       expect(badge(0, 'badge-progress'), findsNothing);
       expect(badge(0, 'badge-selected'), findsNothing);
+    });
+
+    testWidgets('a tap on a game selects it for the strip, a tap on the selected one opens it', (t) async {
+      await pump(t, gameList(), overrides: overrides());
+      expect(stripName(t), isNot(games[4].title));
+      await t.tap(find.byKey(ValueKey(games[4].gameId)));
+      await t.pump(_frame);
+      expect(stripName(t), games[4].title);
+      expect(find.byType(GameDetailsPage), findsNothing, reason: 'the first tap only selects');
+
+      await t.tap(find.byKey(ValueKey(games[4].gameId)));
+      // The page's first frame is offstage (the hero pass): pump twice.
+      await t.pump();
+      await t.pump(_frame);
+      expect(find.byType(GameDetailsPage), findsOneWidget);
     });
 
     testWidgets('scrolling to the end loads more', (t) async {

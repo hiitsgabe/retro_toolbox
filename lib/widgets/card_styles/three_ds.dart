@@ -243,6 +243,7 @@ class _ThreeDsMenuState extends State<_ThreeDsMenu> {
             tile: tiles[i],
             autofocus: widget.autofocusFirst && i == 0,
             customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(side * 0.12)),
+            tapFocus: TapFocus.selectFirst,
             onFocusChange: (v) {
               if (v) _focused.value = i;
             },
@@ -368,6 +369,7 @@ class _ThreeDsGamesState extends State<_ThreeDsGames> {
           game: game,
           autofocus: autofocus,
           radius: 12,
+          tapFocus: TapFocus.selectFirst,
           onFocusChange: (v) {
             if (v) _focused.value = game;
           },

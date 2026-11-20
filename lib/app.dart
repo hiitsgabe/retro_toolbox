@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/widgets/dual_screen/companion_action_listener.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -300,15 +301,18 @@ class RetroToolboxApp extends ConsumerWidget {
       theme: appTheme(style.cards, backdrop: style.backdrop),
       // Under the theme, where the screen is known: its text floor.
       builder: (context, child) => TextFloor(
-        child: DpadScope(
-          navigatorKey: navigatorKey,
-          onScreenKeyboard: Handheld.current || builtInKeyboard,
-          // Select opens the task manager anywhere.
-          onOptions: () {
-            final c = navigatorKey.currentContext;
-            if (c != null) TaskPanelModal.show(c);
-          },
-          child: child!,
+        // Round every route and dialog: the last input decides the hints.
+        child: InputModeListener(
+          child: DpadScope(
+            navigatorKey: navigatorKey,
+            onScreenKeyboard: Handheld.current || builtInKeyboard,
+            // Select opens the task manager anywhere.
+            onOptions: () {
+              final c = navigatorKey.currentContext;
+              if (c != null) TaskPanelModal.show(c);
+            },
+            child: child!,
+          ),
         ),
       ),
       home: const MenuScreen(),

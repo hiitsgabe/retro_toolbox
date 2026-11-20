@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
@@ -23,8 +24,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
   final String? consoleId;
   final SettingsSection? section;
 
-  /// The L1/R1 hint in the header. Null: on Android and the Linux handheld,
-  /// where a gamepad drives the app.
+  /// The L1/R1 hint in the header, shown only after gamepad input. Null: on
+  /// Android and the Linux handheld, where a gamepad drives the app.
   final bool? showControllerHints;
 
   /// From this width the rail and the rows share the screen.
@@ -49,7 +50,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _content = FocusNode(debugLabel: 'settings rows', canRequestFocus: false, skipTraversal: true);
   final _rail = FocusNode(debugLabel: 'settings rail', canRequestFocus: false, skipTraversal: true);
 
-  bool get _hints => widget.showControllerHints ?? (Platform.isAndroid || Handheld.current);
+  /// On a device with a pad, and only while the last input came from it.
+  bool get _hints => (widget.showControllerHints ?? (Platform.isAndroid || Handheld.current)) && ref.watch(inputModeProvider) == InputMode.gamepad;
 
   @override
   void initState() {

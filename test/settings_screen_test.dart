@@ -14,6 +14,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
@@ -476,11 +477,27 @@ void main() {
 
     testWidgets('no footer of button hints, even on a gamepad', (t) async {
       saved();
-      await pump(t, hints: true);
+      final c = await pump(t, hints: true);
+      c.read(inputModeProvider.notifier).state = InputMode.gamepad;
+      await t.pump();
       expect(find.text('switch section'), findsOneWidget); // the header's L1/R1 hint stays
       expect(find.text('Back to sections'), findsNothing);
       expect(find.text('Back'), findsNothing);
       expect(find.text('Adjust'), findsNothing);
+    });
+
+    testWidgets('the L1/R1 hint shows after gamepad input and hides after a touch', (t) async {
+      saved();
+      final c = await pump(t, hints: true);
+      expect(find.text('switch section'), findsNothing, reason: 'no gamepad input yet');
+      c.read(inputModeProvider.notifier).state = InputMode.gamepad;
+      await t.pump();
+      expect(find.text('switch section'), findsOneWidget);
+      expect(find.byType(KeyCap), findsNWidgets(2));
+      c.read(inputModeProvider.notifier).state = InputMode.touch;
+      await t.pump();
+      expect(find.text('switch section'), findsNothing);
+      expect(find.byType(KeyCap), findsNothing);
     });
   });
 
