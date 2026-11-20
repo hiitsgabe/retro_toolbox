@@ -370,6 +370,17 @@ class ReorderableMenu extends ConsumerStatefulWidget {
 class _ReorderableMenuState extends ConsumerState<ReorderableMenu> {
   late final _reorder = MenuReorder(onDrop: (ids) => ref.read(menuOrderProvider.notifier).save(widget.menuId, ids));
 
+  /// The hint in the title row: always up, empty unless a tile is lifted.
+  final _titleRow = OverlayPortalController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _titleRow.show();
+    });
+  }
+
   @override
   void dispose() {
     _reorder.dispose();
@@ -398,10 +409,27 @@ class _ReorderableMenuState extends ConsumerState<ReorderableMenu> {
             onPointerCancel: (_) {
               if (r.touch) r.cancel();
             },
-            child: Stack(children: [
-              widget.builder(context, r.tiles),
-              if (r.moving && gamepad) const Positioned(left: 0, right: 0, bottom: 10, child: Center(child: MenuMoveHint())),
-            ]),
+            // The hint keeps clear of the tiles: in the title row's right
+            // side on a landscape screen, under the menu on a phone, where
+            // the menu leaves room.
+            child: OverlayPortal(
+              controller: _titleRow,
+              overlayChildBuilder: (context) {
+                final r = MenuReorderScope.of(context)!;
+                if (!r.moving || !gamepad || MediaQuery.orientationOf(context) != Orientation.landscape) return const SizedBox.shrink();
+                return Positioned(
+                  top: MediaQuery.paddingOf(context).top,
+                  right: 12,
+                  height: kToolbarHeight,
+                  child: const Center(child: MenuMoveHint()),
+                );
+              },
+              child: Stack(children: [
+                widget.builder(context, r.tiles),
+                if (r.moving && gamepad && MediaQuery.orientationOf(context) == Orientation.portrait)
+                  const Positioned(left: 0, right: 0, bottom: 10, child: Center(child: MenuMoveHint())),
+              ]),
+            ),
           ),
         );
       }),
@@ -409,7 +437,7 @@ class _ReorderableMenuState extends ConsumerState<ReorderableMenu> {
   }
 }
 
-/// "◀▶ move · A drop · B cancel", over the menu while a tile is lifted.
+/// "◀▶ move · A drop · B cancel", while a tile is lifted.
 class MenuMoveHint extends StatelessWidget {
   const MenuMoveHint({super.key});
 
