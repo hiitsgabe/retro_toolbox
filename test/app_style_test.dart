@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
@@ -12,8 +13,34 @@ void main() {
       const style = AppStyle(
         backdrop: BackdropStyle(kind: BackdropKind.image, top: Color(0xFF00E0A4), bottom: Color(0xFF04080A), imagePath: '/p/a.jpg'),
         cards: CardStyle.vita,
+        gameLayout: GameLayout.coverFlow,
       );
       expect(AppStyle.fromJson(style.toJson()), style);
+    });
+
+    test('every game layout round-trips; a save from before it reads as the style default', () {
+      for (final l in GameLayout.values) {
+        expect(AppStyle.fromJson(AppStyle(cards: CardStyle.wii, gameLayout: l).toJson()).gameLayout, l);
+      }
+      expect(AppStyle.fromJson({'cards': 'vita'}), const AppStyle(cards: CardStyle.vita));
+      expect(AppStyle.fromJson({'cards': 'vita'}).gameLayout, GameLayout.styleDefault);
+      expect(AppStyle.fromJson({'cards': 'vita', 'gameLayout': 'nope'}).gameLayout, GameLayout.styleDefault);
+      expect(const AppStyle(gameLayout: GameLayout.grid), isNot(const AppStyle()));
+    });
+
+    test("the games view: a picked layout's in any style, else the style's own (Classic: its toggle)", () {
+      for (final c in CardStyle.values) {
+        expect(AppStyle(cards: c, gameLayout: GameLayout.grid).gameView(ViewMode.list), ViewMode.grid, reason: c.name);
+        expect(AppStyle(cards: c, gameLayout: GameLayout.list).gameView(ViewMode.grid), ViewMode.list, reason: c.name);
+        expect(AppStyle(cards: c, gameLayout: GameLayout.coverFlow).gameView(ViewMode.grid), ViewMode.coverflow, reason: c.name);
+        expect(AppStyle(cards: c).gameView(ViewMode.list), c == CardStyle.classic ? ViewMode.list : null, reason: c.name);
+      }
+    });
+
+    test('the header toggle goes round the three views', () {
+      expect(GameLayout.grid.next, GameLayout.list);
+      expect(GameLayout.list.next, GameLayout.coverFlow);
+      expect(GameLayout.coverFlow.next, GameLayout.grid);
     });
 
     test('a missing, broken or unknown value is the default', () {
@@ -71,6 +98,25 @@ void main() {
       final again = AppStyle.fromJson(jsonDecodeMap(prefs.getString('app_style')!));
       expect(again.cards, CardStyle.switchStyle);
       expect(again.backdrop!.kind, BackdropKind.paint);
+    });
+
+    test('the game layout is stored and stays through card style and backdrop changes', () async {
+      SharedPreferences.setMockInitialValues({'app_style': '{"cards":"vita"}'});
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+      final n = c.read(styleProvider.notifier);
+      await n.loaded;
+      await n.setGameLayout(GameLayout.list);
+      final prefs = await SharedPreferences.getInstance();
+      GameLayout stored() => AppStyle.fromJson(jsonDecodeMap(prefs.getString('app_style')!)).gameLayout;
+      expect(stored(), GameLayout.list);
+      await n.setCards(CardStyle.threeDs);
+      await n.setBackdrop(const BackdropStyle(kind: BackdropKind.drift));
+      // The style's own backdrop picked back clears the pick.
+      await n.setBackdrop(StyleTokens.threeDs.backdrop);
+      expect(c.read(styleProvider).backdrop, isNull);
+      expect(c.read(styleProvider).gameLayout, GameLayout.list);
+      expect(stored(), GameLayout.list);
     });
 
     test('a picked backdrop stays when the card style changes', () async {

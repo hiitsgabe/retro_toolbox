@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,10 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// What the last input came from: button hints show only for a gamepad.
 enum InputMode { gamepad, touch }
 
-/// The last input's kind, kept by [InputModeListener]. Touch until a key
-/// arrives: Android cannot tell a phone from a handheld with a pad, and a
-/// hint shows only once a button has been pressed.
-final inputModeProvider = StateProvider<InputMode>((ref) => InputMode.touch);
+/// The last input's kind, kept by [InputModeListener]. Before any input:
+/// touch, since Android cannot tell a phone from a handheld with a pad, and a
+/// hint shows only once a button has been pressed. The Linux build runs on a
+/// handheld with no touchscreen, where buttons are all there is: gamepad.
+final inputModeProvider = StateProvider<InputMode>((ref) => _initial());
+
+InputMode _initial() => !kIsWeb && defaultTargetPlatform == TargetPlatform.linux ? InputMode.gamepad : InputMode.touch;
 
 /// Sets [inputModeProvider] from every key event (gamepad) and every pointer
 /// down (touch) under it; the app puts one round all its routes.

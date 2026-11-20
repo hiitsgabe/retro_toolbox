@@ -6,6 +6,7 @@ import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
@@ -142,9 +143,15 @@ class GameRowBody extends StatelessWidget {
             ),
             SizedBox(width: 6),
           ],
-          GameBoxart(
-            game: game,
-            size: (isNarrow ? 50 : 60) + (selectable ? 0 : 20),
+          // The style's mark too, as its grid cards wear it: the checkbox
+          // alone says nothing of the style.
+          SelectedMark(
+            selected: isSelected,
+            size: 14,
+            child: GameBoxart(
+              game: game,
+              size: (isNarrow ? 50 : 60) + (selectable ? 0 : 20),
+            ),
           ),
           Expanded(
             child: Padding(

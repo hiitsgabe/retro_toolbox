@@ -74,6 +74,9 @@ void main() {
   testWidgets('settings style', (t) async {
     await launch(t, const SettingsScreen(section: SettingsSection.style), overrides: [...overrides, ...consolesOverrides()]);
     await realWait(t, 600);
-    await snap(t, 'menu_settings_style');
+    await snap(t, 'menu_settings_style', keep: true);
+    // The game layout row, under Cards, is below the fold on landscape screens.
+    await t.ensureVisible(find.text('Game list'));
+    await snap(t, 'menu_settings_style_game_list');
   }, skip: !screenshotsEnabled);
 }

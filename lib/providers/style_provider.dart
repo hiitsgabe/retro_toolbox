@@ -17,7 +17,8 @@ Map<String, Object?> jsonDecodeMap(String s) {
   }
 }
 
-/// The app-wide Style: the menus' background and the card style.
+/// The app-wide Style: the menus' background, the card style and the games
+/// layout.
 final styleProvider = StateNotifierProvider<StyleNotifier, AppStyle>((ref) => StyleNotifier());
 
 class StyleNotifier extends StateNotifier<AppStyle> {
@@ -36,6 +37,7 @@ class StyleNotifier extends StateNotifier<AppStyle> {
   Future<void> setBackdrop(BackdropStyle b) =>
       _save(b == StyleTokens.forStyle(state.cards).backdrop ? state.withStyleBackdrop() : state.copyWith(backdrop: b));
   Future<void> setCards(CardStyle c) => _save(state.copyWith(cards: c));
+  Future<void> setGameLayout(GameLayout l) => _save(state.copyWith(gameLayout: l));
 
   Future<void> _save(AppStyle next) async {
     state = next;

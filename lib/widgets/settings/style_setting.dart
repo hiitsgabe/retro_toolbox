@@ -16,8 +16,8 @@ Future<String?> _pickImage() async {
   return result?.files.single.path;
 }
 
-/// Settings > Style: the menus' background and the card style. [pickImage]
-/// stands in for the file picker (tests).
+/// Settings > Style: the menus' background, the card style and the games
+/// layout. [pickImage] stands in for the file picker (tests).
 class StyleSettingRows extends ConsumerWidget {
   const StyleSettingRows({super.key, this.pickImage});
 
@@ -64,6 +64,14 @@ class StyleSettingRows extends ConsumerWidget {
         changed: style.cards != _defaults.cards,
         onChanged: notifier.setCards,
         onReset: () => notifier.setCards(_defaults.cards),
+      ),
+      SettingsSegmentedRow<GameLayout>(
+        title: 'Game list',
+        options: [for (final l in GameLayout.values) (l, l.label)],
+        selected: style.gameLayout,
+        changed: style.gameLayout != _defaults.gameLayout,
+        onChanged: notifier.setGameLayout,
+        onReset: () => notifier.setGameLayout(_defaults.gameLayout),
       ),
     ]);
   }

@@ -4,6 +4,7 @@
 //
 //   SCREENSHOTS=1 flutter test test/screenshots/menu_test.dart --dart-define=DEVICE=odin2
 //   SCREENSHOTS=1 flutter test test/screenshots/styles_test.dart --dart-define=DEVICE=phone --dart-define=CARDS=vita --dart-define=BACKDROP=aurora
+//   SCREENSHOTS=1 flutter test test/screenshots/styles_test.dart --dart-define=DEVICE=odin2 --dart-define=CARDS=vita --dart-define=LAYOUT=grid
 //   SCREENSHOTS=1 flutter test test/screenshots/tools_test.dart --dart-define=DEVICE=linux640 --dart-define=ONLY=m3u,chd_convert --dart-define=OUT=/tmp/shots
 //
 // DEVICE: phone (412x915), odin2 (731x411) or linux640 (640x480, the Linux
@@ -12,6 +13,8 @@
 // CARDS: one card style for styles_test, and the theme every other test
 // renders in (default classic). BACKDROP: the backdrop for styles_test
 // (default drift; `style` picks none, so each card style shows its own).
+// LAYOUT: the game layout for styles_test (grid, list or coverFlow; default
+// the style's own).
 // ONLY: comma separated screen names for tools_test and servers_test.
 
 import 'dart:convert';

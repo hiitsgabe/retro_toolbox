@@ -4,6 +4,7 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
@@ -14,7 +15,6 @@ import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/screens/about_screen.dart';
-import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/header/console_dropdown.dart';
 import 'package:retro_toolbox/widgets/header/search_field.dart';
 import 'package:retro_toolbox/widgets/header/filter_modal.dart';
@@ -224,8 +224,10 @@ class _HeaderState extends ConsumerState<Header> {
     required bool canAccessSettings,
   }) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
-    // A card style other than Classic has its own layout: no view modes.
-    final classic = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards))) == null;
+    // Shown with a Classic view (Classic's own, or the game layout's): the
+    // card styles' own layouts have no view modes.
+    final style = ref.watch(styleProvider);
+    final view = style.gameView(appState.viewMode);
 
     return [
       _buildActionButton(
@@ -244,16 +246,20 @@ class _HeaderState extends ConsumerState<Header> {
         tooltip: 'Download Selected',
       ),
       SizedBox(width: 4),
-      if (classic) ...[
+      if (view != null) ...[
         _buildActionButton(
           context: context,
-          icon: switch (appState.viewMode) {
+          icon: switch (view) {
             ViewMode.grid => Icons.grid_view_rounded,
             ViewMode.list => Icons.view_list_rounded,
             ViewMode.coverflow => Icons.view_carousel_rounded,
           },
           isActive: false,
-          onPressed: () => appStateNotifier.toggleViewMode(),
+          // A picked layout is the setting: the toggle moves it on (never
+          // back to the style's own, which Settings > Style picks).
+          onPressed: style.gameLayout == GameLayout.styleDefault
+              ? () => appStateNotifier.toggleViewMode()
+              : () => ref.read(styleProvider.notifier).setGameLayout(style.gameLayout.next),
           tooltip: 'Change view',
         ),
         SizedBox(width: 4),

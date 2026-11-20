@@ -102,7 +102,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
-    final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
+    final cards = ref.watch(styleProvider.select((s) => s.cards));
+    final view = ref.watch(styleProvider.select((s) => s.gameView(appState.viewMode)));
 
     return Scaffold(
       body: GamesButtons(
@@ -188,9 +189,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                               ),
                             )
                           : LetterJump(
-                              // A card style other than Classic has its own layout: no view modes.
-                              child: kit?.gameList(context) ??
-                                  switch (appState.viewMode) {
+                              // The card style's own layout, unless a Classic view is picked
+                              // (AppStyle.gameView): those draw from the style's tokens.
+                              child: (view == null ? cardStyleKit(cards)?.gameList(context) : null) ??
+                                  switch (view ?? appState.viewMode) {
                                     ViewMode.grid => GameGrid(),
                                     ViewMode.coverflow => const GameCoverFlow(),
                                     ViewMode.list => GameList(),

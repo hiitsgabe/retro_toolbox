@@ -16,11 +16,13 @@ void main() {
   const backdrop = String.fromEnvironment('BACKDROP', defaultValue: 'drift');
   final kind = backdrop == 'style' ? null : BackdropKind.values.byName(backdrop);
   final only = const String.fromEnvironment('CARDS');
+  const layoutName = String.fromEnvironment('LAYOUT');
+  final layout = layoutName.isEmpty ? GameLayout.styleDefault : GameLayout.values.byName(layoutName);
 
   for (final cards in CardStyle.values) {
     if (only.isNotEmpty && cards.name != only) continue;
-    final style = AppStyle(backdrop: kind == null ? null : BackdropStyle(kind: kind), cards: cards);
-    final tag = 'styles_${cards.name}';
+    final style = AppStyle(backdrop: kind == null ? null : BackdropStyle(kind: kind), cards: cards, gameLayout: layout);
+    final tag = 'styles_${cards.name}${layout == GameLayout.styleDefault ? '' : '_${layout.name}'}';
 
     testWidgets('$tag menu', (t) async {
       await launch(t, const MenuScreen(), style: style, overrides: [patchersProvider.overrideWith((ref) async => [])]);

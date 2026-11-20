@@ -112,6 +112,21 @@ void main() {
     await t.pump();
   }
 
+  testWidgets('the game list row sits under Cards; a tap stores the layout, X resets it', (t) async {
+    await pump(t);
+    final row = find.byType(SettingsSegmentedRow<GameLayout>);
+    expect(t.getTopLeft(row).dy, greaterThan(t.getTopLeft(find.byType(SettingsSegmentedRow<CardStyle>)).dy));
+    expect(find.descendant(of: row, matching: find.text('Game list')), findsOneWidget);
+    for (final l in GameLayout.values) {
+      expect(find.descendant(of: row, matching: find.text(l.label)), findsOneWidget);
+    }
+    await t.tap(find.text('Cover flow'));
+    await t.pump();
+    expect(style().gameLayout, GameLayout.coverFlow);
+    await pressX(t, row);
+    expect(style().gameLayout, GameLayout.styleDefault);
+  });
+
   testWidgets('each row resets to its default', (t) async {
     await pump(t, pick: () async => '/pics/wall.png');
     await t.tap(find.text('Wii'));
