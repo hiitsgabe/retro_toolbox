@@ -5,9 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/screens/console_info_screen.dart';
 import 'package:retro_toolbox/services/process_list.dart';
 import 'package:retro_toolbox/services/system_info.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _Reader extends SystemInfoReader {
@@ -46,6 +49,7 @@ void main() {
     addTearDown(() => t.binding.setSurfaceSize(null));
     await t.pumpWidget(ProviderScope(
       child: MaterialApp(
+        theme: appTheme(CardStyle.switchStyle),
         home: ConsoleInfoScreen(
           reader: _Reader(snap),
           processes: procs ?? _Procs(const []),
@@ -67,10 +71,22 @@ void main() {
     expect(find.text('Advanced'), findsOneWidget);
   });
 
-  testWidgets('all-null snapshot still renders', (t) async {
+  testWidgets('all-null snapshot still renders, saying Unknown and hiding empty fields', (t) async {
     await pump(t, const SystemSnapshot());
-    expect(find.text('—'), findsWidgets);
+    expect(find.text('Unknown'), findsWidgets);
+    expect(find.text('Kernel'), findsNothing);
     expect(t.takeException(), isNull);
+  });
+
+  testWidgets('no colour of its own: the panels and bars take the style', (t) async {
+    await pump(t, const SystemSnapshot(deviceName: 'Test Device', battery: BatteryInfo(percent: 87, charging: true)));
+    // The backdrop behind the route has its own; the screen draws none.
+    final gradients = find.byWidgetPredicate((w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).gradient != null);
+    expect(find.descendant(of: find.byType(KitScaffold), matching: gradients), findsNothing);
+    final accent = Theme.of(t.element(find.text('Test Device'))).colorScheme.primary;
+    final bars = t.widgetList<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    expect(bars, isNotEmpty);
+    expect(bars.map((b) => b.color).toSet(), {accent});
   });
 
   testWidgets('protected rows get a lock, others an end button with confirm', (t) async {
@@ -84,8 +100,8 @@ void main() {
     await t.pumpAndSettle();
     await t.scrollUntilVisible(find.text('gptokeyb'), 200);
 
-    final tailRow = find.ancestor(of: find.text('tailscaled'), matching: find.byType(ListTile));
-    final gpRow = find.ancestor(of: find.text('gptokeyb'), matching: find.byType(ListTile));
+    final tailRow = find.byKey(const ValueKey('process-11'));
+    final gpRow = find.byKey(const ValueKey('process-10'));
     expect(find.descendant(of: tailRow, matching: find.widgetWithIcon(IconButton, Icons.close)), findsOneWidget);
     expect(find.descendant(of: gpRow, matching: find.byIcon(Icons.lock)), findsOneWidget);
     expect(find.descendant(of: gpRow, matching: find.byType(IconButton)), findsNothing);
@@ -108,14 +124,14 @@ void main() {
   testWidgets('d-pad steps through the cards to Advanced and opens it', (t) async {
     await pump(t, const SystemSnapshot(),
         procs: _Procs(const [ProcessEntry(pid: 11, ppid: 1, name: 'tailscaled', cmdline: 't', rssBytes: 1, protected: false)]));
-    bool onAdvanced() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<ExpansionTile>() != null;
+    bool onAdvanced() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<OptionExpander>() != null;
     var steps = 0;
     for (; steps < 8 && !onAdvanced(); steps++) {
       await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await t.pumpAndSettle();
     }
     expect(onAdvanced(), isTrue);
-    expect(steps, greaterThan(2), reason: 'cards are focus stops on the way');
+    expect(steps, greaterThan(2), reason: 'panels are focus stops on the way');
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
     expect(find.text('tailscaled'), findsOneWidget);

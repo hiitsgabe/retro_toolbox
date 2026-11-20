@@ -46,10 +46,28 @@ class M3uService {
     return detectDiscSets(names);
   }
 
+  /// The playlist of [set]: one disc basename per line.
+  static String playlistText(DiscSet set) => '${set.discs.join('\n')}\n';
+
+  /// Whether [dir] already has the playlist of [set], and with what.
+  PlaylistState playlistState(Directory dir, DiscSet set) {
+    final file = File(p.join(dir.path, '${set.base}.m3u'));
+    try {
+      if (!file.existsSync()) return PlaylistState.missing;
+      return file.readAsStringSync() == playlistText(set) ? PlaylistState.same : PlaylistState.different;
+    } catch (_) {
+      return PlaylistState.different;
+    }
+  }
+
   /// Writes `<base>.m3u` into [dir], one disc basename per line. Overwrites.
   File writeM3u(Directory dir, DiscSet set) {
     final file = File(p.join(dir.path, '${set.base}.m3u'));
-    file.writeAsStringSync('${set.discs.join('\n')}\n');
+    file.writeAsStringSync(playlistText(set));
     return file;
   }
 }
+
+/// An existing `<base>.m3u`: none, the same discs, or other content (it
+/// would be replaced).
+enum PlaylistState { missing, same, different }

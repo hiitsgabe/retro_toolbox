@@ -7,23 +7,25 @@ import 'package:path/path.dart' as p;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
+import 'package:retro_toolbox/providers/extraction_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/directory_service.dart';
 import 'package:retro_toolbox/services/link_download.dart';
 import 'package:retro_toolbox/services/link_inbox_server.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
 import 'package:retro_toolbox/utils/network.dart';
-import 'package:retro_toolbox/widgets/common/advanced_port.dart';
-import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 
 const _dirKey = 'link_download_dir';
 const _portKey = 'link_inbox_port';
-const _accent = Color(0xFF2E7D5B);
 
 /// Downloads a file from an http(s) link into a chosen folder, as a background
 /// task. While open it serves a small LAN page (QR) where a phone can send the
@@ -44,7 +46,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
   late final _server = widget.server ?? LinkInboxServer();
   final _url = TextEditingController();
   final _name = TextEditingController();
-  final _downloadFocus = FocusNode();
+  final _portField = TextEditingController(text: '$linkInboxDefaultPort');
   StreamSubscription<String>? _sub;
   Timer? _probe;
   Future<void> _serverOp = Future.value();
@@ -59,8 +61,8 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
   String? _dir, _serverError;
   List<String> _addresses = const [];
 
-  /// Downloads started here, by task id, so a finished archive can offer Extract.
-  final _started = <String>{};
+  /// Finished archives already sent to extraction, so Extract here is offered once.
+  final _extracted = <String>{};
 
   @override
   void initState() {
@@ -77,6 +79,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     setState(() {
       _port = port;
       _dir = dir;
+      _portField.text = '$port';
     });
     _restart();
     final addrs = await (widget.addresses ?? TinfoilServerService.localAddresses)().catchError((_) => const <String>[]);
@@ -106,7 +109,7 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     _serverOp.then((_) => _server.stop());
     _url.dispose();
     _name.dispose();
-    _downloadFocus.dispose();
+    _portField.dispose();
     super.dispose();
   }
 
@@ -114,7 +117,6 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     if (!mounted) return;
     _url.text = link;
     _urlChanged(link, showFull: true);
-    _downloadFocus.requestFocus();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link received from your phone. Press Download to start.')));
   }
 
@@ -162,7 +164,8 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
     // Reserved now, so the task's path (for Extract) is where the file lands.
     final dest = reserveDownloadPath(dir, safeFileName(_name.text));
     final name = p.basename(dest);
-    final id = TaskQueueService.enqueueTransfer(
+    // The status panel shows it from here on.
+    TaskQueueService.enqueueTransfer(
       ref,
       context,
       title: name,
@@ -172,193 +175,140 @@ class _LinkDownloadScreenState extends ConsumerState<LinkDownloadScreen> {
       outputPath: dest,
       run: downloadJob(url, dest),
     );
-    _started.add(id);
-    // This screen has no progress bar of its own.
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name added to the task list')));
   }
 
-  void _onGames(Map<String, GameState>? prev, Map<String, GameState> next) {
-    for (final id in _started.toList()) {
-      final s = next[id];
-      if (s == null || s.status != GameStatus.downloaded || prev?[id]?.status == GameStatus.downloaded) continue;
-      _started.remove(id);
-      final path = s.outputPath!;
-      final archive = s.availableActions.contains(GameAction.extract);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${p.basename(path)} downloaded'),
-        duration: Duration(seconds: archive ? 10 : 4),
-        action: archive
-            ? SnackBarAction(
-                label: 'Extract here',
-                onPressed: () {
-                  if (mounted) TaskQueueService.enqueueArchiveExtraction(ref, context, path);
-                })
-            : null,
-      ));
-    }
+  /// The downloads started from this screen, in the task list.
+  StatusPanel _status() {
+    final games = ref.watch(gameStateManagerProvider);
+    String? path(QueuedTask t) => games[t.id]?.outputPath;
+    return toolTaskStatus(
+      ref.watch(taskQueueProvider),
+      ref.watch(extractionProvider),
+      TaskType.remoteTransfer,
+      where: (t) => t.params['source'] == 'link',
+      name: (t) => '${t.params['label']}',
+      saved: (t) => path(t) == null ? 'Saved ${t.params['label']}' : savedIn(p.basename(path(t)!), p.dirname(path(t)!)),
+      failed: 'Could not download',
+      action: (t) {
+        final s = games[t.id], file = path(t);
+        if (s == null || file == null || _extracted.contains(t.id)) return null;
+        if (s.status != GameStatus.downloaded || !s.availableActions.contains(GameAction.extract)) return null;
+        return (
+          'Extract here',
+          () {
+            setState(() => _extracted.add(t.id));
+            TaskQueueService.enqueueArchiveExtraction(ref, context, file);
+          }
+        );
+      },
+    );
   }
+
+  static const _info = InfoButton(
+    icon: Icons.link,
+    title: 'Download from link',
+    text: 'Saves a file from an http or https link into a folder you choose, in the background. '
+        'Type or paste the link, or send it from your phone.\n\n'
+        'While this screen is open, a phone on the same network can open the address under the QR code and send a link; '
+        'it only fills the Link field, you still press Download. Downloads also show in Tasks.',
+  );
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(gameStateManagerProvider, _onGames);
     final ip = orderAddresses(_addresses, ref.watch(settingsProvider.select((s) => s.preferredLocalIp))).firstOrNull;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Download from link'),
-        actions: const [
-          InfoButton(
-            icon: Icons.link,
-            title: 'Download from link',
-            text: 'Saves a file from an http or https link into a folder you choose, in the background. '
-                'Type or paste the link, or send it from your phone.',
-          ),
+    final url = _url.text, dir = _dir;
+    final invalid = url.trim().isNotEmpty && !isValidDownloadUrl(url);
+    final String summary;
+    if (url.trim().isEmpty) {
+      summary = 'Paste or type a link';
+    } else if (invalid) {
+      summary = 'Not an http or https link';
+    } else {
+      final name = safeFileName(_name.text);
+      summary = dir == null ? name : '$name to ${pathParts(dir).join(pathSeparator)}';
+    }
+    return KitScaffold(
+      title: 'Download from link',
+      subtitle: 'Save a file from a link, or send it from a phone',
+      icon: Icons.link,
+      glyph: PixelIcons.link,
+      area: AppArea.tools,
+      info: _info,
+      body: KitColumns(
+        start: [
+          const KitLabel('Download'),
+          KitPanel(children: [
+            FieldSlot(
+              label: 'Link',
+              controller: _url,
+              hint: 'https://…',
+              icon: Icons.link,
+              glyph: PixelIcons.link,
+              keyboardType: TextInputType.url,
+              onChanged: (v) => _urlChanged(v),
+              error: invalid ? 'Enter an http or https link' : null,
+              // The whole link, never cut: the user must see exactly what they confirm.
+              message: _showFull && !invalid ? url.trim() : null,
+              trailing: IconButton(icon: const Icon(Icons.content_paste), tooltip: 'Paste', onPressed: _paste),
+            ),
+            FieldSlot(label: 'File name', controller: _name, icon: Icons.insert_drive_file_outlined, glyph: PixelIcons.file, onChanged: (_) => _nameTouched = true),
+            Slot(label: 'Save to', folder: true, path: dir, emptyText: 'Looking for the downloads folder', onPick: dir == null ? null : _changeDir),
+          ]),
+          _status(),
+        ],
+        end: [
+          const KitLabel('From your phone'),
+          _phone(context, ip),
+          OptionList(children: [
+            OptionExpander(subtitle: 'Port $_port', children: [
+              FieldSlot(
+                label: 'Port',
+                controller: _portField,
+                icon: Icons.settings_ethernet,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onChanged: (v) {
+                  final port = int.tryParse(v);
+                  if (port != null && port > 0 && port < 65536) _setPort(port);
+                },
+              ),
+            ]),
+          ]),
         ],
       ),
-      body: Actions(
-        actions: {
-          // Not isEnabled-gated: the nearest Start binding wins even when disabled, so defer explicitly.
-          PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (intent) {
-            if (!_canDownload) return Actions.maybeInvoke(context, intent);
-            _download();
-            return null;
-          }),
-        },
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-          child: LayoutBuilder(builder: (context, box) {
-            final form = _form(context), phone = _phone(context, ip);
-            if (box.maxWidth < 600) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [form, const SizedBox(height: 12), phone]);
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [Expanded(child: form), const SizedBox(width: 12), SizedBox(width: 220, child: phone)],
-            );
-          }),
-        ),
+      actionBar: ActionBar(
+        primary: KitAction('Download', _canDownload ? _download : null, icon: Icons.download),
+        hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+        summary: summary,
       ),
     );
   }
 
-  Widget _form(BuildContext context) {
-    final url = _url.text;
-    final invalid = url.trim().isNotEmpty && !isValidDownloadUrl(url);
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _url,
-          keyboardType: TextInputType.url,
-          autocorrect: false,
-          onChanged: (v) => _urlChanged(v),
-          decoration: InputDecoration(
-            labelText: 'Link',
-            hintText: 'https://…',
-            prefixIcon: const Icon(Icons.link),
-            suffixIcon: IconButton(icon: const Icon(Icons.content_paste), tooltip: 'Paste', onPressed: _paste),
-            errorText: invalid ? 'Enter an http or https link' : null,
-            // A plain Text, not helperText: the decorator ellipsizes that, and the user must see exactly the link they confirm.
-            helper: _showFull && !invalid ? Text(url.trim(), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)) : null,
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _name,
-          autocorrect: false,
-          onChanged: (_) => _nameTouched = true,
-          decoration: const InputDecoration(
-            labelText: 'File name',
-            prefixIcon: Icon(Icons.insert_drive_file_outlined),
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: 12),
-        InputDecorator(
-          decoration: const InputDecoration(
-            labelText: 'Save to',
-            prefixIcon: Icon(Icons.folder_outlined),
-            border: OutlineInputBorder(),
-            isDense: true,
-            contentPadding: EdgeInsets.fromLTRB(12, 4, 4, 4),
-          ),
-          child: Row(
-            children: [
-              Expanded(child: Text(_dir ?? '…', maxLines: 1, overflow: TextOverflow.ellipsis)),
-              TextButton(onPressed: _dir == null ? null : _changeDir, child: const Text('Change')),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton.icon(
-          focusNode: _downloadFocus,
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44), shape: const StadiumBorder()),
-          onPressed: _canDownload ? _download : null,
-          icon: const Icon(Icons.download),
-          label: const Text('Download'),
-        ),
-      ],
-    );
-  }
-
+  /// The QR a phone on the same network opens to send a link here.
   Widget _phone(BuildContext context, String? ip) {
-    final t = Theme.of(context).textTheme;
-    final hsl = HSLColor.fromColor(_accent);
-    // Same darkened accent gradient as the menu tiles.
-    final gradient = [hsl.withLightness(0.30).withSaturation((hsl.saturation * 0.85).clamp(0.0, 1.0)).toColor(), hsl.withLightness(0.15).toColor()];
+    final t = KitType.of(context);
     final error = _serverError;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: DecoratedBox(
-            decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradient)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-              child: Column(
-                children: [
-                  Row(children: [
-                    const Icon(Icons.smartphone, size: 16, color: Colors.white70),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text('FROM YOUR PHONE',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.labelMedium?.copyWith(color: Colors.white70, letterSpacing: 1.2, fontWeight: FontWeight.w600)),
-                    ),
-                  ]),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: 148,
-                    height: 148,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                    child: ip == null || error != null
-                        ? Icon(error != null ? Icons.error_outline : Icons.wifi_off, size: 40, color: Colors.black38)
-                        : CustomPaint(painter: QrPainter(data: 'http://$ip:$_port/', version: QrVersions.auto, gapless: true)),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(ip == null ? 'No network · port $_port' : '$ip:$_port',
-                      maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(
-                    error ?? (ip == null ? 'Connect to Wi-Fi to send links from your phone' : 'Scan, paste a link and tap Send'),
-                    textAlign: TextAlign.center,
-                    style: t.bodySmall?.copyWith(color: error != null ? StyleTokens.of(context).warning : Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    final side = kitStacked(context) ? 148.0 : 124.0;
+    return KitPanel(padding: const EdgeInsets.all(12), children: [
+      Center(
+        child: Container(
+          width: side,
+          height: side,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(t.k.buttonRadius.clamp(4, 12).toDouble())),
+          child: ip == null || error != null
+              ? Icon(error != null ? Icons.error_outline : Icons.wifi_off, size: 40, color: Colors.black38)
+              : CustomPaint(painter: QrPainter(data: 'http://$ip:$_port/', version: QrVersions.auto, gapless: true)),
         ),
-        const SizedBox(height: 8),
-        // Re-keyed once the saved port loads: the field only reads its initial value.
-        AdvancedPort(key: ValueKey(_dir != null), port: _port, onChanged: _setPort),
-      ],
-    );
+      ),
+      const SizedBox(height: 10),
+      Text(ip == null ? 'No network · port $_port' : '$ip:$_port', textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.mono(16).copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 2),
+      Text(
+        error ?? (ip == null ? 'Connect to Wi-Fi to send links from your phone' : 'Scan, paste a link and tap Send'),
+        textAlign: TextAlign.center,
+        style: t.subtitle.copyWith(color: error != null ? t.k.warning : null),
+      ),
+    ]);
   }
 }

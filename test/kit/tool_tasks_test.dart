@@ -79,4 +79,24 @@ void main() {
     expect(s.text, 'Saved ok.chd');
     expect([for (final p in s.problems) (p.name, p.reason, p.failed)], [('bad.cue', 'chdman exited 1', true), ('gone.cue', 'Cancelled', false)]);
   });
+
+  test('where narrows a shared type to this screen\'s tasks; action offers a step for the newest result', () {
+    final tasks = [
+      QueuedTask(id: 'a', type: TaskType.remoteTransfer, status: TaskQueueStatus.completed, params: {'source': 'link', 'label': 'a.zip'}, createdAt: DateTime(2026)),
+      QueuedTask(id: 'b', type: TaskType.remoteTransfer, status: TaskQueueStatus.running, params: {'source': 'explorer', 'label': 'b.bin'}, createdAt: DateTime(2026)),
+    ];
+    final s = toolTaskStatus(
+      TaskQueueState(tasks: tasks),
+      const ExtractionState(),
+      TaskType.remoteTransfer,
+      name: (t) => '${t.params['label']}',
+      saved: (t) => 'Saved ${t.params['label']}',
+      where: (t) => t.params['source'] == 'link',
+      action: (t) => t.id == 'a' ? ('Extract here', () {}) : null,
+    );
+    expect(s.kind, StatusKind.done);
+    expect(s.text, 'Saved a.zip');
+    expect(s.actionLabel, 'Extract here');
+    expect(s.onAction, isNotNull);
+  });
 }

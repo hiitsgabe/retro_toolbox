@@ -199,12 +199,15 @@ class OptionAction extends StatelessWidget {
 /// "Advanced": a row that opens the rows under it in place. Closed by
 /// default; [subtitle] says what is inside.
 class OptionExpander extends StatefulWidget {
-  const OptionExpander({super.key, this.title = 'Advanced', this.subtitle, required this.children, this.initiallyExpanded = false});
+  const OptionExpander({super.key, this.title = 'Advanced', this.subtitle, required this.children, this.initiallyExpanded = false, this.onChanged});
 
   final String title;
   final String? subtitle;
   final List<Widget> children;
   final bool initiallyExpanded;
+
+  /// Told when it opens (true) or closes: what is inside can load then.
+  final ValueChanged<bool>? onChanged;
 
   @override
   State<OptionExpander> createState() => _OptionExpanderState();
@@ -226,7 +229,10 @@ class _OptionExpanderState extends State<OptionExpander> {
       Semantics(
         expanded: _open,
         child: KitRow(
-          onTap: () => setState(() => _open = !_open),
+          onTap: () {
+            setState(() => _open = !_open);
+            widget.onChanged?.call(_open);
+          },
           child: Row(children: [
             Expanded(child: KitRowText(title: widget.title, subtitle: widget.subtitle)),
             AnimatedRotation(turns: _open ? 0.5 : 0, duration: const Duration(milliseconds: 150), child: Icon(Icons.expand_more, size: 22, color: t.muted)),

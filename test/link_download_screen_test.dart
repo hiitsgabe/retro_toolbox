@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/app.dart';
+import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -29,11 +31,19 @@ class _FakeServer implements LinkInboxServer {
   Future<void> stop() async => _port = null;
 }
 
+/// Records what is queued; queued tasks wait in its state, as in the app
+/// before a slot frees.
 class _FakeQueue extends StateNotifier<TaskQueueState> implements TaskQueueNotifier {
   _FakeQueue() : super(const TaskQueueState());
   final enqueued = <(String, TaskType, Map<String, dynamic>)>[];
   @override
-  void enqueue(String taskId, TaskType type, Map<String, dynamic> params) => enqueued.add((taskId, type, params));
+  void enqueue(String taskId, TaskType type, Map<String, dynamic> params) {
+    enqueued.add((taskId, type, params));
+    state = state.copyWith(tasks: [...state.tasks, QueuedTask(id: taskId, type: type, params: params, createdAt: DateTime(2026))]);
+  }
+
+  void finish(String id) =>
+      state = state.copyWith(tasks: [for (final t in state.tasks) t.id == id ? t.copyWith(status: TaskQueueStatus.completed) : t]);
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -54,7 +64,7 @@ void main() {
     addTearDown(c.dispose);
     await t.pumpWidget(UncontrolledProviderScope(
       container: c,
-      child: MaterialApp(home: LinkDownloadScreen(server: server, addresses: () async => ['192.168.1.42'])),
+      child: MaterialApp(theme: appTheme(CardStyle.switchStyle), home: LinkDownloadScreen(server: server, addresses: () async => ['192.168.1.42'])),
     ));
     await t.pump();
     await t.pump();
@@ -87,7 +97,8 @@ void main() {
     server.ctrl.add(link);
     await t.pump();
     await t.pump(const Duration(milliseconds: 500));
-    final helper = find.descendant(of: find.byType(InputDecorator).first, matching: find.byWidgetPredicate((w) => w is Text && w.data == link));
+    final helper = find.byKey(const ValueKey('kit-field-message'));
+    expect(t.widget<Text>(helper).data, link);
     final paragraph = t.renderObject<RenderParagraph>(helper);
     expect(paragraph.didExceedMaxLines, isFalse, reason: 'helper text was cut off');
     expect(t.takeException(), isNull);
@@ -107,10 +118,11 @@ void main() {
     expect(find.textContaining('192.168.1.42'), findsOneWidget);
   });
 
-  testWidgets('Download queues the link; a finished archive offers Extract here', (t) async {
+  testWidgets('Download queues the link and the status shows it; a finished archive offers Extract here', (t) async {
     final queue = _FakeQueue();
     final (c, server) = await pump(t, overrides: [taskQueueProvider.overrideWith((ref) => queue)]);
     server.ctrl.add(' https://h/a.zip ');
+    await t.pump();
     await t.pump();
     await t.tap(downloadButton());
     await t.pump();
@@ -119,20 +131,35 @@ void main() {
     expect(params['label'], 'a.zip');
     final state = c.read(gameStateManagerProvider)[id]!;
     expect(state.outputPath, endsWith('${Platform.pathSeparator}a.zip'));
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-status-working')), matching: find.text('a.zip')), findsOneWidget);
 
     c.read(gameStateManagerProvider.notifier).updateExtractionState(id, ExtractionStatus.completed, 1);
+    queue.finish(id);
     await t.pump();
-    // Let the earlier snackbars (link received, added to the task list) go by.
-    for (var i = 0; i < 40 && find.text('a.zip downloaded').evaluate().isEmpty; i++) {
-      await t.pump(const Duration(milliseconds: 500));
-    }
-    expect(find.text('a.zip downloaded'), findsOneWidget);
-    await t.pump(const Duration(milliseconds: 500)); // slide-in
+    final done = find.byKey(const ValueKey('kit-status-done'));
+    expect(find.descendant(of: done, matching: find.textContaining('Saved a.zip')), findsOneWidget);
     await t.tap(find.text('Extract here'));
     await t.pump();
     final (_, extractType, extractParams) = queue.enqueued.last;
     expect(extractType, TaskType.archiveExtraction);
     expect(extractParams['archivePath'], state.outputPath);
+    expect(find.text('Extract here'), findsNothing, reason: 'offered once');
+  });
+
+  testWidgets('a finished file that is not an archive offers nothing more', (t) async {
+    final queue = _FakeQueue();
+    final (c, server) = await pump(t, overrides: [taskQueueProvider.overrideWith((ref) => queue)]);
+    server.ctrl.add('https://h/notes.txt');
+    await t.pump();
+    await t.pump();
+    await t.tap(downloadButton());
+    await t.pump();
+    final (id, _, _) = queue.enqueued.single;
+    c.read(gameStateManagerProvider.notifier).updateExtractionState(id, ExtractionStatus.completed, 1);
+    queue.finish(id);
+    await t.pump();
+    expect(find.byKey(const ValueKey('kit-status-done')), findsOneWidget);
+    expect(find.text('Extract here'), findsNothing);
   });
 
   testWidgets('two downloads of the same name get their own files', (t) async {
@@ -142,6 +169,7 @@ void main() {
     final queue = _FakeQueue();
     final (c, server) = await pump(t, overrides: [taskQueueProvider.overrideWith((ref) => queue)]);
     server.ctrl.add('https://h/a.zip');
+    await t.pump();
     await t.pump();
     for (var i = 0; i < 2; i++) {
       await t.tap(downloadButton());

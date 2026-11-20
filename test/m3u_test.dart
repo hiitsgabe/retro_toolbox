@@ -54,4 +54,16 @@ void main() {
     expect(m3u.existsSync(), true);
     expect(m3u.readAsLinesSync(), ['Cool Game (Disc 1).chd', 'Cool Game (Disc 2).chd']);
   });
+
+  test('playlistState tells a missing, an identical and a different playlist apart', () {
+    final dir = Directory.systemTemp.createTempSync('m3u_state');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    const set = (base: 'Cool Game', discs: ['Cool Game (Disc 1).chd', 'Cool Game (Disc 2).chd']);
+    final service = M3uService();
+    expect(service.playlistState(dir, set), PlaylistState.missing);
+    service.writeM3u(dir, set);
+    expect(service.playlistState(dir, set), PlaylistState.same);
+    File(p.join(dir.path, 'Cool Game.m3u')).writeAsStringSync('Cool Game (Disc 1).chd\n');
+    expect(service.playlistState(dir, set), PlaylistState.different);
+  });
 }

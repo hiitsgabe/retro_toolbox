@@ -175,15 +175,14 @@ void main() {
   if (want('m3u')) {
     testWidgets('tool m3u filled', (t) => filled(t, 'm3u', const M3uScreen(), (root) async {
           picker.dir = '$root/psx';
-          await tapAll(t, 'Choose folder');
-          await tapAll(t, 'Scan');
+          await tapAll(t, 'Choose the folder with the discs');
         }), skip: !screenshotsEnabled);
   }
   if (want('collection_clean')) {
     testWidgets('tool collection_clean filled', (t) => filled(t, 'collection_clean', const CollectionCleanScreen(), (root) async {
           picker.dir = '$root/snes';
           await tapAll(t, 'Choose folder');
-          await tapAll(t, 'Scan');
+          await realWait(t, 1200);
         }), skip: !screenshotsEnabled);
   }
   if (want('file_explorer')) {

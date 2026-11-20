@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/extraction_model.dart';
@@ -17,7 +18,9 @@ const _finishedShown = 3;
 /// [type] there, as the task list has them. Running or waiting ones are the
 /// work (progress from [work]); once all are finished, the newest result, with
 /// what failed or was cancelled and why. Cleared from the task list, they are
-/// gone from here too.
+/// gone from here too. [where] narrows a type several screens share (a
+/// download from a link among every transfer); [action] offers a next step
+/// for the newest result.
 StatusPanel toolTaskStatus(
   TaskQueueState queue,
   ExtractionState work,
@@ -25,8 +28,10 @@ StatusPanel toolTaskStatus(
   required String Function(QueuedTask task) name,
   required String Function(QueuedTask task) saved,
   String failed = 'Could not convert',
+  bool Function(QueuedTask task)? where,
+  (String, VoidCallback)? Function(QueuedTask newest)? action,
 }) {
-  final mine = [for (final t in queue.tasks) if (t.type == type) t];
+  final mine = [for (final t in queue.tasks) if (t.type == type && (where == null || where(t))) t];
   if (mine.isEmpty) return const StatusPanel.hidden();
   bool active(QueuedTask t) => t.status == TaskQueueStatus.waiting || t.status == TaskQueueStatus.running;
   if (mine.any(active)) {
@@ -51,9 +56,12 @@ StatusPanel toolTaskStatus(
     return StatusPanel.error(line: '$failed ${bad.length} files', details: [for (final t in bad) '${name(t)}: ${_reason(t)}'].join('\n'));
   }
   final more = ok.length - 1;
+  final next = action?.call(ok.last);
   return StatusPanel.done(
     summary: more == 0 ? saved(ok.last) : '${saved(ok.last)}, and $more more',
     problems: [for (final t in bad) Problem(name(t), _reason(t), failed: t.status == TaskQueueStatus.failed)],
+    actionLabel: next?.$1,
+    onAction: next?.$2,
   );
 }
 

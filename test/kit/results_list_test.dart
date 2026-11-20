@@ -83,4 +83,25 @@ void main() {
     await pumpKit(t, const Scaffold(body: ResultsList(groups: [ResultGroup('x', [])], empty: Text('Nothing to do'))));
     expect(find.text('Nothing to do'), findsOneWidget);
   });
+
+  testWidgets('a row can lead with a picture, and a footer follows the last row', (t) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await pumpKit(
+      t,
+      Scaffold(
+        body: ResultsList(
+          controller: controller,
+          groups: const [
+            ResultGroup('Results', [ResultRow(id: 'c', title: 'Celeste', leading: SizedBox(key: ValueKey('banner'), width: 40, height: 20))]),
+          ],
+          footer: const Text('Loading more'),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('banner')), findsOneWidget);
+    expect(t.getTopLeft(find.byKey(const ValueKey('banner'))).dx, lessThan(t.getTopLeft(find.text('Celeste')).dx));
+    expect(t.getTopLeft(find.text('Loading more')).dy, greaterThan(t.getTopLeft(find.text('Celeste')).dy));
+    expect(controller.hasClients, isTrue);
+  });
 }

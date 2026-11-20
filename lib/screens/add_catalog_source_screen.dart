@@ -4,13 +4,16 @@ import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
-import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Adds a single console/system to the catalog from a URL. Toggle picks the
 /// source: an Internet Archive item (id or archive.org URL) or a plain HTTP
-/// directory-listing URL. The rest mirrors the console_utilities add flow —
+/// directory-listing URL. The rest mirrors the console_utilities add flow:
 /// name, ROM subfolder, formats, platform, and decompress/extract behaviour.
+/// The screen stays after adding, with the result in its status.
 class AddCatalogSourceScreen extends ConsumerStatefulWidget {
   const AddCatalogSourceScreen({super.key});
 
@@ -30,6 +33,10 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
   bool _extractContents = true;
   bool _busy = false;
 
+  /// What is wrong with the link or the name, under that field.
+  String? _urlError, _nameError;
+  StatusPanel _status = const StatusPanel.hidden();
+
   @override
   void dispose() {
     _urlController.dispose();
@@ -41,28 +48,33 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
     super.dispose();
   }
 
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), duration: const Duration(seconds: 4)),
-    );
-  }
-
   Future<void> _add() async {
+    if (_busy) return;
     final name = _nameController.text.trim();
     final input = _urlController.text.trim();
-    if (name.isEmpty) return _snack('Enter a name.');
-    if (input.isEmpty) return _snack('Enter a URL or item ID.');
-
-    final String url;
-    if (_isIa) {
+    String? urlError, nameError;
+    if (name.isEmpty) nameError = 'Enter a name.';
+    String? url;
+    if (input.isEmpty) {
+      urlError = 'Enter a URL or item ID.';
+    } else if (_isIa) {
       final id = CatalogService.parseIaItemId(input);
-      if (id == null) return _snack('Invalid archive.org item ID or URL.');
-      url = 'https://archive.org/download/$id/';
+      if (id == null) {
+        urlError = 'Invalid archive.org item ID or URL.';
+      } else {
+        url = 'https://archive.org/download/$id/';
+      }
+    } else if (!input.startsWith('http')) {
+      urlError = 'Enter a full http(s) URL.';
     } else {
-      if (!input.startsWith('http')) return _snack('Enter a full http(s) URL.');
       url = input;
     }
+    setState(() {
+      _nameError = nameError;
+      _urlError = urlError;
+      if (nameError != null || urlError != null) _status = const StatusPanel.hidden();
+    });
+    if (url == null || nameError != null) return;
 
     List<String> split(TextEditingController c) => c.text.split(',').map((f) => f.trim()).where((f) => f.isNotEmpty).toList();
     final formats = split(_formatsController);
@@ -83,154 +95,125 @@ class _AddCatalogSourceScreenState extends ConsumerState<AddCatalogSourceScreen>
       added: true,
     );
 
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _status = StatusPanel.working(items: [WorkItem('Adding $name')]);
+    });
     try {
       await CatalogService().addConsole(console);
       await ref.read(appStateProvider.notifier).reloadConsoles();
-      _snack('"$name" added to the catalog.');
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+      // The form clears for the next console; the options stay as they were.
+      setState(() {
+        _status = StatusPanel.done(summary: '"$name" added to the catalog.');
+        _urlController.clear();
+        _nameController.clear();
+        _folderController.clear();
+      });
     } catch (e) {
-      _snack('$e');
+      if (mounted) setState(() => _status = StatusPanel.error(line: 'Could not add "$name"', details: '$e'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  static const _info = InfoButton(
+    icon: Icons.playlist_add,
+    title: 'New Catalog Source',
+    text: 'Add a single console to your catalog from a URL. Turn on Internet Archive '
+        'for an archive.org item (ID or link); otherwise point at a directory-listing URL.\n\n'
+        'Original formats are the files the server lists (.zip). Game files formats are what is kept after '
+        'decompressing (.bin,.cue). Platform is the Batocera system id (psx), used for metadata.',
+  );
+
+  static const _unpack = {
+    Decompress.none: ('Keep as downloaded', 'The files are used as they are'),
+    Decompress.unzip: ('Unzip', 'Each download is a .zip to extract'),
+    Decompress.unrar: ('Unrar', 'Each download is a .rar to extract'),
+  };
+
   @override
   Widget build(BuildContext context) {
-    return Actions(
-      actions: {
-        // Start == "Add to catalog".
-        if (!_busy) PrimaryActionIntent: CallbackAction<PrimaryActionIntent>(onInvoke: (_) => _add()),
-      },
-      child: _scaffold(),
-    );
-  }
-
-  Widget _scaffold() {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('New Catalog Source'),
-        actions: const [
-          InfoButton(
-            icon: Icons.playlist_add,
-            title: 'New Catalog Source',
-            text: 'Add a single console to your catalog from a URL. Turn on Internet Archive '
-                'for an archive.org item (ID or link); otherwise point at a directory-listing URL.',
-          ),
+    final name = _nameController.text.trim();
+    return KitScaffold(
+      title: 'New Catalog Source',
+      subtitle: 'Add a console from a web folder or archive.org',
+      icon: Icons.playlist_add,
+      glyph: PixelIcons.catalogSource,
+      area: AppArea.tools,
+      info: _info,
+      body: KitColumns(
+        start: [
+          const KitLabel('Source'),
+          KitPanel(children: [
+            OptionToggle(title: 'Internet Archive', subtitle: 'Source is an archive.org item', value: _isIa, onChanged: _busy ? null : (v) => setState(() => _isIa = v)),
+            FieldSlot(
+              label: _isIa ? 'archive.org item ID or URL' : 'Directory listing URL',
+              controller: _urlController,
+              hint: _isIa ? 'my_item  or  https://archive.org/details/my_item' : 'https://…/roms/snes/',
+              icon: Icons.link,
+              glyph: PixelIcons.link,
+              keyboardType: TextInputType.url,
+              enabled: !_busy,
+              error: _urlError,
+              onChanged: (_) => setState(() => _urlError = null),
+            ),
+            FieldSlot(
+              label: 'Name',
+              controller: _nameController,
+              hint: 'Super Nintendo',
+              icon: Icons.videogame_asset,
+              glyph: PixelIcons.consoles,
+              enabled: !_busy,
+              error: _nameError,
+              onChanged: (_) => setState(() => _nameError = null),
+            ),
+            FieldSlot(
+              label: 'ROM subfolder (optional)',
+              controller: _folderController,
+              hint: 'defaults to the download folder',
+              icon: Icons.folder_outlined,
+              glyph: PixelIcons.folder,
+              enabled: !_busy,
+            ),
+          ]),
+        ],
+        end: [
+          const KitLabel('Decompress'),
+          OptionList(children: [
+            for (final MapEntry(key: d, value: (title, subtitle)) in _unpack.entries)
+              OptionChoice<Decompress>(
+                title: title,
+                subtitle: subtitle,
+                value: d,
+                groupValue: _decompress,
+                onSelected: _busy ? null : (v) => setState(() => _decompress = v),
+              ),
+            OptionExpander(subtitle: 'Formats, platform, extract contents', children: [
+              FieldSlot(label: 'Original formats', controller: _formatsController, hint: '.zip,.chd', icon: Icons.filter_alt_outlined, enabled: !_busy),
+              FieldSlot(
+                label: 'Game files formats (optional)',
+                controller: _gameFormatsController,
+                hint: '.bin,.cue, kept after decompressing',
+                icon: Icons.description_outlined,
+                enabled: !_busy,
+              ),
+              FieldSlot(label: 'Platform (optional)', controller: _platformController, hint: 'Batocera system id, e.g. psx', icon: Icons.sports_esports_outlined, enabled: !_busy),
+              OptionToggle(
+                title: 'Extract contents',
+                subtitle: 'Into the console folder, not a folder per game',
+                value: _extractContents,
+                onChanged: _busy ? null : (v) => setState(() => _extractContents = v),
+              ),
+            ]),
+          ]),
+          _status,
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Internet Archive'),
-              subtitle: const Text('Source is an archive.org item'),
-              value: _isIa,
-              onChanged: _busy ? null : (v) => setState(() => _isIa = v),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _urlController,
-              enabled: !_busy,
-              decoration: InputDecoration(
-                labelText: _isIa ? 'archive.org item ID or URL' : 'Directory listing URL',
-                hintText: _isIa ? 'my_item  or  https://archive.org/details/my_item' : 'https://…/roms/snes/',
-                isDense: true,
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.link),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              enabled: !_busy,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.videogame_asset),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _folderController,
-              enabled: !_busy,
-              decoration: const InputDecoration(
-                labelText: 'ROM subfolder (optional)',
-                hintText: 'defaults to the download folder',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.folder),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _formatsController,
-              enabled: !_busy,
-              decoration: const InputDecoration(
-                labelText: 'Original formats',
-                hintText: '.zip,.chd',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.filter_alt),
-              ),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<Decompress>(
-              initialValue: _decompress,
-              decoration: const InputDecoration(
-                labelText: 'Decompress',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.unarchive),
-              ),
-              items: [for (final d in Decompress.values) DropdownMenuItem(value: d, child: Text(d.name))],
-              onChanged: _busy ? null : (v) => setState(() => _decompress = v ?? Decompress.none),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _gameFormatsController,
-              enabled: !_busy,
-              decoration: const InputDecoration(
-                labelText: 'Game files formats (optional)',
-                hintText: '.bin,.cue — kept after decompressing',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.description),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _platformController,
-              enabled: !_busy,
-              decoration: const InputDecoration(
-                labelText: 'Platform (optional)',
-                hintText: 'Batocera system id, e.g. psx',
-                isDense: true,
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.sports_esports),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Extract contents'),
-              value: _extractContents,
-              onChanged: _busy ? null : (v) => setState(() => _extractContents = v),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _busy ? null : _add,
-              icon: _busy
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.add),
-              label: const Text('Add to catalog'),
-            ),
-          ],
-        ),
+      actionBar: ActionBar(
+        primary: KitAction('Add to catalog', _busy ? null : _add, icon: Icons.add),
+        hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+        summary: name.isEmpty ? 'Name the console' : 'Add $name',
       ),
     );
   }

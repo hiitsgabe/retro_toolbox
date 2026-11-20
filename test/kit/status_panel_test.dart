@@ -83,6 +83,15 @@ void main() {
     expect(find.text('FAILED'), findsOneWidget);
   });
 
+  testWidgets('done can offer a next step for the result', (t) async {
+    var runs = 0;
+    await show(t, StatusPanel.done(summary: 'Saved a.zip in Downloads', actionLabel: 'Extract here', onAction: () => runs++));
+    await t.tap(find.text('Extract here'));
+    expect(runs, 1);
+    await show(t, const StatusPanel.done(summary: 'Saved a.txt in Downloads'));
+    expect(find.byKey(const ValueKey('kit-status-action')), findsNothing);
+  });
+
   testWidgets('an error is one line; the raw error opens on Details', (t) async {
     await show(t, const StatusPanel.error(line: 'Could not read the disc image', details: 'FileSystemException: Cannot open file'));
     expect(find.text('Could not read the disc image'), findsOneWidget);

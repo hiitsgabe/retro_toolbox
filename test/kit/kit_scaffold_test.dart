@@ -120,6 +120,32 @@ void main() {
       expect(t.getTopLeft(find.text('status')).dy, lessThan(t.getTopLeft(find.text('inputs')).dy));
     });
 
+    testWidgets('on a phone a results list takes all the height the inputs leave', (t) async {
+      await pumpKit(
+        t,
+        const KitScaffold(
+          title: 'T',
+          body: KitColumns(fillEnd: true, start: [SizedBox(height: 60, child: Text('inputs'))], end: [SizedBox.expand(key: ValueKey('list'))]),
+        ),
+        device: phone,
+      );
+      final body = t.getSize(find.byType(KitColumns)).height;
+      expect(t.getSize(find.byKey(const ValueKey('list'))).height, greaterThan(body - 60 - kitGap - 20));
+    });
+
+    testWidgets('on a phone tall inputs stop at about half, and the list keeps the rest', (t) async {
+      await pumpKit(
+        t,
+        const KitScaffold(
+          title: 'T',
+          body: KitColumns(fillEnd: true, start: [SizedBox(height: 2000, child: Text('inputs'))], end: [SizedBox.expand(key: ValueKey('list'))]),
+        ),
+        device: phone,
+      );
+      final body = t.getSize(find.byType(KitColumns)).height;
+      expect(t.getSize(find.byKey(const ValueKey('list'))).height, closeTo(body * 0.55 - kitGap, 1));
+    });
+
     testWidgets('a hidden status panel leaves no gap', (t) async {
       await pumpKit(t, columns(endFirst: true, end: const [StatusPanel.hidden()]), device: phone);
       final withHidden = t.getTopLeft(find.text('inputs')).dy;

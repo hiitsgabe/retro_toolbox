@@ -231,7 +231,7 @@ bool kitStacked(BuildContext context) => DeviceClass.of(context) == DeviceClass.
 /// scrolling on its own; one scrolling column in portrait, with [end] first
 /// when [endFirstWhenStacked] (a running tool's status strip). [fillEnd]: [end]
 /// is a single widget that scrolls itself (a results list) and fills its
-/// column, or the rest of the screen when stacked.
+/// column, or, when stacked, what the inputs above it leave.
 class KitColumns extends StatelessWidget {
   const KitColumns({super.key, required this.start, this.end = const [], this.endFirstWhenStacked = false, this.fillEnd = false, this.startFlex = 6, this.endFlex = 5});
 
@@ -263,11 +263,14 @@ class KitColumns extends StatelessWidget {
     assert(!fillEnd || end.length == 1, 'fillEnd takes one widget that scrolls itself');
     if (kitStacked(context)) {
       if (fillEnd) {
-        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Flexible(flex: 2, child: _column(start)),
-          const SizedBox(height: kitGap),
-          Expanded(flex: 3, child: end.single),
-        ]);
+        // The inputs take their own height (scrolling past 45%), the list the rest.
+        return LayoutBuilder(
+          builder: (context, box) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            ConstrainedBox(constraints: BoxConstraints(maxHeight: box.maxHeight * 0.45), child: _column(start)),
+            const SizedBox(height: kitGap),
+            Expanded(child: end.single),
+          ]),
+        );
       }
       return _column(endFirstWhenStacked ? [...end, ...start] : [...start, ...end]);
     }

@@ -7,7 +7,7 @@ import 'package:retro_toolbox/widgets/kit/kit_base.dart';
 /// Exists, Skipped, Failed).
 @immutable
 class ResultRow {
-  const ResultRow({required this.id, required this.title, this.subtitle, this.badge, this.badgeTone = KitTone.neutral, this.selectable = true});
+  const ResultRow({required this.id, required this.title, this.subtitle, this.badge, this.badgeTone = KitTone.neutral, this.selectable = true, this.leading});
 
   final String id;
   final String title;
@@ -17,6 +17,9 @@ class ResultRow {
 
   /// False: shown, never selected (an item that already exists).
   final bool selectable;
+
+  /// A picture of the item (a store banner), before the title.
+  final Widget? leading;
 }
 
 @immutable
@@ -33,7 +36,7 @@ class ResultGroup {
 /// header's All) marks every row, or none when all are; the count and the
 /// action go in the screen's action bar.
 class ResultsList extends StatelessWidget {
-  const ResultsList({super.key, required this.groups, this.selected, this.onSelectionChanged, this.empty, this.shrinkWrap = false});
+  const ResultsList({super.key, required this.groups, this.selected, this.onSelectionChanged, this.empty, this.shrinkWrap = false, this.controller, this.footer});
 
   final List<ResultGroup> groups;
 
@@ -44,6 +47,12 @@ class ResultsList extends StatelessWidget {
   /// Shown when no group has rows.
   final Widget? empty;
   final bool shrinkWrap;
+
+  /// For a list that loads more as it nears the end.
+  final ScrollController? controller;
+
+  /// After the last row: a loader while the next page comes.
+  final Widget? footer;
 
   Iterable<ResultRow> get _selectable => groups.expand((g) => g.rows).where((r) => r.selectable);
 
@@ -70,12 +79,15 @@ class ResultsList extends StatelessWidget {
     }
     if (entries.isEmpty) return empty ?? const SizedBox.shrink();
     final selecting = selected != null;
+    final footer = this.footer;
     final list = ListView.builder(
+      controller: controller,
       shrinkWrap: shrinkWrap,
       physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
       padding: const EdgeInsets.only(bottom: 8),
-      itemCount: entries.length,
+      itemCount: entries.length + (footer == null ? 0 : 1),
       itemBuilder: (context, i) {
+        if (i == entries.length) return footer!;
         final e = entries[i];
         if (e is ResultGroup) {
           return _GroupHeader(
@@ -151,6 +163,7 @@ class _Row extends StatelessWidget {
     final selected = this.selected;
     final subtitle = row.subtitle;
     final badge = row.badge;
+    final leading = row.leading;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
@@ -169,6 +182,7 @@ class _Row extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 child: Row(children: [
                   if (selected != null) ...[_Check(on: selected, enabled: row.selectable), const SizedBox(width: 12)],
+                  if (leading != null) ...[leading, const SizedBox(width: 10)],
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
                       Text(row.title, style: t.row, maxLines: 1, overflow: TextOverflow.ellipsis),

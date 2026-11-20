@@ -13,6 +13,8 @@ import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 typedef Mount = ({String label, String mount, int total, int free});
 
@@ -56,10 +58,9 @@ Future<String?> _defaultSsid() async {
   return r.exitCode == 0 && s.isNotEmpty ? s : null;
 }
 
-const _dash = '—';
-
 /// Handheld dashboard: device, storage, memory, battery, network and system
-/// facts, plus an Advanced process list where non-critical processes can be ended.
+/// facts, plus an Advanced process list where non-critical processes can be
+/// ended. Panels only, no action bar: nothing here runs on Start.
 class ConsoleInfoScreen extends ConsumerStatefulWidget {
   const ConsoleInfoScreen({
     super.key,
@@ -178,29 +179,33 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   Widget build(BuildContext context) {
     final s = _snap ?? const SystemSnapshot();
     final ip = orderAddresses(_addresses, ref.watch(settingsProvider.select((x) => x.preferredLocalIp))).firstOrNull;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Console Info')),
+    return KitScaffold(
+      title: 'Console Info',
+      subtitle: 'Storage, battery, network and processes',
+      icon: Icons.memory,
+      glyph: PixelIcons.consoleInfo,
+      area: AppArea.tools,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        padding: const EdgeInsets.only(top: 4, bottom: 16),
         child: LayoutBuilder(builder: (context, box) {
           final wide = box.maxWidth >= 520;
-          // Two columns of equal-height cards when wide, stacked otherwise.
+          // Two columns of equal-height panels when wide, stacked otherwise.
           Widget pair(Widget a, Widget b) => wide
               ? IntrinsicHeight(
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: a), const SizedBox(width: 12), Expanded(child: b)]),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: a), const SizedBox(width: kitGap), Expanded(child: b)]),
                 )
-              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [a, const SizedBox(height: 12), b]);
+              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [a, const SizedBox(height: kitGap), b]);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _header(s),
-              const SizedBox(height: 12),
-              pair(_memory(s.mem), _power(s)),
-              const SizedBox(height: 12),
-              pair(_storage(), _network(ip, s.hostname)),
-              const SizedBox(height: 12),
-              _system(context, s, wide ? (box.maxWidth - 28 - 12) / 2 : null),
-              const SizedBox(height: 12),
+              const SizedBox(height: kitGap),
+              pair(_storage(), _power(s)),
+              const SizedBox(height: kitGap),
+              pair(_memory(s.mem), _network(ip, s.hostname)),
+              const SizedBox(height: kitGap),
+              _system(context, s, wide ? (box.maxWidth - 24 - kitGap) / 2 : null),
+              const SizedBox(height: kitGap),
               _advanced(),
             ],
           );
@@ -210,27 +215,20 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   }
 
   Widget _header(SystemSnapshot s) {
-    final t = Theme.of(context).textTheme;
+    final t = KitType.of(context);
     final sub = [s.firmware, s.osVersion].nonNulls.join(' · ');
-    return _InfoCard(
-      accent: const Color(0xFF6C4AB6),
+    return _InfoPanel(
       autofocus: true,
       child: Row(
         children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
-            child: const Icon(Icons.videogame_asset, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 14),
+          const KitIconTile(icon: Icons.videogame_asset, glyph: PixelIcons.consoleInfo, size: 42),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s.deviceName ?? _dash,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: t.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-                Text(sub.isEmpty ? _dash : sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyMedium?.copyWith(color: Colors.white70)),
+                Text(s.deviceName ?? 'This device', maxLines: 1, overflow: TextOverflow.ellipsis, style: t.title),
+                if (sub.isNotEmpty) Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle),
               ],
             ),
           ),
@@ -240,29 +238,23 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   }
 
   Widget _memory(MemInfo m) {
-    final t = Theme.of(context).textTheme;
+    final t = KitType.of(context);
     final used = m.usedBytes, total = m.totalBytes;
     final swapTotal = m.swapTotalBytes ?? 0;
-    return _InfoCard(
+    final line = [
+      if (m.availableBytes != null) '${formatBytes(m.availableBytes!)} free',
+      if (swapTotal > 0) 'swap ${formatBytes(swapTotal - (m.swapFreeBytes ?? 0))} / ${formatBytes(swapTotal)}',
+    ].join(' · ');
+    return _InfoPanel(
       title: 'Memory',
       icon: Icons.memory,
-      accent: const Color(0xFF167C80),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _big(used == null ? _dash : formatBytes(used), total == null ? null : ' / ${formatBytes(total)}'),
+          _big(used == null ? _unknown : formatBytes(used), total == null ? null : ' / ${formatBytes(total)}'),
           const SizedBox(height: 8),
           _Bar(used == null || total == null || total == 0 ? null : used / total),
-          const SizedBox(height: 6),
-          Text(
-            [
-              if (m.availableBytes != null) '${formatBytes(m.availableBytes!)} free',
-              if (swapTotal > 0) 'swap ${formatBytes(swapTotal - (m.swapFreeBytes ?? 0))} / ${formatBytes(swapTotal)}',
-            ].join(' · ').ifEmpty(_dash),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: t.bodySmall?.copyWith(color: Colors.white70),
-          ),
+          if (line.isNotEmpty) ...[const SizedBox(height: 6), Text(line, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle)],
         ],
       ),
     );
@@ -270,43 +262,43 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
 
   Widget _power(SystemSnapshot s) {
     final pct = s.battery?.percent, charging = s.battery?.charging, temp = s.cpuTempC;
-    final t = Theme.of(context).textTheme;
-    Widget half(IconData icon, String value, String label, double? level, Color? color) => Expanded(
+    final t = KitType.of(context);
+    final k = t.k;
+    Widget half(IconData icon, String value, String? label, double? level, Color? color) => Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(icon, color: color ?? Colors.white, size: 22),
+                Icon(icon, color: color ?? k.accent, size: 20),
                 const SizedBox(width: 4),
                 Flexible(child: _big(value, null)),
               ]),
               const SizedBox(height: 8),
               _Bar(level, color: color),
-              const SizedBox(height: 6),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodySmall?.copyWith(color: Colors.white70)),
+              if (label != null) ...[const SizedBox(height: 6), Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle)],
             ],
           ),
         );
-    return _InfoCard(
+    return _InfoPanel(
       title: 'Battery & temperature',
       icon: Icons.bolt,
-      accent: const Color(0xFF2E9E4F),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           half(
             charging == true ? Icons.battery_charging_full : (pct != null && pct < 20 ? Icons.battery_alert : Icons.battery_full),
-            pct == null ? _dash : '$pct%',
-            charging == null ? _dash : (charging ? 'Charging' : 'On battery'),
+            pct == null ? _unknown : '$pct%',
+            charging == null ? null : (charging ? 'Charging' : 'On battery'),
             pct == null ? null : pct / 100,
-            pct != null && pct < 20 && charging != true ? StyleTokens.of(context).error : null,
+            pct != null && pct < 20 && charging != true ? k.error : null,
           ),
           const SizedBox(width: 16),
           half(
             Icons.thermostat,
-            temp == null ? _dash : '${temp.toStringAsFixed(1)} °C',
+            temp == null ? _unknown : '${temp.toStringAsFixed(1)} °C',
             'CPU',
             temp == null ? null : (temp / 100).clamp(0, 1).toDouble(),
-            temp == null ? null : (temp >= 75 ? StyleTokens.of(context).error : (temp >= 60 ? StyleTokens.of(context).warning : null)),
+            temp == null ? null : (temp >= 75 ? k.error : (temp >= 60 ? k.warning : null)),
           ),
         ],
       ),
@@ -314,14 +306,12 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   }
 
   Widget _storage() {
-    final t = Theme.of(context).textTheme;
-    final low = StyleTokens.of(context).warning;
-    return _InfoCard(
+    final t = KitType.of(context);
+    return _InfoPanel(
       title: 'Storage',
       icon: Icons.sd_storage,
-      accent: const Color(0xFFB4632E),
       child: _mounts.isEmpty
-          ? _big(_dash, null)
+          ? _big(_unknown, null)
           : Column(
               children: [
                 for (final (i, m) in _mounts.indexed) ...[
@@ -331,18 +321,18 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
                       Expanded(
                         child: Text.rich(
                           TextSpan(children: [
-                            TextSpan(text: m.label, style: t.bodyMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
-                            TextSpan(text: '  ${m.mount}', style: t.labelSmall?.copyWith(color: Colors.white54)),
+                            TextSpan(text: m.label, style: t.row),
+                            TextSpan(text: '  ${m.mount}', style: t.subtitle),
                           ]),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text('${formatBytes(m.free)} free of ${formatBytes(m.total)}', style: t.bodySmall?.copyWith(color: Colors.white70)),
+                      Text('${formatBytes(m.free)} free of ${formatBytes(m.total)}', style: t.subtitle),
                     ],
                   ),
                   const SizedBox(height: 5),
-                  _Bar(m.total == 0 ? null : (m.total - m.free) / m.total, color: m.total > 0 && m.free / m.total < 0.1 ? low : null),
+                  _Bar(m.total == 0 ? null : (m.total - m.free) / m.total, color: m.total > 0 && m.free / m.total < 0.1 ? t.k.warning : null),
                 ],
               ],
             ),
@@ -350,25 +340,24 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   }
 
   Widget _network(String? ip, String? hostname) {
-    final t = Theme.of(context).textTheme;
-    return _InfoCard(
+    final t = KitType.of(context);
+    return _InfoPanel(
       title: 'Network',
       icon: Icons.wifi,
-      accent: const Color(0xFF2E6DB4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(ip ?? _dash, style: t.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-          if (ip != null) Text('Use this address in FTP, SMB and Retro Tools Server', style: t.bodySmall?.copyWith(color: Colors.white70)),
+          Text(ip ?? 'Not connected', style: ip == null ? t.row.copyWith(color: t.muted) : t.mono(18).copyWith(fontWeight: FontWeight.w700)),
+          if (ip != null) Text('Use this address in FTP, SMB and Retro Tools Server', style: t.subtitle),
           const SizedBox(height: 8),
           _Field('Hostname', hostname),
-          if (_ssid != null) _Field('Wi-Fi', _ssid),
+          _Field('Wi-Fi', _ssid),
         ],
       ),
     );
   }
 
-  /// [col]: width of each of the card's two field columns; null for one column.
+  /// [col]: width of each of the panel's two field columns; null for one column.
   Widget _system(BuildContext context, SystemSnapshot s, double? col) {
     final size = View.of(context).physicalSize;
     final os = [s.osName, s.osVersion].nonNulls.join(' ');
@@ -379,11 +368,10 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
       _Field('glibc', s.glibc),
       _Field('Display', '${Handheld.framebuffer ? 'Framebuffer' : 'DRM/KMS'} · ${size.width.round()}×${size.height.round()}'),
       _Field('App', _version == null ? null : 'Retro Toolbox $_version'),
-    ];
-    return _InfoCard(
+    ].where((f) => f.value != null);
+    return _InfoPanel(
       title: 'System',
       icon: Icons.info_outline,
-      accent: const Color(0xFF55606E),
       child: Wrap(
         spacing: 12,
         children: [for (final f in fields) SizedBox(width: col?.floorToDouble(), child: f)],
@@ -394,20 +382,13 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   Widget _advanced() {
     final procs = _procs;
     final maxRss = procs == null || procs.isEmpty ? 1 : procs.map((p) => p.rssBytes).reduce((a, b) => a > b ? a : b);
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ExpansionTile(
-        shape: const Border(),
-        leading: const Icon(Icons.tune),
-        title: const Text('Advanced', style: TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(procs == null || !_expanded ? 'Running processes' : '${procs.length} running processes'),
-        onExpansionChanged: (v) {
+    return OptionList(children: [
+      OptionExpander(
+        subtitle: procs == null || !_expanded ? 'Running processes' : '${procs.length} running processes',
+        onChanged: (v) {
           _expanded = v;
           if (v) _loadProcs();
         },
-        childrenPadding: const EdgeInsets.only(bottom: 8),
         children: [
           if (procs == null)
             const Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator())
@@ -417,15 +398,15 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
             for (final p in procs) _ProcessRow(p, maxRss: maxRss, onEnd: () => _end(p)),
         ],
       ),
-    );
+    ]);
   }
 
   Widget _big(String value, String? suffix) {
-    final t = Theme.of(context).textTheme;
+    final t = KitType.of(context);
     return Text.rich(
       TextSpan(children: [
-        TextSpan(text: value, style: t.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
-        if (suffix != null) TextSpan(text: suffix, style: t.bodyMedium?.copyWith(color: Colors.white70)),
+        TextSpan(text: value, style: t.row.copyWith(fontSize: t.size(20), fontWeight: FontWeight.w700)),
+        if (suffix != null) TextSpan(text: suffix, style: t.subtitle.copyWith(fontSize: t.size(13))),
       ]),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -433,20 +414,12 @@ class _ConsoleInfoScreenState extends ConsumerState<ConsoleInfoScreen> {
   }
 }
 
-extension on String {
-  String ifEmpty(String other) => isEmpty ? other : this;
-}
+/// A value the device does not report.
+const _unknown = 'Unknown';
 
-/// Same darkened accent gradient as the menu tiles (see MenuTileFace).
-List<Color> _gradient(Color accent) {
-  final hsl = HSLColor.fromColor(accent);
-  return [hsl.withLightness(0.30).withSaturation((hsl.saturation * 0.85).clamp(0.0, 1.0)).toColor(), hsl.withLightness(0.15).toColor()];
-}
-
-/// A focusable card (so the d-pad can step through and scroll the page).
-class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.accent, required this.child, this.title, this.icon, this.autofocus = false});
-  final Color accent;
+/// A focusable panel (so the d-pad can step through and scroll the page).
+class _InfoPanel extends StatelessWidget {
+  const _InfoPanel({required this.child, this.title, this.icon, this.autofocus = false});
   final Widget child;
   final String? title;
   final IconData? icon;
@@ -454,38 +427,27 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return Focus(
       autofocus: autofocus,
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4))),
-        child: DecoratedBox(
-          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: _gradient(accent))),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (title != null) ...[
-                  Row(children: [
-                    Icon(icon, size: 16, color: Colors.white70),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(title!.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Colors.white70, letterSpacing: 1.2, fontWeight: FontWeight.w600)),
-                    ),
-                  ]),
-                  const SizedBox(height: 10),
-                ],
-                child,
+      child: KitPanel(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (title != null) ...[
+                Row(children: [
+                  Icon(icon, size: 16, color: t.k.accent),
+                  const SizedBox(width: 6),
+                  Flexible(child: Text(title!.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.label)),
+                ]),
+                const SizedBox(height: 10),
               ],
-            ),
+              child,
+            ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -503,11 +465,12 @@ class _Bar extends StatelessWidget {
         value: (value ?? 0).clamp(0.0, 1.0),
         minHeight: height,
         borderRadius: BorderRadius.circular(height / 2),
-        backgroundColor: Colors.white.withValues(alpha: 0.14),
-        color: color ?? Colors.white.withValues(alpha: 0.9),
+        backgroundColor: Colors.white.withValues(alpha: 0.12),
+        color: color ?? StyleTokens.of(context).accent,
       );
 }
 
+/// A label and its value; nothing when the device does not report it.
 class _Field extends StatelessWidget {
   const _Field(this.label, this.value);
   final String label;
@@ -515,20 +478,20 @@ class _Field extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
+    final value = this.value;
+    if (value == null) return const SizedBox.shrink();
+    final t = KitType.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          SizedBox(width: 72, child: Text(label, style: t.bodySmall?.copyWith(color: Colors.white60))),
-          Expanded(child: Text(value ?? _dash, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.bodyMedium?.copyWith(color: Colors.white))),
+          SizedBox(width: 72, child: Text(label, style: t.subtitle)),
+          Expanded(child: Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.body)),
         ],
       ),
     );
   }
 }
-
-const _avatarColors = [Color(0xFF2E6DB4), Color(0xFF167C80), Color(0xFFE56717), Color(0xFF2E7D5B), Color(0xFF7A5CA8), Color(0xFFB4632E), Color(0xFF9C4DA0)];
 
 class _ProcessRow extends StatelessWidget {
   const _ProcessRow(this.p, {required this.maxRss, required this.onEnd});
@@ -538,32 +501,34 @@ class _ProcessRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.colorScheme.onSurfaceVariant;
-    final accent = p.protected ? const Color(0xFF55606E) : _avatarColors[p.name.hashCode % _avatarColors.length];
-    return ListTile(
-      leading: CircleAvatar(
-        radius: 17,
-        backgroundColor: accent,
-        child: Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-      ),
-      title: Row(
-        children: [
-          Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text(formatBytes(p.rssBytes), style: theme.textTheme.bodySmall?.copyWith(color: muted)),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(p.cmdline, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: muted)),
-          const SizedBox(height: 4),
-          _Bar(maxRss == 0 ? 0 : p.rssBytes / maxRss, height: 4, color: accent),
-        ],
-      ),
-      trailing: p.protected
-          ? SizedBox(width: 48, child: Icon(Icons.lock, size: 20, color: muted))
-          : IconButton(icon: const Icon(Icons.close), tooltip: 'End ${p.name}', onPressed: onEnd),
+    final t = KitType.of(context);
+    final tint = p.protected ? t.muted : t.k.accent;
+    return Padding(
+      key: ValueKey('process-${p.pid}'),
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      child: Row(children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: tint.withValues(alpha: 0.2),
+          child: Text(p.name.isEmpty ? '?' : p.name[0].toUpperCase(), style: t.row.copyWith(color: tint)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.row)),
+              Text(formatBytes(p.rssBytes), style: t.subtitle),
+            ]),
+            Text(p.cmdline, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle),
+            const SizedBox(height: 4),
+            _Bar(maxRss == 0 ? 0 : p.rssBytes / maxRss, height: 4, color: tint),
+          ]),
+        ),
+        const SizedBox(width: 4),
+        p.protected
+            ? SizedBox(width: 48, child: Icon(Icons.lock, size: 20, color: t.muted))
+            : IconButton(icon: const Icon(Icons.close), tooltip: 'End ${p.name}', onPressed: onEnd),
+      ]),
     );
   }
 }

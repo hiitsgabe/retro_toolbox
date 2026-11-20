@@ -1,24 +1,37 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/services/steam_service.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
 /// Search the Steam store, multi-select games, and write `.steam` shortcut
 /// files (ES-DE format) into a chosen folder.
-class SteamShortcutScreen extends StatefulWidget {
-  const SteamShortcutScreen({super.key});
+class SteamShortcutScreen extends ConsumerStatefulWidget {
+  const SteamShortcutScreen({super.key, this.service});
+
+  /// Tests: the store search and the file writer.
+  final SteamService? service;
 
   static const _lastDirKey = 'steam_shortcut_last_dir';
 
   @override
-  State<SteamShortcutScreen> createState() => _SteamShortcutScreenState();
+  ConsumerState<SteamShortcutScreen> createState() => _SteamShortcutScreenState();
 }
 
-class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
-  final _steamService = SteamService();
+String _count(int n, String one) => n == 1 ? '1 $one' : '$n ${one}s';
+
+/// "Permission denied" out of a FileSystemException; else its first line.
+String _reason(String error) => RegExp(r'OS Error: ([^,)]+)').firstMatch(error)?.group(1)?.trim() ?? error.split('\n').first;
+
+class _SteamShortcutScreenState extends ConsumerState<SteamShortcutScreen> {
+  late final _steamService = widget.service ?? SteamService();
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
 
@@ -33,6 +46,10 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
   bool _creating = false;
   String? _error;
 
+  /// Where the files go: the last folder used, until changed.
+  String? _dir;
+  StatusPanel _status = const StatusPanel.hidden();
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +57,10 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
       if (_hasMore && !_loadingMore && !_loading && _scrollController.position.extentAfter < 400) {
         _loadMore();
       }
+    });
+    SharedPreferences.getInstance().then((prefs) {
+      final dir = prefs.getString(SteamShortcutScreen._lastDirKey);
+      if (mounted && dir != null) setState(() => _dir ??= dir);
     });
   }
 
@@ -90,219 +111,149 @@ class _SteamShortcutScreenState extends State<SteamShortcutScreen> {
     }
   }
 
-  Future<void> _createFiles() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final folder = await pickDirectory(
-      context,
-      title: 'Select destination folder',
-      initialDir: prefs.getString(SteamShortcutScreen._lastDirKey),
-    );
-    if (folder == null || !mounted) return;
-    await prefs.setString(SteamShortcutScreen._lastDirKey, folder);
+  Future<String?> _pickDir() async {
+    final folder = await pickDirectory(context, title: 'Select destination folder', initialDir: _dir);
+    if (folder == null || !mounted) return null;
+    setState(() => _dir = folder);
+    (await SharedPreferences.getInstance()).setString(SteamShortcutScreen._lastDirKey, folder);
+    return folder;
+  }
 
-    setState(() => _creating = true);
+  Future<void> _createFiles() async {
+    if (_selected.isEmpty || _creating) return;
+    final folder = _dir ?? await _pickDir();
+    if (folder == null || !mounted) return;
+
     final games = _selected.values.toList();
+    setState(() => _creating = true);
     final errors = await _steamService.createShortcuts(games, folder);
     if (!mounted) return;
-    setState(() => _creating = false);
-
-    if (errors.isEmpty) {
-      setState(() => _selected.clear());
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Created ${games.length} shortcut${games.length == 1 ? '' : 's'} in $folder')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${errors.length} of ${games.length} failed: ${errors.values.first}')),
-      );
-    }
+    final made = games.length - errors.length;
+    setState(() {
+      _creating = false;
+      // What was written leaves the selection; what failed stays for a retry.
+      _selected.removeWhere((_, g) => !errors.containsKey(g.name));
+      final where = pathParts(folder).join(pathSeparator);
+      if (errors.isEmpty) {
+        _status = StatusPanel.done(summary: 'Created ${_count(made, 'shortcut')} in $where');
+      } else if (made == 0) {
+        _status = StatusPanel.error(
+          line: 'Could not create ${games.length == 1 ? 'the shortcut' : 'the shortcuts'}',
+          details: [for (final e in errors.entries) '${e.key}: ${e.value}'].join('\n'),
+        );
+      } else {
+        _status = StatusPanel.done(
+          summary: '$made created in $where, ${errors.length} failed',
+          problems: [for (final e in errors.entries) Problem(e.key, _reason(e.value), failed: true)],
+        );
+      }
+    });
   }
+
+  void _setSelection(Set<String> ids) {
+    final known = {for (final g in [..._selected.values, ..._results]) '${g.appid}': g};
+    setState(() {
+      _selected
+        ..clear()
+        ..addEntries([for (final id in ids) if (known[id] != null) MapEntry(known[id]!.appid, known[id]!)]);
+    });
+  }
+
+  static const _info = InfoButton(
+    icon: Icons.videogame_asset_rounded,
+    title: 'Steam Shortcuts',
+    text: 'Launchers like ES-DE can start Steam games through GameHub or a similar app, but need one .steam '
+        'shortcut file per game. Search the store, mark the games, and the files are written into the Save to folder.\n\n'
+        'Marked games stay marked across searches, so a batch can come from several.',
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Steam Shortcuts'),
-        actions: const [
-          InfoButton(
-            icon: Icons.videogame_asset_rounded,
-            title: 'Steam Shortcuts',
-            text: 'Some launchers can run steam games using Gamehub or other emulators, but they require a .steam shortcut file. This tool creates .steam shortcut files that can be used with these launchers.',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _searchController,
-              autofocus: true,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Search Steam games…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _loading
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                      )
-                    : IconButton(icon: const Icon(Icons.arrow_forward), onPressed: _search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _search(),
-            ),
-          ),
-          Expanded(child: _body(theme)),
-        ],
-      ),
-      bottomNavigationBar: _selected.isEmpty ? null : _selectionBar(theme),
-    );
-  }
-
-  Widget _body(ThemeData theme) {
+    final n = _selected.length;
+    final shown = {for (final g in _results) g.appid};
+    final earlier = [for (final g in _selected.values) if (!shown.contains(g.appid)) g];
+    final Widget empty;
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 40, color: theme.colorScheme.error),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              OutlinedButton(onPressed: _search, child: const Text('Retry')),
-            ],
-          ),
-        ),
-      );
+      empty = EmptyState(icon: Icons.wifi_off, line: "Can't reach the Steam store", action: KitAction('Retry', _search, icon: Icons.refresh));
+    } else if (_loading) {
+      empty = const EmptyState(icon: Icons.search, line: 'Searching');
+    } else if (_query.isEmpty) {
+      empty = const EmptyState(icon: Icons.search, glyph: PixelIcons.steam, line: 'Search the Steam store by name');
+    } else {
+      empty = EmptyState(icon: Icons.search_off, line: 'No games match "$_query"');
     }
-    if (_results.isEmpty) {
-      return Center(
-        child: Text(
-          _loading
-              ? 'Searching…'
-              : _query.isEmpty
-                  ? 'Search for games to create .steam shortcut files'
-                  : 'No results for "$_query"',
-          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-        ),
-      );
-    }
-    return GridView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 320,
-        // Steam header.jpg is 460x215; leave room for the title strip.
-        childAspectRatio: 1.75,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: _results.length + (_loadingMore ? 1 : 0),
-      itemBuilder: (context, i) {
-        if (i >= _results.length) {
-          return const Center(child: HammerLoader());
-        }
-        return _gameCard(theme, _results[i]);
-      },
-    );
-  }
-
-  Widget _gameCard(ThemeData theme, SteamGame game) {
-    final selected = _selected.containsKey(game.appid);
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => setState(() {
-        selected ? _selected.remove(game.appid) : _selected[game.appid] = game;
-      }),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: selected ? theme.colorScheme.primary : theme.dividerColor.withValues(alpha: 0.2),
-            width: selected ? 3 : 1,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CachedNetworkImage(
-                imageUrl: game.bannerUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, _) => Container(color: theme.colorScheme.surfaceContainerHighest),
-                errorWidget: (context, _, __) => Container(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  child: Icon(Icons.videogame_asset_rounded, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black87],
-                    ),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
-                  child: Text(
-                    game.name,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 6,
-                left: 6,
-                child: AnimatedOpacity(
-                  opacity: selected ? 1 : 0,
-                  duration: const Duration(milliseconds: 120),
-                  child: CircleAvatar(
-                    radius: 12,
-                    backgroundColor: theme.colorScheme.primary,
-                    child: const Icon(Icons.check, size: 16, color: Colors.white),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _selectionBar(ThemeData theme) {
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: theme.dividerColor.withValues(alpha: 0.3)))),
-        child: Row(
-          children: [
-            Text('${_selected.length} selected', style: theme.textTheme.titleSmall),
-            const SizedBox(width: 8),
-            TextButton(onPressed: _creating ? null : () => setState(() => _selected.clear()), child: const Text('Clear')),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: _creating ? null : _createFiles,
-              icon: _creating
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.note_add_outlined, size: 18),
-              label: const Text('Create files'),
+    return KitScaffold(
+      title: 'Steam Shortcuts',
+      subtitle: 'Launcher shortcuts for Steam games',
+      icon: Icons.videogame_asset_rounded,
+      glyph: PixelIcons.steam,
+      area: AppArea.tools,
+      info: _info,
+      body: KitColumns(
+        fillEnd: true,
+        start: [
+          const KitLabel('Search'),
+          KitPanel(children: [
+            FieldSlot(
+              label: 'Search',
+              controller: _searchController,
+              hint: 'Search Steam',
+              icon: Icons.search,
+              // The keyboard would cover half a phone on arrival; a pad user is
+              // here to type with the on-screen one.
+              autofocus: ref.read(inputModeProvider) == InputMode.gamepad,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _search(),
+              trailing: _loading
+                  ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                  : IconButton(icon: const Icon(Icons.arrow_forward), tooltip: 'Search', onPressed: _search),
             ),
-          ],
-        ),
+            Slot(label: 'Save to', folder: true, path: _dir, emptyText: 'Choose where the files go', onPick: _creating ? null : _pickDir),
+          ]),
+          _status,
+        ],
+        end: [
+          ResultsList(
+            controller: _scrollController,
+            groups: [
+              ResultGroup(_query.isEmpty ? 'Results' : 'Results for "$_query"', [for (final g in _results) _row(g)]),
+              ResultGroup('Marked earlier', [for (final g in earlier) _row(g)]),
+            ],
+            selected: {for (final id in _selected.keys) '$id'},
+            onSelectionChanged: _creating ? null : _setSelection,
+            footer: _loadingMore ? const Padding(padding: EdgeInsets.all(12), child: Center(child: HammerLoader())) : null,
+            empty: empty,
+          ),
+        ],
+      ),
+      actionBar: ActionBar(
+        primary: KitAction(n == 0 ? 'Create shortcuts' : 'Create ${_count(n, 'shortcut')}', n == 0 || _creating ? null : _createFiles, icon: Icons.note_add_outlined),
+        secondary: n == 0 ? null : KitAction('Clear', _creating ? null : () => setState(_selected.clear), icon: Icons.clear_all, button: PadButton.y),
+        hints: const [KitHint(PadButton.a, 'Mark'), KitHint(PadButton.select, 'All'), KitHint(PadButton.b, 'Back')],
+        summary: n == 0 ? 'Mark games to create their files' : '${_count(n, 'game')} marked',
+      ),
+    );
+  }
+
+  ResultRow _row(SteamGame g) => ResultRow(id: '${g.appid}', title: g.name, leading: _Banner(g));
+}
+
+/// The game's store banner, small: Steam's header.jpg is 460x215.
+class _Banner extends StatelessWidget {
+  const _Banner(this.game);
+
+  final SteamGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = StyleTokens.of(context);
+    final fallback = ColoredBox(color: Colors.white.withValues(alpha: 0.06), child: Icon(Icons.videogame_asset_rounded, size: 18, color: k.accent.withValues(alpha: 0.7)));
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(k.buttonRadius.clamp(2, 6).toDouble()),
+      child: SizedBox(
+        width: 74,
+        height: 35,
+        child: CachedNetworkImage(imageUrl: game.bannerUrl, fit: BoxFit.cover, placeholder: (_, __) => fallback, errorWidget: (_, __, ___) => fallback),
       ),
     );
   }

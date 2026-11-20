@@ -87,6 +87,16 @@ void main() {
     expect(find.text('CD for AetherSX2'), findsNothing);
   });
 
+  testWidgets('Advanced says when it opens and closes', (t) async {
+    final told = <bool>[];
+    await pumpKit(t, Scaffold(body: OptionList(children: [OptionExpander(onChanged: told.add, children: const [Text('inside')])])));
+    await t.tap(find.text('Advanced'));
+    await t.pump();
+    await t.tap(find.text('Advanced'));
+    await t.pump();
+    expect(told, [true, false]);
+  });
+
   testWidgets('an action row shows its value and runs', (t) async {
     var ran = 0;
     await pumpKit(t, Scaffold(body: OptionList(children: [OptionAction(title: 'Port', value: '9092', onTap: () => ran++)])));

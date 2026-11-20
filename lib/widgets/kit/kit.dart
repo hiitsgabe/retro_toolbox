@@ -8,6 +8,7 @@ export 'address_hero.dart';
 export 'browser_bar.dart';
 export 'config_file_slot.dart';
 export 'empty_state.dart';
+export 'field_slot.dart';
 export 'kit_base.dart';
 export 'kit_scaffold.dart';
 export 'option_list.dart';

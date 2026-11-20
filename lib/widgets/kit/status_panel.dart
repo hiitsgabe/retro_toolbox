@@ -77,12 +77,11 @@ class StatusPanel extends StatelessWidget {
         onLink = null,
         problems = const [];
 
-  const StatusPanel.done({super.key, required String summary, this.problems = const []})
+  /// [actionLabel]: what to do next with the result ("Extract here").
+  const StatusPanel.done({super.key, required String summary, this.problems = const [], this.actionLabel, this.onAction})
       : kind = StatusKind.done,
         text = summary,
         detail = null,
-        actionLabel = null,
-        onAction = null,
         linkLabel = null,
         onLink = null,
         items = const [],
@@ -220,6 +219,19 @@ class StatusPanel extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(child: Text(text, style: t.row)),
       ]),
+      if (actionLabel != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              key: const ValueKey('kit-status-action'),
+              onPressed: onAction,
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), padding: const EdgeInsets.symmetric(horizontal: 14), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              child: Text(actionLabel!),
+            ),
+          ),
+        ),
       for (final p in problems)
         Padding(
           padding: const EdgeInsets.only(top: 8),
