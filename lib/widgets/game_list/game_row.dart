@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
@@ -172,11 +173,17 @@ class GameRowBody extends StatelessWidget {
                             ),
                             Row(
                               children: [
+                                // No Status column on a phone: the state goes after the size.
                                 if (isNarrow)
-                                  Text(
-                                    formatBytes(game.size),
+                                  Text.rich(
+                                    TextSpan(children: [
+                                      TextSpan(text: formatBytes(game.size)),
+                                      const TextSpan(text: '  ·  '),
+                                      TextSpan(text: gameState.statusText, style: TextStyle(color: getStatusColor(context, gameState.status), fontWeight: FontWeight.w500)),
+                                    ]),
+                                    key: const ValueKey('row-size-status'),
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: DeviceClass.of(context).textFloor,
                                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
@@ -193,27 +200,28 @@ class GameRowBody extends StatelessWidget {
                           child: Text(
                             formatBytes(game.size),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: DeviceClass.of(context).textFloor,
                               color: Theme.of(context).colorScheme.onSurfaceVariant,
                             ),
                             textAlign: TextAlign.center,
                           ),
                         ),
-                      SizedBox(
-                        width: statusColumnWidth,
-                        child: Tooltip(
-                          message: gameState.errorMessage ?? '',
-                          child: Text(
-                            gameState.statusText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: getStatusColor(context, gameState.status),
-                              fontWeight: FontWeight.w500,
+                      if (!isNarrow)
+                        SizedBox(
+                          width: statusColumnWidth,
+                          child: Tooltip(
+                            message: gameState.errorMessage ?? '',
+                            child: Text(
+                              gameState.statusText,
+                              style: TextStyle(
+                                fontSize: DeviceClass.of(context).textFloor,
+                                color: getStatusColor(context, gameState.status),
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
                           ),
                         ),
-                      ),
                       SizedBox(
                         width: actionsColumnWidth,
                         child: ExcludeFocus(child: actions),

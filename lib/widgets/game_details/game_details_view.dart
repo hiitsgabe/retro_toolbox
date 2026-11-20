@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_images.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/image_memory.dart';
@@ -65,9 +66,11 @@ class GameDetailsView extends StatelessWidget {
   final ValueChanged<String>? onOpenImage;
   final ScrollController? scrollController;
 
-  /// The hero's height in a viewport of [viewport]: the first screen, within
-  /// reason.
-  static double heroHeight(double viewport) => viewport.clamp(320.0, 720.0);
+  /// The least height of the hero in a viewport of [viewport] on [device]:
+  /// most of a roomy screen; on a handheld or a phone only what it holds, so
+  /// the details start on the first screen (a full-screen hero hid them, and
+  /// left a phone 300 px of empty gradient).
+  static double heroHeight(double viewport, DeviceClass device) => device == DeviceClass.roomy ? (viewport * 0.6).clamp(320.0, 560.0) : 0;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +83,10 @@ class GameDetailsView extends StatelessWidget {
           : width >= 600
               ? 40.0
               : 20.0;
+      // A low landscape screen: the details table beside the cover and title
+      // rather than under them, where it fell below the action bar.
+      final device = DeviceClass.of(context);
+      final side = (device == DeviceClass.landscapeLow || device == DeviceClass.pixel) && width >= 600 && info.rows.isNotEmpty;
       return _FollowFocus(
         launchbox: launchbox,
         child: CustomScrollView(
@@ -89,9 +96,11 @@ class GameDetailsView extends StatelessWidget {
               child: _Hero(
                 info: info,
                 image: image,
-                height: heroHeight(box.maxHeight),
+                height: heroHeight(box.maxHeight, DeviceClass.of(context)),
                 gutter: gutter,
                 narrow: width < 600,
+                side: side ? _Section(title: 'Details', top: 0, child: _DetailsTable(rows: info.rows)) : null,
+                coverHeight: device == DeviceClass.portrait ? 180 : 120,
                 actions: actions,
                 status: status,
                 onOpenImage: onOpenImage,
@@ -99,7 +108,7 @@ class GameDetailsView extends StatelessWidget {
             ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 48 + MediaQuery.paddingOf(context).bottom),
-              sliver: SliverList.list(children: _sheet(context, info, image, wide: width - 2 * gutter >= 1000)),
+              sliver: SliverList.list(children: _sheet(context, info, image, wide: width - 2 * gutter >= 1000, tableInHero: side)),
             ),
           ],
         ),
@@ -111,7 +120,7 @@ class GameDetailsView extends StatelessWidget {
   /// half empty. The screenshots stay full width under them: the d-pad goes
   /// down from the actions to whatever is below the first one, and a strip in
   /// a right-hand column would be skipped.
-  List<Widget> _sheet(BuildContext context, _Info info, DetailsImageBuilder image, {required bool wide}) {
+  List<Widget> _sheet(BuildContext context, _Info info, DetailsImageBuilder image, {required bool wide, bool tableInHero = false}) {
     final region = game.region;
     final shots = [
       ...launchboxImagesOf(info.images, LaunchboxImageType.screenshot, region),
@@ -120,7 +129,7 @@ class GameDetailsView extends StatelessWidget {
     final back = pickLaunchboxImage(info.images, LaunchboxImageType.boxBack, region);
     final rows = info.rows;
     final overview = launchbox?.overview;
-    final details = rows.isEmpty ? null : _Section(title: 'Details', child: _DetailsTable(rows: rows));
+    final details = rows.isEmpty || tableInHero ? null : _Section(title: 'Details', child: _DetailsTable(rows: rows));
     final screenshots = shots.isEmpty
         ? null
         : _Section(
@@ -216,10 +225,10 @@ class _Info {
         final n => '1-$n players',
       };
 
+  /// The genres and players are in the details table, not here too.
   String get summary => [
         if (year != null) '$year',
         if (lb?.publisher != null) lb!.publisher!,
-        if (genres.isNotEmpty) genres.first,
       ].join(' · ');
 
   List<(String, String)> get rows => [
@@ -252,6 +261,8 @@ class _Hero extends StatelessWidget {
     required this.height,
     required this.gutter,
     required this.narrow,
+    this.side,
+    this.coverHeight = 120,
     this.actions,
     this.status,
     this.onOpenImage,
@@ -262,6 +273,11 @@ class _Hero extends StatelessWidget {
   final double height;
   final double gutter;
   final bool narrow;
+
+  /// Beside the cover and title instead of under them (the details table on
+  /// a low landscape screen).
+  final Widget? side;
+  final double coverHeight;
   final List<Widget>? actions;
   final Widget? status;
   final ValueChanged<String>? onOpenImage;
@@ -306,6 +322,7 @@ class _Hero extends StatelessWidget {
             url: cover,
             onOpen: onOpenImage,
             child: _Cover(
+              height: coverHeight,
               child: image(
                 context,
                 cover,
@@ -374,8 +391,23 @@ class _Hero extends StatelessWidget {
               ),
             ),
           Padding(
-            padding: EdgeInsets.fromLTRB(gutter, top + 16, gutter, 24),
-            child: narrow
+            padding: EdgeInsets.fromLTRB(gutter, top + (height > 0 ? 16 : 4), gutter, height > 0 ? 24 : 12),
+            child: side != null
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          if (coverArt != null) ...[coverArt, const SizedBox(width: 16)],
+                          Expanded(child: text),
+                        ]),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(flex: 4, child: side!),
+                    ],
+                  )
+                : narrow
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -418,7 +450,6 @@ class _HeroText extends StatelessWidget {
     final logo = pickLaunchboxImage(info.images, LaunchboxImageType.clearLogo, info.game.region);
     final summary = info.summary;
     final rating = info.rating;
-    final players = info.players == null ? null : [info.players!, if (info.cooperative == true) 'Co-op'].join(' · ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,7 +462,8 @@ class _HeroText extends StatelessWidget {
           // bottom left: nothing moves when the record or the logo comes in,
           // and the buttons below stay under a d-pad focus already placed.
           SizedBox(
-            height: 96,
+            // Smaller on a handheld, where the hero is only as tall as it holds.
+            height: DeviceClass.of(context) == DeviceClass.roomy ? 96 : 64,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: SizedBox.expand(
@@ -448,22 +480,18 @@ class _HeroText extends StatelessWidget {
           const SizedBox(height: 12),
           Text(summary, style: theme.textTheme.titleMedium?.copyWith(color: muted)),
         ],
-        if (rating != null || players != null) ...[
+        if (rating != null) ...[
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (rating != null) ...[
-                _Stars(rating: rating),
-                Text(
-                  info.votes == null ? rating.toStringAsFixed(1) : '${rating.toStringAsFixed(1)} (${info.votes} ${info.votes == 1 ? 'vote' : 'votes'})',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-                ),
-              ],
-              if (rating != null && players != null) Text('·', style: TextStyle(color: muted)),
-              if (players != null) Text(players, style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
+              _Stars(rating: rating),
+              Text(
+                info.votes == null ? rating.toStringAsFixed(1) : '${rating.toStringAsFixed(1)} (${info.votes} ${info.votes == 1 ? 'vote' : 'votes'})',
+                style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+              ),
             ],
           ),
         ],
@@ -509,9 +537,10 @@ class _Stars extends StatelessWidget {
 
 /// The front cover: a fixed height, the width the art asks for.
 class _Cover extends StatelessWidget {
-  const _Cover({required this.child});
+  const _Cover({required this.child, this.height = 120});
 
   final Widget child;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +551,7 @@ class _Cover extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: SizedBox(height: 120, child: child),
+        child: SizedBox(height: height, child: child),
       ),
     );
   }
@@ -551,15 +580,16 @@ class _Missing extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child});
+  const _Section({required this.title, required this.child, this.top = 32});
 
   final String title;
   final Widget child;
+  final double top;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 32),
+      padding: EdgeInsets.only(top: top),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

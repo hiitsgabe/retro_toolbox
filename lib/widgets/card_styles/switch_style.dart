@@ -104,6 +104,7 @@ class SwitchMenuRow extends StatelessWidget {
       if (device == DeviceClass.portrait) return _grid(box);
       // About the Switch's share of the screen: a 256 px icon on 720 px.
       var size = (box.maxHeight * 0.38).clamp(120.0, 280.0).clamp(0.0, box.maxWidth * 0.42).toDouble();
+      var edge = _rowEdge, gap = _gap;
       if (device != DeviceClass.roomy) {
         // Whole cards at rest: the ones that fit grow until the next one
         // starts at the screen's edge, or one more shrinks in when growing
@@ -111,8 +112,12 @@ class SwitchMenuRow extends StatelessWidget {
         final width = box.maxWidth - 2 * _rowEdge;
         final fit = math.max(1, ((width + _gap) / (size + _gap)).floor());
         if (device == DeviceClass.landscapeLow && tiles.length <= 6) {
-          // A short menu on a low screen: all of it in the row.
-          size = math.min(size, (width - (tiles.length - 1) * _gap) / tiles.length);
+          // A short menu on a low screen: all of it in the row. Nothing
+          // scrolls, so the edges keep only the frame's room, and so does
+          // the gap (one card wears the frame at a time): the cards get it.
+          edge = _margin + 9;
+          gap = _margin + 6;
+          size = math.min(size, (box.maxWidth - 2 * edge - (tiles.length - 1) * gap) / tiles.length);
         } else if (tiles.length > fit) {
           double sized(int k) => (box.maxWidth - _rowEdge - k * _gap) / k;
           size = _rowHeight(sized(fit)) <= box.maxHeight ? sized(fit) : sized(fit + 1);
@@ -120,7 +125,7 @@ class SwitchMenuRow extends StatelessWidget {
       }
       return SizedBox.expand(
         key: _menuKey,
-        child: Center(child: SizedBox(height: _rowHeight(size), child: _row(size))),
+        child: Center(child: SizedBox(height: _rowHeight(size), child: _row(size, edge: edge, gap: gap))),
       );
     });
   }
@@ -149,15 +154,15 @@ class SwitchMenuRow extends StatelessWidget {
   /// what sits in the middle.
   static double _rowHeight(double size) => size + 2 * _MenuName.bandFor(size);
 
-  Widget _row(double size) {
+  Widget _row(double size, {double edge = _rowEdge, double gap = _gap}) {
     final band = _MenuName.bandFor(size);
     return ListView.builder(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: _rowEdge),
+      padding: EdgeInsets.symmetric(horizontal: edge),
       itemCount: tiles.length,
       itemBuilder: (context, i) => Padding(
-        padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : _gap),
-        child: SizedBox.square(dimension: size, child: _card(i, size, before: _rowEdge, after: _rowEdge)),
+        padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : gap),
+        child: SizedBox.square(dimension: size, child: _card(i, size, before: edge, after: edge)),
       ),
     );
   }

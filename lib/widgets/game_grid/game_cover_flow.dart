@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
 import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
@@ -29,6 +30,8 @@ class GameCoverFlow extends ConsumerWidget {
     }
     return CoverFlow(
       aspectRatio: _aspectRatio,
+      // The ring round the centre card, in its corners.
+      focusShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(StyleTokens.of(context).cardRadius)),
       jumpTo: jumpIndex >= 0 ? jumpIndex : null,
       items: [
         for (final game in games)

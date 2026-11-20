@@ -188,4 +188,40 @@ void main() {
     await t.pump();
     expect(FocusManager.instance.primaryFocus, same(two));
   });
+
+  // A pushed page used to put the first press on the (i) or Back, the
+  // topmost controls, instead of the screen's content. The first page is the
+  // menu: a focused tile that opens the screen.
+  for (final (name, key) in [('Down', LogicalKeyboardKey.arrowDown), ('Right', LogicalKeyboardKey.arrowRight), ('X', LogicalKeyboardKey.gameButtonX)]) {
+    testWidgets('after a push, the first $name lands on the first control of the body', (t) async {
+      var pressed = 0;
+      final screen = tool(
+        bar: ActionBar(primary: KitAction('Compress to CHD', () {})),
+        body: Column(children: [
+          TextButton(onPressed: () => pressed++, child: const Text('first')),
+          TextButton(onPressed: () {}, child: const Text('second')),
+        ]),
+      );
+      await pumpKit(
+        t,
+        Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              autofocus: true,
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen)),
+              child: const Text('tile'),
+            ),
+          ),
+        ),
+      );
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.pumpAndSettle();
+      expect(find.text('CHD CONVERTER'), findsOneWidget);
+      await t.sendKeyEvent(key);
+      await t.pumpAndSettle();
+      expect(Focus.of(t.element(find.text('first'))).hasPrimaryFocus, isTrue);
+      // A button wakes focus without pressing what it lands on.
+      expect(pressed, 0);
+    });
+  }
 }

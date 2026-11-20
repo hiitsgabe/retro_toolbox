@@ -114,6 +114,9 @@ void main() {
 
   Finder inPage(Finder f) => find.descendant(of: find.byType(GameDetailsPage), matching: f);
 
+  /// The action bar's primary, labelled [label] (the bar writes Classic caps).
+  Finder primary(String label) => find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text(label));
+
   bool onCard(WidgetTester t, Type card) {
     final ctx = FocusManager.instance.primaryFocus?.context;
     if (ctx == null) return false;
@@ -151,21 +154,21 @@ void main() {
   // The grid card has no buttons of its own any more: favourite, download and
   // select are reached through the page, as from a row.
   for (final (name, card) in <(String, Widget)>[('row', const GameRow(game: _game)), ('grid item', const GameGridItem(game: _game))]) {
-    testWidgets('$name: enter opens the menu; Download runs the action and closes it; focus returns', (t) async {
+    testWidgets('$name: enter opens the menu; Start runs Download and closes it; focus returns', (t) async {
       await pump(t, card);
       await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
 
       expect(inPage(find.text(_game.title)), findsOneWidget);
-      expect(inPage(find.text('Ready')), findsOneWidget);
-      expect(inPage(find.text('Download')), findsOneWidget);
-      expect(inPage(find.text('Add to favourites')), findsOneWidget);
-      expect(inPage(find.text('Select')), findsOneWidget);
+      // "Ready" is every game not on disk: the page has no line for it.
+      expect(inPage(find.text('Ready')), findsNothing);
+      // The actions are in the bar: Download is the primary, on Start.
+      expect(inPage(primary('DOWNLOAD')), findsOneWidget);
+      expect(inPage(find.text('FAVOURITE')), findsOneWidget);
+      expect(inPage(find.text('SELECT')), findsOneWidget);
 
-      // First action button is focused.
-      expect(Focus.of(t.element(inPage(find.text('Download')))).hasFocus, isTrue);
-      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
       await t.pumpAndSettle();
 
       expect(find.byType(GameDetailsPage), findsNothing);
@@ -178,12 +181,18 @@ void main() {
       await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
-      await t.tap(inPage(find.text('Add to favourites')));
+      await t.tap(inPage(find.text('FAVOURITE')));
       await t.pumpAndSettle();
       expect(favorites.toggled, [_game.gameId]);
-      await t.tap(inPage(find.text('Select')));
+      await t.tap(inPage(find.text('SELECT')));
       await t.pumpAndSettle();
       expect(catalog.toggled, [_game.gameId]);
+      // Y and X do the same from anywhere on the page.
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonY);
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonX);
+      await t.pumpAndSettle();
+      expect(favorites.toggled, [_game.gameId, _game.gameId]);
+      expect(catalog.toggled, [_game.gameId, _game.gameId]);
     });
   }
 
@@ -207,7 +216,7 @@ void main() {
     await t.pump();
     expect(find.byType(GameRow), findsNothing);
 
-    await t.tap(inPage(find.text('Download')));
+    await t.tap(inPage(primary('DOWNLOAD')));
     await t.pumpAndSettle();
     expect(t.takeException(), isNull);
     expect(ran, [(_game, GameAction.download)]);
@@ -225,7 +234,9 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(t.getTopLeft(inPage(find.text('Cancel'))).dx, lessThan(t.getTopLeft(inPage(find.text('Pause'))).dx));
+    // The first is the primary, on Start; the rest sit beside it.
+    expect(inPage(primary('CANCEL')), findsOneWidget);
+    expect(inPage(find.text('PAUSE')), findsOneWidget);
   });
 
   testWidgets('selectable: false has no Select button', (t) async {
@@ -233,8 +244,8 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(inPage(find.text('Download')), findsOneWidget);
-    expect(inPage(find.text('Select')), findsNothing);
+    expect(inPage(primary('DOWNLOAD')), findsOneWidget);
+    expect(inPage(find.text('SELECT')), findsNothing);
   });
 
   testWidgets('escape closes the menu and focus returns to the card', (t) async {
@@ -304,18 +315,15 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight); // favourites
-    await t.sendKeyEvent(LogicalKeyboardKey.arrowRight); // Unselect
+    Focus.of(t.element(inPage(find.text('UNSELECT')))).requestFocus();
     await t.pump();
-    expect(Focus.of(t.element(inPage(find.text('Unselect')))).hasFocus, isTrue);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(inPage(find.text('Unselect')), findsNothing);
-    expect(inPage(find.text('Select')), findsNothing);
+    expect(inPage(find.text('UNSELECT')), findsNothing);
+    expect(inPage(find.text('SELECT')), findsNothing);
     final node = FocusManager.instance.primaryFocus;
     expect(node, isNot(isA<FocusScopeNode>()));
     expect(node?.context?.findAncestorWidgetOfExactType<GameDetailsPage>(), isNotNull);
-    expect(Focus.of(t.element(inPage(find.text('Add to favourites')))).hasFocus, isTrue); // the button before it
   });
 
   testWidgets('escape while an action runs does not drop it', (t) async {
@@ -328,7 +336,7 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    await t.tap(inPage(find.text('Download')));
+    await t.tap(inPage(primary('DOWNLOAD')));
     await t.pump();
     await t.sendKeyEvent(LogicalKeyboardKey.escape);
     await t.pumpAndSettle();
@@ -368,27 +376,33 @@ void main() {
     expect(lb.asked, [('Sega Genesis', 7)]);
     // No title now to swap for the logo a moment later; the buttons are there.
     expect(inPage(find.text(matched.title)), findsNothing);
-    expect(inPage(find.text('Download')), findsOneWidget);
+    expect(inPage(primary('DOWNLOAD')), findsOneWidget);
     expect(find.text('About'), findsNothing);
-    final buttonsAt = t.getTopLeft(inPage(find.text('Download')));
+    final buttonsAt = t.getTopLeft(inPage(primary('DOWNLOAD')));
 
     // No clear logo in the record: the title takes the logo's place, nothing moves.
     lb.record.complete(const LaunchboxGame(id: 7, name: 'Sonic the Hedgehog', overview: overview, developer: 'Sonic Team'));
     await t.pumpAndSettle();
     expect(inPage(find.text(matched.title)), findsOneWidget);
-    expect(t.getTopLeft(inPage(find.text('Download'))), buttonsAt);
+    expect(t.getTopLeft(inPage(primary('DOWNLOAD'))), buttonsAt);
     await t.drag(inPage(find.byType(CustomScrollView)), const Offset(0, -2000));
     await t.pumpAndSettle();
     expect(inPage(find.text(overview)), findsOneWidget);
     expect(inPage(find.text('Sonic Team')), findsOneWidget);
   });
 
-  testWidgets('with no game actions the favourite button takes focus', (t) async {
+  testWidgets('with no game actions there is no primary, and Favourite is still in the bar', (t) async {
     await pump(t, const GameRow(game: _game), state: const GameState(game: _game, status: GameStatus.extracted));
     await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await t.sendKeyEvent(LogicalKeyboardKey.enter);
     await t.pumpAndSettle();
-    expect(Focus.of(t.element(inPage(find.text('Add to favourites')))).hasPrimaryFocus, isTrue);
+    expect(inPage(find.byKey(const ValueKey('kit-primary'))), findsNothing);
+    expect(inPage(find.text('FAVOURITE')), findsOneWidget);
+    // Start runs nothing, and does not press what has focus either.
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pumpAndSettle();
+    expect(ran, isEmpty);
+    expect(favorites.toggled, isEmpty);
   });
 
   testWidgets('the d-pad walks a long overview down to the back cover, never via the back button', (t) async {

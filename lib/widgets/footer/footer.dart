@@ -5,8 +5,9 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
-import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
+import 'package:retro_toolbox/widgets/kit/kit_base.dart';
+import 'package:retro_toolbox/widgets/kit/slot.dart';
 
 class Footer extends ConsumerWidget {
   const Footer({super.key});
@@ -33,141 +34,75 @@ class Footer extends ConsumerWidget {
 
     final overallProgress = _calculateOverallProgress(activeGames);
 
-    final selectedConsole = appState.selectedConsole;
-    final downloadDir = settingsNotifier.getDownloadDir(selectedConsole?.id);
-    final shouldTruncate = downloadDir.length > (50 + (isNarrow ? 0 : 20));
-    final truncateSize = isNarrow ? 10 : 30;
-    final truncatedDownloadDir =
-        shouldTruncate ? '${downloadDir.substring(0, truncateSize)}...${downloadDir.substring(downloadDir.length - truncateSize)}' : downloadDir;
+    final downloadDir = settingsNotifier.getDownloadDir(appState.selectedConsole?.id);
+    final t = KitType.of(context);
+    final k = t.k;
+    final muted = t.subtitle;
 
-    return Stack(
-      children: [
-        AnimatedContainer(
-          duration: Duration(milliseconds: 200),
-          height: hasActiveTasks ? 50 : 40,
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-            onTap: () => TaskPanelModal.show(context),
-            // The global DpadScope outline is the only focus indicator.
-            focusColor: Colors.transparent,
-            child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: hasActiveTasks
-                    ? Color.alphaBlend(Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.1), StyleTokens.of(context).bar)
-                    : StyleTokens.of(context).bar,
-                border: Border(
-                  top: BorderSide(
-                    color: hasActiveTasks
-                        ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4)
-                        : Theme.of(context).colorScheme.outline,
-                    width: hasActiveTasks ? 1.5 : 0.5,
-                  ),
-                ),
-              ),
-              child: OverflowBox(
-                maxHeight: double.infinity,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: hasActiveTasks
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _buildStatusText(downloadingGames, extractingGames),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                SizedBox(height: 2),
-                                Text(
-                                  "${catalogState.filteredGamesCount} games",
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Text(
-                              appState.loading ? "Loading catalog..." : "${catalogState.filteredGamesCount} games",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+    // One row: what runs (with its progress), the count, and the download
+    // folder; the whole bar opens the task manager.
+    return SizedBox(
+      height: 40,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => TaskPanelModal.show(context),
+          // The global DpadScope outline is the only focus indicator.
+          focusColor: Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              // Translucent, as the kit's bars: the backdrop shows through.
+              color: Color.alphaBlend(Colors.black.withValues(alpha: 0.3), k.surface.withValues(alpha: 0.55)),
+              border: Border(top: BorderSide(color: hasActiveTasks ? k.accent.withValues(alpha: 0.5) : k.panelLine)),
+            ),
+            // Three parts: what runs and the count on the left, the chevron in
+            // the middle (never over the text), the folder on the right.
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (hasActiveTasks) ...[
+                          Flexible(
+                            child: Text(
+                              _buildStatusText(downloadingGames, extractingGames),
+                              style: muted.copyWith(color: k.accent, fontWeight: FontWeight.w600),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                    ),
-                    SizedBox(width: 8),
-                    hasActiveTasks
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: SizedBox(
-                                  width: 132,
-                                  child: LinearProgressIndicator(
-                                    value: overallProgress,
-                                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                    color: Theme.of(context).colorScheme.primary,
-                                    minHeight: 3,
-                                  ),
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: Text(
-                                  truncatedDownloadDir,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Text(
-                            truncatedDownloadDir,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-                            ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                  ],
-                ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: isNarrow ? 40 : 72,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: LinearProgressIndicator(value: overallProgress, backgroundColor: Colors.white.withValues(alpha: 0.12), color: k.accent, minHeight: 4),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                        ],
+                        // The body says the catalog is loading; the bar does not repeat it.
+                        if (!appState.loading)
+                          Flexible(child: Text('${catalogState.filteredGamesCount} games', style: muted, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      ],
+                    ),
+                  ),
+                  // The bar's InkWell handles taps on the arrow too.
+                  IgnorePointer(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Icon(Icons.keyboard_arrow_up, size: 24, color: hasActiveTasks ? k.accent : t.muted.withValues(alpha: 0.7)),
+                    ),
+                  ),
+                  Expanded(child: Align(alignment: Alignment.centerRight, child: PathText(downloadDir, style: muted))),
+                ],
               ),
-            ),
             ),
           ),
         ),
-        // The bar's InkWell handles taps on the arrow too.
-        Center(
-          child: IgnorePointer(
-            child: Container(
-              padding: EdgeInsets.all(8),
-              child: Icon(
-                Icons.keyboard_arrow_up,
-                size: 24,
-                color: hasActiveTasks ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 

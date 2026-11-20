@@ -13,6 +13,8 @@ import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
@@ -58,11 +60,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   @override
   void initState() {
     super.initState();
-    _scroll.addListener(() {
-      final media = MediaQuery.of(context);
-      final bar = media.padding.top + kToolbarHeight;
-      _pastHero.value = _scroll.offset > GameDetailsView.heroHeight(media.size.height) - bar;
-    });
+    // The hero is only as tall as it needs on a handheld: the page scrolls
+    // under the app bar as soon as it moves.
+    _scroll.addListener(() => _pastHero.value = _scroll.offset > 48);
     // The catalog only carries the fields lists sort and filter on; the
     // rest is read from the platform file now, while the page already shows.
     final details = widget.game.details;
@@ -112,12 +112,6 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         if (gameActionLabels.containsKey(a)) a,
     ];
 
-    // All one button type, unkeyed: when Select goes away the next button
-    // takes over its element, and with it the focus.
-    Widget button(String label, IconData icon, VoidCallback onPressed, {bool primary = false, bool autofocus = false}) => primary
-        ? FilledButton.icon(autofocus: autofocus, onPressed: onPressed, icon: Icon(icon), label: Text(label))
-        : FilledButton.tonalIcon(autofocus: autofocus, onPressed: onPressed, icon: Icon(icon), label: Text(label));
-
     (String, Widget) section(String title, List<GameAddon> list) {
       final games = [for (final a in list) _addonGames.putIfAbsent(a, () => a.toGame(game))];
       return (title, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -127,72 +121,92 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     }
 
     final error = gameState.errorMessage;
+    // The bar: Start runs the first action, Y favourites, X selects; the
+    // other actions sit beside them. The box art opens from the cover. Focus
+    // starts in the page, at its top, so Down reads it through to the bar.
+    final bar = ActionBar(
+      primary: actions.isEmpty ? null : KitAction(gameActionLabels[actions.first]!, () => _run(gameState, actions.first), icon: gameActionIcons[actions.first]),
+      more: [
+        for (final a in actions.skip(1)) KitAction(gameActionLabels[a]!, () => _run(gameState, a), icon: gameActionIcons[a]),
+        if (widget.selectable && (gameState.isInteractable || isSelected))
+          KitAction(
+            isSelected ? 'Unselect' : 'Select',
+            () => ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId),
+            icon: isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+            button: PadButton.x,
+          ),
+      ],
+      secondary: KitAction(
+        isFavorite ? 'Unfavourite' : 'Favourite',
+        () => ref.read(favoritesProvider.notifier).toggleFavorite(game.gameId),
+        icon: isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+        button: PadButton.y,
+      ),
+    );
+    // "Ready" is every game not on disk yet: no line for it.
+    final showStatus = error != null || gameState.status != GameStatus.ready;
     return PopScope(
       canPop: !_busy,
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
-          child: ValueListenableBuilder<bool>(
-            valueListenable: _pastHero,
-            builder: (context, past, _) => AppBar(
-              // Not a focus stop: once the focused control scrolls off the top,
-              // Down would land on it and the rest of the page is unreachable.
-              // B and touch still go back.
-              leading: const ExcludeFocus(child: BackButton()),
-              // Past the hero the page scrolls under it: the solid panel, not the
-              // transparent scaffold.
-              backgroundColor: past ? StyleTokens.of(context).solidPanel : null,
-              title: past ? Text(game.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-            ),
-          ),
-        ),
-        body: GameDetailsView(
-          game: game,
-          launchbox: _launchbox,
-          launchboxPending: _lookingUp,
-          scrollController: _scroll,
-          imageBuilder: GameDetailsPage.debugImageBuilder,
-          onOpenImage: (url) => showImageViewer(context, url),
-          status: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(gameState.statusText),
-              if (error != null) Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ],
-          ),
-          discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
-          sections: [
-            if (group != null && group.isBoxSet) ('Contents', GameContentsList(group: group)),
-            if (group != null && group.versions.length >= 2)
-              ('Versions', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final v in group.versions)
-                  GameFileRow(game: _versionGames.putIfAbsent(v, () => v.entry), label: v.label, main: v.first.gameId == game.gameId),
-              ])),
-            if (group != null && group.extras.isNotEmpty)
-              ('Extras', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                for (final e in group.extras) GameFileRow(game: e, label: extraLabel(e)),
-              ])),
-            if (game.updates.isNotEmpty) section('Updates', game.updates),
-            if (game.dlcs.isNotEmpty) section('DLC', game.dlcs),
-            if (game.mods.isNotEmpty) section('Mods', game.mods),
-          ],
-          actions: [
-            for (final a in actions) button(gameActionLabels[a]!, gameActionIcons[a]!, () => _run(gameState, a), primary: a == actions.first, autofocus: a == actions.first),
-            button(
-              isFavorite ? 'Remove from favourites' : 'Add to favourites',
-              isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              () => ref.read(favoritesProvider.notifier).toggleFavorite(game.gameId),
-              autofocus: actions.isEmpty,
-            ),
-            if (widget.selectable && (gameState.isInteractable || isSelected))
-              button(
-                isSelected ? 'Unselect' : 'Select',
-                isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                () => ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId),
+      child: KitArea(
+        area: AppArea.games,
+        child: KitBarActions(
+          bar: bar,
+          child: Scaffold(
+            extendBodyBehindAppBar: true,
+            appBar: PreferredSize(
+              preferredSize: const Size.fromHeight(kToolbarHeight),
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _pastHero,
+                builder: (context, past, _) => AppBar(
+                  // Not a focus stop: once the focused control scrolls off the top,
+                  // Down would land on it and the rest of the page is unreachable.
+                  // B and touch still go back.
+                  leading: const ExcludeFocus(child: BackButton()),
+                  // Past the hero the page scrolls under it: the solid panel, not the
+                  // transparent scaffold.
+                  backgroundColor: past ? StyleTokens.of(context).solidPanel : null,
+                  title: past ? Text(game.displayTitle, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+                ),
               ),
-            if (game.boxart != null) button('View box art', Icons.image_outlined, () => showBoxartViewer(context, game)),
-          ],
+            ),
+            body: DpadFirstFocus(
+              child: GameDetailsView(
+                game: game,
+                launchbox: _launchbox,
+                launchboxPending: _lookingUp,
+                scrollController: _scroll,
+                imageBuilder: GameDetailsPage.debugImageBuilder,
+                // The cover is the box art: its viewer, with the title and size.
+                onOpenImage: (url) => url == game.boxart ? showBoxartViewer(context, game) : showImageViewer(context, url),
+                status: !showStatus
+                    ? null
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(gameState.statusText),
+                          if (error != null) Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        ],
+                      ),
+                discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,
+                sections: [
+                  if (group != null && group.isBoxSet) ('Contents', GameContentsList(group: group)),
+                  if (group != null && group.versions.length >= 2)
+                    ('Versions', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      for (final v in group.versions)
+                        GameFileRow(game: _versionGames.putIfAbsent(v, () => v.entry), label: v.label, main: v.first.gameId == game.gameId),
+                    ])),
+                  if (group != null && group.extras.isNotEmpty)
+                    ('Extras', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      for (final e in group.extras) GameFileRow(game: e, label: extraLabel(e)),
+                    ])),
+                  if (game.updates.isNotEmpty) section('Updates', game.updates),
+                  if (game.dlcs.isNotEmpty) section('DLC', game.dlcs),
+                  if (game.mods.isNotEmpty) section('Mods', game.mods),
+                ],
+              ),
+            ),
+            bottomNavigationBar: bar,
+          ),
         ),
       ),
     );

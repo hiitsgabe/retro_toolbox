@@ -28,6 +28,64 @@ class DpadOwnOutline extends StatelessWidget {
   Widget build(BuildContext context) => child;
 }
 
+/// Where the first press on a page with nothing focused yet lands: the first
+/// control under it, not the first on the page (a kit screen's body rather
+/// than the (i) in its header).
+class DpadFirstFocus extends StatefulWidget {
+  const DpadFirstFocus({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DpadFirstFocus> createState() => _DpadFirstFocusState();
+}
+
+class _DpadFirstFocusState extends State<DpadFirstFocus> {
+  static final _live = <_DpadFirstFocusState>{};
+  final _node = FocusNode(debugLabel: 'DpadFirstFocus', canRequestFocus: false, skipTraversal: true);
+
+  @override
+  void initState() {
+    super.initState();
+    _live.add(this);
+  }
+
+  @override
+  void dispose() {
+    _live.remove(this);
+    _node.dispose();
+    super.dispose();
+  }
+
+  /// The first control of a region inside [scope] on the top route, if any.
+  static FocusNode? firstIn(FocusScopeNode scope) {
+    for (final region in _live) {
+      if (!region.mounted || ModalRoute.of(region.context)?.isCurrent == false) continue;
+      if (!region._node.ancestors.contains(scope)) continue;
+      final first = region._node.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull;
+      if (first != null) return first;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Focus(focusNode: _node, child: widget.child);
+}
+
+/// The focus outline goes round [target] instead of the focused control under
+/// this (a cover flow's one focus stop is the whole flow; the ring belongs on
+/// its centre card), in [shape] when given.
+class DpadFocusRect extends StatelessWidget {
+  const DpadFocusRect({super.key, required this.target, this.shape, required this.child});
+
+  final GlobalKey target;
+  final ShapeBorder? shape;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
 /// Y: actions for the focused item.
 class ItemActionsIntent extends Intent {
   const ItemActionsIntent();
@@ -62,6 +120,20 @@ class _EdgeAction extends Action<ListEdgeIntent> {
   void invoke(ListEdgeIntent intent) => _run(intent.end);
 }
 
+/// The first control of [scope]: a [DpadFirstFocus] region's when it has
+/// one, else the first in traversal order.
+FocusNode? _firstOf(FocusScopeNode scope) =>
+    _DpadFirstFocusState.firstIn(scope) ?? scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull;
+
+/// An arrow on a page with nothing focused: into its [DpadFirstFocus] region
+/// when it has one (the directional search would take the topmost control).
+bool _wakeInRegion(FocusNode? node) {
+  if (node is! FocusScopeNode) return false;
+  final first = _DpadFirstFocusState.firstIn(node);
+  first?.requestFocus();
+  return first != null;
+}
+
 EditableTextState? _focusedField() => FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>();
 
 /// Up/down: leave a text field unless it is multi-line (maxLines != 1); then
@@ -85,6 +157,7 @@ class _VerticalAction extends Action<_VerticalIntent> {
   void invoke(_VerticalIntent intent) {
     _onMove();
     final node = FocusManager.instance.primaryFocus;
+    if (_wakeInRegion(node)) return;
     if (node == null || node.focusInDirection(intent.direction)) return;
     // Nothing focusable that way (text, a disabled button, a header above the
     // first button): scroll the page so it can still be read.
@@ -130,7 +203,9 @@ class _SideAction extends Action<_SideIntent> {
   @override
   void invoke(_SideIntent intent) {
     _onMove();
-    FocusManager.instance.primaryFocus?.focusInDirection(intent.direction);
+    final node = FocusManager.instance.primaryFocus;
+    if (_wakeInRegion(node)) return;
+    node?.focusInDirection(intent.direction);
   }
 }
 
@@ -274,8 +349,7 @@ class _DpadScopeState extends State<DpadScope> {
       final pageCtx = top.subtreeContext;
       if (_disposed || !offTop() || !top.isActive || pageCtx == null) return;
       final scope = FocusScope.of(pageCtx);
-      final first = scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull;
-      (first ?? scope).requestFocus();
+      (_firstOf(scope) ?? scope).requestFocus();
     });
   }
 
@@ -332,7 +406,7 @@ class _DpadScopeState extends State<DpadScope> {
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is KeyDownEvent && _wakeKeys.contains(e.logicalKey)) {
       final scope = FocusManager.instance.primaryFocus;
-      final first = scope is FocusScopeNode ? scope.traversalDescendants.where((n) => n.canRequestFocus && !n.skipTraversal).firstOrNull : null;
+      final first = scope is FocusScopeNode ? _firstOf(scope) : null;
       _woke = first != null;
       if (first != null) {
         first.requestFocus();
@@ -365,6 +439,13 @@ class _DpadScopeState extends State<DpadScope> {
     if (ctx.findAncestorWidgetOfExactType<DpadOwnOutline>() != null) return null;
     final box = ctx.findRenderObject();
     if (box is! RenderBox || !box.attached || !box.hasSize) return null;
+    final owner = ctx.findAncestorWidgetOfExactType<DpadFocusRect>();
+    if (owner != null) {
+      final target = owner.target.currentContext?.findRenderObject();
+      if (target is! RenderBox || !target.attached || !target.hasSize) return null;
+      final r = MatrixUtils.transformRect(target.getTransformTo(null), Offset.zero & target.size);
+      return r.isFinite ? r : null;
+    }
     // A focused InkWell keeps itself alive when its list scrolls it away, and
     // the sliver gives kept-alive children a zero paint transform, so its rect
     // is NaN until focus moves (an L1/R1 jump scrolls a frame before the
@@ -378,6 +459,8 @@ class _DpadScopeState extends State<DpadScope> {
   static ShapeBorder? _focusShape() {
     final ctx = FocusManager.instance.primaryFocus?.context;
     if (ctx == null || !ctx.mounted) return null;
+    final owner = ctx.findAncestorWidgetOfExactType<DpadFocusRect>();
+    if (owner != null) return owner.shape;
     ShapeBorder? shape;
     var hops = 0;
     ctx.visitAncestorElements((e) {

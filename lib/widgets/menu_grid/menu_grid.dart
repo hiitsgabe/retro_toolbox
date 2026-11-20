@@ -34,6 +34,10 @@ class MenuTile {
   /// parent's). Classic draws a tile with an area as a cartridge.
   final AppArea? area;
 
+  /// A cartridge's label colour in place of its [area]'s (the consoles, all
+  /// of one area, take the palette in turn).
+  final Color? tint;
+
   /// The tile's drawing in Classic's own icon set.
   final PixelGlyph? pixelIcon;
 
@@ -57,6 +61,7 @@ class MenuTile {
     this.bgAssetPath,
     this.accentColor,
     this.area,
+    this.tint,
     this.pixelIcon,
     this.subtitle,
     this.badge,
@@ -475,7 +480,7 @@ class _CartridgeFace extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final k = StyleTokens.of(context);
-    final area = k.area(tile.area!);
+    final area = tile.tint ?? k.area(tile.area!);
     final floor = DeviceClass.of(context).textFloor;
     final shape = _cartridgeShape(k);
     return LayoutBuilder(builder: (context, box) {

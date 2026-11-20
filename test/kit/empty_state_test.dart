@@ -27,4 +27,27 @@ void main() {
     expect(find.byIcon(Icons.search_off), findsNothing);
     expect(find.byType(OutlinedButton), findsNothing);
   });
+
+  testWidgets('a second action sits beside the first, and either can be left out', (t) async {
+    final ran = <String>[];
+    await pumpKit(
+      t,
+      Scaffold(
+        body: EmptyState(
+          icon: Icons.search_off,
+          line: 'No games match',
+          action: KitAction('Reset filters', () => ran.add('reset')),
+          secondAction: KitAction('Clear search', () => ran.add('clear')),
+        ),
+      ),
+      style: CardStyle.vita,
+    );
+    expect(t.getCenter(find.text('Reset filters')).dy, closeTo(t.getCenter(find.text('Clear search')).dy, 1));
+    await t.tap(find.text('Clear search'));
+    await t.tap(find.text('Reset filters'));
+    expect(ran, ['clear', 'reset']);
+
+    await pumpKit(t, Scaffold(body: EmptyState(line: 'No games match', secondAction: KitAction('Clear search', () {}))), style: CardStyle.vita);
+    expect(find.byType(OutlinedButton), findsOneWidget);
+  });
 }

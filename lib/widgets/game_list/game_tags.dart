@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_metadata_model.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 
 class GameTags extends StatelessWidget {
@@ -22,7 +23,7 @@ class GameTags extends StatelessWidget {
         Wrap(
           spacing: 3,
           runSpacing: 2,
-          children: [for (final tag in tags) _tag(tag, _getTagColor(context, tag))],
+          children: [for (final tag in tags) _tag(tag, _getTagColor(context, tag), DeviceClass.of(context).textFloor)],
         ),
       ],
     );
@@ -56,13 +57,13 @@ class GameTags extends StatelessWidget {
     return tags;
   }
 
-  Widget _tag(String tag, Color color) => Container(
+  Widget _tag(String tag, Color color, double fontSize) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         child: Text(
           tag,
           style: TextStyle(
-            fontSize: 8,
+            fontSize: fontSize,
             fontWeight: FontWeight.w600,
             // The warning amber is too light for white.
             color: ThemeData.estimateBrightnessForColor(color) == Brightness.light ? Colors.black87 : Colors.white,

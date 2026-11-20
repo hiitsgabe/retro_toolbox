@@ -49,7 +49,8 @@ class FakeDownloads extends StateNotifier<DownloadState> implements DownloadNoti
 }
 
 class FakeGames extends StateNotifier<Map<String, GameState>> implements GameStateManager {
-  FakeGames() : super(const {});
+  /// [running]: the task states the footer and the task manager show.
+  FakeGames([super.running = const {}]);
   @override
   bool isResolving(String gameId) => false;
   @override
@@ -99,10 +100,15 @@ List<Game> snesGames() => [
         Game(title: title, url: 'https://example.invalid/snes/$i.zip', size: (2 + i) * 512 * 1024, consoleId: 'snes'),
     ];
 
-/// Overrides for a games screen on SNES with [games], [selected] ids.
-List<Override> gamesOverrides(List<Game> games, {Set<String> selected = const {}, Map<int, GameStatus> statuses = const {}}) => [
+/// Overrides for a games screen on SNES with [games], [selected] ids;
+/// [catalog] in place of the one they make.
+List<Override> gamesOverrides(List<Game> games,
+        {Set<String> selected = const {}, Map<int, GameStatus> statuses = const {}, FakeCatalog? catalog, Map<String, GameState> running = const {}}) =>
+    [
       appStateProvider.overrideWith((ref) => FakeApp(AppState(consoles: {for (final c in consoles) c.id: c}, selectedConsole: consoles.first))),
-      catalogProvider.overrideWith((ref) => FakeCatalog(CatalogState(
+      catalogProvider.overrideWith((ref) =>
+          catalog ??
+          FakeCatalog(CatalogState(
             games: games,
             cachedFilteredGames: games,
             cachedTotalCount: games.length,
@@ -125,7 +131,7 @@ List<Override> gamesOverrides(List<Game> games, {Set<String> selected = const {}
           },
         );
       }),
-      gameStateManagerProvider.overrideWith((ref) => FakeGames()),
+      gameStateManagerProvider.overrideWith((ref) => FakeGames(running)),
       downloadProvider.overrideWith((ref) => FakeDownloads()),
       favoritesProvider.overrideWith((ref) => FakeFavorites()),
     ];

@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 /// One card in a [CoverFlow]: a visual [face], a [label] shown under the
 /// centered card, and an optional [onTap] fired when the centered card is
@@ -28,7 +31,10 @@ class CoverFlow extends StatefulWidget {
   /// When this changes to an index, the flow animates there (an L1/R1 jump).
   final int? jumpTo;
 
-  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0, this.jumpTo});
+  /// The focus ring's shape round the centre card; null: the style's.
+  final ShapeBorder? focusShape;
+
+  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0, this.jumpTo, this.focusShape});
 
   @override
   State<CoverFlow> createState() => _CoverFlowState();
@@ -37,10 +43,14 @@ class CoverFlow extends StatefulWidget {
 class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMixin {
   double _position = 0; // continuous centered index
   late final AnimationController _snap;
+
+  /// Where the centre card rests: the focus ring's place.
+  final _slot = GlobalKey();
   Animation<double>? _snapAnim;
 
   static const double _tilt = 0.22; // subtle Y rotation (radians) — near upright
-  static const int _window = 6;
+  /// Room kept between the farthest card and the screen's edge.
+  static const double _gutter = 12;
 
   @override
   void initState() {
@@ -118,20 +128,32 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Fit card + its 0.42 reflection within the height left after the label,
-        // and cap the width so the centered card isn't absurdly wide.
+        // The centre card sits in the middle of its band, its reflection
+        // hanging below it, the label right under the band, and the whole in
+        // the middle of the height. Landscape keeps the sides for the fans; a
+        // phone sizes the card from its height as much as from its width.
+        final portrait = MediaQuery.orientationOf(context) == Orientation.portrait;
         final budget = (constraints.maxHeight - 56).clamp(160.0, double.infinity);
-        double cardH = budget / 1.44;
-        final maxCardW = constraints.maxWidth * 0.5;
+        double cardH = budget * (portrait ? 0.5 : 0.8);
+        final maxCardW = constraints.maxWidth * (portrait ? 0.68 : 0.36);
         if (cardH * widget.aspectRatio > maxCardW) cardH = maxCardW / widget.aspectRatio;
         final cardW = cardH * widget.aspectRatio;
-        final nearGap = cardW * 0.52; // spacing of the immediate neighbours
-        final farStep = cardW * 0.13; // far cards compress into slivers
+        // A phone shows more of the reflection, the title over its fading end.
+        final gap = portrait ? cardH * 0.3 : math.max(16.0, cardH * 0.12);
+        final band = math.min(portrait ? constraints.maxHeight : budget, cardH + 2 * gap);
+        final nearGap = cardW * (portrait ? 0.46 : 0.62); // spacing of the immediate neighbours
+        // The far cards fan out to the screen's edges: as many as the width
+        // takes at a readable step, the last one ending at the gutter. A
+        // phone has no room for that: two more peek past the first, as slivers.
+        final edge = constraints.maxWidth / 2 - _gutter - cardW * 0.24;
+        final room = edge - nearGap;
+        final window = room < cardW * 0.16 ? 3 : ((room / (cardW * 0.16)).floor() + 1).clamp(3, 8);
+        final farStep = room < cardW * 0.16 ? cardW * 0.08 : room / (window - 1); // far cards compress into slivers
         final step = nearGap; // drag sensitivity
 
         final visible = <int>[];
         for (int i = 0; i < widget.items.length; i++) {
-          if ((i - _position).abs() <= _window) visible.add(i);
+          if ((i - _position).abs() <= window) visible.add(i);
         }
         // Paint far-to-near so the centered card ends up on top.
         visible.sort((a, b) => (b - _position).abs().compareTo((a - _position).abs()));
@@ -144,27 +166,36 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
           onHorizontalDragEnd: (d) => _onEnd(d.primaryVelocity ?? 0),
           child: Column(
             children: [
-              Expanded(
+              const Spacer(),
+              SizedBox(
+                height: band,
                 child: ClipRect(
                   child: SizedBox.expand(
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
+                        // The centre card's face, without its reflection.
+                        IgnorePointer(child: SizedBox(key: _slot, width: cardW, height: cardH)),
                         for (final i in visible) _card(i, cardW, cardH, nearGap, farStep),
+                        if (portrait) Positioned(left: 0, right: 0, bottom: gap * 0.35, child: _label()),
                       ],
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-              _label(),
-              const SizedBox(height: 20),
+              if (!portrait) ...[
+                const SizedBox(height: 8),
+                _label(),
+                const SizedBox(height: 20),
+              ],
+              const Spacer(),
             ],
           ),
         );
         final focus = Actions(
           actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => _openCentre())},
-          child: Focus(autofocus: true, onKeyEvent: _onKey, child: flow),
+          // One focus stop for the flow; the ring goes round the centre card.
+          child: DpadFocusRect(target: _slot, shape: widget.focusShape, child: Focus(autofocus: true, onKeyEvent: _onKey, child: flow)),
         );
         final wrap = widget.items.isEmpty ? null : widget.items[_position.round().clamp(0, _last)].wrapFocus;
         return wrap?.call(focus) ?? focus;
@@ -192,25 +223,30 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
           _animateTo(i);
         }
       },
-      child: ExcludeFocus(child: _cardWithReflection(cardW, cardH, widget.items[i].face)),
+      child: ExcludeFocus(child: _cardWithReflection(cardW, cardH, widget.items[i].face, dim: 1 - opacity)),
     );
 
     // Horizontal placement kept separate from the perspective tilt/scale so the
-    // math stays predictable.
+    // math stays predictable. Down by half the reflection: the face is what
+    // sits in the middle.
     return Transform.translate(
-      offset: Offset(x, 0),
+      offset: Offset(x, (2 + cardH * 0.42) / 2),
       child: Transform(
         alignment: Alignment.center,
         transform: Matrix4.identity()
           ..setEntry(3, 2, 0.0012) // perspective
           ..rotateY(rot)
           ..scaleByDouble(scale, scale, scale, 1.0),
-        child: Opacity(opacity: opacity, child: card),
+        // The reflection may hang past the bottom, where the flow clips it.
+        child: OverflowBox(maxHeight: double.infinity, child: card),
       ),
     );
   }
 
-  Widget _cardWithReflection(double w, double h, Widget face) {
+  /// The far cards fade by [dim] towards black, not towards transparent: a
+  /// see-through card showed the titles of the ones behind it.
+  Widget _cardWithReflection(double w, double h, Widget face, {required double dim}) {
+    if (dim > 0) face = DecoratedBox(position: DecorationPosition.foreground, decoration: BoxDecoration(color: Colors.black.withValues(alpha: dim)), child: face);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

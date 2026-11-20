@@ -101,59 +101,58 @@ class _GameGridState extends ConsumerState<GameGrid> with JumpScroll<GameGrid> {
 
     const loadMoreThresholdPx = 500.0;
 
-    return Padding(
-      padding: EdgeInsets.only(left: 6, right: 6, top: 6, bottom: 3),
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          final isScroll = notification is ScrollUpdateNotification;
-          final isNearBottom = notification.metrics.pixels >= notification.metrics.maxScrollExtent - loadMoreThresholdPx;
-          final isVerticalScroll = notification.metrics.axis == Axis.vertical;
-          final shouldLoadMore = isScroll && isVerticalScroll && isNearBottom && !catalogState.loadingMore && catalogState.hasMoreItems;
-          if (shouldLoadMore) ref.read(catalogProvider.notifier).loadMoreItems();
-          return false;
-        },
-        child: GridView.builder(
-          key: PageStorageKey('game-grid-$selectedConsoleId'),
-          controller: jumpScroll,
-          padding: EdgeInsets.zero,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: _aspectRatio,
-            crossAxisSpacing: 6,
-            mainAxisSpacing: 6,
-          ),
-          itemCount: games.length + (loadingMore ? crossAxisCount : 0),
-          itemBuilder: (context, index) {
-            if (index >= games.length) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
-                    width: 1,
-                  ),
-                ),
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                ),
-              );
-            }
-
-            final game = games[index];
-            return GameGridItem(
-              key: ValueKey(game.gameId),
-              game: game,
-              aspectRatio: _aspectRatio,
-              // First card takes focus when the list appears (d-pad start).
-              autofocus: index == 0,
-            );
-          },
+    // The gutter is inside the scroll view: the first row starts clear of the
+    // header, and its focus ring is not clipped when it scrolls back.
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        final isScroll = notification is ScrollUpdateNotification;
+        final isNearBottom = notification.metrics.pixels >= notification.metrics.maxScrollExtent - loadMoreThresholdPx;
+        final isVerticalScroll = notification.metrics.axis == Axis.vertical;
+        final shouldLoadMore = isScroll && isVerticalScroll && isNearBottom && !catalogState.loadingMore && catalogState.hasMoreItems;
+        if (shouldLoadMore) ref.read(catalogProvider.notifier).loadMoreItems();
+        return false;
+      },
+      child: GridView.builder(
+        key: PageStorageKey('game-grid-$selectedConsoleId'),
+        controller: jumpScroll,
+        padding: const EdgeInsets.fromLTRB(10, 12, 10, 10),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: _aspectRatio,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
         ),
+        itemCount: games.length + (loadingMore ? crossAxisCount : 0),
+        itemBuilder: (context, index) {
+          if (index >= games.length) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+
+          final game = games[index];
+          return GameGridItem(
+            key: ValueKey(game.gameId),
+            game: game,
+            aspectRatio: _aspectRatio,
+            // First card takes focus when the list appears (d-pad start).
+            autofocus: index == 0,
+          );
+        },
       ),
     );
   }

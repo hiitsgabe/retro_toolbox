@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 
@@ -37,14 +38,14 @@ class GameProgressBar extends StatelessWidget {
                   Text(
                     '${(gameState.currentProgress * 100).toStringAsFixed(1)}%',
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: DeviceClass.of(context).textFloor,
                       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),
                   Text(
                     _getProgressText(gameState),
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: DeviceClass.of(context).textFloor,
                       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                   ),

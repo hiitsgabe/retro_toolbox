@@ -216,6 +216,22 @@ class StyleTokens extends ThemeExtension<StyleTokens> {
 
   Color area(AppArea a) => areas[a]!;
 
+  /// The area colours in an order where neighbours stand apart: for a row of
+  /// tiles of one area (the consoles) that should not all wear its colour.
+  static const _paletteTurn = [
+    AppArea.games,
+    AppArea.tools,
+    AppArea.saves,
+    AppArea.servers,
+    AppArea.tasks,
+    AppArea.settings,
+    AppArea.sports,
+    AppArea.info,
+  ];
+
+  /// The [i]th colour of the palette in turn.
+  Color paletteAt(int i) => area(_paletteTurn[i % _paletteTurn.length]);
+
   /// The tokens for a screen of [a]: the area's colour as the accent where
   /// the style says so, else these.
   StyleTokens inArea(AppArea? a) {

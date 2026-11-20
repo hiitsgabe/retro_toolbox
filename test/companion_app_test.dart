@@ -232,7 +232,8 @@ void main() {
 
     // Downloads: Sonic downloading with its bar and buttons. Streets is queued, so only under Queue.
     expect(find.text('Sonic The Hedgehog'), findsOneWidget);
-    expect(find.text('Downloading'), findsOneWidget);
+    // A narrow row says its state after its size, in one line.
+    expect(find.textContaining('Downloading', findRichText: true), findsOneWidget);
     expect(find.text('40.0%'), findsOneWidget);
     expect(find.text('Streets of Rage 2'), findsNothing);
     expect(find.byIcon(Icons.favorite), findsOneWidget, reason: "Sonic's heart");
@@ -248,12 +249,12 @@ void main() {
     await t.tap(find.text('Queue'));
     await t.pumpAndSettle();
     expect(find.text('Streets of Rage 2'), findsOneWidget);
-    expect(find.text('Dl. Queued'), findsOneWidget);
+    expect(find.textContaining('Dl. Queued', findRichText: true), findsOneWidget);
 
     await t.tap(find.text('Failed'));
     await t.pumpAndSettle();
     expect(find.text('Golden Axe'), findsOneWidget);
-    expect(find.text('Download Failed'), findsOneWidget);
+    expect(find.textContaining('Download Failed', findRichText: true), findsOneWidget);
     await t.tap(find.byTooltip('Retry Download'));
     await t.pump();
     expect(requests.last, {'kind': 'game', 'gameId': golden.gameId, 'action': 'retryDownload'});

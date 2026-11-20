@@ -35,7 +35,12 @@ Future<void> _pumpWizard(WidgetTester t, _Probe probe) async {
     child: MaterialApp(
       navigatorKey: nav,
       builder: (c, child) => DpadScope(navigatorKey: nav, child: child!),
-      home: const SaveSyncRecipeWizardScreen(package: 'com.example.alpha', label: 'Alpha'),
+      // Pushed, as Add an app opens it, so leaving has somewhere to go.
+      home: Builder(builder: (context) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => const SaveSyncRecipeWizardScreen(package: 'com.example.alpha', label: 'Alpha'))));
+        return const Scaffold(body: Text('add an app'));
+      }),
     ),
   ));
   await t.pumpAndSettle();
@@ -154,5 +159,20 @@ void main() {
     expect(find.text('No save folder found for this app.'), findsOneWidget);
     expect(find.text('Look again'), findsOneWidget);
     expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNull);
+  });
+
+  // A desktop has no back key: step 1 needs a way out of its own.
+  testWidgets('step 1 offers Cancel, which leaves; later steps offer Back instead', (t) async {
+    await _pumpWizard(t, _Probe((root: '/storage/emulated/0/Android/data/com.example.alpha/files/Saves', entries: [(name: 'save.dat', isDir: false)])));
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-secondary')), matching: find.text('CANCEL')), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pumpAndSettle();
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-secondary')), matching: find.text('BACK')), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    await t.pumpAndSettle();
+    expect(find.text('Step 1 of 3 · Folder'), findsOneWidget);
+    await t.tap(find.byKey(const ValueKey('kit-secondary')));
+    await t.pumpAndSettle();
+    expect(find.byType(SaveSyncRecipeWizardScreen), findsNothing);
   });
 }

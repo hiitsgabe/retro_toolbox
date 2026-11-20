@@ -123,14 +123,13 @@ class _VitaRowsState extends State<_VitaRows> {
       return _VitaPlan(wide, cell, math.min((cell * share).clamp(48.0, widget.menu ? 150.0 : 180.0), cell), fits: false);
     }
 
-    if (!widget.menu) {
-      // Games: fewer, larger bubbles than the menus on the same screen.
-      return switch (device) {
-        DeviceClass.portrait => scrolling(3, 0.74),
-        DeviceClass.roomy => scrolling(4, 0.66),
-        _ => scrolling(4, 0.72),
-      };
-    }
+    // Games: fewer, larger bubbles than the menus on the same screen.
+    final games = switch (device) {
+      DeviceClass.portrait => scrolling(3, 0.74),
+      DeviceClass.roomy => scrolling(4, 0.66),
+      _ => scrolling(4, 0.72),
+    };
+    if (!widget.menu) return games;
     final fit = device.menuFit(count);
     if (fit == null || widget.shrinkWrap || !box.hasBoundedHeight) return scrolling(4, 0.6);
     // Menus: the long-row width that gives the largest bubbles with every
@@ -144,8 +143,11 @@ class _VitaRowsState extends State<_VitaRows> {
     _VitaPlan? best;
     for (final wide in choices) {
       final cell = width / wide;
-      final bubble = math.min(math.min(cell * 0.78, 160.0), _bubbleForRow(height / _rows(count, wide), floor));
-      if (best == null || bubble > best.bubble) best = _VitaPlan(wide, cell, bubble, fits: true);
+      // Never larger than a game's bubble: a phone's two-across menu had
+      // bubbles half as large again as the games under them.
+      final bubble = math.min(math.min(cell * 0.78, math.min(160.0, games.bubble)), _bubbleForRow(height / _rows(count, wide), floor));
+      // At the cap, the wider row: fewer rows of the same bubbles.
+      if (best == null || bubble > best.bubble || (bubble == best.bubble && bubble == games.bubble)) best = _VitaPlan(wide, cell, bubble, fits: true);
     }
     if (best == null || best.bubble < 48) return scrolling(device == DeviceClass.portrait ? 3 : 4, 0.6);
     return best;

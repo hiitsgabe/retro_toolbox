@@ -245,6 +245,32 @@ void main() {
       }
     });
 
+    // Six cards in the row, as the spec has it, but six small ones read as
+    // a strip: the edges and gaps keep only the focus frame's room.
+    testWidgets('Switch on the Odin 2: the six home cards take most of the width', (t) async {
+      await pump(t, menu(six), _odin2, CardStyle.switchStyle);
+      final widths = [for (final tile in six) t.getSize(find.byKey(ValueKey(tile.label))).width];
+      expect(widths.reduce((a, b) => a + b), greaterThan(_odin2.$1.width * 0.84));
+    });
+
+    // On a phone the menu took two bubbles across, half as large again as
+    // the games after it.
+    for (final (device, name) in [(_phone, 'phone'), (_odin2, 'Odin 2'), (_linux640, 'pixel')]) {
+      testWidgets('Vita on the $name: home bubbles no larger than game bubbles', (t) async {
+        final games = [for (var i = 0; i < 12; i++) Game(title: 'Game $i', url: 'https://x/g$i.zip', size: 1, consoleId: 'snes')];
+        final overrides = [
+          gameStateProvider.overrideWith((ref, g) => GameState(game: g, status: GameStatus.ready)),
+          gameStateManagerProvider.overrideWith((ref) => _FakeGames()),
+          favoritesProvider.overrideWith((ref) => _FakeFavorites()),
+          catalogProvider.overrideWith((ref) => _FakeCatalog(CatalogState(games: games, cachedFilteredGames: games, cachedHasMore: false))),
+        ];
+        await pump(t, menu(six), device, CardStyle.vita);
+        final menuBubble = t.getSize(find.byType(ClipOval).first).width;
+        await pump(t, Scaffold(body: Builder(builder: (c) => cardStyleKit(CardStyle.vita)!.gameList(c))), device, CardStyle.vita, overrides: overrides);
+        expect(menuBubble, lessThanOrEqualTo(t.getSize(find.byType(ClipOval).first).width + 0.5));
+      });
+    }
+
     testWidgets('Vita: game bubbles are larger than menu bubbles on the Odin 2', (t) async {
       final games = [for (var i = 0; i < 12; i++) Game(title: 'Game $i', url: 'https://x/g$i.zip', size: 1, consoleId: 'snes')];
       final overrides = [

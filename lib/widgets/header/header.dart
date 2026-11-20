@@ -91,16 +91,23 @@ class Header extends ConsumerStatefulWidget {
 }
 
 class _HeaderState extends ConsumerState<Header> {
+  /// Narrow screens: the search field is open in the console's place.
+  bool _searching = false;
+
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
     final catalogState = ref.watch(catalogProvider);
     final catalogNotifier = ref.read(catalogProvider.notifier);
     final taskQueueState = ref.watch(taskQueueProvider);
+    final k = StyleTokens.of(context);
 
-    // Below 600dp the console picker gets its own row: squeezed next to the
-    // search field and actions it shrank to an unreadable sliver on handhelds.
-    final isMobile = MediaQuery.of(context).size.width < 600;
+    // One row everywhere. Below 600 dp search is an icon that opens the field
+    // in the console's place: next to the console, the actions and back, a
+    // field on a phone was a sliver (it used to take a second row).
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    // A search under way stays open, so the query shows.
+    final searching = !narrow || _searching || catalogState.filterText.isNotEmpty;
     // The console picker stays enabled while a catalog loads: switching
     // mid-load is safe (stale loads are discarded), and a slow catalog used to
     // lock it, so changing consoles looked broken.
@@ -108,109 +115,71 @@ class _HeaderState extends ConsumerState<Header> {
     final canAccessSettings = !appState.loading && !taskQueueState.hasRunningTasks;
     final canDownload = canDownloadSelected(ref);
 
+    final search = SearchField(
+      initialText: catalogState.filterText,
+      isEnabled: !appState.loading,
+      autofocus: narrow,
+      onFocusChange: (focused) {
+        if (!focused && mounted && _searching && ref.read(catalogProvider).filterText.isEmpty) setState(() => _searching = false);
+      },
+      onChanged: (text) => catalogNotifier.updateFilterText(text),
+    );
+    final console = ConsoleDropdown(
+      consoles: widget.consoles,
+      selectedConsole: widget.selectedConsole,
+      onConsoleSelect: widget.onConsoleSelect,
+    );
+
     return Container(
-      height: !isMobile ? (kToolbarHeight - 5) + MediaQuery.of(context).padding.top : null,
       decoration: BoxDecoration(
-        color: StyleTokens.of(context).bar,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
-            width: 1,
-          ),
-        ),
+        // Translucent, as the kit's bars: the backdrop shows through.
+        color: Color.alphaBlend(Colors.black.withValues(alpha: 0.3), k.surface.withValues(alpha: 0.55)),
+        border: Border(bottom: BorderSide(color: k.panelLine)),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          child: isMobile
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        if (Navigator.canPop(context)) ...[
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back),
-                            tooltip: 'Back',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => Navigator.maybePop(context),
-                          ),
-                          SizedBox(width: 4),
-                        ],
-                        Expanded(
-                          flex: 3,
-                          child: ConsoleDropdown(
-                            consoles: widget.consoles,
-                            selectedConsole: widget.selectedConsole,
-                            onConsoleSelect: widget.onConsoleSelect,
-                          ),
-                        ),
-                      ],
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                if (Navigator.canPop(context))
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                else ...[
+                  const SizedBox(width: 4),
+                  Image.asset('assets/icon.png', width: 32),
+                  const SizedBox(width: 8),
+                ],
+                const SizedBox(width: 2),
+                if (narrow) ...[
+                  Expanded(child: searching ? search : console),
+                  if (!searching)
+                    _HeaderButton(
+                      icon: Icons.search_rounded,
+                      tooltip: 'Search',
+                      onPressed: appState.loading ? null : () => setState(() => _searching = true),
                     ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: SearchField(
-                            initialText: catalogState.filterText,
-                            isEnabled: !ref.watch(appStateProvider).loading,
-                            onChanged: (text) => catalogNotifier.updateFilterText(text),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        ..._buildActionWidgets(
-                          context: context,
-                          appState: appState,
-                          catalogState: catalogState,
-                          canDownload: canDownload,
-                          canAccessSettings: canAccessSettings,
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    if (Navigator.canPop(context)) ...[
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back),
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.maybePop(context),
-                      ),
-                      SizedBox(width: 4),
-                    ] else ...[
-                      Image.asset('assets/icon.png', width: 35),
-                      SizedBox(width: 16),
-                    ],
-                    Expanded(
-                      flex: 2,
-                      child: ConsoleDropdown(
-                        consoles: widget.consoles,
-                        selectedConsole: widget.selectedConsole,
-                        onConsoleSelect: widget.onConsoleSelect,
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      flex: 3,
-                      child: SearchField(
-                        initialText: catalogState.filterText,
-                        isEnabled: !ref.watch(appStateProvider).loading,
-                        onChanged: (text) => catalogNotifier.updateFilterText(text),
-                      ),
-                    ),
-                    SizedBox(width: 8),
-                    ..._buildActionWidgets(
-                      context: context,
-                      appState: appState,
-                      catalogState: catalogState,
-                      canDownload: canDownload,
-                      canAccessSettings: canAccessSettings,
-                    ),
-                  ],
+                ] else ...[
+                  Expanded(flex: 2, child: console),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 3, child: search),
+                ],
+                const SizedBox(width: 4),
+                ..._buildActionWidgets(
+                  context: context,
+                  appState: appState,
+                  catalogState: catalogState,
+                  canDownload: canDownload,
+                  canAccessSettings: canAccessSettings,
                 ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -228,33 +197,31 @@ class _HeaderState extends ConsumerState<Header> {
     // card styles' own layouts have no view modes.
     final style = ref.watch(styleProvider);
     final view = style.gameView(appState.viewMode);
+    final changed = catalogState.filter.changesFromDefault;
 
     return [
-      _buildActionButton(
-        context: context,
-        icon: catalogState.filter.differsFromDefault ? Icons.filter_alt : Icons.filter_alt_outlined,
-        isActive: catalogState.filter.differsFromDefault,
+      // The badge only when the filter is off its defaults: the defaults hide
+      // bad dumps and other regions, which is not something the user set.
+      _HeaderButton(
+        icon: changed > 0 ? Icons.filter_alt : Icons.filter_alt_outlined,
+        isActive: changed > 0,
+        badge: changed > 0 ? '$changed' : null,
         onPressed: () => FilterModal.show(context),
         tooltip: 'Filters',
       ),
-      SizedBox(width: 4),
-      _buildActionButton(
-        context: context,
+      _HeaderButton(
         icon: Icons.download_rounded,
         isActive: canDownload,
         onPressed: canDownload ? () => downloadSelected(ref, context, widget.selectedConsole?.id) : null,
         tooltip: 'Download Selected',
       ),
-      SizedBox(width: 4),
-      if (view != null) ...[
-        _buildActionButton(
-          context: context,
+      if (view != null)
+        _HeaderButton(
           icon: switch (view) {
             ViewMode.grid => Icons.grid_view_rounded,
             ViewMode.list => Icons.view_list_rounded,
             ViewMode.coverflow => Icons.view_carousel_rounded,
           },
-          isActive: false,
           // A picked layout is the setting: the toggle moves it on (never
           // back to the style's own, which Settings > Style picks).
           onPressed: style.gameLayout == GameLayout.styleDefault
@@ -262,8 +229,6 @@ class _HeaderState extends ConsumerState<Header> {
               : () => ref.read(styleProvider.notifier).setGameLayout(style.gameLayout.next),
           tooltip: 'Change view',
         ),
-        SizedBox(width: 4),
-      ],
       PopupMenuButton<String>(
         icon: Icon(
           Icons.more_vert,
@@ -316,45 +281,71 @@ class _HeaderState extends ConsumerState<Header> {
       ),
     ];
   }
+}
 
-  Widget _buildActionButton({
-    required BuildContext context,
-    required IconData icon,
-    required VoidCallback? onPressed,
-    required String tooltip,
-    bool isActive = false,
-  }) {
-    return Stack(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: isActive ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: isActive
-                ? Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                    width: 1,
-                  )
-                : null,
-          ),
-          child: IconButton(
-            icon: Icon(
-              icon,
-              color: isActive
-                  ? Theme.of(context).colorScheme.primary
-                  : onPressed != null
-                      ? Theme.of(context).colorScheme.onSurfaceVariant
-                      : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
-              size: 20,
+/// A 40 px icon button of the header, lit when [isActive], with an optional
+/// count in its corner.
+class _HeaderButton extends StatelessWidget {
+  const _HeaderButton({required this.icon, required this.onPressed, required this.tooltip, this.isActive = false, this.badge});
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final String tooltip;
+  final bool isActive;
+  final String? badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final k = StyleTokens.of(context);
+    final badge = this.badge;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: isActive ? k.accent.withValues(alpha: 0.16) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
-            onPressed: onPressed,
-            tooltip: tooltip,
-            padding: EdgeInsets.zero,
+            child: IconButton(
+              icon: Icon(
+                icon,
+                color: isActive
+                    ? k.accent
+                    : onPressed != null
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurfaceVariant.withValues(alpha: 0.4),
+                size: 22,
+              ),
+              onPressed: onPressed,
+              tooltip: tooltip,
+              padding: EdgeInsets.zero,
+            ),
           ),
-        ),
-      ],
+          if (badge != null)
+            Positioned(
+              top: -2,
+              right: -2,
+              child: IgnorePointer(
+                child: Container(
+                  key: const ValueKey('filter-badge'),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: k.accent, borderRadius: BorderRadius.circular(9)),
+                  child: Text(
+                    badge,
+                    style: TextStyle(fontFamily: StyleTokens.displayFont, fontSize: 12, height: 1.1, fontWeight: FontWeight.w700, color: k.onAccent),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

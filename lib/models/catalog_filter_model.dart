@@ -78,21 +78,26 @@ class CatalogFilter {
   /// Whether any filter is off its default. [isActive] is true on a fresh
   /// install (the default hides bad dumps and non-USA sets), so the header icon
   /// asks this instead. Sort is not a filter.
-  bool get differsFromDefault {
+  bool get differsFromDefault => changesFromDefault > 0;
+
+  /// How many filters are off their default: the header badge's number.
+  int get changesFromDefault {
     const d = CatalogFilter();
-    return !setEquals(regions, d.regions) ||
-        !setEquals(languages, d.languages) ||
-        !setEquals(categories, d.categories) ||
-        !setEquals(mediaTypes, d.mediaTypes) ||
-        !setEquals(dumpQualities, d.dumpQualities) ||
-        !setEquals(romTypes, d.romTypes) ||
-        !setEquals(modifications, d.modifications) ||
-        !setEquals(distributionTypes, d.distributionTypes) ||
-        showFavoritesOnly != d.showFavoritesOnly ||
-        showInLibraryOnly != d.showInLibraryOnly ||
-        !setEquals(genres, d.genres) ||
-        !setEquals(players, d.players) ||
-        minRating != d.minRating;
+    return [
+      !setEquals(regions, d.regions),
+      !setEquals(languages, d.languages),
+      !setEquals(categories, d.categories),
+      !setEquals(mediaTypes, d.mediaTypes),
+      !setEquals(dumpQualities, d.dumpQualities),
+      !setEquals(romTypes, d.romTypes),
+      !setEquals(modifications, d.modifications),
+      !setEquals(distributionTypes, d.distributionTypes),
+      showFavoritesOnly != d.showFavoritesOnly,
+      showInLibraryOnly != d.showInLibraryOnly,
+      !setEquals(genres, d.genres),
+      !setEquals(players, d.players),
+      minRating != d.minRating,
+    ].where((changed) => changed).length;
   }
 
   bool get isActive {

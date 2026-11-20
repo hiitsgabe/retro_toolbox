@@ -235,6 +235,11 @@ void main() {
       await pumpPage(t, box, size: size);
       final down = await walk(t, LogicalKeyboardKey.arrowDown, 120);
       expect(down, [for (final m in group.members) 'open:${memberLabel(group, m)}']);
+      // Past the last row Down reaches the action bar; Up comes back to it.
+      expect(focused(), isNull);
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await t.pumpAndSettle();
+      expect(focused(), 'open:${memberLabel(group, group.members.last)}');
       await t.sendKeyEvent(LogicalKeyboardKey.enter);
       await t.pumpAndSettle();
       expect(find.text('Contents'), findsNothing);

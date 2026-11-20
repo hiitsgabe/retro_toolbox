@@ -6,11 +6,17 @@ class SearchField extends StatefulWidget {
   final bool isEnabled;
   final Function(String) onChanged;
 
+  /// Takes focus when it appears (the header opens it from an icon).
+  final bool autofocus;
+  final ValueChanged<bool>? onFocusChange;
+
   const SearchField({
     super.key,
     required this.initialText,
     this.isEnabled = true,
     required this.onChanged,
+    this.autofocus = false,
+    this.onFocusChange,
   });
 
   @override
@@ -26,7 +32,7 @@ class _SearchFieldState extends State<SearchField> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.initialText);
-    _focusNode = FocusNode();
+    _focusNode = FocusNode()..addListener(() => widget.onFocusChange?.call(_focusNode.hasFocus));
   }
 
   @override
@@ -59,9 +65,10 @@ class _SearchFieldState extends State<SearchField> {
       child: TextField(
         controller: _controller,
         focusNode: _focusNode,
+        autofocus: widget.autofocus,
         onSubmitted: (_) => _focusNode.unfocus(),
         decoration: InputDecoration(
-          hintText: 'Search games...',
+          hintText: 'Search games',
           hintStyle: TextStyle(
             fontSize: 14,
             color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),

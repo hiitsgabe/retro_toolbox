@@ -132,7 +132,9 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                           ),
                           SizedBox(height: 2),
                         ],
-                        Row(
+                        // Chips at the text floor do not all fit across a small card.
+                        Wrap(
+                          runSpacing: 2,
                           children: [
                             if (game.discs.length >= 2 || game.metadata?.diskNumber.isNotEmpty == true) ...[
                               Container(
@@ -144,7 +146,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                                 child: Text(
                                   game.discs.length >= 2 ? '${game.discs.length} discs' : 'Disk ${game.metadata!.diskNumber}',
                                   style: TextStyle(
-                                    fontSize: 9,
+                                    fontSize: DeviceClass.of(context).textFloor,
                                     fontWeight: FontWeight.w500,
                                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
@@ -162,7 +164,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                                 child: Text(
                                   'Rev ${game.metadata!.revision}',
                                   style: TextStyle(
-                                    fontSize: 9,
+                                    fontSize: DeviceClass.of(context).textFloor,
                                     fontWeight: FontWeight.w500,
                                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
@@ -186,7 +188,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                                   child: Text(
                                     game.metadata?.regions.first ?? '',
                                     style: TextStyle(
-                                      fontSize: 8,
+                                      fontSize: DeviceClass.of(context).textFloor,
                                       fontWeight: FontWeight.w600,
                                       color: Theme.of(context).colorScheme.primary,
                                     ),
@@ -229,14 +231,19 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
   }
 
   Widget _buildPlaceholder(BuildContext context) {
+    final k = StyleTokens.of(context);
+    // Opaque, tinted with the style's accent: a see-through face let the
+    // cover flow's cards behind it show through.
+    final base = k.solidPanel.withValues(alpha: 1);
     return Container(
+      key: const ValueKey('game-placeholder'),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
-            Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.2),
+            Color.alphaBlend(k.accent.withValues(alpha: 0.26), base),
+            Color.alphaBlend(k.accent.withValues(alpha: 0.10), base),
           ],
         ),
       ),

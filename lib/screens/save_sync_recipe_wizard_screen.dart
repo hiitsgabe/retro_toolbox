@@ -135,6 +135,8 @@ class _SaveSyncRecipeWizardScreenState extends ConsumerState<SaveSyncRecipeWizar
         ),
       ),
       onBack: _step > 0 && !_busy ? () => _go(_step - 1) : null,
+      // Step 1 has no Back; a desktop has no back key either.
+      leaveLabel: _step == 0 ? 'Cancel' : null,
       onNext: _busy || _root == null ? null : (last ? _finish : () => _go(_step + 1)),
       nextLabel: last ? 'Save recipe' : 'Next',
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/action_bar.dart';
 import 'package:retro_toolbox/widgets/kit/kit_base.dart';
 import 'package:retro_toolbox/widgets/kit/status_panel.dart';
@@ -88,7 +89,8 @@ class KitScaffold extends StatelessWidget {
                 progress: portrait ? null : progress,
               ),
               if (portrait && progress != null) _ProgressBar(progress: progress),
-              Expanded(child: Padding(padding: padding, child: body)),
+              // The first d-pad press lands here, not on the header's (i).
+              Expanded(child: DpadFirstFocus(child: Padding(padding: padding, child: body))),
             ]),
           ),
           bottomNavigationBar: actionBar,

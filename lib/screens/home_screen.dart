@@ -17,6 +17,8 @@ import 'package:retro_toolbox/widgets/game_grid/game_cover_flow.dart';
 import 'package:retro_toolbox/widgets/footer/footer.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/widgets/common/hammer_loader.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Tells [HomeScreen] when a page covers it. Popups (sheets, dialogs, menus)
 /// are not page routes and leave it up, and neither does the game details page,
@@ -103,6 +105,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     final loadingStatus = ref.watch(catalogProvider.select((s) => s.loadingStatus));
     final errorMessage = ref.watch(catalogProvider.select((s) => s.errorMessage));
     final cards = ref.watch(styleProvider.select((s) => s.cards));
+    final catalog = ref.read(catalogProvider.notifier);
+    final filter = ref.watch(catalogProvider.select((s) => s.filter));
+    final query = ref.watch(catalogProvider.select((s) => s.filterText));
+    // A loaded catalog the filter or the search empties: say so, and offer
+    // the way back (the layouts have no empty look of their own).
+    final noMatch = ref.watch(catalogProvider.select((s) => s.games.isNotEmpty && s.filteredGamesCount == 0));
     final view = ref.watch(styleProvider.select((s) => s.gameView(appState.viewMode)));
 
     return Scaffold(
@@ -116,30 +124,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
             ),
             Expanded(
               child: appState.consolesList.isEmpty && !appState.loading
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.dataset_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                            const SizedBox(height: 16),
-                            const Text('No catalog configured', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Add a console catalog to get started: import a JSON file or load one from a URL.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton.icon(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null)),
-                              ),
-                              icon: const Icon(Icons.settings),
-                              label: const Text('Open Settings'),
-                            ),
-                          ],
-                        ),
+                  ? EmptyState(
+                      icon: Icons.dataset_outlined,
+                      glyph: PixelIcons.games,
+                      line: 'No catalog configured. Add one in Settings.',
+                      action: KitAction(
+                        'Open Settings',
+                        () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null))),
+                        icon: Icons.settings,
                       ),
                     )
                   : appState.loading
@@ -188,7 +180,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                                 ),
                               ),
                             )
-                          : LetterJump(
+                          : noMatch
+                              ? EmptyState(
+                                  icon: Icons.search_off_rounded,
+                                  line: 'No games match',
+                                  action: filter.differsFromDefault ? KitAction('Reset filters', catalog.defaultFilters) : null,
+                                  secondAction: query.isNotEmpty ? KitAction('Clear search', () => catalog.updateFilterText('')) : null,
+                                )
+                              : LetterJump(
                               // The card style's own layout, unless a Classic view is picked
                               // (AppStyle.gameView): those draw from the style's tokens.
                               child: (view == null ? cardStyleKit(cards)?.gameList(context) : null) ??

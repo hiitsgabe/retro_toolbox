@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
@@ -58,7 +59,7 @@ class _GameListState extends ConsumerState<GameList> with JumpScroll<GameList> {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 12,
+                    fontSize: DeviceClass.of(context).textFloor,
                   ),
                 ),
               ),
@@ -70,23 +71,25 @@ class _GameListState extends ConsumerState<GameList> with JumpScroll<GameList> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
+                      fontSize: DeviceClass.of(context).textFloor,
                     ),
                     textAlign: TextAlign.center,
                   ),
                 ),
-              SizedBox(
-                width: statusColumnWidth,
-                child: Text(
-                  'Status',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 12,
+              // A phone has no room for it: the row says the state under its size.
+              if (!isNarrow)
+                SizedBox(
+                  width: statusColumnWidth,
+                  child: Text(
+                    'Status',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: DeviceClass.of(context).textFloor,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-              ),
               SizedBox(
                 width: actionsColumnWidth - 5,
                 child: Text(
@@ -94,7 +97,7 @@ class _GameListState extends ConsumerState<GameList> with JumpScroll<GameList> {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 12,
+                    fontSize: DeviceClass.of(context).textFloor,
                   ),
                   textAlign: TextAlign.center,
                 ),

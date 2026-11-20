@@ -8,6 +8,7 @@ import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -26,78 +27,44 @@ class ConsoleGridScreen extends ConsumerWidget {
 
     // Always the console list: a catalog loads (and can fail) on the games
     // screen, never here.
-    Widget body;
+    final Widget body;
     if (appState.consolesList.isEmpty) {
-      body = Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.dataset_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              const SizedBox(height: 16),
-              const Text('No catalog configured', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-              const SizedBox(height: 8),
-              const Text(
-                'Add a console catalog to get started: import a JSON file or load one from a URL.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null)),
-                ),
-                icon: const Icon(Icons.settings),
-                label: const Text('Open Settings'),
-              ),
-            ],
-          ),
+      body = EmptyState(
+        icon: Icons.dataset_outlined,
+        glyph: PixelIcons.games,
+        line: 'No catalog configured. Add one in Settings.',
+        action: KitAction(
+          'Open Settings',
+          () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null))),
+          icon: Icons.settings,
         ),
       );
     } else {
+      final k = StyleTokens.of(context);
       final tiles = [
-        for (final console in appState.consolesList) _consoleTile(context, ref, console),
+        for (final (i, console) in appState.consolesList.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
       ];
       body = kit?.menuList(context, tiles, shrinkWrap: false, autofocusFirst: true) ?? _viewFor(appState.consoleViewMode, tiles);
     }
 
-    final showToggle = appState.consolesList.isNotEmpty && kit == null;
-    return Scaffold(
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(96),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 16, 12, 8),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  tooltip: 'Back',
-                  onPressed: () => Navigator.maybePop(context),
-                ),
-                const Spacer(),
-                Text(
-                  'Games Library',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                if (showToggle)
-                  IconButton(
-                    icon: Icon(_viewIcon(appState.consoleViewMode)),
-                    tooltip: 'Change view',
-                    onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
-                  )
-                else
-                  const SizedBox(width: 48),
-              ],
-            ),
+    final count = appState.consolesList.length;
+    final showToggle = count > 0 && kit == null;
+    return KitScaffold(
+      title: 'Games Library',
+      subtitle: count == 0 ? null : (count == 1 ? '1 console' : '$count consoles'),
+      icon: Icons.videogame_asset,
+      glyph: PixelIcons.games,
+      area: AppArea.games,
+      padding: EdgeInsets.zero,
+      actions: [
+        if (showToggle)
+          IconButton(
+            icon: Icon(_viewIcon(appState.consoleViewMode)),
+            tooltip: 'Change view',
+            onPressed: () => ref.read(appStateProvider.notifier).toggleConsoleViewMode(),
           ),
-        ),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: body,
-      ),
+      ],
+      body: body,
     );
   }
 
@@ -142,11 +109,14 @@ class ConsoleGridScreen extends ConsumerWidget {
     }
   }
 
-  MenuTile _consoleTile(BuildContext context, WidgetRef ref, Console console) {
+  /// [tint]: the cartridge's label colour; every console is a Games tile,
+  /// and one colour for all of them read as a wall of red.
+  MenuTile _consoleTile(BuildContext context, WidgetRef ref, Console console, Color tint) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     return MenuTile(
       label: console.name,
       area: AppArea.games,
+      tint: tint,
       pixelIcon: PixelIcons.games,
       icon: Icons.videogame_asset,
       assetPath: consoleLogoAsset(console),

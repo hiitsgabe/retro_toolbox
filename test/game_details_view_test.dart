@@ -61,9 +61,10 @@ void main() {
     List<Widget>? actions,
     ValueChanged<String>? onOpenImage,
     Size size = const Size(1240, 3000),
+    double dpr = 1,
   }) async {
-    t.view.physicalSize = size;
-    t.view.devicePixelRatio = 1;
+    t.view.physicalSize = size * dpr;
+    t.view.devicePixelRatio = dpr;
     addTearDown(t.view.reset);
     await t.pumpWidget(MaterialApp(
       theme: appTheme(CardStyle.classic),
@@ -85,7 +86,9 @@ void main() {
 
     expect(_url(_logo.url), findsOneWidget);
     expect(find.text('Sonic The Hedgehog'), findsNothing);
-    expect(find.text('1991 · Sega · Platform'), findsOneWidget);
+    // The genres and players are in the table only.
+    expect(find.text('1991 · Sega'), findsOneWidget);
+    expect(find.textContaining('players'), findsOneWidget);
     expect(find.text('4.2 (120 votes)'), findsOneWidget);
     // Hero background is the fanart, the cover the LaunchBox front.
     expect(_url(_fanart.url), findsOneWidget);
@@ -114,6 +117,30 @@ void main() {
     expect(_url(_back.url), findsOneWidget);
   });
 
+  // The hero was the whole first screen on a handheld: the details below it
+  // were out of sight with nothing to say they were there.
+  for (final (name, size, dpr) in [('odin2', const Size(731, 411), 2.625), ('linux640', const Size(640, 480), 1.0), ('phone', const Size(412, 915), 2.625)]) {
+    testWidgets('on $name the details start on the first screen', (t) async {
+      await pump(t, lb: _lb, size: size, dpr: dpr);
+      expect(t.getTopLeft(find.text('Details')).dy, lessThan(size.height * 0.6));
+    });
+  }
+
+  for (final (name, size, dpr) in [('odin2', const Size(731, 411), 2.625), ('linux640', const Size(640, 480), 1.0)]) {
+    testWidgets('on $name the details table sits beside the cover and title', (t) async {
+      await pump(t, lb: _lb, size: size, dpr: dpr);
+      final table = t.getRect(find.byType(Table));
+      final cover = t.getRect(_url(_front.url));
+      expect(table.left, greaterThan(cover.right));
+      expect(table.top, lessThan(cover.bottom));
+    });
+  }
+
+  testWidgets('on a phone the cover is larger than on a handheld', (t) async {
+    await pump(t, lb: _lb, size: const Size(412, 915), dpr: 2.625);
+    expect(t.getSize(_url(_front.url)).height, greaterThan(150));
+  });
+
   testWidgets('the catalog\'s release date wins over LaunchBox\'s, which shows before the record loads', (t) async {
     await pump(t, game: _game.copyWith(details: const GameDetails(boxart: _box, launchboxReleaseDate: 19990000)));
     row(t, 'Release date', '1999');
@@ -121,11 +148,12 @@ void main() {
     row(t, 'Release date', '2000');
   });
 
-  testWidgets('a year-only date shows the year; co-op shows in the players', (t) async {
+  testWidgets('a year-only date shows the year; players and co-op only in the table', (t) async {
     await pump(t, lb: const LaunchboxGame(id: 2, name: 'G', releaseDate: 19990000, maxPlayers: 4, cooperative: true));
     row(t, 'Release date', '1999');
     row(t, 'Co-op', 'Yes');
-    expect(find.text('1-4 players · Co-op'), findsOneWidget);
+    row(t, 'Players', '1-4 players');
+    expect(find.text('1-4 players · Co-op'), findsNothing);
   });
 
   testWidgets('without LaunchBox data: the title, no rating, no screenshots or about, the size, blurred box art', (t) async {
@@ -332,7 +360,8 @@ void main() {
     }
 
     arrived('open');
-    expect(position.pixels, greaterThan(0), reason: 'the first button sits below the screen at offset 0');
+    // On a short screen the hero holds only what it shows; once it was the
+    // whole screen and the first button opened scrolled into view.
     var backInHero = false;
     for (final key in [LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowUp]) {
       for (var i = 0; i < 80; i++) {

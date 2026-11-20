@@ -110,4 +110,32 @@ void main() {
     await t.pump();
     expect(find.text('Downloading 1 • Extracting 1'), findsOneWidget);
   });
+
+  // It used to stack the status over the count, and the progress over the
+  // folder, in a taller bar with 10 px text.
+  testWidgets('with work running the footer is one row, none of its text under the floor', (t) async {
+    final dl = GameState(game: const Game(title: 'dl', url: 'https://x/dl.bin', size: 0, consoleId: 'manual'), status: GameStatus.downloading);
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        appStateProvider.overrideWith((ref) => _FakeApp()),
+        catalogProvider.overrideWith((ref) => _FakeCatalog()),
+        settingsProvider.overrideWith((ref) => _FakeSettings()),
+        gameStateManagerProvider.overrideWith((ref) => _FakeGames({dl.game.gameId: dl})),
+      ],
+      child: const MaterialApp(home: Scaffold(body: Column(children: [Spacer(), SizedBox(width: 300, child: Footer())]))),
+    ));
+    await t.pump(const Duration(milliseconds: 300));
+    final status = t.getCenter(find.text('Downloading 1'));
+    expect(t.getCenter(find.text('0 games')).dy, closeTo(status.dy, 1));
+    expect(t.getCenter(find.byType(LinearProgressIndicator)).dy, closeTo(status.dy, 2));
+    expect(t.getSize(find.byType(Footer)).height, lessThanOrEqualTo(44));
+    // The chevron sat over the count on a 640 px screen.
+    final chevron = t.getRect(find.byIcon(Icons.keyboard_arrow_up));
+    for (final text in ['Downloading 1', '0 games']) {
+      expect(t.getRect(find.text(text)).overlaps(chevron), isFalse, reason: text);
+    }
+    for (final text in t.widgetList<Text>(find.descendant(of: find.byType(Footer), matching: find.byType(Text)))) {
+      expect(text.style?.fontSize ?? 14, greaterThanOrEqualTo(12), reason: text.data);
+    }
+  });
 }
