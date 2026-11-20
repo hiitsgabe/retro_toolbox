@@ -224,7 +224,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
     final t = state.transfer;
     return FileBrowserView(
       locationLabel: state.atRoot ? 'Shares' : state.path,
-      canGoUp: !state.atRoot,
+      crumbs: remoteCrumbs('Shares', state.path, notifier.goTo),
       busy: state.busy,
       error: state.error,
       items: [
@@ -234,7 +234,7 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       transfer: t == null ? null : BrowserTransfer(name: t.name, done: t.done, total: t.total, upload: t.upload),
       queuedSource: 'smb',
       selectable: !state.atRoot,
-      onUp: () => notifier.goUp(),
+      emptyLine: state.atRoot ? 'No shares on this host' : 'This folder is empty',
       onRefresh: () => notifier.refresh(),
       onOpen: (item) => notifier.open(_entry(state, item.id)),
       onToggleSelect: (item) => notifier.toggleSelect(_entry(state, item.id)),

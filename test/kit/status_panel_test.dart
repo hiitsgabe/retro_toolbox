@@ -108,4 +108,13 @@ void main() {
     await show(t, const StatusPanel.error(line: 'Nothing to convert'));
     expect(find.text('Details'), findsNothing);
   });
+
+  testWidgets('an error with onDismiss has a Dismiss that runs it; without, none', (t) async {
+    var dismissed = 0;
+    await show(t, StatusPanel.error(line: 'Zipping saves.zip failed: disk full', details: 'disk full', onDismiss: () => dismissed++));
+    await t.tap(find.byTooltip('Dismiss'));
+    expect(dismissed, 1);
+    await show(t, const StatusPanel.error(line: 'Nothing to convert'));
+    expect(find.byTooltip('Dismiss'), findsNothing);
+  });
 }

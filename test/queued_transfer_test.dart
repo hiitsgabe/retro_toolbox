@@ -128,7 +128,6 @@ void main() {
         home: Scaffold(
           body: FileBrowserView(
             locationLabel: '/roms',
-            canGoUp: false,
             busy: false,
             items: const [],
             selectedIds: const {},

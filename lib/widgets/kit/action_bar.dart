@@ -184,7 +184,9 @@ class KitBarActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bar = this.bar;
-    if (bar == null) return child;
+    // Always an Actions, so a bar that comes and goes (a paste waiting) keeps
+    // the screen's tree, and with it its state and focus.
+    if (bar == null) return Actions(actions: const {}, child: child);
     final secondary = bar.secondary;
     Action<T> run<T extends Intent>(VoidCallback? f) => CallbackAction<T>(onInvoke: (_) {
           f?.call();

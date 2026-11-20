@@ -160,6 +160,9 @@ class SmbNotifier extends StateNotifier<SmbState> {
 
   Future<void> goUp() async => _load(smbParent(state.path));
 
+  /// Opens [path] ('' = the shares root): a folder of the trail.
+  Future<void> goTo(String path) async => _load(path);
+
   Future<void> refresh() async => _load(state.path);
 
   Future<void> _load(String path) async {

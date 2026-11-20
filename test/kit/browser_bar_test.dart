@@ -34,4 +34,37 @@ void main() {
     expect(last.right, lessThanOrEqualTo(412));
     expect(t.takeException(), isNull);
   });
+
+  testWidgets('the menu is one icon after the actions', (t) async {
+    var opened = 0;
+    await pumpKit(t, Scaffold(body: BrowserBar(crumbs: const [Crumb('psx')], menu: () => opened++, menuTooltip: 'Folder options')));
+    await t.tap(find.byTooltip('Folder options'));
+    expect(opened, 1);
+  });
+
+  testWidgets('on a phone the actions go under the trail, which keeps the width', (t) async {
+    await pumpKit(
+      t,
+      Scaffold(
+        body: BrowserBar(
+          crumbs: [Crumb('Internal', () {}), Crumb('ROMs', () {}), const Crumb('psx')],
+          actions: [KitAction('New folder', () {}, icon: Icons.create_new_folder_outlined), KitAction('Storage', () {}, icon: Icons.sd_storage_outlined)],
+          menu: () {},
+        ),
+      ),
+      device: phone,
+    );
+    expect(t.getTopLeft(find.text('New folder')).dy, greaterThan(t.getBottomLeft(find.text('psx')).dy));
+    expect(t.takeException(), isNull);
+    await pumpKit(
+      t,
+      Scaffold(body: BrowserBar(crumbs: const [Crumb('psx')], actions: [KitAction('New folder', () {})])),
+    );
+    expect(t.getCenter(find.text('New folder')).dy, moreOrLessEquals(t.getCenter(find.text('psx')).dy, epsilon: 2));
+  });
+
+  testWidgets('a short trail starts at the left', (t) async {
+    await pumpKit(t, Scaffold(body: BrowserBar(crumbs: [Crumb('Internal', () {}), const Crumb('ROMs')])));
+    expect(t.getTopLeft(find.text('Internal')).dx, lessThan(40));
+  });
 }

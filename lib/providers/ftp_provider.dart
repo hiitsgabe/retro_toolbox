@@ -182,6 +182,17 @@ class FtpNotifier extends StateNotifier<FtpState> {
     }
   }
 
+  /// Opens the absolute [path]: a folder of the trail.
+  Future<void> goTo(String path) async {
+    state = state.copyWith(busy: true, clearError: true);
+    try {
+      await _client.cd(path);
+      await _reload();
+    } catch (e) {
+      state = state.copyWith(busy: false, error: '$e');
+    }
+  }
+
   Future<void> refresh() async {
     state = state.copyWith(busy: true, clearError: true);
     try {

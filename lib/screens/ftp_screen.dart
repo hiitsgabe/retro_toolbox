@@ -167,7 +167,7 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     final t = state.transfer;
     return FileBrowserView(
       locationLabel: state.path,
-      canGoUp: state.path != '/' && state.path.isNotEmpty,
+      crumbs: remoteCrumbs('/', state.path, (p) => notifier.goTo(p.isEmpty ? '/' : p)),
       busy: state.busy,
       error: state.error,
       items: [
@@ -176,7 +176,6 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
       selectedIds: state.selected,
       transfer: t == null ? null : BrowserTransfer(name: t.name, done: t.done, total: t.total, upload: t.upload),
       queuedSource: 'ftp',
-      onUp: () => notifier.goUp(),
       onRefresh: () => notifier.refresh(),
       onOpen: (item) => notifier.open(_entry(state, item.id)),
       onToggleSelect: (item) => notifier.toggleSelect(_entry(state, item.id)),

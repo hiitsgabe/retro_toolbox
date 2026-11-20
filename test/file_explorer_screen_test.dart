@@ -10,6 +10,7 @@ import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/file_explorer_screen.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -45,22 +46,41 @@ void main() {
     return container;
   }
 
-  IconButton action(WidgetTester tester, String tooltip) =>
-      tester.widget<IconButton>(find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton)).first);
+  // The actions sheet (Y, or More in the selection bar) is the kit's row menu.
+  List<String> sheetLabels(WidgetTester tester) => [for (final i in tester.widget<RowMenuSheet>(find.byType(RowMenuSheet)).items) i.label];
+  Finder inSheet(String label) => find.descendant(of: find.byType(RowMenuSheet), matching: find.text(label));
+  Finder inBar(String label) => find.descendant(of: find.byKey(const ValueKey('browser-selection')), matching: find.text(label));
+  Finder inTrail(String label) => find.descendant(of: find.byType(BrowserBar), matching: find.text(label));
 
-  testWidgets('selection actions follow the selection', (tester) async {
+  Future<void> more(WidgetTester tester) async {
+    await tester.tap(inBar('More'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> closeSheet(WidgetTester tester) async {
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('selection actions follow the selection: Copy, Move, Delete by name, the rest under More', (tester) async {
     await open(tester);
     expect(find.text('Saves'), findsOneWidget);
 
     await tester.tap(find.text('game.zip'));
     await tester.pump();
-    expect(action(tester, 'Rename').onPressed, isNotNull);
-    expect(action(tester, 'Extract here').onPressed, isNotNull);
+    expect(inBar('Copy'), findsOneWidget);
+    expect(inBar('Move'), findsOneWidget);
+    expect(inBar('Delete'), findsOneWidget);
+    await more(tester);
+    expect(sheetLabels(tester), ['Copy', 'Move', 'Rename', 'Zip', 'Extract here', 'Delete', 'Clear selection', 'New folder']);
+    await closeSheet(tester);
 
     await tester.tap(find.text('notes.txt'));
     await tester.pump();
-    expect(action(tester, 'Rename').onPressed, isNull); // two selected
-    expect(action(tester, 'Extract here').onPressed, isNull);
+    await more(tester);
+    expect(inSheet('Rename'), findsNothing); // two selected
+    expect(inSheet('Extract here'), findsNothing);
+    expect(inSheet('Zip'), findsOneWidget);
   });
 
   testWidgets('copy then paste inside a folder queues a copy into it', (tester) async {
@@ -68,9 +88,9 @@ void main() {
 
     await tester.tap(find.text('notes.txt'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Copy'));
+    await tester.tap(inBar('Copy'));
     await tester.pump();
-    expect(find.textContaining('open the destination and paste'), findsOneWidget);
+    expect(find.text('Copy notes.txt: open the folder and paste'), findsOneWidget);
 
     await tester.runAsync(() async {
       // Tapping a folder opens it (a file's tap selects), as in the SMB/FTP browsers.
@@ -78,24 +98,27 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pump();
-    expect(find.text(p.join(root.path, 'Saves')), findsOneWidget);
+    expect(inTrail('Saves'), findsOneWidget);
 
-    await tester.tap(find.text('Paste here'));
+    await tester.tap(find.byKey(const ValueKey('kit-primary')));
     await tester.pump();
 
     final task = container.read(taskQueueProvider).tasks.single;
     expect(task.type, TaskType.fileCopy);
     expect(task.params['destDir'], p.join(root.path, 'Saves'));
     expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
-    expect(find.text('Paste here'), findsNothing);
+    expect(find.byKey(const ValueKey('kit-primary')), findsNothing);
     container.dispose(); // stops the queue's timer, started in fake time by the queued copy
   });
 
   testWidgets('the grid/list choice switches the view and is remembered', (tester) async {
     await open(tester);
-    expect(find.byType(ListView), findsOneWidget); // short test screen: list by default
+    expect(find.byType(ListView), findsOneWidget); // list by default
 
-    await tester.tap(find.byTooltip('Show as grid'));
+    await tester.tap(find.byTooltip('Folder options'));
+    await tester.pumpAndSettle();
+    await tester.tap(inSheet('Show as grid'));
+    await tester.pumpAndSettle();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pump();
 
@@ -114,10 +137,9 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown); // game.zip
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    final labels = [for (final t in tester.widgetList<ListTile>(find.descendant(of: find.byType(BottomSheet), matching: find.byType(ListTile)))) (t.title as Text).data];
-    expect(labels, ['Copy', 'Move', 'Rename', 'Zip', 'Extract here', 'Delete', 'Clear selection', 'New folder']);
+    expect(sheetLabels(tester), ['Copy', 'Move', 'Rename', 'Zip', 'Extract here', 'Delete', 'Clear selection', 'New folder']);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Delete'));
+    await tester.tap(inSheet('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete?'), findsOneWidget);
     final focus = FocusManager.instance.primaryFocus!;
@@ -132,8 +154,8 @@ void main() {
     await press(tester, LogicalKeyboardKey.f2);
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, 'Rename'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Extract here'), findsNothing);
+    expect(inSheet('Rename'), findsOneWidget);
+    expect(inSheet('Extract here'), findsNothing);
   });
 
   testWidgets('with a clipboard, Y offers Paste here and Cancel paste', (tester) async {
@@ -142,19 +164,19 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown); // notes.txt
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.tap(inSheet('Copy'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('open the destination and paste'), findsOneWidget);
+    expect(find.textContaining('open the folder and paste'), findsOneWidget);
 
     await press(tester, LogicalKeyboardKey.f3); // nothing selected: acts on the focused entry
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(ListTile, 'Paste here'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Cancel paste'), findsOneWidget);
-    await tester.ensureVisible(find.widgetWithText(ListTile, 'Cancel paste'));
+    expect(inSheet('Paste here'), findsOneWidget);
+    expect(inSheet('Cancel paste'), findsOneWidget);
+    await tester.ensureVisible(inSheet('Cancel paste'));
     await tester.pump();
-    await tester.tap(find.widgetWithText(ListTile, 'Cancel paste'));
+    await tester.tap(inSheet('Cancel paste'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('open the destination and paste'), findsNothing);
+    expect(find.textContaining('open the folder and paste'), findsNothing);
     expect(container.read(taskQueueProvider).tasks, isEmpty);
   });
 
@@ -164,22 +186,25 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown);
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.tap(inSheet('Copy'));
     await tester.pumpAndSettle();
     await press(tester, LogicalKeyboardKey.f5);
     final task = container.read(taskQueueProvider).tasks.single;
     expect(task.type, TaskType.fileCopy);
     expect(task.params['destDir'], root.path);
     expect(task.params['sources'], [p.join(root.path, 'notes.txt')]);
-    expect(find.textContaining('open the destination and paste'), findsNothing);
+    expect(find.textContaining('open the folder and paste'), findsNothing);
     container.dispose(); // stops the queue's timer, started in fake time by the queued copy
   });
 
-  testWidgets('Start without a clipboard activates the focused row as before', (tester) async {
-    await open(tester);
-    await press(tester, LogicalKeyboardKey.arrowDown); // game.zip: activating selects it
+  // The kit's rule: Start runs the screen's primary or nothing; it never
+  // presses whatever has focus (here that would mark game.zip).
+  testWidgets('Start without a clipboard does nothing', (tester) async {
+    final container = await open(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown); // game.zip
     await press(tester, LogicalKeyboardKey.f5);
-    expect(action(tester, 'Extract here').onPressed, isNotNull);
+    expect(find.byKey(const ValueKey('browser-selection')), findsNothing);
+    expect(container.read(taskQueueProvider).tasks, isEmpty);
   });
 
   testWidgets('Start pastes into an empty folder just opened with A', (tester) async {
@@ -188,7 +213,7 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowDown); // notes.txt
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Copy'));
+    await tester.tap(inSheet('Copy'));
     await tester.pumpAndSettle();
     await press(tester, LogicalKeyboardKey.arrowUp);
     await press(tester, LogicalKeyboardKey.arrowUp); // Saves (empty)
@@ -197,7 +222,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 300));
     });
     await tester.pump();
-    expect(find.text('Empty'), findsOneWidget);
+    expect(find.text('This folder is empty'), findsOneWidget);
     await press(tester, LogicalKeyboardKey.f5);
     expect(container.read(taskQueueProvider).tasks.single.params['destDir'], p.join(root.path, 'Saves'));
     container.dispose(); // stops the queue's timer, started in fake time by the queued copy
@@ -220,17 +245,19 @@ void main() {
     await tester.pump();
     await press(tester, LogicalKeyboardKey.f3);
     await tester.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsNothing); // nothing to offer at the roots
+    expect(find.byType(RowMenuSheet), findsNothing); // nothing to offer at the roots
     expect(find.text('New folder'), findsNothing);
     expect(find.text('Paste here'), findsNothing);
   });
 
-  Future<void> openDialog(WidgetTester tester, String file, String tooltip) async {
+  /// Marks [file] (unless it is) and picks [action] under More.
+  Future<void> openDialog(WidgetTester tester, String file, String action) async {
     if (!tester.widget<ListTile>(find.widgetWithText(ListTile, file)).selected) {
       await tester.tap(find.text(file));
       await tester.pump();
     }
-    await tester.tap(find.byTooltip(tooltip));
+    await more(tester);
+    await tester.tap(inSheet(action));
     await tester.pumpAndSettle();
   }
 
@@ -328,5 +355,114 @@ void main() {
     expect(File(p.join(root.path, 'game', 'game.iso')).readAsStringSync(), 'iso');
     expect(File(p.join(root.path, 'game.zip')).existsSync(), isFalse);
     container.dispose(); // stops the queue's timer, started in fake time by the queued extraction
+  });
+
+  testWidgets('the trail names the storage root and goes back up on a tap', (tester) async {
+    await open(tester);
+    // The test folder is the Downloads root (path_provider answers it).
+    expect(inTrail('Downloads'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Saves'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    expect(inTrail('Saves'), findsOneWidget);
+    expect(find.text('notes.txt'), findsNothing);
+    await tester.runAsync(() async {
+      await tester.tap(inTrail('Downloads'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    expect(find.text('notes.txt'), findsOneWidget);
+    await press(tester, LogicalKeyboardKey.escape); // Back from a root: the storage list
+    expect(find.text('notes.txt'), findsNothing);
+    expect(find.widgetWithText(ListTile, 'Downloads'), findsOneWidget);
+    expect(inTrail('Storage'), findsOneWidget);
+  });
+
+  testWidgets('Storage lists the roots, the current one checked', (tester) async {
+    await open(tester);
+    await tester.tap(find.text('Storage'));
+    await tester.pumpAndSettle();
+    final sheet = tester.widget<RowMenuSheet>(find.byType(RowMenuSheet));
+    final downloads = sheet.items.singleWhere((i) => i.label == 'Downloads');
+    expect(downloads.subtitle, root.path);
+    expect(downloads.icon, Icons.check);
+  });
+
+  testWidgets('no action bar on touch with nothing to paste; a paste waiting is the bar, Cancel drops it', (tester) async {
+    await open(tester);
+    expect(find.byType(ActionBar), findsNothing);
+    await tester.tap(find.text('notes.txt'));
+    await tester.pump();
+    await tester.tap(inBar('Move'));
+    await tester.pump();
+    expect(find.descendant(of: find.byType(ActionBar), matching: find.text('Move notes.txt: open the folder and paste')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('kit-secondary')));
+    await tester.pump();
+    expect(find.byType(ActionBar), findsNothing);
+  });
+
+  testWidgets('a long press marks a folder', (tester) async {
+    await open(tester);
+    await tester.longPress(find.text('Saves'));
+    await tester.pump();
+    expect(inBar('1 selected'), findsOneWidget);
+    expect(find.text('notes.txt'), findsOneWidget, reason: 'still in the same folder');
+  });
+
+  group('a refused change', () {
+    late Directory locked;
+    setUp(() {
+      locked = Directory(p.join(root.path, 'Saves'));
+      File(p.join(locked.path, 'save.dat')).writeAsStringSync('dat');
+      Process.runSync('chmod', ['555', locked.path]);
+    });
+    tearDown(() => Process.runSync('chmod', ['755', locked.path]));
+
+    /// The dialog closes, then the change and the reload do real IO.
+    Future<void> realIo(WidgetTester tester) async {
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      }
+      await tester.pump();
+    }
+
+    Future<void> openLocked(WidgetTester tester) async {
+      await open(tester);
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Saves'));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+      await tester.tap(find.text('save.dat'));
+      await tester.pump();
+    }
+
+    testWidgets('a failed delete says what and why in one line, the raw error behind Details', (tester) async {
+      await openLocked(tester);
+      await tester.tap(inBar('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await realIo(tester);
+      expect(File(p.join(locked.path, 'save.dat')).existsSync(), isTrue);
+      expect(find.text("Can't delete save.dat: permission denied"), findsOneWidget);
+      expect(find.textContaining('errno'), findsNothing);
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('errno = 13'), findsOneWidget);
+    });
+
+    testWidgets('a failed rename stays on screen after the folder reloads', (tester) async {
+      await openLocked(tester);
+      await more(tester);
+      await tester.tap(inSheet('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'other.dat');
+      await tester.tap(find.widgetWithText(FilledButton, 'OK'));
+      await realIo(tester);
+      expect(find.text("Can't rename save.dat: permission denied"), findsOneWidget);
+    });
   });
 }

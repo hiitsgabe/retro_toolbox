@@ -162,4 +162,30 @@ void main() {
     expect(find.byKey(const ValueKey('kit-progress')), findsOneWidget);
     expect(t.getSize(find.byKey(const ValueKey('kit-progress'))).width, greaterThan(300));
   });
+
+  testWidgets('an action bar coming and going keeps the body and its focus', (t) async {
+    final bar = ValueNotifier<bool>(false);
+    await pumpKit(
+      t,
+      ValueListenableBuilder(
+        valueListenable: bar,
+        builder: (_, on, __) => KitScaffold(
+          title: 'T',
+          body: Column(children: [
+            TextButton(onPressed: () {}, child: const Text('one')),
+            TextButton(autofocus: true, onPressed: () {}, child: const Text('two')),
+          ]),
+          actionBar: on ? ActionBar(primary: KitAction('Paste here', () {})) : null,
+        ),
+      ),
+    );
+    final two = FocusManager.instance.primaryFocus;
+    expect(find.descendant(of: find.byWidget(two!.context!.widget), matching: find.text('two')), findsOneWidget);
+    bar.value = true;
+    await t.pump();
+    expect(FocusManager.instance.primaryFocus, same(two));
+    bar.value = false;
+    await t.pump();
+    expect(FocusManager.instance.primaryFocus, same(two));
+  });
 }

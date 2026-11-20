@@ -47,7 +47,8 @@ class StatusPanel extends StatelessWidget {
         onLink = null,
         items = const [],
         problems = const [],
-        dense = null;
+        dense = null,
+        onDismiss = null;
 
   /// [title]: "chdman not found". [actionLabel] runs the fix ("Locate
   /// chdman"); [linkLabel] opens where to read more ("Settings > Keys").
@@ -63,7 +64,8 @@ class StatusPanel extends StatelessWidget {
         text = title,
         items = const [],
         problems = const [],
-        dense = null;
+        dense = null,
+        onDismiss = null;
 
   /// [items] in order: the first running one gets the bar. [dense] (null:
   /// in portrait) shows only it and how many wait.
@@ -75,7 +77,8 @@ class StatusPanel extends StatelessWidget {
         onAction = null,
         linkLabel = null,
         onLink = null,
-        problems = const [];
+        problems = const [],
+        onDismiss = null;
 
   /// [actionLabel]: what to do next with the result ("Extract here").
   const StatusPanel.done({super.key, required String summary, this.problems = const [], this.actionLabel, this.onAction})
@@ -85,11 +88,13 @@ class StatusPanel extends StatelessWidget {
         linkLabel = null,
         onLink = null,
         items = const [],
-        dense = null;
+        dense = null,
+        onDismiss = null;
 
   /// [line]: what went wrong, for a person. [details]: the raw error, shown
-  /// on Details.
-  const StatusPanel.error({super.key, required String line, String? details})
+  /// on Details. [onDismiss]: the error can be put away (a failed background
+  /// job the screen keeps listing).
+  const StatusPanel.error({super.key, required String line, String? details, this.onDismiss})
       : kind = StatusKind.error,
         text = line,
         detail = details,
@@ -111,6 +116,7 @@ class StatusPanel extends StatelessWidget {
   final List<WorkItem> items;
   final List<Problem> problems;
   final bool? dense;
+  final VoidCallback? onDismiss;
 
   bool get isHidden => kind == StatusKind.hidden || (kind == StatusKind.working && items.isEmpty);
 
@@ -260,6 +266,15 @@ class StatusPanel extends StatelessWidget {
           onPressed: () => _showDetails(context, text, details),
           style: TextButton.styleFrom(minimumSize: const Size(0, 30), padding: const EdgeInsets.symmetric(horizontal: 8), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
           child: const Text('Details'),
+        ),
+      if (onDismiss != null)
+        IconButton(
+          onPressed: onDismiss,
+          tooltip: 'Dismiss',
+          icon: const Icon(Icons.close, size: 18),
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          padding: EdgeInsets.zero,
         ),
     ]);
   }
