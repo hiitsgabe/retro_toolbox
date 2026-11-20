@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_recipe_wizard_screen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Picking which apps this set of handhelds keeps in step.
 ///
@@ -33,7 +37,8 @@ class SaveSyncAddAppScreen extends ConsumerStatefulWidget {
 
 class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
   List<({String package, AppInfo info})>? _apps;
-  final _picked = <String>{};
+  var _picked = <String>{};
+  final _search = TextEditingController();
   String _filter = '';
   bool _adding = false;
   String? _error;
@@ -48,8 +53,14 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
   }
 
   @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final pad = ref.watch(inputModeProvider) == InputMode.gamepad;
     final apps = _apps;
     final catalog = widget.catalog;
     final shown = apps == null
@@ -58,97 +69,69 @@ class _SaveSyncAddAppScreenState extends ConsumerState<SaveSyncAddAppScreen> {
             for (final a in apps)
               if (_filter.isEmpty || a.info.label.toLowerCase().contains(_filter) || a.package.contains(_filter)) a,
           ];
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add an app')),
-      body: SafeArea(
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search installed apps'),
-              onChanged: (v) => setState(() => _filter = v.trim().toLowerCase()),
-            ),
-          ),
-          if (catalog != null && catalog.fetchedAt != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  catalog.fromCache
-                      ? 'Catalog unreachable — showing what was cached'
-                      : 'Catalog updated ${_ago(catalog.fetchedAt!)}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ),
-            ),
-          if (apps == null) const Expanded(child: Center(child: CircularProgressIndicator())),
-          if (apps != null)
-            Expanded(
-              child: shown.isEmpty
-                  ? Center(child: Text('Nothing matches.', style: theme.textTheme.bodyMedium))
-                  : ListView.builder(
-                      itemCount: shown.length,
-                      itemBuilder: (context, i) {
-                        final a = shown[i];
-                        final added = widget.already.contains(a.package);
-                        final mine = widget.known[a.package];
-                        final hit = catalog?.byPackage[a.package];
-                        return CheckboxListTile(
-                          value: added || _picked.contains(a.package),
-                          onChanged: added || _adding
-                              ? null
-                              : (on) => setState(() => on == true ? _picked.add(a.package) : _picked.remove(a.package)),
-                          secondary: GestureDetector(
-                            // An app with nothing published is a thing to
-                            // describe, not a thing to hide: the way in is on
-                            // its own row.
-                            onLongPress: added ? null : () => _describe(a),
-                            child: a.info.icon != null
-                                ? Image.memory(a.info.icon!, width: 40, height: 40, gaplessPlayback: true)
-                                : const Icon(Icons.videogame_asset, size: 40),
-                          ),
-                          title: Text(a.info.label),
-                          // Not an error and not a dead end: an app with no
-                          // recipe is one to write a recipe for.
-                          subtitle: Text(
-                            added
-                                ? 'Already added'
-                                : mine != null
-                                    ? 'Recipe ready'
-                                    : hit != null
-                                        ? 'Recipe available${hit.status == 'verified' ? ' · verified' : ''}'
-                                        : 'No recipe yet — hold its icon to describe it here',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                if (_error != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
-                  ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: _picked.isEmpty || _adding ? null : _add,
-                    child: Text(_picked.isEmpty ? 'Add' : 'Add ${_picked.length}'),
-                  ),
-                ),
-              ]),
-            ),
+    final rows = [
+      for (final a in shown)
+        ResultRow(
+          id: a.package,
+          title: a.info.label,
+          subtitle: _line(a.package, pad: pad),
+          selectable: !widget.already.contains(a.package) && !_adding,
+          leading: a.info.icon != null
+              ? ClipRRect(borderRadius: BorderRadius.circular(6), child: Image.memory(a.info.icon!, width: 32, height: 32, gaplessPlayback: true))
+              : Icon(Icons.videogame_asset_outlined, size: 28, color: KitType.of(context).muted),
+          // An app with nothing published is a thing to describe, not a thing
+          // to hide: the way in is on its own row, Y or a long press.
+          onMenu: widget.already.contains(a.package) || _adding ? null : () => _describe(a),
+        ),
+    ];
+    final n = _picked.length;
+    return KitScaffold(
+      title: 'Add an app',
+      subtitle: catalog != null && catalog.fetchedAt != null
+          ? (catalog.fromCache ? 'Catalog unreachable: showing what was cached' : 'Catalog updated ${_ago(catalog.fetchedAt!)}')
+          : 'Pick the games whose saves should travel',
+      icon: Icons.sync,
+      glyph: PixelIcons.saves,
+      area: AppArea.saves,
+      body: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        KitPanel(children: [
+          FieldSlot(
+            label: 'Search',
+            hint: 'Search installed apps',
+            controller: _search,
+            icon: Icons.search,
+            onChanged: (v) => setState(() => _filter = v.trim().toLowerCase()),
           ),
         ]),
+        if (_error != null) Padding(padding: const EdgeInsets.only(top: kitGap), child: StatusPanel.error(line: _error!)),
+        const SizedBox(height: kitGap),
+        Expanded(
+          child: apps == null
+              ? const Center(child: CircularProgressIndicator())
+              : ResultsList(
+                  groups: [ResultGroup('Installed apps', rows)],
+                  selected: {..._picked, ...widget.already},
+                  onSelectionChanged: _adding ? null : (s) => setState(() => _picked = s.difference(widget.already)),
+                  empty: const EmptyState(icon: Icons.search_off, line: 'Nothing matches.'),
+                ),
+        ),
+      ]),
+      actionBar: ActionBar(
+        primary: KitAction(n == 0 ? 'Add' : 'Add $n', n == 0 || _adding ? null : _add, icon: Icons.add),
+        hints: const [KitHint(PadButton.a, 'Mark'), KitHint(PadButton.y, 'Describe'), KitHint(PadButton.b, 'Back')],
+        summary: n == 0 ? null : '$n marked',
       ),
     );
+  }
+
+  /// What the row can count on. Not an error and not a dead end: an app with
+  /// no recipe is one to write a recipe for.
+  String _line(String package, {required bool pad}) {
+    if (widget.already.contains(package)) return 'Already added';
+    if (widget.known[package] != null) return 'Recipe ready';
+    final hit = widget.catalog?.byPackage[package];
+    if (hit != null) return 'Recipe available${hit.status == 'verified' ? ' · verified' : ''}';
+    return pad ? 'No recipe yet: press Y to describe it here' : 'No recipe yet: hold it to describe it here';
   }
 
   /// Opens the authoring flow for one app and brings its recipe straight into

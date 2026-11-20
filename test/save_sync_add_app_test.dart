@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_add_app_screen.dart';
+import 'package:retro_toolbox/screens/save_sync_recipe_wizard_screen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe_index.dart';
 
 class FakeNotifier extends SaveSyncNotifier {
@@ -17,6 +18,9 @@ class FakeNotifier extends SaveSyncNotifier {
 
   @override
   Future<String?> addApps(Map<String, String?> packageToRecipe) async => addError;
+
+  @override
+  Future<({String root, List<({String name, bool isDir})> entries})?> probeSaveFolder(String package) async => null;
 
   @override
   Future<List<({String package, AppInfo info})>> launchableApps() async => const [
@@ -81,10 +85,32 @@ void main() {
     await t.pumpAndSettle();
     await t.tap(find.text('Catalog App'));
     await t.pump();
-    await t.tap(find.text('Add 1'));
+    await t.tap(find.text('ADD 1'));
     await t.pumpAndSettle();
 
     expect(find.text('Could not download the recipe for com.example.catalog'), findsOneWidget);
-    expect(find.text('Add an app'), findsOneWidget, reason: 'the screen must not close on a failed add');
+    expect(find.byType(SaveSyncAddAppScreen), findsOneWidget, reason: 'the screen must not close on a failed add');
+  });
+
+  // The website says to hold an app to describe it; a pad gets Y on the row.
+  testWidgets('holding an app with no recipe opens Describe', (t) async {
+    await pump(t);
+    await t.longPress(find.text('Unknown App'));
+    await t.pumpAndSettle();
+    expect(find.byType(SaveSyncRecipeWizardScreen), findsOneWidget);
+  });
+
+  testWidgets('an app already added is marked, cannot be unmarked, and has nothing to describe', (t) async {
+    await t.pumpWidget(ProviderScope(
+      overrides: [saveSyncProvider.overrideWith((ref) => FakeNotifier())],
+      child: const MaterialApp(home: SaveSyncAddAppScreen(already: {'com.example.known'})),
+    ));
+    await t.pumpAndSettle();
+    expect(find.text('Already added'), findsOneWidget);
+    await t.tap(find.text('Known App'));
+    await t.longPress(find.text('Known App'));
+    await t.pumpAndSettle();
+    expect(find.byType(SaveSyncRecipeWizardScreen), findsNothing);
+    expect(find.text('ADD'), findsOneWidget, reason: 'nothing new is marked');
   });
 }

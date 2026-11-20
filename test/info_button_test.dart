@@ -115,6 +115,27 @@ void main() {
     expect(find.text('Learn more'), findsNothing, reason: 'the handheld has no browser to open it in');
   });
 
+  // Save Sync keeps its hub (where saves go, Change, Sign out) under the
+  // (i): a setup decision, not something to read on every visit.
+  testWidgets('extra content shows under the text, and its controls work', (t) async {
+    var changed = 0;
+    await t.pumpWidget(_app(Scaffold(
+      appBar: AppBar(
+        title: const Text('Tool'),
+        actions: [
+          InfoButton(icon: Icons.sync, text: 'What it does.', extra: (context) => TextButton(onPressed: () => changed++, child: const Text('Change'))),
+        ],
+      ),
+    )));
+    expect(find.text('Change'), findsNothing);
+    await t.tap(find.byIcon(Icons.info_outline));
+    await _settle(t);
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Change')), findsOneWidget);
+    expect(t.getTopLeft(find.text('Change')).dy, greaterThan(t.getTopLeft(find.text('What it does.')).dy));
+    await t.tap(find.text('Change'));
+    expect(changed, 1);
+  });
+
   // The screen's explanation is out of the body until the (i) is pressed.
   final screens = <String, (Widget, String)>{
     'CHD Converter': (const ChdConvertScreen(), 'Convert disc images to CHD to save space'),

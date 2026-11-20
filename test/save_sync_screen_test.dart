@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_setup_screen.dart';
@@ -16,6 +17,7 @@ import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
 import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 import 'package:retro_toolbox/services/save_sync/units.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 
 import 'save_sync_support.dart';
 
@@ -30,8 +32,14 @@ class FakeNotifier extends SaveSyncNotifier {
   @override
   Future<void> refresh() async => calls.add('refresh');
 
+  /// What the next push or pull reports, as the engine does.
+  List<String> reply = const [];
+
   @override
-  Future<void> push(String recipeId, {String? unit}) async => calls.add('push $recipeId${unit == null ? '' : ' $unit'}');
+  Future<void> push(String recipeId, {String? unit}) async {
+    calls.add('push $recipeId${unit == null ? '' : ' $unit'}');
+    state = state.copyWith(messages: reply);
+  }
 
   @override
   Future<void> pull(String recipeId, {String? unit}) async => calls.add('pull $recipeId${unit == null ? '' : ' $unit'}');
@@ -92,14 +100,24 @@ void main() {
     payloadSha256: 'f' * 64,
   );
 
-  Future<FakeNotifier> pump(WidgetTester t, SaveSyncState s) async {
+  Future<FakeNotifier> pump(WidgetTester t, SaveSyncState s, {InputMode mode = InputMode.touch}) async {
     final fake = FakeNotifier(s);
+    final nav = GlobalKey<NavigatorState>();
     await t.pumpWidget(ProviderScope(
-      overrides: [saveSyncProvider.overrideWith((ref) => fake)],
-      child: const MaterialApp(home: SaveSyncScreen()),
+      overrides: [saveSyncProvider.overrideWith((ref) => fake), inputModeProvider.overrideWith((ref) => mode)],
+      // DpadScope, as the app has it: Start, Y and Select reach the screen.
+      child: MaterialApp(navigatorKey: nav, builder: (c, child) => DpadScope(navigatorKey: nav, child: child!), home: const SaveSyncScreen()),
     ));
     await t.pump();
     return fake;
+  }
+
+  /// The bar's primary, whatever case the style draws it in.
+  Finder primary(String label) => find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text(label.toUpperCase()));
+
+  Future<void> openInfo(WidgetTester t) async {
+    await t.tap(find.byTooltip('About this screen'));
+    await t.pumpAndSettle();
   }
 
   testWidgets('a game with several saves acts on one at a time', (t) async {
@@ -114,9 +132,15 @@ void main() {
     );
     expect(fake.calls, ['refresh']);
     expect(find.text('Stardew Valley'), findsOneWidget);
-    // Two saves under one game, so each gets its own line and its own verb,
-    // and the card offers none: acting on both at once is what loses
-    // somebody's progress.
+    // Two saves under one game, so the row offers no verb of its own (acting
+    // on both at once is what loses somebody's progress) and opens the list
+    // of saves, each with its own line and its own verb.
+    expect(find.text('1 to download · 1 to upload · 2 saves'), findsOneWidget);
+    expect(find.text('Farm_1'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Upload'), findsNothing);
+    await t.tap(find.text('Stardew Valley'));
+    await t.pumpAndSettle();
     expect(find.text('Farm_1'), findsOneWidget);
     expect(find.text('Farm_2'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Download'), findsNothing);
@@ -148,6 +172,8 @@ void main() {
         ],
       ),
     );
+    await t.tap(find.text(eden.name));
+    await t.pumpAndSettle();
     expect(find.text('Alpha Title'), findsOneWidget);
     expect(find.text('Beta Title'), findsOneWidget);
     // An id the catalog never heard of is still a save worth syncing, so it
@@ -384,7 +410,8 @@ void main() {
         games: [GameStatus(stardew, 'bundled', const Bound(binding))],
       ),
     );
-    expect(find.widgetWithText(FilledButton, 'Add an app'), findsOneWidget);
+    expect(primary('Add an app'), findsOneWidget);
+    expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNotNull);
   });
 
   testWidgets('a game this device does not have is left out of the list', (t) async {
@@ -429,7 +456,7 @@ void main() {
       t,
       SaveSyncState(access: SyncAccess.shizuku, games: [GameStatus(stardew, 'bundled', const Bound(binding))]),
     );
-    await t.tap(find.byType(InkWell).first);
+    await t.tap(find.text(stardew.name));
     await t.pumpAndSettle();
     expect(find.text('Hub Farm_1'), findsOneWidget);
     expect(find.text('damaged'), findsOneWidget);
@@ -441,7 +468,7 @@ void main() {
       SaveSyncState(access: SyncAccess.shizuku, games: [GameStatus(stardew, 'bundled', const Bound(binding))]),
     );
     fake.checkThrows = true;
-    await t.tap(find.byType(InkWell).first);
+    await t.tap(find.text(stardew.name));
     await t.pumpAndSettle();
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.textContaining('bridge died'), findsOneWidget);
@@ -590,8 +617,12 @@ void main() {
     expect(find.textContaining('Sign in with Google'), findsNothing);
   });
 
-  testWidgets('a Google hub shows the account with Sign out, and no folder note', (t) async {
+  // Where saves go is a setup decision: the header names it, the (i) changes it.
+  testWidgets('a Google hub names the account in the header, and its (i) has Sign out and no folder note', (t) async {
     final fake = await pump(t, const SaveSyncState(hubKind: HubKind.drive, googleEmail: 'player@gmail.com', googleAvailable: true, access: SyncAccess.shizuku));
+    expect(find.text('Drive · player@gmail.com'), findsOneWidget);
+    expect(find.text('Sign out'), findsNothing);
+    await openInfo(t);
     expect(find.text('Google Drive: player@gmail.com'), findsOneWidget);
     expect(find.textContaining('Folder hub'), findsNothing);
     expect(find.text('Sign in again'), findsNothing);
@@ -599,8 +630,11 @@ void main() {
     expect(fake.calls.last, 'sign out');
   });
 
-  testWidgets('a folder hub shows its path, and Change switches to Google', (t) async {
+  testWidgets('a folder hub keeps its path and note in the (i), and Change switches to Google', (t) async {
     final fake = await pump(t, const SaveSyncState(hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Hub', googleAvailable: true, access: SyncAccess.shizuku));
+    expect(find.text('Folder · 0 games'), findsOneWidget);
+    expect(find.textContaining('Folder hub'), findsNothing);
+    await openInfo(t);
     expect(find.text('/storage/emulated/0/Hub'), findsOneWidget);
     expect(find.textContaining('Folder hub'), findsOneWidget);
     await t.tap(find.text('Change'));
@@ -613,6 +647,7 @@ void main() {
 
   testWidgets('without Google the chooser offers only a folder', (t) async {
     await pump(t, const SaveSyncState(hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Hub', access: SyncAccess.shizuku));
+    await openInfo(t);
     await t.tap(find.text('Change'));
     await t.pumpAndSettle();
     expect(find.text('A folder on this device'), findsOneWidget);
@@ -646,5 +681,119 @@ void main() {
     expect(t.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Use a folder')).onPressed, isNull);
     // One on the setup screen, one on the list behind it.
     expect(find.byType(LinearProgressIndicator), findsWidgets);
+  });
+
+  group('games first', () {
+    SaveSyncState two({SyncAccess access = SyncAccess.shizuku}) => SaveSyncState(access: access, hubKind: HubKind.folder, hubFolder: '/storage/emulated/0/Hub', games: [
+          GameStatus(stardew, 'bundled', const Bound(binding), units: {'Farm_1': const UnitStatus(PushPlan('Farm_1', []))}),
+          GameStatus(bundledRecipe('sea-of-stars'), 'bundled', const Bound(Binding(recipe: 'sea-of-stars', package: 'com.playdigious.seaofstars', area: Area.androidData, root: 'files')),
+              units: {'all': const UnitStatus(UpToDate('all'))}),
+        ]);
+
+    testWidgets('the header says where saves go and how many games', (t) async {
+      await pump(t, two());
+      expect(find.text('Folder · 2 games'), findsOneWidget);
+    });
+
+    // Start is the focused row's action, never a sync of everything.
+    testWidgets('with a pad, Start runs the focused row\'s action and the bar names it', (t) async {
+      final fake = await pump(t, two(), mode: InputMode.gamepad);
+      await t.pump();
+      expect(primary('Upload'), findsOneWidget, reason: 'the first row has focus and owes an upload');
+      expect(find.byKey(const ValueKey('kit-secondary')), findsOneWidget, reason: 'Add an app moves to the secondary');
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+      await t.pump();
+      expect(fake.calls.last, 'push stardew-valley');
+    });
+
+    testWidgets('Start on a row with nothing to do does nothing, not Add an app', (t) async {
+      final fake = await pump(t, two(), mode: InputMode.gamepad);
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await t.pump();
+      expect(find.byKey(const ValueKey('kit-primary')), findsNothing);
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+      await t.pumpAndSettle();
+      expect(fake.calls, ['refresh']);
+      expect(find.byType(SaveSyncScreen), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing);
+    });
+
+    // The bar follows the last input a frame late: the first Start after a
+    // tap must still be the focused row's, never the bar's Add an app.
+    testWidgets('Start on a focused row runs that row even while the bar still shows touch', (t) async {
+      final fake = await pump(t, two());
+      await t.pump();
+      expect(primary('Add an app'), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+      await t.pumpAndSettle();
+      expect(fake.calls.last, 'push stardew-valley');
+      expect(find.byType(SaveSyncScreen), findsOneWidget);
+    });
+
+    testWidgets('on touch the bar keeps Add an app and the row keeps its own button', (t) async {
+      await pump(t, two());
+      await t.pump();
+      expect(primary('Add an app'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Upload'), findsOneWidget);
+    });
+
+    testWidgets('Y opens the row menu: Restore a backup, Check, Choose location', (t) async {
+      await pump(t, two(), mode: InputMode.gamepad);
+      await t.pump();
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonY);
+      await t.pumpAndSettle();
+      final sheet = find.byType(BottomSheet);
+      for (final item in ['Upload', 'Restore a backup…', 'Check', 'Choose location']) {
+        expect(find.descendant(of: sheet, matching: find.text(item)), findsOneWidget, reason: item);
+      }
+    });
+
+    testWidgets('an action\'s result lands in its own row, not as loose text', (t) async {
+      final fake = await pump(t, two());
+      fake.reply = const ['Farm_1: pushed'];
+      await t.tap(find.widgetWithText(FilledButton, 'Upload'));
+      await t.pump();
+      final result = find.byKey(const ValueKey('save-sync-result'));
+      expect(result, findsOneWidget);
+      // One save: the row says what happened, not the save's folder name.
+      expect(t.widget<Text>(result).data, 'Pushed');
+      expect(find.descendant(of: find.byKey(const ValueKey('save-sync-row-stardew-valley')), matching: result), findsOneWidget);
+    });
+
+    testWidgets('access is only shown when it is missing; the (i) says which one is in use', (t) async {
+      await pump(t, two());
+      expect(find.textContaining('Access:'), findsNothing);
+      expect(find.text('No access to game folders'), findsNothing);
+      await openInfo(t);
+      expect(find.text('Access: Shizuku (shell)'), findsOneWidget);
+    });
+
+    testWidgets('without Shizuku running the panel offers Retry and keeps the website\'s words', (t) async {
+      final fake = await pump(t, two(access: SyncAccess.none));
+      expect(find.text('No access to game folders'), findsOneWidget);
+      expect(find.text('Start Shizuku (wireless debugging, or root), then come back and refresh.'), findsOneWidget);
+      await t.tap(find.text('Retry'));
+      expect(fake.calls.last, 'refresh');
+    });
+
+    testWidgets('a save in a game with several restores that save, from its own menu', (t) async {
+      final fake = await pump(
+        t,
+        SaveSyncState(access: SyncAccess.shizuku, hubKind: HubKind.folder, games: [
+          GameStatus(stardew, 'bundled', const Bound(binding), units: {
+            'Farm_1': const UnitStatus(PushPlan('Farm_1', [])),
+            'Farm_2': UnitStatus(PullPlan('Farm_2', remote, missingLocally: false), newest: remote),
+          }),
+        ]),
+      );
+      await t.tap(find.text('Stardew Valley'));
+      await t.pumpAndSettle();
+      await t.longPress(find.text('Farm_2'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Restore a backup…'));
+      await t.pumpAndSettle();
+      expect(fake.calls.last, 'backupsFor stardew-valley Farm_2');
+    });
   });
 }

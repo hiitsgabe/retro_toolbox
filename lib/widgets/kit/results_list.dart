@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit_base.dart';
+import 'package:retro_toolbox/widgets/kit/row_menu_sheet.dart';
 
 /// A result row: what it is, and its state as a badge (Keep, Delete, Rename,
 /// Exists, Skipped, Failed).
 @immutable
 class ResultRow {
-  const ResultRow({required this.id, required this.title, this.subtitle, this.badge, this.badgeTone = KitTone.neutral, this.selectable = true, this.leading});
+  const ResultRow({required this.id, required this.title, this.subtitle, this.badge, this.badgeTone = KitTone.neutral, this.selectable = true, this.leading, this.onMenu});
 
   final String id;
   final String title;
@@ -20,6 +21,10 @@ class ResultRow {
 
   /// A picture of the item (a store banner), before the title.
   final Widget? leading;
+
+  /// The row's other action, on Y while it has focus and on a long press
+  /// (Describe an app with no recipe). Null: neither does anything.
+  final VoidCallback? onMenu;
 }
 
 @immutable
@@ -164,7 +169,8 @@ class _Row extends StatelessWidget {
     final subtitle = row.subtitle;
     final badge = row.badge;
     final leading = row.leading;
-    return Padding(
+    final onMenu = row.onMenu;
+    final tile = Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: k.panel,
@@ -197,6 +203,7 @@ class _Row extends StatelessWidget {
         ),
       ),
     );
+    return onMenu == null ? tile : RowMenuTarget(onMenu: onMenu, child: tile);
   }
 }
 

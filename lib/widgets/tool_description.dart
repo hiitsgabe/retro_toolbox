@@ -10,7 +10,11 @@ class InfoButton extends StatelessWidget {
   final String? title;
   final Uri? learnMore;
   final String tooltip;
-  const InfoButton({super.key, required this.icon, required this.text, this.title, this.learnMore, this.tooltip = 'About this screen'});
+
+  /// Under the text: settings the screen keeps out of its body (Save Sync's
+  /// hub). Built inside the sheet, so it can watch providers.
+  final WidgetBuilder? extra;
+  const InfoButton({super.key, required this.icon, required this.text, this.title, this.learnMore, this.tooltip = 'About this screen', this.extra});
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +45,7 @@ class InfoButton extends StatelessWidget {
               ]),
               const SizedBox(height: 12),
               Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              if (extra != null) ...[const SizedBox(height: 16), extra!(context)],
               const SizedBox(height: 16),
               // A focused button keeps the d-pad inside the sheet, so up/down
               // scroll a long text. The handheld has no browser for the link.

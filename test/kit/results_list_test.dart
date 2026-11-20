@@ -104,4 +104,39 @@ void main() {
     expect(t.getTopLeft(find.text('Loading more')).dy, greaterThan(t.getTopLeft(find.text('Celeste')).dy));
     expect(controller.hasClients, isTrue);
   });
+
+  // A row's other action (Describe an app with no recipe): Y while it has
+  // focus, or a long press, never a separate focus stop.
+  testWidgets('Y or a long press on a row runs its menu, and a row without one ignores both', (t) async {
+    final menus = <String>[];
+    await pumpKit(
+      t,
+      Scaffold(
+        body: StatefulBuilder(
+          builder: (context, set) => ResultsList(
+            groups: [
+              ResultGroup('Apps', [
+                ResultRow(id: 'a', title: 'Alpha', onMenu: () => menus.add('a')),
+                const ResultRow(id: 'b', title: 'Beta'),
+              ]),
+            ],
+            selected: const {},
+            onSelectionChanged: (_) {},
+          ),
+        ),
+      ),
+    );
+    await t.longPress(find.text('Alpha'));
+    await t.pump();
+    expect(menus, ['a']);
+    await t.longPress(find.text('Beta'));
+    await t.pump();
+    expect(menus, ['a']);
+
+    Focus.of(t.element(find.text('Alpha'))).requestFocus();
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonY);
+    await t.pump();
+    expect(menus, ['a', 'a']);
+  });
 }
