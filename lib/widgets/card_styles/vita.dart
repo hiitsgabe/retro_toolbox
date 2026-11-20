@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
@@ -15,14 +16,15 @@ import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 
-/// PS Vita home screen: glossy bubbles in rows of 4 and 3, the label under
-/// each, a column of page dots on the right.
+/// PS Vita home screen: glossy bubbles in staggered rows (4 and 3 on a wide
+/// screen), the label under each, a column of page dots on the right.
 const vitaKit = CardStyleKit(menuList: _menuList, gameList: _gameList);
 
 Widget _menuList(BuildContext context, List<MenuTile> tiles, {required bool shrinkWrap, required bool autofocusFirst}) => _VitaRows(
       key: const ValueKey('vita-menu'),
       count: tiles.length,
       shrinkWrap: shrinkWrap,
+      menu: true,
       item: (context, i) => _VitaMenuCell(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0),
     );
 
@@ -34,33 +36,39 @@ Widget _gameList(BuildContext context) => StyledGameList(
 
 /// Sizes of the bubbles in one layout, for the cells under it.
 class _VitaMetrics extends InheritedWidget {
-  const _VitaMetrics({required this.bubble, required super.child});
+  const _VitaMetrics({required this.bubble, required this.floor, required super.child});
 
   /// Bubble diameter.
   final double bubble;
 
-  double get labelSize => labelSizeFor(bubble);
+  /// The device's smallest text.
+  final double floor;
 
-  static double labelSizeFor(double bubble) => (bubble * 0.105).clamp(11.0, 15.0);
+  double get labelSize => labelSizeFor(bubble, floor);
+
+  static double labelSizeFor(double bubble, double floor) => (bubble * 0.105).clamp(floor, math.max(15.0, floor));
 
   /// Bubble, its focus growth, the gap and up to two label lines.
-  static double rowHeightFor(double bubble) => bubble * 1.1 + 6 + labelSizeFor(bubble) * 2.9 + 10;
+  static double rowHeightFor(double bubble, double floor) => bubble * 1.1 + 6 + labelSizeFor(bubble, floor) * 2.9 + 10;
 
   static _VitaMetrics of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_VitaMetrics>()!;
 
   @override
-  bool updateShouldNotify(_VitaMetrics old) => old.bubble != bubble;
+  bool updateShouldNotify(_VitaMetrics old) => old.bubble != bubble || old.floor != floor;
 }
 
-/// Rows alternating 4 and 3 places, the 3-rows half a place in, scrolling
-/// vertically; [controller] (or its own) also drives the page dots.
+/// Rows alternating [_VitaPlan.wide] and one fewer places, the short rows
+/// half a place in, scrolling vertically; [controller] (or its own) also
+/// drives the page dots. A [menu] fits the screen when its device class
+/// lets it; games get larger bubbles and scroll.
 class _VitaRows extends StatefulWidget {
-  const _VitaRows({super.key, required this.count, required this.item, this.controller, this.shrinkWrap = false});
+  const _VitaRows({super.key, required this.count, required this.item, this.controller, this.shrinkWrap = false, this.menu = false});
 
   final int count;
   final Widget Function(BuildContext context, int index) item;
   final ScrollController? controller;
   final bool shrinkWrap;
+  final bool menu;
 
   @override
   State<_VitaRows> createState() => _VitaRowsState();
@@ -86,13 +94,64 @@ class _VitaRowsState extends State<_VitaRows> {
     super.dispose();
   }
 
-  /// Rows for [count] items: every pair of rows holds 7.
-  static int _rows(int count) {
-    final rest = count % 7;
-    return count ~/ 7 * 2 + (rest == 0 ? 0 : (rest <= 4 ? 1 : 2));
+  /// Rows for [count] items, [wide] on the long rows: every pair of rows
+  /// holds 2 * [wide] - 1.
+  static int _rows(int count, int wide) {
+    final pair = 2 * wide - 1, rest = count % pair;
+    return count ~/ pair * 2 + (rest == 0 ? 0 : (rest <= wide ? 1 : 2));
   }
 
-  static int _rowStart(int row) => row ~/ 2 * 7 + (row.isOdd ? 4 : 0);
+  static int _rowStart(int row, int wide) => row ~/ 2 * (2 * wide - 1) + (row.isOdd ? wide : 0);
+
+  /// The largest bubble whose row fits [rowHeight], given the device's [floor].
+  static double _bubbleForRow(double rowHeight, double floor) {
+    // The label grows with the bubble: a guess, then the bubble for its label.
+    var b = (rowHeight - 16 - floor * 2.9) / 1.1;
+    for (var i = 0; i < 3; i++) {
+      b = (rowHeight - 16 - _VitaMetrics.labelSizeFor(b, floor) * 2.9) / 1.1;
+    }
+    return b;
+  }
+
+  /// How the rows are laid out in [box] on [device].
+  _VitaPlan _plan(DeviceClass device, BoxConstraints box, double gutter) {
+    final width = (box.maxWidth - gutter * 2).clamp(0.0, 1000.0);
+    final floor = device.textFloor;
+    final count = widget.count;
+    _VitaPlan scrolling(int wide, double share) {
+      final cell = width / wide;
+      return _VitaPlan(wide, cell, math.min((cell * share).clamp(48.0, widget.menu ? 150.0 : 180.0), cell), fits: false);
+    }
+
+    if (!widget.menu) {
+      // Games: fewer, larger bubbles than the menus on the same screen.
+      return switch (device) {
+        DeviceClass.portrait => scrolling(3, 0.74),
+        DeviceClass.roomy => scrolling(4, 0.66),
+        _ => scrolling(4, 0.72),
+      };
+    }
+    final fit = device.menuFit(count);
+    if (fit == null || widget.shrinkWrap || !box.hasBoundedHeight) return scrolling(4, 0.6);
+    // Menus: the long-row width that gives the largest bubbles with every
+    // row on screen; a phone keeps to 2 or 3 across.
+    final height = box.maxHeight - 2 * _padding;
+    final choices = switch (device) {
+      DeviceClass.portrait => const [2, 3],
+      DeviceClass.pixel => const [3, 4],
+      _ => const [3, 4, 5, 6, 7],
+    };
+    _VitaPlan? best;
+    for (final wide in choices) {
+      final cell = width / wide;
+      final bubble = math.min(math.min(cell * 0.78, 160.0), _bubbleForRow(height / _rows(count, wide), floor));
+      if (best == null || bubble > best.bubble) best = _VitaPlan(wide, cell, bubble, fits: true);
+    }
+    if (best == null || best.bubble < 48) return scrolling(device == DeviceClass.portrait ? 3 : 4, 0.6);
+    return best;
+  }
+
+  static const _padding = 16.0;
 
   bool _onScroll(Notification n) {
     final metrics = switch (n) {
@@ -123,14 +182,15 @@ class _VitaRowsState extends State<_VitaRows> {
     return (pages, (at * (pages - 1)).round());
   }
 
-  Widget _row(BuildContext context, int row, double cell, double rowHeight) {
-    final start = _rowStart(row);
-    final end = math.min(start + (row.isOdd ? 3 : 4), widget.count);
+  Widget _row(BuildContext context, int row, _VitaPlan plan, double rowHeight) {
+    final cell = plan.cell, wide = plan.wide;
+    final start = _rowStart(row, wide);
+    final end = math.min(start + (row.isOdd ? wide - 1 : wide), widget.count);
     return SizedBox(
       height: rowHeight,
       child: Center(
         child: SizedBox(
-          width: cell * 4,
+          width: cell * wide,
           child: Row(
             key: ValueKey('vita-row-$row'),
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,19 +208,28 @@ class _VitaRowsState extends State<_VitaRows> {
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
       final gutter = widget.shrinkWrap ? 8.0 : _dotsGutter;
-      final width = (box.maxWidth - gutter * 2).clamp(0.0, 1000.0);
-      final cell = width / 4;
-      final bubble = math.min((cell * 0.6).clamp(48.0, 150.0), cell);
-      final rowHeight = _VitaMetrics.rowHeightFor(bubble);
-      final rows = _rows(widget.count);
-      const padding = EdgeInsets.symmetric(vertical: 16);
+      final device = DeviceClass.of(context);
+      final plan = _plan(device, box, gutter);
+      final bubble = plan.bubble;
+      final rows = _rows(widget.count, plan.wide);
+      var rowHeight = _VitaMetrics.rowHeightFor(bubble, device.textFloor);
+      var padding = const EdgeInsets.symmetric(vertical: _padding);
+      if (plan.fits) {
+        // Every row on screen: they share the height, the bubbles in the middle.
+        final spare = box.maxHeight - 2 * _padding - rows * rowHeight;
+        if (spare > 0) {
+          final grow = math.min(spare / rows, rowHeight * 0.25);
+          rowHeight += grow;
+          padding = EdgeInsets.symmetric(vertical: _padding + (spare - grow * rows) / 2);
+        }
+      }
 
       final Widget list;
       if (widget.shrinkWrap) {
         // Inside another scroll view: all rows, no scrolling of its own.
         list = Padding(
           padding: padding,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [for (var r = 0; r < rows; r++) _row(context, r, cell, rowHeight)]),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [for (var r = 0; r < rows; r++) _row(context, r, plan, rowHeight)]),
         );
       } else {
         list = NotificationListener<Notification>(
@@ -170,12 +239,13 @@ class _VitaRowsState extends State<_VitaRows> {
             padding: padding,
             itemExtent: rowHeight,
             itemCount: rows,
-            itemBuilder: (context, r) => _row(context, r, cell, rowHeight),
+            itemBuilder: (context, r) => _row(context, r, plan, rowHeight),
           ),
         );
       }
       return _VitaMetrics(
         bubble: bubble,
+        floor: device.textFloor,
         child: Stack(
           children: [
             list,
@@ -186,6 +256,17 @@ class _VitaRowsState extends State<_VitaRows> {
       );
     });
   }
+}
+
+/// Long-row width, the place each bubble has, the bubble; [fits] when every
+/// row is on screen.
+class _VitaPlan {
+  const _VitaPlan(this.wide, this.cell, this.bubble, {required this.fits});
+
+  final int wide;
+  final double cell;
+  final double bubble;
+  final bool fits;
 }
 
 /// Where in the list the view is: [count] dots, the [active] one lit.

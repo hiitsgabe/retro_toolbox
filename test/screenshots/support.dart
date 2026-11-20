@@ -28,6 +28,7 @@ import 'package:retro_toolbox/app.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -213,7 +214,8 @@ Future<ProviderContainer> launch(
         navigatorObservers: [DpadScope.routeObserver],
         debugShowCheckedModeBanner: false,
         theme: shotTheme(style.cards, backdrop: style.backdrop),
-        builder: (context, child) => RepaintBoundary(key: _boundary, child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!)),
+        builder: (context, child) =>
+            RepaintBoundary(key: _boundary, child: TextFloor(child: DpadScope(navigatorKey: nav, onScreenKeyboard: Handheld.current, child: child!))),
         home: home,
       );
       },

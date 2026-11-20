@@ -12,6 +12,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/image_memory.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
@@ -55,14 +56,25 @@ Widget _gameList(BuildContext context) => const _ThreeDsGames();
 // Layout
 
 /// The top strip over the grid. [shrinkWrap]: inside another scroll view, so
-/// both get a fixed height.
+/// both get a fixed height. A [menu] of [count] tiles on a phone or a pixel
+/// handheld takes the columns that give it the largest slots on one screen.
 class _TopScreenLayout extends StatelessWidget {
-  const _TopScreenLayout({super.key, required this.strip, required this.grid, required this.side, this.shrinkWrap = false});
+  const _TopScreenLayout({super.key, required this.strip, required this.grid, required this.side, this.shrinkWrap = false, this.menu = false, this.count = 0});
 
   final Widget strip;
   final Widget Function(int rows, double side) grid;
   final double side;
   final bool shrinkWrap;
+  final bool menu;
+  final int count;
+
+  /// The strip's share of the height: the grid is the menu, the strip a
+  /// caption, so a low screen gives it less.
+  static double stripHeight(DeviceClass device, double height) => switch (device) {
+        DeviceClass.landscapeLow => (height * 0.22).clamp(56.0, 96.0),
+        DeviceClass.pixel => (height * 0.2).clamp(56.0, 96.0),
+        _ => (height * 0.26).clamp(96.0, 200.0),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +91,13 @@ class _TopScreenLayout extends StatelessWidget {
           ]),
         );
       }
-      final stripHeight = (box.maxHeight * 0.26).clamp(96.0, 200.0);
+      final device = DeviceClass.of(context);
+      final stripHeight = _TopScreenLayout.stripHeight(device, box.maxHeight);
+      final columns = switch (device) {
+        DeviceClass.portrait when menu => const [2, 3],
+        DeviceClass.pixel when menu => const [3, 4],
+        _ => const <int>[],
+      };
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Column(children: [
@@ -91,6 +109,8 @@ class _TopScreenLayout extends StatelessWidget {
                 // As many rows as fit, the cards a little larger to fill the
                 // height, never past 1.2 times their size.
                 final inner = area.maxHeight - 2 * _panelPadding;
+                final fit = largestFit(count, Size(area.maxWidth - 2 * _panelPadding, inner), columns, aspect: 1, gap: _gap, minWidth: 48);
+                if (fit != null) return grid((count / fit.columns).ceil(), fit.cell.width);
                 final rows = max(1, ((inner + _gap) / (side + _gap)).floor());
                 final fitted = min((inner - (rows - 1) * _gap) / rows, side * 1.2);
                 return grid(rows, max(fitted, 24));
@@ -139,10 +159,18 @@ class _SlotGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = rows * side + (rows - 1) * _gap + 2 * _panelPadding;
     return LayoutBuilder(builder: (context, box) {
-      final visibleColumns = max(1, ((box.maxWidth - 2 * _panelPadding + _gap) / (side + _gap)).floor());
+      var side = this.side;
+      final width = box.maxWidth - 2 * _panelPadding;
+      final visibleColumns = max(1, ((width + _gap) / (side + _gap)).floor());
       final columns = max(visibleColumns, (count / rows).ceil());
+      if (columns > visibleColumns) {
+        // A shelf that scrolls shows whole slots at rest, none cut at the
+        // edge: one more column, a little smaller, the next one starting
+        // just past the edge.
+        side = (box.maxWidth - _panelPadding) / (visibleColumns + 1) - _gap;
+      }
+      final height = rows * side + (rows - 1) * _gap + 2 * _panelPadding;
       // A grid that fits is centred; one that scrolls starts at the edge.
       final spare = columns == visibleColumns ? box.maxWidth - columns * side - (columns - 1) * _gap : 0.0;
       return Center(
@@ -198,6 +226,8 @@ class _ThreeDsMenuState extends State<_ThreeDsMenu> {
     return _TopScreenLayout(
       side: _menuSide,
       shrinkWrap: widget.shrinkWrap,
+      menu: true,
+      count: tiles.length,
       strip: ValueListenableBuilder<int>(
         valueListenable: _focused,
         builder: (context, i, _) => tiles.isEmpty ? const _TopStrip(name: '') : _MenuStrip(tile: tiles[min(i, tiles.length - 1)]),
@@ -554,10 +584,14 @@ class _TopStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return LayoutBuilder(builder: (context, box) {
-      final artSide = max(0.0, box.maxHeight - 24);
+      // A low strip (Odin 2, the pixel handheld) has room for one name line.
+      final low = box.maxHeight < 100 || DeviceClass.of(context) == DeviceClass.pixel;
+      final pad = box.maxHeight < 72 ? 8.0 : 12.0;
+      final artSide = max(0.0, box.maxHeight - 2 * pad);
+      final nameStyle = box.maxHeight < 72 ? text.titleMedium : (box.maxHeight < 120 ? text.titleLarge : text.headlineSmall);
       return Container(
         key: const ValueKey('3ds-strip'),
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(pad),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
           gradient: LinearGradient(
@@ -589,15 +623,14 @@ class _TopStrip extends StatelessWidget {
                       child: Text(
                         name,
                         key: const ValueKey('3ds-strip-name'),
-                        maxLines: 2,
+                        maxLines: low ? 1 : 2,
                         overflow: TextOverflow.ellipsis,
-                        style: (box.maxHeight < 120 ? text.titleLarge : text.headlineSmall)
-                            ?.copyWith(color: Colors.white, fontWeight: FontWeight.w700, height: 1.15),
+                        style: nameStyle?.copyWith(color: Colors.white, fontWeight: FontWeight.w700, height: 1.15),
                       ),
                     ),
                     if (chip != null) ...[const SizedBox(width: 10), _Chip(chip!)],
                   ]),
-                  if (lines.isNotEmpty) const SizedBox(height: 6),
+                  if (lines.isNotEmpty) SizedBox(height: low ? 2 : 6),
                   ...lines,
                 ],
               ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
 import 'package:retro_toolbox/widgets/game_list/letter_jump.dart';
 
@@ -95,7 +96,8 @@ class _GameGridState extends ConsumerState<GameGrid> with JumpScroll<GameGrid> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final crossAxisCount = _calculateCrossAxisCount(screenWidth, screenHeight, _aspectRatio);
+    // Phones and handhelds get the columns of their class; roomy screens by width.
+    final crossAxisCount = DeviceClass.of(context).gameColumns(screenWidth) ?? _calculateCrossAxisCount(screenWidth, screenHeight, _aspectRatio);
 
     const loadMoreThresholdPx = 500.0;
 

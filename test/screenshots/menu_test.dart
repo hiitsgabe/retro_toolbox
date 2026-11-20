@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
@@ -22,7 +22,9 @@ void main() {
     for (var i = 0; i < 8 && text.evaluate().isEmpty && slot.evaluate().isEmpty; i++) {
       await key(t, LogicalKeyboardKey.arrowRight);
     }
-    final target = text.evaluate().isEmpty ? slot : text;
+    // The tile's own ink: a Vita label under its bubble takes no tap.
+    final ink = find.descendant(of: slot, matching: find.byType(InkWell));
+    final target = ink.evaluate().isNotEmpty ? ink.first : (text.evaluate().isEmpty ? slot : text);
     await t.ensureVisible(target);
     await frames(t, 4);
     await t.tap(target);

@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 
@@ -52,8 +54,9 @@ class MenuTile {
   static void _noop() {}
 }
 
-/// 3DS-inspired grid of square tiles. Responsive column count via a max tile
-/// extent; scrolls when tiles overflow.
+/// 3DS-inspired grid of tiles. Sized from the device class so a menu fits
+/// without scrolling when it can; roomy screens take as many tiles across as
+/// the width allows and scroll.
 class MenuGrid extends StatelessWidget {
   final List<MenuTile> tiles;
 
@@ -78,6 +81,40 @@ class MenuGrid extends StatelessWidget {
   }
 
   Widget _classic(BuildContext context) {
+    final fit = DeviceClass.of(context).menuFit(tiles.length);
+    if (fit == null) return _roomy();
+    return LayoutBuilder(builder: (context, box) {
+      const pad = 16.0, gap = 14.0;
+      // Inside another scroll view there is no height to fill: square tiles.
+      final fill = !shrinkWrap && box.hasBoundedHeight;
+      final area = Size(box.maxWidth - 2 * pad, fill ? box.maxHeight - 2 * pad : double.infinity);
+      final cell = fit.cell(area, gap: gap);
+      // The rows fill the height, the tiles no taller than 1.3 times their width.
+      final height = fill ? math.max(72.0, math.min(cell.height, cell.width * 1.3)) : cell.width;
+      final rows = (tiles.length / fit.columns).ceil();
+      final content = rows * height + (rows - 1) * gap;
+      // A grid that fits sits in the middle of the screen.
+      final top = fill && content < area.height ? pad + (area.height - content) / 2 : pad;
+      return GridView.builder(
+        padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
+        shrinkWrap: shrinkWrap,
+        physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: fit.columns,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
+          mainAxisExtent: height,
+        ),
+        itemCount: tiles.length,
+        itemBuilder: _tile,
+      );
+    });
+  }
+
+  Widget _tile(BuildContext context, int i) => _MenuTileCard(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0);
+
+  /// Roomy screens: as many 180 px tiles as the width takes, scrolling.
+  Widget _roomy() {
     final grid = GridView.builder(
       padding: const EdgeInsets.all(16),
       shrinkWrap: shrinkWrap,
@@ -89,11 +126,7 @@ class MenuGrid extends StatelessWidget {
         childAspectRatio: 1,
       ),
       itemCount: tiles.length,
-      itemBuilder: (context, i) => _MenuTileCard(
-        key: ValueKey(tiles[i].label),
-        tile: tiles[i],
-        autofocus: autofocusFirst && i == 0,
-      ),
+      itemBuilder: _tile,
     );
     // Handheld panels run to the bezel: keep scrolled tiles off the bottom edge.
     return Handheld.current && !shrinkWrap ? Padding(padding: const EdgeInsets.only(bottom: 16), child: grid) : grid;
@@ -133,17 +166,19 @@ class _MenuTileCardState extends State<_MenuTileCard> {
   Widget build(BuildContext context) {
     // Touch users never see a focus look (taps don't move focus).
     final showFocus = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: widget.tile.onTap,
-        autofocus: widget.autofocus,
-        onHighlightChanged: (v) => setState(() => _pressed = v),
-        onFocusChange: (v) => setState(() => _focused = v),
-        child: AnimatedScale(
-          scale: _pressed ? 0.94 : (showFocus ? 1.05 : 1),
-          duration: const Duration(milliseconds: 90),
+    // The scale is outside the ink: DpadScope draws its outline round the
+    // focused box as painted, so the ring grows with the tile.
+    return AnimatedScale(
+      scale: _pressed ? 0.94 : (showFocus ? 1.05 : 1),
+      duration: const Duration(milliseconds: 90),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: widget.tile.onTap,
+          autofocus: widget.autofocus,
+          onHighlightChanged: (v) => setState(() => _pressed = v),
+          onFocusChange: (v) => setState(() => _focused = v),
           child: MenuTileFace(tile: widget.tile),
         ),
       ),
@@ -200,7 +235,8 @@ class MenuTileFace extends StatelessWidget {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(18, 18, 18, showLabel ? 6 : 18),
-                    child: Center(child: _tileImage(scheme)),
+                    // The icon grows and shrinks with the tile, within reason.
+                    child: LayoutBuilder(builder: (context, box) => Center(child: _tileImage(scheme, (box.biggest.shortestSide * 0.8).clamp(24.0, 64.0)))),
                   ),
                 ),
                 if (showLabel)
@@ -227,7 +263,7 @@ class MenuTileFace extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: DeviceClass.of(context).textFloor,
                               color: _light ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant,
                               shadows: _light ? const [Shadow(color: Colors.black87, blurRadius: 4)] : null,
                             ),
@@ -313,16 +349,16 @@ class MenuTileFace extends StatelessWidget {
     ];
   }
 
-  Widget _tileImage(ColorScheme scheme) {
+  Widget _tileImage(ColorScheme scheme, double iconSize) {
     final path = tile.assetPath;
     if (path != null && _loadable(path)) {
       final tint = tile.brandLogo ? ColorFilter.mode(_light ? Colors.white : scheme.onSurface, BlendMode.srcIn) : null;
-      final image = _image(path, fit: BoxFit.contain, tint: tint, fallback: _fallbackIcon(scheme, 56));
+      final image = _image(path, fit: BoxFit.contain, tint: tint, fallback: _fallbackIcon(scheme, iconSize));
       // The bundled logos share one square canvas, so filling the box is what
       // makes them read the same size; their own width/height are arbitrary.
       return tile.brandLogo ? SizedBox.expand(child: image) : image;
     }
-    return _fallbackIcon(scheme, 56);
+    return _fallbackIcon(scheme, iconSize);
   }
 
   /// True when [path] points at a bundled asset (assumed present) or an

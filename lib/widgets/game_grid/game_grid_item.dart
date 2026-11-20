@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
@@ -119,7 +120,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                             game.displayTitle,
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 12,
+                              fontSize: DeviceClass.of(context).textFloor,
                               fontWeight: FontWeight.w600,
                               shadows: [
                                 Shadow(color: Colors.black, blurRadius: 8, offset: Offset(0, 1)),
@@ -251,16 +252,20 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
                 color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
               ),
               SizedBox(height: 8),
-              Text(
-                widget.game.displayTitle,
-                style: TextStyle(
-                  fontSize: widget.game.displayTitle.length > 20 ? 10 : 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurface,
+              // A short card clips the title rather than overflow.
+              Flexible(
+                child: Text(
+                  widget.game.displayTitle,
+                  style: TextStyle(
+                    // Long titles shrink, never under the device's floor.
+                    fontSize: widget.game.displayTitle.length > 20 ? DeviceClass.of(context).textFloor : 14,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

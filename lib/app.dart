@@ -10,6 +10,7 @@ import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/menu_screen.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/backdrop/backdrop.dart';
@@ -297,15 +298,18 @@ class RetroToolboxApp extends ConsumerWidget {
       title: 'Retro Toolbox',
       debugShowCheckedModeBanner: false,
       theme: appTheme(style.cards, backdrop: style.backdrop),
-      builder: (context, child) => DpadScope(
-        navigatorKey: navigatorKey,
-        onScreenKeyboard: Handheld.current || builtInKeyboard,
-        // Select opens the task manager anywhere.
-        onOptions: () {
-          final c = navigatorKey.currentContext;
-          if (c != null) TaskPanelModal.show(c);
-        },
-        child: child!,
+      // Under the theme, where the screen is known: its text floor.
+      builder: (context, child) => TextFloor(
+        child: DpadScope(
+          navigatorKey: navigatorKey,
+          onScreenKeyboard: Handheld.current || builtInKeyboard,
+          // Select opens the task manager anywhere.
+          onOptions: () {
+            final c = navigatorKey.currentContext;
+            if (c != null) TaskPanelModal.show(c);
+          },
+          child: child!,
+        ),
       ),
       home: const MenuScreen(),
     );

@@ -106,6 +106,23 @@ void main() {
     expect(tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 1.05);
   });
 
+  testWidgets('the focus grows the tile and the box DpadScope outlines with it', (tester) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MenuGrid(tiles: [MenuTile(label: 'One', icon: Icons.download, onTap: () {})]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // DpadScope draws its ring round the focused node's rect: it must be the
+    // tile as painted (1.05), not as laid out.
+    final laidOut = tester.getSize(find.byKey(const ValueKey('One')));
+    expect(FocusManager.instance.primaryFocus!.rect.width, moreOrLessEquals(laidOut.width * 1.05, epsilon: 0.5));
+  });
+
   group('brand logo tiles', () {
     Future<void> pumpFace(WidgetTester tester, MenuTile tile) => tester.pumpWidget(
           MaterialApp(home: Scaffold(body: SizedBox(width: 180, height: 180, child: MenuTileFace(tile: tile)))),

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
@@ -18,8 +19,9 @@ const _frameGrey = Color(0xFFD3D8DE);
 const _inset = 6.0;
 const _bandHeight = 26.0;
 
-/// The Wii style: white glossy channels in a grid, 4 columns (2 on narrow
-/// screens), scrolling vertically.
+/// The Wii style: white glossy channels in a grid, scrolling vertically: 4
+/// columns on a wide roomy screen (2 on a narrow one), from the device class
+/// elsewhere, where a menu takes the columns that fit it on one screen.
 CardStyleKit wiiKit() => CardStyleKit(
       menuList: _menuList,
       gameList: (context) => StyledGameList(
@@ -37,6 +39,7 @@ Widget _menuList(BuildContext context, List<MenuTile> tiles, {required bool shri
       key: const ValueKey('wii-menu'),
       count: tiles.length,
       shrinkWrap: shrinkWrap,
+      menu: true,
       itemBuilder: (context, i) => _menuCard(tiles[i], autofocusFirst && i == 0),
     );
 
@@ -46,24 +49,53 @@ Widget _grid({
   required Widget Function(BuildContext, int) itemBuilder,
   ScrollController? controller,
   bool shrinkWrap = false,
+  bool menu = false,
 }) =>
-    LayoutBuilder(
-      builder: (context, box) => GridView.builder(
+    LayoutBuilder(builder: (context, box) {
+      const pad = 16.0, gap = 14.0;
+      final device = DeviceClass.of(context);
+      var columns = switch (device) {
+        DeviceClass.roomy => box.maxWidth >= 800 ? 4 : 2,
+        DeviceClass.portrait => 2,
+        _ => 3,
+      };
+      double? extent;
+      var top = pad;
+      if (menu && device != DeviceClass.roomy && !shrinkWrap && box.hasBoundedHeight) {
+        // A menu on one screen: the columns that give the widest channels,
+        // taller than 16:9 where the height is spare (most on a phone).
+        final area = Size(box.maxWidth - 2 * pad, box.maxHeight - 2 * pad);
+        final choices = switch (device) {
+          DeviceClass.portrait => const [2],
+          DeviceClass.pixel => const [2, 3],
+          _ => const [2, 3, 4, 5, 6],
+        };
+        final fit = largestFit(count, area, choices, aspect: 16 / 9, gap: gap, minWidth: 120);
+        if (fit != null) {
+          columns = fit.columns;
+          final rows = (count / columns).ceil();
+          final height = math.min((area.height - (rows - 1) * gap) / rows, fit.cell.width / (device == DeviceClass.portrait ? 1.05 : 1.2));
+          extent = height;
+          top = pad + (area.height - rows * height - (rows - 1) * gap) / 2;
+        }
+      }
+      return GridView.builder(
         key: key,
         controller: controller,
         shrinkWrap: shrinkWrap,
         physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: box.maxWidth >= 800 ? 4 : 2,
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
+          crossAxisCount: columns,
+          mainAxisSpacing: gap,
+          crossAxisSpacing: gap,
           childAspectRatio: 16 / 9,
+          mainAxisExtent: extent,
         ),
         itemCount: count,
         itemBuilder: itemBuilder,
-      ),
-    );
+      );
+    });
 
 // The channel draws its own focus (blue border and glow): no DpadScope
 // outline over it.

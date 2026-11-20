@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
+import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
@@ -57,25 +59,30 @@ Widget switchGameList(BuildContext context) => StyledGameList(
           ),
         ),
       ),
-      layout: (context, count, card, onNearEnd, controller) => GridView.builder(
-        key: const ValueKey('switch-games'),
-        controller: controller,
-        // Room above the first row for its name.
-        padding: const EdgeInsets.fromLTRB(_gridEdge, _gridTop, _gridEdge, _gridEdge),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 210,
-          childAspectRatio: 1,
-          // The focused card's frame and name sit in the gap above it.
-          mainAxisSpacing: _GameName.height + _margin + 6,
-          crossAxisSpacing: 2 * _margin + 6,
-        ),
-        itemCount: count,
-        itemBuilder: card,
-      ),
+      layout: (context, count, card, onNearEnd, controller) {
+        // The focused card's frame and name sit in the gap above it.
+        const rowGap = _GameName.height + _margin + 6, columnGap = 2 * _margin + 6;
+        // Its frames and names take room: one column fewer on a low screen.
+        final device = DeviceClass.of(context);
+        final columns = device == DeviceClass.landscapeLow ? 5 : device.gameColumns(MediaQuery.sizeOf(context).width);
+        return GridView.builder(
+          key: const ValueKey('switch-games'),
+          controller: controller,
+          // Room above the first row for its name.
+          padding: const EdgeInsets.fromLTRB(_gridEdge, _gridTop, _gridEdge, _gridEdge),
+          gridDelegate: columns == null
+              ? const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 210, mainAxisSpacing: rowGap, crossAxisSpacing: columnGap)
+              : SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: columns, mainAxisSpacing: rowGap, crossAxisSpacing: columnGap),
+          itemCount: count,
+          itemBuilder: card,
+        );
+      },
     );
 
-/// Menus and consoles: one row of large squares, vertically centred. Inside
-/// another scroll view ([shrinkWrap]) the row has a fixed height.
+/// Menus and consoles: one row of large squares, vertically centred; on a
+/// handheld as many whole cards as fit, none cut at the edge (a low landscape
+/// screen fits up to 6). A phone held upright gets two columns instead.
+/// Inside another scroll view ([shrinkWrap]) the row has a fixed height.
 class SwitchMenuRow extends StatelessWidget {
   const SwitchMenuRow({super.key, required this.tiles, this.shrinkWrap = false, this.autofocusFirst = true});
 
@@ -92,13 +99,49 @@ class SwitchMenuRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (shrinkWrap) return SizedBox(key: _menuKey, height: _rowHeight(shrinkWrapSize), child: _row(shrinkWrapSize));
     return LayoutBuilder(builder: (context, box) {
+      final device = DeviceClass.of(context);
+      if (device == DeviceClass.portrait) return _grid(box);
       // About the Switch's share of the screen: a 256 px icon on 720 px.
-      final size = (box.maxHeight * 0.38).clamp(120.0, 280.0).clamp(0.0, box.maxWidth * 0.42).toDouble();
+      var size = (box.maxHeight * 0.38).clamp(120.0, 280.0).clamp(0.0, box.maxWidth * 0.42).toDouble();
+      if (device != DeviceClass.roomy) {
+        // Whole cards at rest: the ones that fit grow until the next one
+        // starts at the screen's edge, or one more shrinks in when growing
+        // would leave the height.
+        final width = box.maxWidth - 2 * _rowEdge;
+        final fit = math.max(1, ((width + _gap) / (size + _gap)).floor());
+        if (device == DeviceClass.landscapeLow && tiles.length <= 6) {
+          // A short menu on a low screen: all of it in the row.
+          size = math.min(size, (width - (tiles.length - 1) * _gap) / tiles.length);
+        } else if (tiles.length > fit) {
+          double sized(int k) => (box.maxWidth - _rowEdge - k * _gap) / k;
+          size = _rowHeight(sized(fit)) <= box.maxHeight ? sized(fit) : sized(fit + 1);
+        }
+      }
       return SizedBox.expand(
         key: _menuKey,
         child: Center(child: SizedBox(height: _rowHeight(size), child: _row(size))),
       );
     });
+  }
+
+  /// Between two cards: room for both frames, plus the Switch's gap.
+  static const _gap = 2 * _margin + 4;
+
+  /// Two columns of squares, the focused name in the band above each row,
+  /// the whole grid in the middle when it fits.
+  Widget _grid(BoxConstraints box) {
+    final size = (box.maxWidth - 2 * _gridEdge - _gap) / 2;
+    final band = _MenuName.bandFor(size);
+    final rows = (tiles.length / 2).ceil();
+    final content = rows * (size + band);
+    final top = math.max(band, (box.maxHeight - content) / 2 + band / 2);
+    return GridView.builder(
+      key: _menuKey,
+      padding: EdgeInsets.fromLTRB(_gridEdge, top, _gridEdge, _gridEdge),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: band, crossAxisSpacing: _gap),
+      itemCount: tiles.length,
+      itemBuilder: (context, i) => _card(i, size, before: band + _margin, after: _gridEdge),
+    );
   }
 
   /// The card, and the name's band above it mirrored below so the card is
@@ -111,30 +154,30 @@ class SwitchMenuRow extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: _rowEdge),
       itemCount: tiles.length,
-      itemBuilder: (context, i) {
-        final tile = tiles[i];
-        return Padding(
-          // Room between cards for the frame, plus the Switch's gap.
-          padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : 2 * _margin + 4),
-          child: SizedBox.square(
-            dimension: size,
-            child: DpadOwnOutline(
-              child: Builder(
-                builder: (card) => StyledMenuCard(
-                  key: ValueKey(tile.label),
-                  tile: tile,
-                  autofocus: autofocusFirst && i == 0,
-                  customBorder: _cardShape,
-                  onFocusChange: (focused) {
-                    if (focused) _reveal(card, before: _rowEdge, after: _rowEdge);
-                  },
-                  face: (context, focused) => SwitchMenuFace(tile: tile, focused: focused, size: size),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+      itemBuilder: (context, i) => Padding(
+        padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : _gap),
+        child: SizedBox.square(dimension: size, child: _card(i, size, before: _rowEdge, after: _rowEdge)),
+      ),
+    );
+  }
+
+  /// Tile [i] at [size]; focus scrolls it [before] and [after] clear of its
+  /// list's edges.
+  Widget _card(int i, double size, {required double before, required double after}) {
+    final tile = tiles[i];
+    return DpadOwnOutline(
+      child: Builder(
+        builder: (card) => StyledMenuCard(
+          key: ValueKey(tile.label),
+          tile: tile,
+          autofocus: autofocusFirst && i == 0,
+          customBorder: _cardShape,
+          onFocusChange: (focused) {
+            if (focused) _reveal(card, before: before, after: after);
+          },
+          face: (context, focused) => SwitchMenuFace(tile: tile, focused: focused, size: size),
+        ),
+      ),
     );
   }
 }
@@ -173,7 +216,7 @@ class SwitchMenuFace extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   Padding(padding: inset, child: Center(child: _image(art))),
-                  if (!logoOnly) _innerLabel(art),
+                  if (!logoOnly) _innerLabel(art, DeviceClass.of(context).textFloor),
                   if (tile.badge != null) Positioned(top: art * 0.06, right: art * 0.06, child: _badge(tile.badge!)),
                 ],
               ),
@@ -205,7 +248,7 @@ class SwitchMenuFace extends StatelessWidget {
 
   /// Plain tiles carry their name inside, for touch; it gives way to the name
   /// above while focused.
-  Widget _innerLabel(double art) => Positioned(
+  Widget _innerLabel(double art, double floor) => Positioned(
         left: 10,
         right: 10,
         bottom: art * 0.07,
@@ -220,7 +263,7 @@ class SwitchMenuFace extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: (art * 0.065).clamp(11.0, 16.0)),
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: (art * 0.065).clamp(floor, math.max(16.0, floor))),
               ),
               if (tile.subtitle != null)
                 Text(
@@ -228,7 +271,7 @@ class SwitchMenuFace extends StatelessWidget {
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white70, fontSize: (art * 0.05).clamp(10.0, 13.0)),
+                  style: TextStyle(color: Colors.white70, fontSize: (art * 0.05).clamp(floor, math.max(13.0, floor))),
                 ),
             ],
           ),
