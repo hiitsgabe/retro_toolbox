@@ -13,6 +13,7 @@ import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 
 const _wiiBlue = Color(0xFF34BEED);
 const _frameGrey = Color(0xFFD3D8DE);
@@ -79,35 +80,44 @@ Widget _grid({
           top = pad + (area.height - rows * height - (rows - 1) * gap) / 2;
         }
       }
-      return GridView.builder(
-        key: key,
-        controller: controller,
-        shrinkWrap: shrinkWrap,
-        physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-        padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          childAspectRatio: 16 / 9,
-          mainAxisExtent: extent,
+      return MenuMoveLayout(
+        move: MenuMove.grid(columns),
+        child: GridView.builder(
+          key: key,
+          controller: controller,
+          shrinkWrap: shrinkWrap,
+          physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+          padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+            childAspectRatio: 16 / 9,
+            mainAxisExtent: extent,
+          ),
+          itemCount: count,
+          itemBuilder: itemBuilder,
         ),
-        itemCount: count,
-        itemBuilder: itemBuilder,
       );
     });
 
 // The channel draws its own focus (blue border and glow): no DpadScope
-// outline over it.
-Widget _menuCard(MenuTile tile, bool autofocus) => DpadOwnOutline(
-      child: StyledMenuCard(
-        key: ValueKey(tile.label),
-        tile: tile,
-        autofocus: autofocus,
-        customBorder: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
-        face: (context, focused) => _Channel(
-          focused: focused,
-          builder: (context, radius) => _MenuArt(tile: tile),
+// outline over it. Lifted to be moved, it is ringed in the Wii's blue.
+Widget _menuCard(MenuTile tile, bool autofocus) => MenuReorderTarget(
+      tile: tile,
+      look: LiftLook.outline,
+      color: _wiiBlue,
+      radius: 24,
+      child: DpadOwnOutline(
+        child: StyledMenuCard(
+          key: ValueKey(tile.label),
+          tile: tile,
+          autofocus: autofocus,
+          customBorder: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
+          face: (context, focused) => _Channel(
+            focused: focused,
+            builder: (context, radius) => _MenuArt(tile: tile),
+          ),
         ),
       ),
     );

@@ -69,7 +69,8 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
         data: (list) {
           // Nothing failed: retrying would not help (the handheld hides some).
           if (list.isEmpty) return const EmptyState(icon: Icons.sports_score, glyph: PixelIcons.sports, line: 'No games for this device yet');
-          return MenuGrid(key: ValueKey(_bySport), tiles: _bySport ? _sportTiles(list) : _consoleTiles(list));
+          // Each grouping keeps its own order.
+          return MenuGrid(key: ValueKey(_bySport), menuId: _bySport ? 'sports-by-sport' : 'sports', tiles: _bySport ? _sportTiles(list) : _consoleTiles(list));
         },
       ),
     );
@@ -83,6 +84,7 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
     return [
       for (final platform in platforms)
         MenuTile(
+          id: platform,
           label: platformLabel(platform),
           area: AppArea.sports,
           pixelIcon: PixelIcons.games,
@@ -105,6 +107,7 @@ class _SportsGridScreenState extends ConsumerState<SportsGridScreen> {
     return [
       for (final sport in sports)
         MenuTile(
+          id: sport,
           label: _cap(sport),
           area: AppArea.sports,
           pixelIcon: sportPixelIcon(sport),

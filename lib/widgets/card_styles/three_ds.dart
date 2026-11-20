@@ -23,6 +23,7 @@ import 'package:retro_toolbox/widgets/card_styles/styled_game_list.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 
 /// The 3DS HOME Menu: square icons, each in a light slot, packed in a grid
 /// that scrolls sideways, under a "top screen" strip that shows the focused
@@ -176,19 +177,22 @@ class _SlotGrid extends StatelessWidget {
       return Center(
         child: SizedBox(
           height: height,
-          child: GridView.builder(
-            controller: controller,
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.symmetric(vertical: _panelPadding, horizontal: max(_panelPadding, spare / 2)),
-            clipBehavior: Clip.hardEdge,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: rows,
-              mainAxisSpacing: _gap,
-              crossAxisSpacing: _gap,
-              mainAxisExtent: side,
+          child: MenuMoveLayout(
+            move: MenuMove.columns(rows),
+            child: GridView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              padding: EdgeInsets.symmetric(vertical: _panelPadding, horizontal: max(_panelPadding, spare / 2)),
+              clipBehavior: Clip.hardEdge,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: rows,
+                mainAxisSpacing: _gap,
+                crossAxisSpacing: _gap,
+                mainAxisExtent: side,
+              ),
+              itemCount: columns * rows,
+              itemBuilder: (context, i) => i < count ? card(context, i) : const _EmptySlot(),
             ),
-            itemCount: columns * rows,
-            itemBuilder: (context, i) => i < count ? card(context, i) : const _EmptySlot(),
           ),
         ),
       );
@@ -237,17 +241,23 @@ class _ThreeDsMenuState extends State<_ThreeDsMenu> {
         side: side,
         count: tiles.length,
         // The slot pulses its own border: no DpadScope outline over it.
-        card: (context, i) => DpadOwnOutline(
-          child: StyledMenuCard(
-            key: ValueKey(tiles[i].label),
-            tile: tiles[i],
-            autofocus: widget.autofocusFirst && i == 0,
-            customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(side * 0.12)),
-            tapFocus: TapFocus.selectFirst,
-            onFocusChange: (v) {
-              if (v) _focused.value = i;
-            },
-            face: (context, focused) => _Slot(focused: focused, child: _MenuFace(tile: tiles[i])),
+        // Lifted to be moved, an icon grows out of its slot.
+        card: (context, i) => MenuReorderTarget(
+          tile: tiles[i],
+          look: LiftLook.scaled,
+          radius: side * 0.12,
+          child: DpadOwnOutline(
+            child: StyledMenuCard(
+              key: ValueKey(tiles[i].label),
+              tile: tiles[i],
+              autofocus: widget.autofocusFirst && i == 0,
+              customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(side * 0.12)),
+              tapFocus: TapFocus.selectFirst,
+              onFocusChange: (v) {
+                if (v) _focused.value = i;
+              },
+              face: (context, focused) => _Slot(focused: focused, child: _MenuFace(tile: tiles[i])),
+            ),
           ),
         ),
       ),

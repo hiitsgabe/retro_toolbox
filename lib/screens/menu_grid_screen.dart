@@ -7,13 +7,16 @@ class MenuGridScreen extends StatelessWidget {
   final String title;
   final List<MenuTile> tiles;
 
-  const MenuGridScreen({super.key, required this.title, required this.tiles});
+  /// The order the user gives the tiles is saved under it (see [MenuGrid.menuId]).
+  final String? menuId;
+
+  const MenuGridScreen({super.key, required this.title, required this.tiles, this.menuId});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      body: MenuGrid(tiles: tiles),
+      body: MenuGrid(menuId: menuId, tiles: tiles),
     );
   }
 }

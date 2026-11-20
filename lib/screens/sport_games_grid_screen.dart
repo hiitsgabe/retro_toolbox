@@ -26,6 +26,7 @@ class SportGamesGridScreen extends ConsumerWidget {
     final tiles = [
       for (final info in games)
         MenuTile(
+          id: info.gameId,
           label: gameName(info),
           // Show the axis the grid isn't grouped by, so each card still
           // identifies both sport and console.
@@ -46,7 +47,9 @@ class SportGamesGridScreen extends ConsumerWidget {
       glyph: byPlatform ? PixelIcons.games : sportPixelIcon(sport!),
       area: AppArea.sports,
       padding: EdgeInsets.zero,
-      body: tiles.isEmpty ? const EmptyState(icon: Icons.sports_score, glyph: PixelIcons.sports, line: 'No games here.') : MenuGrid(tiles: tiles),
+      body: tiles.isEmpty
+          ? const EmptyState(icon: Icons.sports_score, glyph: PixelIcons.sports, line: 'No games here.')
+          : MenuGrid(menuId: byPlatform ? 'sport-games:platform:$platform' : 'sport-games:sport:$sport', tiles: tiles),
     );
   }
 

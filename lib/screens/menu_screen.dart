@@ -95,6 +95,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final tiles = [
       if (library)
         MenuTile(
+          id: 'games',
           label: 'Games Library',
           area: AppArea.games,
           pixelIcon: PixelIcons.games,
@@ -104,6 +105,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         ),
       if (MenuScreen.saveSyncShownForTest ?? Platform.isAndroid)
         MenuTile(
+          id: 'save-sync',
           label: 'Save Sync',
           area: AppArea.saves,
           pixelIcon: PixelIcons.saves,
@@ -113,16 +115,18 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           onTap: () => _push(const SaveSyncScreen()),
         ),
       MenuTile(
+        id: 'servers',
         label: 'Servers',
         area: AppArea.servers,
         pixelIcon: PixelIcons.servers,
         icon: Icons.dns,
         accentColor: const Color(0xFF167C80),
-        onTap: () => _push(MenuGridScreen(title: 'Servers', tiles: [
+        onTap: () => _push(MenuGridScreen(title: 'Servers', menuId: 'servers', tiles: [
           // Tinfoil, FBI and FPKGi are opt-in (Settings → Extra servers); the
           // handheld keeps the pure-Dart servers that make sense there.
           if (tinfoil && !Handheld.current)
             MenuTile(
+              id: 'tinfoil',
               label: 'Tinfoil Server',
               area: AppArea.servers,
               pixelIcon: PixelIcons.tinfoil,
@@ -132,6 +136,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (!Handheld.current)
             MenuTile(
+              id: 'jdkv',
               label: 'JDKV Server',
               area: AppArea.servers,
               pixelIcon: PixelIcons.jdkv,
@@ -140,6 +145,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               onTap: () => _push(const JdkvServerScreen()),
             ),
           MenuTile(
+            id: 'smb',
             label: 'SMB Share',
             area: AppArea.servers,
             pixelIcon: PixelIcons.smb,
@@ -148,6 +154,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             onTap: () => _push(const SmbScreen()),
           ),
           MenuTile(
+            id: 'ftp',
             label: 'FTP',
             area: AppArea.servers,
             pixelIcon: PixelIcons.ftp,
@@ -156,6 +163,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             onTap: () => _push(const FtpScreen()),
           ),
           MenuTile(
+            id: 'rts',
             label: 'Retro Tools Server',
             area: AppArea.servers,
             pixelIcon: PixelIcons.rts,
@@ -165,6 +173,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           ),
           if (fbi && !Handheld.current)
             MenuTile(
+              id: 'fbi',
               label: 'FBI Server',
               area: AppArea.servers,
               pixelIcon: PixelIcons.fbi,
@@ -174,6 +183,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (fpkgi && !Handheld.current)
             MenuTile(
+              id: 'fpkgi',
               label: 'FPKGi Server',
               area: AppArea.servers,
               pixelIcon: PixelIcons.fpkgi,
@@ -184,14 +194,16 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         ])),
       ),
       MenuTile(
+        id: 'tools',
         label: 'Tools',
         area: AppArea.tools,
         pixelIcon: PixelIcons.tools,
         icon: Icons.build,
         accentColor: const Color(0xFFE56717),
-        onTap: () => _push(MenuGridScreen(title: 'Tools', tiles: [
+        onTap: () => _push(MenuGridScreen(title: 'Tools', menuId: 'tools', tiles: [
           if (Handheld.current)
             MenuTile(
+              id: 'console-info',
               label: 'Console Info',
               area: AppArea.tools,
               pixelIcon: PixelIcons.consoleInfo,
@@ -201,6 +213,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (Handheld.current)
             MenuTile(
+              id: 'link-download',
               label: 'Download from link',
               area: AppArea.tools,
               pixelIcon: PixelIcons.link,
@@ -210,6 +223,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (!Handheld.current)
             MenuTile(
+              id: 'nsz',
               label: 'NSZ Decompress',
               area: AppArea.tools,
               pixelIcon: PixelIcons.nsz,
@@ -219,6 +233,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (!Handheld.current)
             MenuTile(
+              id: 'steam',
               label: 'Steam Shortcuts',
               area: AppArea.tools,
               pixelIcon: PixelIcons.steam,
@@ -228,6 +243,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (library)
             MenuTile(
+                id: 'catalog-source',
                 label: 'New Catalog Source',
                 area: AppArea.tools,
                 pixelIcon: PixelIcons.catalogSource,
@@ -235,6 +251,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
                 accentColor: const Color(0xFF2E7D5B),
                 onTap: () => _push(const AddCatalogSourceScreen())),
           MenuTile(
+              id: 'collection-clean',
               label: 'Collection Clean',
               area: AppArea.tools,
               pixelIcon: PixelIcons.clean,
@@ -242,6 +259,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               accentColor: const Color(0xFF9C4DA0),
               onTap: () => _push(const CollectionCleanScreen())),
           MenuTile(
+            id: 'file-explorer',
             label: 'File Explorer',
             area: AppArea.tools,
             pixelIcon: PixelIcons.explorer,
@@ -251,6 +269,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           ),
           if (!Handheld.current || ArchiveExtractService.rarSupported())
             MenuTile(
+              id: 'rar',
               label: 'Rar Decompress',
               area: AppArea.tools,
               pixelIcon: PixelIcons.rar,
@@ -259,6 +278,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
               onTap: () => _push(const RarDecompressScreen()),
             ),
           MenuTile(
+            id: 'm3u',
             label: 'M3U Playlists',
             area: AppArea.tools,
             pixelIcon: PixelIcons.m3u,
@@ -268,6 +288,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           ),
           if (!Handheld.current)
             MenuTile(
+              id: 'chd',
               label: 'CHD Converter',
               area: AppArea.tools,
               pixelIcon: PixelIcons.chd,
@@ -277,6 +298,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
             ),
           if (!Handheld.current)
             MenuTile(
+              id: 'cia',
               label: '3DS → CIA',
               area: AppArea.tools,
               pixelIcon: PixelIcons.cia,
@@ -287,6 +309,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         ])),
       ),
       MenuTile(
+        id: 'sports',
         label: 'Sports',
         area: AppArea.sports,
         pixelIcon: PixelIcons.sports,
@@ -296,6 +319,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         onTap: () => _push(const SportsGridScreen()),
       ),
       MenuTile(
+        id: 'settings',
         label: 'Settings',
         area: AppArea.settings,
         pixelIcon: PixelIcons.settings,
@@ -304,6 +328,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         onTap: () => _push(const SettingsScreen(consoleId: null)),
       ),
       MenuTile(
+        id: 'about',
         label: 'About',
         area: AppArea.info,
         pixelIcon: PixelIcons.info,
@@ -318,6 +343,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
       tiles.insert(
         0,
         MenuTile(
+          id: MenuTile.tasksId,
           label: 'Tasks ($activeTasks)',
           area: AppArea.tasks,
           pixelIcon: PixelIcons.tasks,
@@ -341,7 +367,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
           ],
         ),
       ),
-      body: MenuGrid(tiles: tiles),
+      body: MenuGrid(menuId: 'home', tiles: tiles),
     );
   }
 }

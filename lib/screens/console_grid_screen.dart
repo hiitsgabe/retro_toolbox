@@ -11,6 +11,7 @@ import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
@@ -44,7 +45,11 @@ class ConsoleGridScreen extends ConsumerWidget {
       final tiles = [
         for (final (i, console) in appState.consolesList.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
       ];
-      body = kit?.menuList(context, tiles, shrinkWrap: false, autofocusFirst: true) ?? _viewFor(appState.consoleViewMode, tiles);
+      body = ReorderableMenu(
+        menuId: 'consoles',
+        tiles: tiles,
+        builder: (context, tiles) => kit?.menuList(context, tiles, shrinkWrap: false, autofocusFirst: true) ?? _viewFor(context, appState.consoleViewMode, tiles),
+      );
     }
 
     final count = appState.consolesList.length;
@@ -68,30 +73,61 @@ class ConsoleGridScreen extends ConsumerWidget {
     );
   }
 
-  Widget _viewFor(ViewMode mode, List<MenuTile> tiles) {
+  /// The Classic views. Each lets a console be moved: the lifted one rises
+  /// (the cover flow's centre card, a list row, a grid tile).
+  Widget _viewFor(BuildContext context, ViewMode mode, List<MenuTile> tiles) {
+    final reorder = MenuReorderScope.of(context);
     switch (mode) {
       case ViewMode.coverflow:
         return CoverFlow(
           items: [
-            for (final t in tiles) CoverFlowItem(face: MenuTileFace(tile: t, showLabel: false), label: t.label, onTap: t.onTap),
+            for (final t in tiles)
+              CoverFlowItem(
+                face: MenuLiftLook(
+                  lifted: reorder?.isLifted(t.id) ?? false,
+                  look: LiftLook.raised,
+                  radius: 20,
+                  // The cards slide under a finger: a drag moves the lifted one a place a step.
+                  child: GestureDetector(
+                    onLongPressStart: (_) => reorder?.lift(t.id, touch: true, steps: Axis.horizontal),
+                    child: MenuTileFace(tile: t, showLabel: false),
+                  ),
+                ),
+                label: t.label,
+                onTap: t.onTap,
+              ),
           ],
+          jumpTo: reorder?.moverIndex,
+          onKey: reorder == null ? null : (centre, e) => reorder.handleKey(tiles[centre].id, e, const MenuMove.row()),
         );
       case ViewMode.list:
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: tiles.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, i) {
-            final t = tiles[i];
-            return ListTile(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-              leading: SizedBox(width: 52, height: 52, child: MenuTileFace(tile: t, showLabel: false)),
-              title: Text(t.label, style: const TextStyle(fontWeight: FontWeight.w600)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: t.onTap,
-            );
-          },
+        return MenuMoveLayout(
+          move: const MenuMove.list(),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(12),
+            itemCount: tiles.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              final t = tiles[i];
+              return MenuReorderTarget(
+                tile: t,
+                look: LiftLook.raised,
+                radius: 14,
+                // Its own Material, so the row's colour rises with it.
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    tileColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    leading: SizedBox(width: 52, height: 52, child: MenuTileFace(tile: t, showLabel: false)),
+                    title: Text(t.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: t.onTap,
+                  ),
+                ),
+              );
+            },
+          ),
         );
       case ViewMode.grid:
         return MenuGrid(tiles: tiles);
@@ -114,6 +150,7 @@ class ConsoleGridScreen extends ConsumerWidget {
   MenuTile _consoleTile(BuildContext context, WidgetRef ref, Console console, Color tint) {
     final appStateNotifier = ref.read(appStateProvider.notifier);
     return MenuTile(
+      id: console.id,
       label: console.name,
       area: AppArea.games,
       tint: tint,

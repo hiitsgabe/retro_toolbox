@@ -15,6 +15,7 @@ import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 
 /// PS Vita home screen: glossy bubbles in staggered rows (4 and 3 on a wide
 /// screen), the label under each, a column of page dots on the right.
@@ -25,7 +26,12 @@ Widget _menuList(BuildContext context, List<MenuTile> tiles, {required bool shri
       count: tiles.length,
       shrinkWrap: shrinkWrap,
       menu: true,
-      item: (context, i) => _VitaMenuCell(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0),
+      // Lifted to be moved, a bubble rocks in place, as on the Vita.
+      item: (context, i) => MenuReorderTarget(
+        tile: tiles[i],
+        look: LiftLook.wobble,
+        child: _VitaMenuCell(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0),
+      ),
     );
 
 Widget _gameList(BuildContext context) => StyledGameList(
@@ -248,12 +254,15 @@ class _VitaRowsState extends State<_VitaRows> {
       return _VitaMetrics(
         bubble: bubble,
         floor: device.textFloor,
-        child: Stack(
-          children: [
-            list,
-            if (!widget.shrinkWrap && _dots.$1 > 1)
-              Positioned(right: 10, top: 0, bottom: 0, child: Center(child: _PageDots(count: _dots.$1, active: _dots.$2))),
-          ],
+        child: MenuMoveLayout(
+          move: MenuMove.vita(plan.wide),
+          child: Stack(
+            children: [
+              list,
+              if (!widget.shrinkWrap && _dots.$1 > 1)
+                Positioned(right: 10, top: 0, bottom: 0, child: Center(child: _PageDots(count: _dots.$1, active: _dots.$2))),
+            ],
+          ),
         ),
       );
     });

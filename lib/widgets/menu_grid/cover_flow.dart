@@ -34,7 +34,11 @@ class CoverFlow extends StatefulWidget {
   /// The focus ring's shape round the centre card; null: the style's.
   final ShapeBorder? focusShape;
 
-  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0, this.jumpTo, this.focusShape});
+  /// Sees each key before the flow does, with the centre card's index (a
+  /// menu's move mode); anything but ignored stops the key there.
+  final KeyEventResult Function(int centre, KeyEvent e)? onKey;
+
+  const CoverFlow({super.key, required this.items, this.aspectRatio = 1.0, this.jumpTo, this.focusShape, this.onKey});
 
   @override
   State<CoverFlow> createState() => _CoverFlowState();
@@ -103,8 +107,11 @@ class _CoverFlowState extends State<CoverFlow> with SingleTickerProviderStateMix
   }
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
-    if (e is KeyUpEvent || widget.items.isEmpty) return KeyEventResult.ignored;
+    if (widget.items.isEmpty) return KeyEventResult.ignored;
     final centre = _position.round().clamp(0, _last);
+    final first = widget.onKey?.call(centre, e) ?? KeyEventResult.ignored;
+    if (first != KeyEventResult.ignored) return first;
+    if (e is KeyUpEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
     if (k == LogicalKeyboardKey.arrowLeft) {
       _animateTo(centre - 1);

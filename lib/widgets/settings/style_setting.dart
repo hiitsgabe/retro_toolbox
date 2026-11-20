@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/app_style.dart';
+import 'package:retro_toolbox/providers/menu_order_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 
@@ -74,6 +76,12 @@ class StyleSettingRows extends ConsumerWidget {
           },
           onReset: () => notifier.setBackdrop(backdrop.copyWith(clearImage: true)),
         ),
+      SettingsActionRow(
+        title: 'Reset menu order',
+        subtitle: 'Hold A or long press a menu tile to move it',
+        action: 'Reset',
+        onPressed: ref.watch(menuOrderProvider).isEmpty ? null : ref.read(menuOrderProvider.notifier).reset,
+      ),
     ]);
   }
 }

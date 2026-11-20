@@ -56,6 +56,18 @@ void main() {
     await snap(t, 'menu_home_focused');
   }, skip: !screenshotsEnabled);
 
+  // Holding A lifts a tile to move it: each style shows it its own way, and
+  // the pad's hint row is over the menu.
+  testWidgets('home menu moving a tile', (t) async {
+    await launch(t, const MenuScreen(), overrides: overrides);
+    await key(t, LogicalKeyboardKey.arrowRight);
+    await t.sendKeyDownEvent(LogicalKeyboardKey.enter);
+    await frames(t, 7);
+    await t.sendKeyUpEvent(LogicalKeyboardKey.enter);
+    await key(t, LogicalKeyboardKey.arrowRight);
+    await snap(t, 'menu_home_moving');
+  }, skip: !screenshotsEnabled);
+
   testWidgets('tools submenu', (t) async {
     await launch(t, const MenuScreen(), overrides: overrides);
     await open(t, 'Tools');

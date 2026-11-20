@@ -8,11 +8,19 @@ import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
 
 /// One tile in a [MenuGrid]. Shows [assetPath] (a PNG on disk or bundled) when
 /// present and loadable, otherwise falls back to [icon].
 class MenuTile {
+  /// Names the tile in its menu's saved order: from the screen or the item
+  /// it opens, never the label (which can change). The label when not given.
+  final String id;
+
+  /// The Tasks tile's id: always first, never moved.
+  static const tasksId = 'tasks';
+
   final String label;
   final IconData icon;
 
@@ -54,6 +62,7 @@ class MenuTile {
   final VoidCallback onTap;
 
   const MenuTile({
+    String? id,
     required this.label,
     required this.icon,
     this.onTap = _noop,
@@ -66,7 +75,7 @@ class MenuTile {
     this.subtitle,
     this.badge,
     this.brandLogo = false,
-  });
+  }) : id = id ?? label;
 
   static void _noop() {}
 }
@@ -84,25 +93,34 @@ class MenuGrid extends StatelessWidget {
   /// Autofocus the first tile so a d-pad has somewhere to start.
   final bool autofocusFirst;
 
-  const MenuGrid({super.key, required this.tiles, this.shrinkWrap = false, this.autofocusFirst = true});
+  /// Saves the order the user moves the tiles into under this id (see
+  /// [ReorderableMenu]); null: a fixed menu, or one already inside a
+  /// [ReorderableMenu].
+  final String? menuId;
+
+  const MenuGrid({super.key, required this.tiles, this.shrinkWrap = false, this.autofocusFirst = true, this.menuId});
 
   @override
   Widget build(BuildContext context) {
     // A card style other than Classic brings its own layout. Without a
     // ProviderScope (a bare MenuGrid) there is no style to read: Classic.
-    if (context.getElementForInheritedWidgetOfExactType<UncontrolledProviderScope>() == null) return _classic(context);
+    if (context.getElementForInheritedWidgetOfExactType<UncontrolledProviderScope>() == null) return _classic(context, tiles);
     return Consumer(builder: (context, ref, _) {
       final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
-      return kit?.menuList(context, tiles, shrinkWrap: shrinkWrap, autofocusFirst: autofocusFirst) ?? _classic(context);
+      Widget body(BuildContext context, List<MenuTile> tiles) =>
+          kit?.menuList(context, tiles, shrinkWrap: shrinkWrap, autofocusFirst: autofocusFirst) ?? _classic(context, tiles);
+      if (menuId == null) return body(context, tiles);
+      return ReorderableMenu(menuId: menuId!, tiles: tiles, builder: body);
     });
   }
 
-  Widget _classic(BuildContext context) {
+  Widget _classic(BuildContext context, List<MenuTile> tiles) {
     final found = DeviceClass.of(context).menuFit(tiles.length);
-    if (found == null) return _roomy();
+    if (found == null) return _roomy(tiles);
+    final cartridges = _cartridges(tiles);
     // Four to six cartridges squeezed into one low row leave each a sliver
     // with an empty middle; two rows give them the height.
-    final fit = _cartridges && found.rows == 1 && tiles.length > 3 ? MenuFit((tiles.length / 2).ceil(), 2) : found;
+    final fit = cartridges && found.rows == 1 && tiles.length > 3 ? MenuFit((tiles.length / 2).ceil(), 2) : found;
     return LayoutBuilder(builder: (context, box) {
       const pad = 16.0, gap = 14.0;
       // Inside another scroll view there is no height to fill: square tiles.
@@ -111,46 +129,62 @@ class MenuGrid extends StatelessWidget {
       final cell = fit.cell(area, gap: gap);
       // The rows fill the height, the tiles no taller than 1.3 times their
       // width; a cartridge stands taller, as the real ones do.
-      final tallest = _cartridges ? 2.4 : 1.3;
+      final tallest = cartridges ? 2.4 : 1.3;
       final height = fill ? math.max(72.0, math.min(cell.height, cell.width * tallest)) : cell.width;
       final rows = (tiles.length / fit.columns).ceil();
       final content = rows * height + (rows - 1) * gap;
       // A grid that fits sits in the middle of the screen.
       final top = fill && content < area.height ? pad + (area.height - content) / 2 : pad;
-      return GridView.builder(
-        padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
-        shrinkWrap: shrinkWrap,
-        physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: fit.columns,
-          mainAxisSpacing: gap,
-          crossAxisSpacing: gap,
-          mainAxisExtent: height,
+      return MenuMoveLayout(
+        move: MenuMove.grid(fit.columns),
+        child: GridView.builder(
+          padding: EdgeInsets.fromLTRB(pad, top, pad, pad),
+          shrinkWrap: shrinkWrap,
+          physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: fit.columns,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+            mainAxisExtent: height,
+          ),
+          itemCount: tiles.length,
+          itemBuilder: (context, i) => _tile(context, tiles, i),
         ),
-        itemCount: tiles.length,
-        itemBuilder: _tile,
       );
     });
   }
 
-  bool get _cartridges => tiles.any((t) => t.area != null);
+  static bool _cartridges(List<MenuTile> tiles) => tiles.any((t) => t.area != null);
 
-  Widget _tile(BuildContext context, int i) => _MenuTileCard(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0);
+  /// Lifted to be moved, a tile rises off the grid.
+  Widget _tile(BuildContext context, List<MenuTile> tiles, int i) => MenuReorderTarget(
+        tile: tiles[i],
+        look: LiftLook.raised,
+        radius: tiles[i].area != null ? StyleTokens.of(context).cardRadius : 20,
+        child: _MenuTileCard(key: ValueKey(tiles[i].label), tile: tiles[i], autofocus: autofocusFirst && i == 0),
+      );
 
   /// Roomy screens: as many 180 px tiles as the width takes, scrolling.
-  Widget _roomy() {
-    final grid = GridView.builder(
-      padding: const EdgeInsets.all(16),
-      shrinkWrap: shrinkWrap,
-      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 180,
-        mainAxisSpacing: 16,
-        crossAxisSpacing: 16,
-        childAspectRatio: _cartridges ? 0.72 : 1,
+  Widget _roomy(List<MenuTile> tiles) {
+    const pad = 16.0, spacing = 16.0, extent = 180.0;
+    final grid = LayoutBuilder(
+      builder: (context, box) => MenuMoveLayout(
+        // The columns SliverGridDelegateWithMaxCrossAxisExtent makes.
+        move: MenuMove.grid(math.max(1, ((box.maxWidth - 2 * pad) / (extent + spacing)).ceil())),
+        child: GridView.builder(
+          padding: const EdgeInsets.all(pad),
+          shrinkWrap: shrinkWrap,
+          physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: extent,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            childAspectRatio: _cartridges(tiles) ? 0.72 : 1,
+          ),
+          itemCount: tiles.length,
+          itemBuilder: (context, i) => _tile(context, tiles, i),
+        ),
       ),
-      itemCount: tiles.length,
-      itemBuilder: _tile,
     );
     // Handheld panels run to the bezel: keep scrolled tiles off the bottom edge.
     return Handheld.current && !shrinkWrap ? Padding(padding: const EdgeInsets.only(bottom: 16), child: grid) : grid;

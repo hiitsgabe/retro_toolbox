@@ -15,6 +15,7 @@ import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 
 /// The Switch HOME menu: flat squares, one row for menus and consoles, a grid
 /// of squares for the games ("All software"). The focused card wears a frame
@@ -141,12 +142,15 @@ class SwitchMenuRow extends StatelessWidget {
     final rows = (tiles.length / 2).ceil();
     final content = rows * (size + band);
     final top = math.max(band, (box.maxHeight - content) / 2 + band / 2);
-    return GridView.builder(
-      key: _menuKey,
-      padding: EdgeInsets.fromLTRB(_gridEdge, top, _gridEdge, _gridEdge),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: band, crossAxisSpacing: _gap),
-      itemCount: tiles.length,
-      itemBuilder: (context, i) => _card(i, size, before: band + _margin, after: _gridEdge),
+    return MenuMoveLayout(
+      move: const MenuMove.grid(2),
+      child: GridView.builder(
+        key: _menuKey,
+        padding: EdgeInsets.fromLTRB(_gridEdge, top, _gridEdge, _gridEdge),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: band, crossAxisSpacing: _gap),
+        itemCount: tiles.length,
+        itemBuilder: (context, i) => _card(i, size, before: band + _margin, after: _gridEdge),
+      ),
     );
   }
 
@@ -156,13 +160,16 @@ class SwitchMenuRow extends StatelessWidget {
 
   Widget _row(double size, {double edge = _rowEdge, double gap = _gap}) {
     final band = _MenuName.bandFor(size);
-    return ListView.builder(
-      scrollDirection: Axis.horizontal,
-      padding: EdgeInsets.symmetric(horizontal: edge),
-      itemCount: tiles.length,
-      itemBuilder: (context, i) => Padding(
-        padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : gap),
-        child: SizedBox.square(dimension: size, child: _card(i, size, before: edge, after: edge)),
+    return MenuMoveLayout(
+      move: const MenuMove.row(),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(horizontal: edge),
+        itemCount: tiles.length,
+        itemBuilder: (context, i) => Padding(
+          padding: EdgeInsets.only(top: band, bottom: band, right: i == tiles.length - 1 ? 0 : gap),
+          child: SizedBox.square(dimension: size, child: _card(i, size, before: edge, after: edge)),
+        ),
       ),
     );
   }
@@ -171,18 +178,24 @@ class SwitchMenuRow extends StatelessWidget {
   /// list's edges.
   Widget _card(int i, double size, {required double before, required double after}) {
     final tile = tiles[i];
-    return DpadOwnOutline(
-      child: Builder(
-        builder: (card) => StyledMenuCard(
-          key: ValueKey(tile.label),
-          tile: tile,
-          autofocus: autofocusFirst && i == 0,
-          customBorder: _cardShape,
-          tapFocus: TapFocus.focusAndRun,
-          onFocusChange: (focused) {
-            if (focused) _reveal(card, before: before, after: after);
-          },
-          face: (context, focused) => SwitchMenuFace(tile: tile, focused: focused, size: size),
+    // Lifted to be moved, the card rises out of the row.
+    return MenuReorderTarget(
+      tile: tile,
+      look: LiftLook.raised,
+      radius: _radius,
+      child: DpadOwnOutline(
+        child: Builder(
+          builder: (card) => StyledMenuCard(
+            key: ValueKey(tile.label),
+            tile: tile,
+            autofocus: autofocusFirst && i == 0,
+            customBorder: _cardShape,
+            tapFocus: TapFocus.focusAndRun,
+            onFocusChange: (focused) {
+              if (focused) _reveal(card, before: before, after: after);
+            },
+            face: (context, focused) => SwitchMenuFace(tile: tile, focused: focused, size: size),
+          ),
         ),
       ),
     );
