@@ -33,6 +33,13 @@ void main() {
     expect((fixed, read), (1, 1));
   });
 
+  testWidgets('a missing requirement without a fix only says what is missing', (t) async {
+    await show(t, const StatusPanel.missingRequirement(title: 'No PS4 system in the catalog', detail: 'Add it to your catalog first.'));
+    expect(find.text('No PS4 system in the catalog'), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.byType(TextButton), findsNothing);
+  });
+
   testWidgets('working: the running item has the bar, the rest say where they are', (t) async {
     await show(
       t,

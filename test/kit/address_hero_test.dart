@@ -6,13 +6,16 @@ import 'package:retro_toolbox/widgets/kit/kit.dart';
 
 import 'kit_support.dart';
 
+const _wide = (Size(1280, 720), 1.0);
+
 void main() {
   tearDown(() => Handheld.current = false);
 
   String shown(WidgetTester t) => t.widget<Text>(find.byKey(const ValueKey('kit-address'))).textSpan!.toPlainText();
 
   testWidgets('a URL: scheme and path small around host and port', (t) async {
-    await pumpKit(t, Scaffold(body: AddressHero.url('http://192.168.1.42:8080/consoles.json', state: ServerState.on, stateDetail: '1 transfer')));
+    // Wide enough for the whole URL on one line (the test font draws every glyph square).
+    await pumpKit(t, Scaffold(body: AddressHero.url('http://192.168.1.42:8080/consoles.json', state: ServerState.on, stateDetail: '1 transfer')), device: _wide);
     final spans = (t.widget<Text>(find.byKey(const ValueKey('kit-address'))).textSpan! as TextSpan).children!.cast<TextSpan>();
     expect(spans.map((s) => s.text), ['http://', '192.168.1.42:8080', '/consoles.json']);
     expect(spans[1].style!.fontSize, greaterThan(spans[0].style!.fontSize!));
@@ -72,5 +75,26 @@ void main() {
     expect(find.text('IN CONFIG.JSON'), findsOneWidget);
     await t.tap(find.text('Other addresses (2)'));
     expect(others, 1);
+  });
+
+  testWidgets('a server that is off has no address yet: the hero says so, with no Copy and no fields', (t) async {
+    await pumpKit(t, const Scaffold(body: AddressHero(state: ServerState.off, address: '', fields: [AddressField('Host', '')])));
+    expect(find.byKey(const ValueKey('kit-address')), findsNothing);
+    expect(find.text('Start the server to see its address'), findsOneWidget);
+    expect(find.text('Copy'), findsNothing);
+    expect(find.text('Host'), findsNothing);
+    expect(find.text('Off'), findsOneWidget);
+    // A URL hero copies its whole address; with none there is nothing to copy.
+    await pumpKit(t, const Scaffold(body: AddressHero(state: ServerState.off, address: '')));
+    expect(find.text('Copy'), findsNothing);
+  });
+
+  testWidgets('a path that does not fit goes whole on the line under the address', (t) async {
+    await pumpKit(t, Scaffold(body: SizedBox(width: 330, child: AddressHero.url('http://192.168.1.42:9095/games.json', state: ServerState.on))), device: phone);
+    expect(find.byKey(const ValueKey('kit-address-path')), findsOneWidget);
+    expect(find.text('/games.json'), findsOneWidget);
+    expect(t.getTopLeft(find.text('/games.json')).dy, greaterThan(t.getTopLeft(find.byKey(const ValueKey('kit-address'))).dy));
+    await pumpKit(t, Scaffold(body: AddressHero.url('http://192.168.1.42:9095/games.json', state: ServerState.on)), device: _wide);
+    expect(find.byKey(const ValueKey('kit-address-path')), findsNothing, reason: 'it fits on one line');
   });
 }

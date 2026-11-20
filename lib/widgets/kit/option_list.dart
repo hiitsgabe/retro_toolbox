@@ -45,25 +45,41 @@ class KitRow extends StatelessWidget {
   }
 }
 
-/// A row's title and the line under it.
+/// A row's title and the line under it. [lockedReason]: the row is shown,
+/// not changeable, and a lock says why ("Stop the server to change").
 class KitRowText extends StatelessWidget {
-  const KitRowText({super.key, required this.title, this.subtitle, this.enabled = true});
+  const KitRowText({super.key, required this.title, this.subtitle, this.enabled = true, this.lockedReason});
 
   final String title;
   final String? subtitle;
   final bool enabled;
+  final String? lockedReason;
 
   @override
   Widget build(BuildContext context) {
     final t = KitType.of(context);
     final subtitle = this.subtitle;
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        Text(title, style: t.row),
-        if (subtitle != null && subtitle.isNotEmpty) Text(subtitle, style: t.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-      ]),
-    );
+    final locked = lockedReason;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(title, style: t.row),
+          if (subtitle != null && subtitle.isNotEmpty) Text(subtitle, style: t.subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ]),
+      ),
+      // The reason stays readable: greying it out too would hide the answer.
+      if (locked != null)
+        Padding(
+          key: const ValueKey('kit-row-locked'),
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.lock_outline, size: 14, color: t.muted),
+            const SizedBox(width: 4),
+            Flexible(child: Text(locked, style: t.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          ]),
+        ),
+    ]);
   }
 }
 
@@ -116,25 +132,27 @@ class KitRadio extends StatelessWidget {
   }
 }
 
-/// An on/off option. [onChanged] null: shown, not changeable.
+/// An on/off option. [onChanged] null: shown, not changeable; with
+/// [lockedReason], a lock says why.
 class OptionToggle extends StatelessWidget {
-  const OptionToggle({super.key, required this.title, this.subtitle, required this.value, required this.onChanged, this.autofocus = false});
+  const OptionToggle({super.key, required this.title, this.subtitle, required this.value, required this.onChanged, this.autofocus = false, this.lockedReason});
 
   final String title;
   final String? subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
   final bool autofocus;
+  final String? lockedReason;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onChanged != null;
+    final enabled = onChanged != null && lockedReason == null;
     return KitRow(
       autofocus: autofocus,
       selected: value,
       onTap: enabled ? () => onChanged!(!value) : null,
       child: Row(children: [
-        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: enabled)),
+        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: enabled, lockedReason: lockedReason)),
         const SizedBox(width: 12),
         KitSwitch(value: value, enabled: enabled),
       ]),
@@ -144,7 +162,7 @@ class OptionToggle extends StatelessWidget {
 
 /// One choice of a group: the radio is on when [value] is [groupValue].
 class OptionChoice<T> extends StatelessWidget {
-  const OptionChoice({super.key, required this.title, this.subtitle, required this.value, required this.groupValue, required this.onSelected, this.autofocus = false});
+  const OptionChoice({super.key, required this.title, this.subtitle, required this.value, required this.groupValue, required this.onSelected, this.autofocus = false, this.lockedReason});
 
   final String title;
   final String? subtitle;
@@ -152,11 +170,12 @@ class OptionChoice<T> extends StatelessWidget {
   final T? groupValue;
   final ValueChanged<T>? onSelected;
   final bool autofocus;
+  final String? lockedReason;
 
   @override
   Widget build(BuildContext context) {
     final on = value == groupValue;
-    final enabled = onSelected != null;
+    final enabled = onSelected != null && lockedReason == null;
     return KitRow(
       autofocus: autofocus,
       selected: on,
@@ -164,7 +183,7 @@ class OptionChoice<T> extends StatelessWidget {
       child: Row(children: [
         KitRadio(selected: on),
         const SizedBox(width: 12),
-        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: enabled)),
+        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: enabled, lockedReason: lockedReason)),
       ]),
     );
   }
@@ -172,7 +191,7 @@ class OptionChoice<T> extends StatelessWidget {
 
 /// A row that opens something or shows a value: "Port 9092 >".
 class OptionAction extends StatelessWidget {
-  const OptionAction({super.key, required this.title, this.subtitle, this.value, required this.onTap, this.chevron = true, this.autofocus = false});
+  const OptionAction({super.key, required this.title, this.subtitle, this.value, required this.onTap, this.chevron = true, this.autofocus = false, this.lockedReason});
 
   final String title;
   final String? subtitle;
@@ -181,16 +200,20 @@ class OptionAction extends StatelessWidget {
   final bool chevron;
   final bool autofocus;
 
+  /// Shown, not changeable, and why.
+  final String? lockedReason;
+
   @override
   Widget build(BuildContext context) {
     final t = KitType.of(context);
+    final onTap = lockedReason == null ? this.onTap : null;
     return KitRow(
       autofocus: autofocus,
       onTap: onTap,
       child: Row(children: [
-        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: onTap != null)),
+        Expanded(child: KitRowText(title: title, subtitle: subtitle, enabled: onTap != null, lockedReason: lockedReason)),
         if (value != null) ...[const SizedBox(width: 12), Text(value!, style: t.subtitle.copyWith(fontSize: t.size(13)))],
-        if (chevron) ...[const SizedBox(width: 6), Icon(Icons.chevron_right, size: 20, color: t.muted)],
+        if (chevron && lockedReason == null) ...[const SizedBox(width: 6), Icon(Icons.chevron_right, size: 20, color: t.muted)],
       ]),
     );
   }

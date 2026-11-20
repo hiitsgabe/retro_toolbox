@@ -47,35 +47,43 @@ Future<_FakeFpkgi> _pump(WidgetTester t, Map<String, Console> consoles, {FpkgiSe
   return fpkgi;
 }
 
-SwitchListTile _switch(WidgetTester t) => t.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Enable server'));
+FilledButton _primary(WidgetTester t) => t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary')));
+
+/// The primary's label, in whatever case the style writes it.
+Finder _primaryLabel(String label) => find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.textContaining(RegExp(label, caseSensitive: false)));
 
 void main() {
-  testWidgets('the switch is disabled without a PS4 system, with the notice as the reason', (t) async {
+  testWidgets('Start is blocked without a PS4 system, with the panel as the reason', (t) async {
     final fpkgi = await _pump(t, const {'snes': _snes});
-    expect(find.text('No PS4 system in the catalog'), findsOneWidget);
-    expect(_switch(t).onChanged, isNull);
-    await t.tap(find.text('Enable server'));
+    expect(find.descendant(of: find.byKey(const ValueKey('kit-status-missingRequirement')), matching: find.text('No PS4 system in the catalog')), findsOneWidget);
+    expect(find.text('Add the PS4 system to your catalog first'), findsOneWidget, reason: 'the bar says why Start is off');
+    expect(_primary(t).onPressed, isNull);
+    await t.tap(find.byKey(const ValueKey('kit-primary')));
     await t.pump();
     expect(fpkgi.enables, 0);
   });
 
-  testWidgets('the switch works with a PS4 system in the catalog', (t) async {
+  testWidgets('Start works with a PS4 system in the catalog', (t) async {
     final fpkgi = await _pump(t, const {'ps4': _ps4});
     expect(find.text('No PS4 system in the catalog'), findsNothing);
-    await t.tap(find.text('Enable server'));
+    await t.tap(_primaryLabel('Start server'));
     await t.pump();
     expect(fpkgi.enables, 1);
   });
 
   testWidgets('a running server can still be switched off after the PS4 system is gone', (t) async {
     await _pump(t, const {'snes': _snes}, state: const FpkgiServerState(running: true, addresses: ['10.0.0.2']));
-    expect(_switch(t).onChanged, isNotNull);
+    expect(_primaryLabel('Stop server'), findsOneWidget);
+    expect(_primary(t).onPressed, isNotNull);
   });
   testWidgets('the PS4 steps are all in English', (t) async {
     await _pump(t, const {'ps4': _ps4}, state: const FpkgiServerState(running: true, addresses: ['10.0.0.2']));
-    expect(find.textContaining('On the PS4'), findsOneWidget, reason: 'the steps are shown');
+    expect(find.text('ON THE PS4'), findsOneWidget, reason: 'the steps are shown');
+    // The one-time setup opens in place.
+    await t.tap(find.text('Set up the PS4 (once)'));
+    await t.pump();
     expect(find.textContaining('(L2/R2 switch category)'), findsOneWidget);
     expect(find.textContaining('troca'), findsNothing);
-    expect(find.textContaining('—'), findsNothing, reason: 'no em dash in the steps');
+    expect(find.textContaining('\u2014'), findsNothing, reason: 'no em dash in the steps');
   });
 }

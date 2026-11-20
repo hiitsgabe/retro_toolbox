@@ -29,8 +29,10 @@ void main() {
     ));
     await t.pump();
 
-    expect(find.textContaining('http://10.0.0.2:9093/consoles.json'), findsOneWidget, reason: 'the link card is shown');
-    expect(find.textContaining('Settings > Library > Catalog source'), findsOneWidget, reason: 'the link card');
+    // The hero may put the path on its own line when the link does not fit.
+    expect(find.textContaining('http://10.0.0.2:9093'), findsOneWidget, reason: 'the link is shown');
+    expect(find.textContaining('/consoles.json'), findsOneWidget);
+    expect(find.textContaining('Settings > Library > Catalog source'), findsOneWidget, reason: 'the steps');
     expect(find.textContaining('New Catalog Source'), findsNothing);
 
     // The explanation behind the (i) says the same.

@@ -36,6 +36,7 @@ class AddressHero extends StatelessWidget {
     this.onChange,
     this.changeLabel = 'Change',
     this.copyable,
+    this.placeholder = 'Start the server to see its address',
   });
 
   /// A URL: the scheme and the path small, host and port large.
@@ -71,8 +72,9 @@ class AddressHero extends StatelessWidget {
       );
 
   /// Where this device sends to (FBI: the console's address, typed here).
-  factory AddressHero.pushTarget({Key? key, required ServerState state, required String address, String label = 'Send to', String? stateDetail, required VoidCallback? onChange}) =>
-      AddressHero(key: key, state: state, stateDetail: stateDetail, address: address, label: label, onChange: onChange, copyable: false);
+  factory AddressHero.pushTarget(
+          {Key? key, required ServerState state, required String address, String label = 'Send to', String? stateDetail, required VoidCallback? onChange, String placeholder = 'Not set yet'}) =>
+      AddressHero(key: key, state: state, stateDetail: stateDetail, address: address, label: label, onChange: onChange, copyable: false, placeholder: placeholder);
 
   /// The address a config file carries to the console (FPKGi, JDKV).
   factory AddressHero.configFile({Key? key, required ServerState state, required String address, required String fileName, String? stateDetail, bool? copyable}) =>
@@ -98,6 +100,9 @@ class AddressHero extends StatelessWidget {
 
   /// Null: wherever there is a clipboard (not the Linux handheld).
   final bool? copyable;
+
+  /// Said in place of an empty [address] (a server that is off has none yet).
+  final String placeholder;
 
   static String stateWord(ServerState s) => switch (s) {
         ServerState.off => 'Off',
@@ -131,18 +136,33 @@ class AddressHero extends StatelessWidget {
     );
     final small = t.mono(13).copyWith(color: t.muted);
     final big = t.mono(t.portrait ? 22 : 23);
-    final value = Opacity(
-      opacity: state == ServerState.on ? 1 : 0.5,
-      child: Text.rich(
-        TextSpan(children: [
-          if (prefix != null) TextSpan(text: prefix, style: small),
-          TextSpan(text: address, style: big),
-          if (suffix != null) TextSpan(text: suffix, style: small),
-        ]),
-        key: const ValueKey('kit-address'),
-        softWrap: true,
-      ),
-    );
+    final empty = address.isEmpty;
+    final value = empty
+        ? Text(placeholder, key: const ValueKey('kit-address-placeholder'), style: t.body.copyWith(color: t.muted))
+        : Opacity(
+            opacity: state == ServerState.on ? 1 : 0.5,
+            child: LayoutBuilder(builder: (context, box) {
+              final whole = TextSpan(children: [
+                if (prefix != null) TextSpan(text: prefix, style: small),
+                TextSpan(text: address, style: big),
+                if (suffix != null) TextSpan(text: suffix, style: small),
+              ]);
+              // A path that does not fit goes whole under the address, rather
+              // than wrapping after one of its slashes.
+              if (suffix == null || _fits(context, whole, box.maxWidth)) return Text.rich(whole, key: const ValueKey('kit-address'), softWrap: true);
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text.rich(
+                  TextSpan(children: [
+                    if (prefix != null) TextSpan(text: prefix, style: small),
+                    TextSpan(text: address, style: big),
+                  ]),
+                  key: const ValueKey('kit-address'),
+                  softWrap: true,
+                ),
+                Text(suffix!, key: const ValueKey('kit-address-path'), style: small),
+              ]);
+            }),
+          );
     return KitPanel(padding: const EdgeInsets.all(14), children: [
       Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         pill,
@@ -152,9 +172,9 @@ class AddressHero extends StatelessWidget {
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Expanded(child: value),
           if (onChange != null) _SmallButton(label: changeLabel, onPressed: onChange),
-          if (copy && fields.isEmpty && onChange == null) _CopyButton(text: whole),
+          if (copy && !empty && fields.isEmpty && onChange == null) _CopyButton(text: whole),
         ]),
-        if (fields.isNotEmpty) ...[
+        if (fields.isNotEmpty && !empty) ...[
           const SizedBox(height: 8),
           for (final f in fields)
             Padding(
@@ -173,6 +193,19 @@ class AddressHero extends StatelessWidget {
       ]),
     ]);
   }
+}
+
+bool _fits(BuildContext context, InlineSpan span, double width) {
+  if (!width.isFinite) return true;
+  final tp = TextPainter(
+    text: TextSpan(style: DefaultTextStyle.of(context).style, children: [span]),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  final w = tp.width;
+  tp.dispose();
+  return w <= width;
 }
 
 class _SmallButton extends StatelessWidget {

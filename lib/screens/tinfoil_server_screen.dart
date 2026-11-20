@@ -1,209 +1,126 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/tinfoil_server_provider.dart';
 import 'package:retro_toolbox/services/tinfoil_server_service.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/network.dart';
+import 'package:retro_toolbox/widgets/file_browser.dart' show errorReason;
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
-import 'package:retro_toolbox/widgets/common/advanced_port.dart';
-import 'package:retro_toolbox/theme/style_tokens.dart';
 
 /// Controls the embedded Tinfoil shop server and shows the connection
 /// details to enter on the Switch once it is running.
-class TinfoilServerScreen extends ConsumerWidget {
+class TinfoilServerScreen extends ConsumerStatefulWidget {
   const TinfoilServerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TinfoilServerScreen> createState() => _TinfoilServerScreenState();
+}
+
+class _TinfoilServerScreenState extends ConsumerState<TinfoilServerScreen> with ServerToggle {
+  static const _info = InfoButton(
+    icon: Icons.cloud_upload_rounded,
+    title: 'Tinfoil Server',
+    text: 'Hosts your game library over the local network so Tinfoil on your console can browse and install titles directly from this device. '
+        'Both must be on the same network. A "Fast install" location in the File Browser lists only the games already on this device and installs '
+        'them straight from its storage; if it does not appear, add one with Path /Fast install/.',
+  );
+
+  Future<void> _signIn(Console c) => showKitSheet<void>(context, area: AppArea.servers, title: '${c.name} sign-in', subtitle: 'Needed to download its games', builder: (_) => ConsoleAuthSetting(console: c));
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(tinfoilServerProvider);
     final notifier = ref.read(tinfoilServerProvider.notifier);
-    final theme = Theme.of(context);
-    final addresses = orderAddresses(state.addresses, ref.watch(settingsProvider).preferredLocalIp);
-    final host = addresses.isNotEmpty ? addresses.first : null;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tinfoil Server'),
-        actions: const [
-          InfoButton(
-            icon: Icons.cloud_upload_rounded,
-            title: 'Tinfoil Server',
-            text: 'Hosts your game library over the local network so Tinfoil on your console can browse and install titles directly from this device. Both must be on the same network.',
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          ..._authSections(context, ref),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Enable server'),
-                subtitle: Text(state.running ? 'Serving Switch games' : 'Off'),
-                value: state.running,
-                onChanged: (v) => v ? notifier.enable() : notifier.disable(),
-              ),
-            ),
-          ),
-          if (!state.running) ...[
-            const SizedBox(height: 8),
-            AdvancedPort(port: state.port, onChanged: notifier.setPort),
-          ],
-          if (state.error != null) ...[
-            const SizedBox(height: 16),
-            Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
-          ],
-          if (state.running && host != null) ...[
-            const SizedBox(height: 24),
-            _connectionCard(context, host, state.port),
-            const SizedBox(height: 16),
-            _instructions(theme),
-            if (addresses.length > 1) ...[
-              const SizedBox(height: 8),
-              _otherAddresses(context, addresses),
-            ],
-            const SizedBox(height: 16),
-            Center(
-              child: Text('Active transfers: ${state.activeTransfers}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Switch sources need a login token to download. Show each such console's
-  /// auth UI in an accordion — open when it still needs sign-in, collapsed once
-  /// authenticated so it stays out of the way.
-  List<Widget> _authSections(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
-    final theme = Theme.of(context);
-    final consoles = ref.watch(appStateProvider).consolesList.where(
-          (c) => TinfoilServerService.isSwitchConsole(c) && c.hasTokenAuth,
-        );
-    if (consoles.isEmpty) return const [];
+    final addresses = orderAddresses(state.addresses, settings.preferredLocalIp);
+    final host = state.running ? addresses.firstOrNull : null;
+    final pill = serverStateOf(running: state.running, starting: starting, error: state.error);
+    final detail = transfersLabel(state.activeTransfers);
 
+    final switches = ref.watch(appStateProvider).consolesList.where(TinfoilServerService.isSwitchConsole).toList();
     bool authed(Console c) => (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
+    final auth = switches.where((c) => c.hasTokenAuth).toList();
+    final locked = state.running ? lockedWhileRunning : null;
 
-    return [
-      for (final c in consoles) ...[
-        Card(
-          margin: EdgeInsets.zero,
-          child: ExpansionTile(
-            // Rebuild the tile when auth flips so it collapses on sign-in.
-            key: ValueKey('auth_${c.id}_${authed(c)}'),
-            initiallyExpanded: !authed(c),
-            shape: const Border(),
-            leading: Icon(
-              authed(c) ? Icons.check_circle : Icons.lock_outline,
-              color: authed(c) ? StyleTokens.of(context).success : theme.colorScheme.error,
+    final hero = host == null
+        ? AddressHero(state: pill, address: '', stateDetail: detail)
+        : AddressHero.hostPort(
+            state: pill,
+            stateDetail: detail,
+            host: host,
+            port: state.port,
+            otherAddresses: addresses.length - 1,
+            onOtherAddresses: () => showOtherAddresses(context, area: AppArea.servers, addresses: [for (final ip in addresses.skip(1)) AddressChoice(ip)]),
+          );
+
+    return KitScaffold(
+      title: 'Tinfoil Server',
+      subtitle: 'Install Switch games from here with Tinfoil',
+      icon: Icons.cloud_upload_rounded,
+      glyph: PixelIcons.tinfoil,
+      area: AppArea.servers,
+      info: _info,
+      body: KitColumns(
+        start: [
+          // A source that cannot download is what the user must fix first.
+          for (final c in auth)
+            if (!authed(c))
+              StatusPanel.missingRequirement(
+                title: 'Sign in to ${c.name} to serve its games',
+                detail: 'Required to download',
+                actionLabel: 'Sign in',
+                onAction: () => _signIn(c),
+              ),
+          hero,
+          if (state.error != null && !state.running) StatusPanel.error(line: 'The server did not start: ${errorReason(state.error!)}', details: state.error),
+          KitPanel(children: [
+            Slot(
+              label: 'Serving',
+              icon: Icons.inventory_2_outlined,
+              glyph: PixelIcons.games,
+              value: switches.isEmpty ? null : switches.map((c) => c.name).join(', '),
+              emptyText: 'No Switch system in your catalog',
             ),
-            title: Text('${c.name} sign-in'),
-            subtitle: Text(authed(c) ? 'Authenticated' : 'Required to download'),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [ConsoleAuthSetting(console: c)],
+          ]),
+          OptionList(children: [
+            PortOption(port: state.port, onChanged: notifier.setPort, lockedReason: locked),
+            for (final c in auth)
+              if (authed(c)) OptionAction(title: '${c.name} sign-in', subtitle: 'Authenticated', value: 'Signed in', onTap: () => _signIn(c)),
+          ]),
+        ],
+        end: [
+          const KitLabel('In Tinfoil'),
+          const Steps(
+            steps: ['Open the File Browser, then this server', 'Your games show in New Games'],
+            firstTime: [
+              'File Browser, then New',
+              'Protocol http, then the Host and Port shown here',
+              'Save. Your games show up under New Games',
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-      ],
-    ];
-  }
-
-  Widget _connectionCard(BuildContext context, String host, int port) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text('Enter this in Tinfoil', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-            const SizedBox(height: 16),
-            _field(context, 'Host', host),
-            const Divider(height: 24),
-            _field(context, 'Port', '$port'),
-          ],
-        ),
+          if (state.running)
+            ActivityPanel(
+              count: state.activeTransfers,
+              countLabel: detail ?? 'Idle',
+              emptyText: state.activeTransfers > 0 ? 'Tinfoil is downloading from here' : 'No transfers right now',
+            ),
+        ],
       ),
-    );
-  }
-
-  Widget _field(BuildContext context, String label, String value) {
-    final theme = Theme.of(context);
-    return Row(
-      children: [
-        SizedBox(width: 52, child: Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onPrimaryContainer))),
-        Expanded(
-          child: SelectableText(
-            value,
-            style: theme.textTheme.titleMedium?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer),
-          ),
+      actionBar: ActionBar(
+        primary: serverAction(
+          running: state.running,
+          starting: starting,
+          onToggle: () => toggleServer(running: state.running, start: notifier.enable, stop: notifier.disable),
         ),
-        IconButton(
-          icon: const Icon(Icons.copy, size: 20),
-          color: theme.colorScheme.onPrimaryContainer,
-          tooltip: 'Copy $label',
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: value));
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label copied'), duration: const Duration(seconds: 1)));
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _instructions(ThemeData theme) {
-    const steps = [
-      'Open Tinfoil → File Browser → New',
-      'Set Protocol to http, then enter the host and port above',
-      'Save — your games show up under New Games',
-      'A "Fast install" location then appears in the File Browser with only the games already on this device, installed straight from its storage (if it doesn\'t, add one with Path /Fast install/)',
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < steps.length; i++)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(radius: 11, backgroundColor: theme.colorScheme.secondaryContainer, child: Text('${i + 1}', style: theme.textTheme.labelSmall)),
-                const SizedBox(width: 12),
-                Expanded(child: Text(steps[i], style: theme.textTheme.bodyMedium)),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _otherAddresses(BuildContext context, List<String> addresses) {
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Text('Other addresses', style: Theme.of(context).textTheme.bodySmall),
-      children: [
-        for (final ip in addresses.skip(1))
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.wifi, size: 18),
-            title: Text(ip, style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
-            trailing: IconButton(
-              icon: const Icon(Icons.copy, size: 16),
-              onPressed: () => Clipboard.setData(ClipboardData(text: ip)),
-            ),
-          ),
-      ],
+        hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+        summary: state.running ? 'Serving on port ${state.port}' : 'Port ${state.port}',
+      ),
     );
   }
 }

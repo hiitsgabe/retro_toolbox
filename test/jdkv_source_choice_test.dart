@@ -14,6 +14,7 @@ import 'package:retro_toolbox/services/jksv_meta.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/hub.dart';
 import 'package:retro_toolbox/services/save_sync/hub_backend.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _id = '0100000000ABC000';
@@ -185,26 +186,27 @@ void main() {
       await t.pump();
     }
 
-    ListTile tile(WidgetTester t, String title) => t.widget<ListTile>(find.widgetWithText(ListTile, title));
+    /// Whether the source row [title] can be picked.
+    bool enabled(WidgetTester t, String title) => t.widget<OptionChoice<JdkvSourceChoice?>>(find.widgetWithText(OptionChoice<JdkvSourceChoice?>, title)).onSelected != null;
 
     testWidgets('without a hub the Save Sync option is disabled with a hint', (t) async {
       await show(t, () async => null);
-      expect(tile(t, 'Exported saves folder').enabled, isTrue);
-      expect(tile(t, 'Save Sync').enabled, isFalse);
+      expect(enabled(t, 'Exported saves folder'), isTrue);
+      expect(enabled(t, 'Save Sync'), isFalse);
       expect(find.text('Set up Save Sync first'), findsOneWidget);
     });
 
     testWidgets('a saved hub recipe without a hub stays listed, disabled', (t) async {
       SharedPreferences.setMockInitialValues({'jdkv_source': 'hub:eden'});
       await show(t, () async => null);
-      expect(tile(t, 'Save Sync: eden').enabled, isFalse);
+      expect(enabled(t, 'Save Sync: eden'), isFalse);
       expect(find.text('Set up Save Sync first'), findsOneWidget);
     });
 
     testWidgets('with a hub each folder recipe is an enabled option that becomes the source', (t) async {
       await show(t, () async => (hub: _RecipesOnlyHub(), deviceId: 'thor-7f3a'));
-      expect(tile(t, 'Save Sync: Eden').enabled, isTrue);
-      expect(tile(t, 'Save Sync: yuzu').enabled, isTrue);
+      expect(enabled(t, 'Save Sync: Eden'), isTrue);
+      expect(enabled(t, 'Save Sync: yuzu'), isTrue);
       expect(find.text('Save Sync: Stardew Valley'), findsNothing);
       expect(find.text('Set up Save Sync first'), findsNothing);
       expect(find.text('Save exports folder'), findsOneWidget);

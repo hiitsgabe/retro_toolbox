@@ -26,6 +26,7 @@ class FieldSlot extends StatelessWidget {
     this.enabled = true,
     this.autofocus = false,
     this.focusNode,
+    this.obscureText = false,
   });
 
   final String label;
@@ -44,6 +45,9 @@ class FieldSlot extends StatelessWidget {
   final bool enabled;
   final bool autofocus;
   final FocusNode? focusNode;
+
+  /// A password: typed, not shown.
+  final bool obscureText;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +77,7 @@ class FieldSlot extends StatelessWidget {
                 focusNode: focusNode,
                 autofocus: autofocus,
                 enabled: enabled,
+                obscureText: obscureText,
                 autocorrect: false,
                 keyboardType: keyboardType,
                 textInputAction: textInputAction,

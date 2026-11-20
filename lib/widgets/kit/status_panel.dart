@@ -52,12 +52,13 @@ class StatusPanel extends StatelessWidget {
 
   /// [title]: "chdman not found". [actionLabel] runs the fix ("Locate
   /// chdman"); [linkLabel] opens where to read more ("Settings > Keys").
+  /// Without an action the panel only says what is missing and where.
   const StatusPanel.missingRequirement({
     super.key,
     required String title,
     this.detail,
-    required String this.actionLabel,
-    required this.onAction,
+    this.actionLabel,
+    this.onAction,
     this.linkLabel,
     this.onLink,
   })  : kind = StatusKind.missingRequirement,
@@ -152,13 +153,14 @@ class StatusPanel extends StatelessWidget {
         Expanded(child: Text(text, style: t.row)),
       ]),
       if (detail != null) ...[const SizedBox(height: 4), Text(detail!, style: t.subtitle)],
-      const SizedBox(height: 10),
+      if (actionLabel != null || linkLabel != null) const SizedBox(height: 10),
       Wrap(spacing: 12, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        FilledButton(
-          onPressed: onAction,
-          style: FilledButton.styleFrom(minimumSize: const Size(0, 36), padding: const EdgeInsets.symmetric(horizontal: 14), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          child: Text(actionLabel!),
-        ),
+        if (actionLabel != null)
+          FilledButton(
+            onPressed: onAction,
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 36), padding: const EdgeInsets.symmetric(horizontal: 14), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            child: Text(actionLabel!),
+          ),
         if (linkLabel != null)
           TextButton(
             onPressed: onLink,

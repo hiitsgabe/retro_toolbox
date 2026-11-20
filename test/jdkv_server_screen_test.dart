@@ -41,12 +41,12 @@ Future<void> saveTo(WidgetTester t, String path) async {
     child: const MaterialApp(home: JdkvServerScreen()),
   ));
   await t.pump();
-  // The Source card above pushes the address rows below the default 800x600 view.
-  await t.ensureVisible(find.byTooltip('Save webdav.json'));
+  // The webdav.json slot under the address saves the file.
+  await t.ensureVisible(find.text('Save file'));
   await t.pump();
-  await t.tap(find.byTooltip('Save webdav.json'));
-  // The write is real file I/O: wait for its snackbar instead of a fixed
-  // number of pumps (flaky under a loaded full-suite run).
+  await t.tap(find.text('Save file'));
+  // The write is real file I/O: wait for its line in the activity log
+  // instead of a fixed number of pumps (flaky under a loaded full-suite run).
   for (var i = 0; i < 50; i++) {
     await t.pump();
     if (find.textContaining('Saved webdav.json').evaluate().isNotEmpty || find.textContaining('Could not save').evaluate().isNotEmpty) break;

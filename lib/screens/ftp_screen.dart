@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ftpconnect/ftpconnect.dart';
 
-import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/providers/ftp_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/utils/network.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/file_browser.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
@@ -21,15 +23,25 @@ class FtpScreen extends ConsumerStatefulWidget {
   ConsumerState<FtpScreen> createState() => _FtpScreenState();
 }
 
-class _FtpScreenState extends ConsumerState<FtpScreen> {
+class _FtpScreenState extends ConsumerState<FtpScreen> with ServerToggle {
   final _host = TextEditingController();
-  final _port = TextEditingController();
+  final _port = TextEditingController(text: '21');
   final _user = TextEditingController();
   final _pass = TextEditingController();
-  final _srvPort = TextEditingController();
-  final _srvAdvanced = ExpansibleController();
   bool _prefilled = false;
-  bool _srvPrefilled = false;
+
+  static const _clientInfo = InfoButton(
+    icon: Icons.cloud_download_rounded,
+    title: 'FTP',
+    text: 'Connect to an FTP server on your network to browse it, download files into the app, and upload files to it. '
+        'Downloads and zips run in the background, so you can leave this screen.',
+  );
+  static const _serverInfo = InfoButton(
+    icon: Icons.dns_rounded,
+    title: 'FTP',
+    text: 'Share a folder over FTP so other devices on your network can browse, download, and upload files to it. '
+        'Any FTP app works. Read-only blocks uploads and deletes. Ports under 1024 need root.',
+  );
 
   @override
   void initState() {
@@ -47,9 +59,15 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     _port.dispose();
     _user.dispose();
     _pass.dispose();
-    _srvPort.dispose();
     super.dispose();
   }
+
+  void _connect(FtpNotifier notifier) => notifier.connect(
+        host: _host.text.trim(),
+        port: int.tryParse(_port.text.trim()) ?? 21,
+        username: _user.text.trim(),
+        password: _pass.text,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -64,101 +82,95 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
     }
 
     final inClient = state.mode == FtpMode.client;
+    final browsing = inClient && state.connected;
+    final ActionBar bar;
+    if (!inClient) {
+      bar = _serverBar(state, notifier);
+    } else if (browsing) {
+      bar = ActionBar(
+        primary: KitAction('Upload here', state.transfer == null && state.selected.isEmpty ? () => _upload(notifier) : null, icon: Icons.upload_file),
+        secondary: KitAction('Disconnect', () => notifier.disconnect(), icon: Icons.logout),
+        hints: const [KitHint(PadButton.a, 'Open'), KitHint(PadButton.x, 'Select'), KitHint(PadButton.y, 'Actions'), KitHint(PadButton.b, 'Up')],
+      );
+    } else {
+      bar = ActionBar(
+        primary: KitAction(state.busy ? 'Connecting…' : 'Connect', state.busy || _host.text.trim().isEmpty ? null : () => _connect(notifier), icon: Icons.login),
+        hints: const [KitHint(PadButton.a, 'Type'), KitHint(PadButton.b, 'Back')],
+        summary: _host.text.trim().isEmpty ? 'Type the server address first' : null,
+      );
+    }
+    final stacked = kitStacked(context);
+    final modes = _modes(state, notifier);
+    final content = inClient ? (state.connected ? _browser(context, state, notifier) : _clientForm(context, state, notifier)) : _serverView(context, state, notifier);
     return PopScope(
         // Back goes up a folder; only the FTP root (or server mode) leaves.
-        canPop: (!(inClient && state.connected) || state.path == '/' || state.path.isEmpty) && state.selected.isEmpty,
+        canPop: (!browsing || state.path == '/' || state.path.isEmpty) && state.selected.isEmpty,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop || state.busy) return;
           // Back first clears a selection, then goes up.
           state.selected.isNotEmpty ? notifier.clearSelection() : notifier.goUp();
         },
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('FTP'),
-            actions: [
-              inClient
-                  ? const InfoButton(
-                      icon: Icons.cloud_download_rounded,
-                      title: 'FTP',
-                      text: 'Connect to an FTP server on your network to browse it, download files into the app, and upload files to it.',
-                    )
-                  : const InfoButton(
-                      icon: Icons.dns_rounded,
-                      title: 'FTP',
-                      text: 'Share a folder over FTP so other devices on your network can browse, download, and upload files to it.',
-                    ),
-              if (inClient && state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
-            ],
-          ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: SegmentedButton<FtpMode>(
-                  segments: const [
-                    ButtonSegment(value: FtpMode.client, label: Text('Client'), icon: Icon(Icons.download)),
-                    ButtonSegment(value: FtpMode.server, label: Text('Server'), icon: Icon(Icons.dns)),
-                  ],
-                  selected: {state.mode},
-                  onSelectionChanged: (s) => notifier.setMode(s.first),
-                ),
-              ),
-              Expanded(
-                child: inClient
-                    ? (state.connected ? _browser(context, state, notifier) : _clientForm(context, state, notifier))
-                    : _serverView(context, state, notifier),
-              ),
-            ],
-          ),
-          floatingActionButton: inClient && state.connected && state.transfer == null && state.selected.isEmpty
-              ? FloatingActionButton.extended(onPressed: () => _upload(notifier), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
-              : null,
+        child: KitScaffold(
+          title: 'FTP',
+          subtitle: !inClient
+              ? 'Share a folder with your PC over FTP'
+              : (browsing ? 'Connected to ${state.host}' : 'Browse and copy files on an FTP server'),
+          icon: inClient ? Icons.cloud_download_rounded : Icons.dns_rounded,
+          glyph: PixelIcons.ftp,
+          area: AppArea.servers,
+          info: inClient ? _clientInfo : _serverInfo,
+          // Both modes stay one tile; the switch sits in the header so the
+          // body is all the mode's own, or over the body where the header is
+          // too narrow for it and the subtitle.
+          actions: [if (!stacked) ...[const SizedBox(width: 6), modes]],
+          actionBar: bar,
+          body: stacked
+              ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  Padding(padding: const EdgeInsets.only(top: 4, bottom: kitGap), child: modes),
+                  Expanded(child: content),
+                ])
+              : content,
         ));
   }
+
+  Widget _modes(FtpState state, FtpNotifier notifier) => SegmentedButton<FtpMode>(
+        showSelectedIcon: false,
+        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        segments: const [
+          ButtonSegment(value: FtpMode.client, label: Text('Client')),
+          ButtonSegment(value: FtpMode.server, label: Text('Server')),
+        ],
+        selected: {state.mode},
+        onSelectionChanged: (s) => notifier.setMode(s.first),
+      );
 
   // ---- Client --------------------------------------------------------------
 
   Widget _clientForm(BuildContext context, FtpState state, FtpNotifier notifier) {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        TextField(
-          controller: _host,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(labelText: 'Host / IP', hintText: '192.168.1.10', border: OutlineInputBorder(), isDense: true),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _port,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(labelText: 'Port', hintText: '21', border: OutlineInputBorder(), isDense: true),
-        ),
-        const SizedBox(height: 12),
-        TextField(controller: _user, decoration: const InputDecoration(labelText: 'Username (blank = anonymous)', border: OutlineInputBorder(), isDense: true)),
-        const SizedBox(height: 12),
-        TextField(controller: _pass, obscureText: true, decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), isDense: true)),
-        if (state.error != null) ...[
-          const SizedBox(height: 16),
-          Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
-        ],
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: state.busy || _host.text.trim().isEmpty
-                ? null
-                : () => notifier.connect(
-                      host: _host.text.trim(),
-                      port: int.tryParse(_port.text.trim()) ?? 21,
-                      username: _user.text.trim(),
-                      password: _pass.text,
-                    ),
-            icon: state.busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
-            label: const Text('Connect'),
+    return KitColumns(
+      start: [
+        const KitLabel('Server'),
+        KitPanel(children: [
+          FieldSlot(label: 'Host / IP', controller: _host, hint: '192.168.1.10', icon: Icons.dns_outlined, keyboardType: TextInputType.url, onChanged: (_) => setState(() {})),
+          FieldSlot(
+            label: 'Port',
+            controller: _port,
+            hint: '21',
+            icon: Icons.settings_ethernet,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
-        ),
+        ]),
+        if (state.error != null) StatusPanel.error(line: errorReason(state.error!), details: errorReason(state.error!) == state.error ? null : state.error),
+      ],
+      end: [
+        const KitLabel('Login'),
+        KitPanel(children: [
+          FieldSlot(label: 'Username', controller: _user, hint: 'Leave empty for anonymous', icon: Icons.person_outline),
+          FieldSlot(label: 'Password', controller: _pass, icon: Icons.key_outlined, obscureText: true, onSubmitted: (_) {
+            if (!state.busy && _host.text.trim().isNotEmpty) _connect(notifier);
+          }),
+        ]),
       ],
     );
   }
@@ -226,131 +238,72 @@ class _FtpScreenState extends ConsumerState<FtpScreen> {
 
   // ---- Server --------------------------------------------------------------
 
-  Widget _serverView(BuildContext context, FtpState state, FtpNotifier notifier) {
-    final theme = Theme.of(context);
-    final host = orderAddresses(state.serverAddresses, ref.watch(settingsProvider).preferredLocalIp).firstOrNull;
+  ActionBar _serverBar(FtpState state, FtpNotifier notifier) {
     final running = state.serverRunning;
-
-    if (!_srvPrefilled) {
-      _srvPrefilled = true;
-      _srvPort.text = '${state.serverPort}';
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Card(
-          margin: EdgeInsets.zero,
-          child: ListTile(
-            leading: const Icon(Icons.folder),
-            title: Text(state.serverDir.isEmpty ? 'No folder selected' : state.serverDir, maxLines: 2, overflow: TextOverflow.ellipsis),
-            subtitle: const Text('Folder to share'),
-            trailing: TextButton(
-                onPressed: running
-                    ? null
-                    : () async {
-                        final dir = await pickDirectory(context, title: 'Choose folder to share');
-                        if (dir != null) await notifier.setServerDir(dir);
-                      },
-                child: const Text('Choose')),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          child: ExpansionTile(
-            controller: _srvAdvanced,
-            shape: const Border(),
-            leading: const Icon(Icons.tune),
-            title: const Text('Advanced', style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('Port ${state.serverPort}${state.serverReadOnly ? ' · read-only' : ''}'),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            children: [
-              TextField(
-                controller: _srvPort,
-                enabled: !running,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration:
-                    const InputDecoration(labelText: 'Port', border: OutlineInputBorder(), isDense: true, helperText: 'Use a port > 1024 (21 needs root)'),
-                onChanged: (v) {
-                  final port = int.tryParse(v);
-                  if (port != null && port > 0 && port < 65536) notifier.setServerPort(port);
-                },
-              ),
-              const SizedBox(height: 4),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Read-only'),
-                subtitle: const Text('Block uploads and deletes from clients'),
-                value: state.serverReadOnly,
-                onChanged: running ? null : (v) => notifier.setServerReadOnly(v),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(
-              shape: const StadiumBorder(),
-              backgroundColor: running ? theme.colorScheme.errorContainer : null,
-              foregroundColor: running ? theme.colorScheme.onErrorContainer : null,
-            ),
-            onPressed: () => running ? notifier.stopServer() : notifier.startServer(),
-            icon: Icon(running ? Icons.stop : Icons.play_arrow),
-            label: Text(running ? 'Stop server' : 'Start server', style: const TextStyle(fontSize: 16)),
-          ),
-        ),
-        if (state.serverError != null) ...[
-          const SizedBox(height: 16),
-          Text(state.serverError!, style: TextStyle(color: theme.colorScheme.error)),
-        ],
-        if (running && host != null) ...[
-          const SizedBox(height: 24),
-          _connectionCard(context, host, state.serverPort),
-        ],
-      ],
+    final noDir = state.serverDir.isEmpty;
+    return ActionBar(
+      primary: serverAction(
+        running: running,
+        starting: starting,
+        onToggle: noDir && !running ? null : () => toggleServer(running: running, start: notifier.startServer, stop: notifier.stopServer),
+      ),
+      hints: const [KitHint(PadButton.a, 'Choose'), KitHint(PadButton.b, 'Back')],
+      summary: noDir && !running ? 'Choose a folder to share first' : (running ? 'Sharing on port ${state.serverPort}' : 'Port ${state.serverPort}'),
     );
   }
 
-  Widget _connectionCard(BuildContext context, String host, int port) {
-    final theme = Theme.of(context);
-    final url = 'ftp://$host:$port';
-    return Card(
-      margin: EdgeInsets.zero,
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text('Connect from another device', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: SelectableText(url,
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer)),
-                ),
-                // No clipboard on the handheld.
-                if (!Handheld.current)
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 20),
-                  color: theme.colorScheme.onPrimaryContainer,
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: url));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied'), duration: Duration(seconds: 1)));
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+  Widget _serverView(BuildContext context, FtpState state, FtpNotifier notifier) {
+    final addresses = orderAddresses(state.serverAddresses, ref.watch(settingsProvider).preferredLocalIp);
+    final running = state.serverRunning;
+    final host = running ? addresses.firstOrNull : null;
+    final pill = serverStateOf(running: running, starting: starting, error: state.serverError);
+    final locked = running ? lockedWhileRunning : null;
+    String urlOf(String ip) => 'ftp://$ip:${state.serverPort}';
+
+    return KitColumns(
+      start: [
+        if (host == null)
+          AddressHero(state: pill, address: '')
+        else
+          AddressHero.url(
+            urlOf(host),
+            state: pill,
+            otherAddresses: addresses.length - 1,
+            onOtherAddresses: () => showOtherAddresses(context, area: AppArea.servers, addresses: [for (final ip in addresses.skip(1)) AddressChoice(urlOf(ip))]),
+          ),
+        if (state.serverError != null) StatusPanel.error(line: 'The server did not start: ${errorReason(state.serverError!)}', details: state.serverError),
+        KitPanel(children: [
+          Slot(
+            label: 'Sharing',
+            folder: true,
+            path: state.serverDir.isEmpty ? null : state.serverDir,
+            emptyText: 'Choose a folder to share',
+            lockedReason: locked,
+            onPick: () async {
+              final dir = await pickDirectory(context, title: 'Choose folder to share');
+              if (dir != null) await notifier.setServerDir(dir);
+            },
+          ),
+        ]),
+        OptionList(children: [
+          PortOption(port: state.serverPort, onChanged: notifier.setServerPort, lockedReason: locked, message: 'Use a port above 1024 (21 needs root)'),
+          OptionToggle(
+            title: 'Read-only',
+            subtitle: 'Block uploads and deletes from clients',
+            value: state.serverReadOnly,
+            onChanged: notifier.setServerReadOnly,
+            lockedReason: locked,
+          ),
+        ]),
+      ],
+      end: [
+        const KitLabel('On the other device'),
+        Steps(steps: [
+          'Open the address in an FTP app or a file manager',
+          if (state.serverReadOnly) 'Read-only: it can browse and download, not upload or delete',
+          'Both devices on the same Wi-Fi',
+        ]),
+      ],
     );
   }
 }

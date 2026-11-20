@@ -104,4 +104,31 @@ void main() {
     await t.tap(find.text('Port'));
     expect(ran, 1);
   });
+
+  testWidgets('a locked row stays readable, says why with a lock, and does not change', (t) async {
+    final got = <bool>[];
+    var ran = 0;
+    String? picked;
+    await pumpKit(
+      t,
+      Scaffold(
+        body: OptionList(children: [
+          OptionToggle(title: 'Read-only', value: false, onChanged: got.add, lockedReason: 'Stop the server to change'),
+          OptionAction(title: 'Port', value: '2121', onTap: () => ran++, lockedReason: 'Stop the server to change'),
+          OptionChoice<String>(title: 'Folder', value: 'folder', groupValue: 'hub', onSelected: (v) => picked = v, lockedReason: 'Stop the server to change'),
+        ]),
+      ),
+    );
+    expect(find.text('Stop the server to change'), findsNWidgets(3));
+    expect(find.byIcon(Icons.lock_outline), findsNWidgets(3));
+    expect(find.text('2121'), findsOneWidget, reason: 'the value stays visible');
+    await t.tap(find.text('Read-only'));
+    await t.tap(find.text('Port'));
+    await t.tap(find.text('Folder'));
+    expect(got, isEmpty);
+    expect((ran, picked), (0, null));
+    // The reason is not greyed with the row.
+    final faded = find.ancestor(of: find.text('Stop the server to change').first, matching: find.byType(Opacity));
+    expect(t.widgetList<Opacity>(faded).where((o) => o.opacity < 1), isEmpty);
+  });
 }

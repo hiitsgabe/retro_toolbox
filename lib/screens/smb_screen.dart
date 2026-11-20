@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:smb_connect/smb_connect.dart';
 
+import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/smb_provider.dart';
 import 'package:retro_toolbox/services/smb_service.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/file_browser.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
@@ -19,20 +23,39 @@ class SmbScreen extends ConsumerStatefulWidget {
 }
 
 class _SmbScreenState extends ConsumerState<SmbScreen> {
-  final _host = TextEditingController();
-  final _user = TextEditingController();
-  final _pass = TextEditingController();
-  final _domain = TextEditingController();
-  final _advanced = ExpansibleController();
-  bool _prefilled = false;
+  /// The address sheet is up: the error shows there, not twice.
+  bool _sheetOpen = false;
 
-  @override
-  void dispose() {
-    _host.dispose();
-    _user.dispose();
-    _pass.dispose();
-    _domain.dispose();
-    super.dispose();
+  static const _info = InfoButton(
+    icon: Icons.folder_shared_rounded,
+    title: 'SMB Share',
+    text: 'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network. '
+        'Works with Windows shared folders, Samba and most NAS boxes. Downloads and zips keep running if you leave.',
+  );
+
+  /// The address sheet, filled with [host] (else the last one) and the saved
+  /// user and domain.
+  Future<void> _enterAddress({String? host}) async {
+    final state = ref.read(smbProvider);
+    setState(() => _sheetOpen = true);
+    try {
+      await showKitSheet<void>(
+        context,
+        area: AppArea.servers,
+        title: 'Connect to a share',
+        subtitle: 'A PC or NAS on this network',
+        builder: (_) => _ConnectForm(host: host ?? state.host, user: state.username, domain: state.domain),
+      );
+    } finally {
+      if (mounted) setState(() => _sheetOpen = false);
+    }
+  }
+
+  // Tapping a found host connects right away; only a refused login falls back
+  // to the address sheet, with the host filled in.
+  Future<void> _connectTo(SmbHost h, SmbNotifier notifier) async {
+    if (await notifier.connectToHost(h.ip) || !mounted) return;
+    await _enterAddress(host: h.ip);
   }
 
   @override
@@ -40,11 +63,20 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
     final state = ref.watch(smbProvider);
     final notifier = ref.read(smbProvider.notifier);
 
-    if (!_prefilled && !state.connected && state.host.isNotEmpty) {
-      _prefilled = true;
-      _host.text = state.host;
-      _user.text = state.username;
-      _domain.text = state.domain;
+    final ActionBar bar;
+    if (state.connected) {
+      bar = ActionBar(
+        primary: KitAction('Upload here', state.transfer == null && !state.atRoot && state.selected.isEmpty ? () => _upload(notifier) : null, icon: Icons.upload_file),
+        secondary: KitAction('Disconnect', () => notifier.disconnect(), icon: Icons.logout),
+        hints: const [KitHint(PadButton.a, 'Open'), KitHint(PadButton.x, 'Select'), KitHint(PadButton.y, 'Actions'), KitHint(PadButton.b, 'Up')],
+        summary: state.atRoot ? 'Open a share first' : null,
+      );
+    } else {
+      bar = ActionBar(
+        primary: KitAction(state.scanning ? 'Scanning…' : (state.discovered.isEmpty ? 'Scan network' : 'Scan again'), state.scanning ? null : () => notifier.scan(), icon: Icons.wifi_find),
+        secondary: KitAction('Enter address', state.busy ? null : () => _enterAddress(), icon: Icons.edit_outlined, button: PadButton.y),
+        hints: const [KitHint(PadButton.a, 'Connect'), KitHint(PadButton.b, 'Back')],
+      );
     }
 
     return PopScope(
@@ -55,166 +87,71 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
           // Back first clears a selection, then goes up.
           state.selected.isNotEmpty ? notifier.clearSelection() : notifier.goUp();
         },
-        child: Scaffold(
-          appBar: AppBar(
-            title: const Text('SMB Share'),
-            actions: [
-              const InfoButton(
-                icon: Icons.folder_shared_rounded,
-                title: 'SMB Share',
-                text:
-                    'Connect to a Samba/SMB share on your network to browse it, download files into the app, and upload files to it. Both devices must be on the same network.',
-              ),
-              if (state.connected) IconButton(icon: const Icon(Icons.logout), tooltip: 'Disconnect', onPressed: () => notifier.disconnect()),
-            ],
-          ),
+        child: KitScaffold(
+          title: 'SMB Share',
+          subtitle: state.connected ? 'Connected to ${state.host}' : 'Browse and copy files on a PC or NAS share',
+          icon: Icons.folder_shared_rounded,
+          glyph: PixelIcons.smb,
+          area: AppArea.servers,
+          info: _info,
+          actionBar: bar,
           body: state.connected ? _browser(context, state, notifier) : _connectForm(context, state, notifier),
-          floatingActionButton: state.connected && !state.atRoot && state.transfer == null && state.selected.isEmpty
-              ? FloatingActionButton.extended(onPressed: () => _upload(notifier), icon: const Icon(Icons.upload_file), label: const Text('Upload'))
-              : null,
         ));
   }
 
   // ---- Connect / scan ------------------------------------------------------
 
   Widget _connectForm(BuildContext context, SmbState state, SmbNotifier notifier) {
-    final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        SizedBox(
-          height: 52,
-          child: FilledButton.icon(
-            style: FilledButton.styleFrom(shape: const StadiumBorder()),
-            onPressed: state.scanning ? null : () => notifier.scan(),
-            icon: state.scanning ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find),
-            label: Text(state.scanning ? 'Scanning the network…' : 'Scan network', style: const TextStyle(fontSize: 16)),
-          ),
-        ),
-        if (state.discovered.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text('FOUND ON YOUR NETWORK', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, letterSpacing: 1.2)),
-          ),
-          for (final h in state.discovered) _hostTile(context, h, state.busy ? null : () => _connectTo(h, notifier)),
-        ] else if (!state.scanning) ...[
-          const SizedBox(height: 16),
-          Center(
-            child: Text('Scan to find SMB hosts, or open Advanced to enter one.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ),
-        ],
-        // Open Advanced shows the error under its Connect button instead.
-        if (state.error != null && !_advanced.isExpanded) ...[
-          const SizedBox(height: 16),
-          Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
-        ],
-        const SizedBox(height: 20),
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          child: ExpansionTile(
-            controller: _advanced,
-            onExpansionChanged: (_) => setState(() {}),
-            shape: const Border(),
-            leading: const Icon(Icons.tune),
-            title: const Text('Advanced', style: TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: const Text('Enter host and credentials manually'),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            children: [_manualFields(context, state, notifier)],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Tapping a found host connects right away; only a refused login falls back
-  // to the manual form, with the host filled in.
-  Future<void> _connectTo(SmbHost h, SmbNotifier notifier) async {
-    if (await notifier.connectToHost(h.ip) || !mounted) return;
-    final state = ref.read(smbProvider);
-    _host.text = h.ip;
-    _user.text = state.username;
-    _domain.text = state.domain;
-    setState(() {});
-    _advanced.expand();
-  }
-
-  Widget _hostTile(BuildContext context, SmbHost h, VoidCallback? onTap) {
-    final theme = Theme.of(context);
-    final hasName = h.name != null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
-                  child: Icon(Icons.computer, color: theme.colorScheme.onPrimaryContainer),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(h.label, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(hasName ? '${h.ip} · tap to connect' : 'tap to connect',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right, color: theme.colorScheme.onSurfaceVariant),
-              ],
+    final t = KitType.of(context);
+    final pad = ref.watch(inputModeProvider) == InputMode.gamepad;
+    return KitColumns(
+      start: [
+        const KitLabel('On your network'),
+        KitPanel(children: [
+          if (state.scanning)
+            Padding(
+              key: const ValueKey('smb-scanning'),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text('Scanning the network…', style: t.row),
+                const SizedBox(height: 6),
+                const LinearProgressIndicator(minHeight: 3),
+              ]),
             ),
-          ),
-        ),
-      ),
+          for (final h in state.discovered) _hostRow(context, h, state.busy ? null : () => _connectTo(h, notifier)),
+          if (state.discovered.isEmpty && !state.scanning)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              child: Text('Scan to find SMB hosts, or enter an address.', style: t.body.copyWith(color: t.muted)),
+            ),
+          OptionAction(title: 'Enter address', subtitle: 'Type the host, user and password', onTap: state.busy ? null : () => _enterAddress()),
+        ]),
+        // The address sheet shows the error itself while it is up.
+        if (state.error != null && !_sheetOpen) StatusPanel.error(line: errorReason(state.error!), details: errorReason(state.error!) == state.error ? null : state.error),
+      ],
+      end: [
+        const KitLabel('How to connect'),
+        Steps(steps: [
+          '${pad ? 'Press A on' : 'Tap'} a PC or NAS to connect',
+          'A user and password are asked only when the share needs them',
+          'Both devices on the same Wi-Fi',
+        ]),
+      ],
     );
   }
 
-  Widget _manualFields(BuildContext context, SmbState state, SmbNotifier notifier) {
-    final theme = Theme.of(context);
-    return Column(
-      children: [
-        TextField(
-          controller: _host,
-          onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(labelText: 'Host / IP', hintText: '192.168.1.10', border: OutlineInputBorder(), isDense: true),
-        ),
-        const SizedBox(height: 12),
-        TextField(controller: _user, decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder(), isDense: true)),
-        const SizedBox(height: 12),
-        TextField(controller: _pass, obscureText: true, decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), isDense: true)),
-        const SizedBox(height: 12),
-        TextField(controller: _domain, decoration: const InputDecoration(labelText: 'Domain (optional)', border: OutlineInputBorder(), isDense: true)),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: state.busy || _host.text.trim().isEmpty
-                ? null
-                : () => notifier.connect(host: _host.text.trim(), username: _user.text.trim(), password: _pass.text, domain: _domain.text.trim()),
-            icon: state.busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
-            label: const Text('Connect'),
-          ),
-        ),
-        if (state.error != null) ...[
-          const SizedBox(height: 12),
-          Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
-        ],
-      ],
+  Widget _hostRow(BuildContext context, SmbHost h, VoidCallback? onTap) => Builder(builder: (context) => _hostRowIn(context, h, onTap));
+
+  Widget _hostRowIn(BuildContext context, SmbHost h, VoidCallback? onTap) {
+    final t = KitType.of(context);
+    return KitRow(
+      onTap: onTap,
+      child: Row(children: [
+        Icon(Icons.computer, size: 22, color: t.k.accent),
+        const SizedBox(width: 12),
+        Expanded(child: KitRowText(title: h.label, subtitle: h.name != null ? h.ip : null)),
+        Text('Connect', style: t.verb),
+      ]),
     );
   }
 
@@ -281,5 +218,62 @@ class _SmbScreenState extends ConsumerState<SmbScreen> {
       ),
     );
     if (ok == true) await notifier.deleteSelected();
+  }
+}
+
+/// Host, user, password and domain for a share; Connect closes the sheet once
+/// it is in, and a refused login stays here with its error.
+class _ConnectForm extends ConsumerStatefulWidget {
+  const _ConnectForm({required this.host, required this.user, required this.domain});
+
+  final String host;
+  final String user;
+  final String domain;
+
+  @override
+  ConsumerState<_ConnectForm> createState() => _ConnectFormState();
+}
+
+class _ConnectFormState extends ConsumerState<_ConnectForm> {
+  late final _host = TextEditingController(text: widget.host);
+  late final _user = TextEditingController(text: widget.user);
+  final _pass = TextEditingController();
+  late final _domain = TextEditingController(text: widget.domain);
+
+  @override
+  void dispose() {
+    _host.dispose();
+    _user.dispose();
+    _pass.dispose();
+    _domain.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    await ref.read(smbProvider.notifier).connect(host: _host.text.trim(), username: _user.text.trim(), password: _pass.text, domain: _domain.text.trim());
+    if (mounted && ref.read(smbProvider).connected) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(smbProvider);
+    final ready = !state.busy && _host.text.trim().isNotEmpty;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      KitPanel(children: [
+        FieldSlot(label: 'Host / IP', controller: _host, hint: '192.168.1.10', icon: Icons.computer, keyboardType: TextInputType.url, autofocus: _host.text.isEmpty, onChanged: (_) => setState(() {})),
+        FieldSlot(label: 'Username', controller: _user, icon: Icons.person_outline),
+        FieldSlot(label: 'Password', controller: _pass, icon: Icons.key_outlined, obscureText: true, autofocus: _host.text.isNotEmpty, onSubmitted: (_) {
+          if (ready) _connect();
+        }),
+        FieldSlot(label: 'Domain (optional)', controller: _domain, icon: Icons.domain),
+      ]),
+      if (state.error != null) ...[const SizedBox(height: kitGap), StatusPanel.error(line: errorReason(state.error!), details: errorReason(state.error!) == state.error ? null : state.error)],
+      const SizedBox(height: 10),
+      FilledButton.icon(
+        onPressed: ready ? _connect : null,
+        icon: state.busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.login),
+        label: const Text('Connect'),
+      ),
+    ]);
   }
 }

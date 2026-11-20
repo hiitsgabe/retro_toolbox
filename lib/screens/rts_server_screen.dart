@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/utils/handheld.dart';
@@ -9,217 +8,150 @@ import 'package:retro_toolbox/providers/rts_server_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/utils/network.dart';
-import 'package:retro_toolbox/widgets/common/advanced_port.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/file_browser.dart' show errorReason;
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 import 'package:retro_toolbox/services/pick.dart';
 
 /// Turns local folders into a catalog other apps load as their catalog source
 /// (Settings > Library > Catalog source): add folders, tweak how each appears,
 /// flip the server on, and share the consoles.json link.
-class RtsServerScreen extends ConsumerWidget {
+class RtsServerScreen extends ConsumerStatefulWidget {
   const RtsServerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RtsServerScreen> createState() => _RtsServerScreenState();
+}
+
+class _RtsServerScreenState extends ConsumerState<RtsServerScreen> with ServerToggle {
+  static const _info = InfoButton(
+    icon: Icons.dns_rounded,
+    title: 'Retro Tools Server',
+    text: 'Shares folders on this device as a catalog. On another device, open Settings > Library > Catalog source '
+        '(with Games Library & downloads on) and paste the link below. It browses and downloads straight from here. Same network. '
+        'Forward my library serves every console in your library, using this device\'s sign-ins; games downloaded through here are kept on this device. '
+        'Formats left empty share every file in the folder.',
+  );
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(rtsServerProvider);
     final notifier = ref.read(rtsServerProvider.notifier);
-    final theme = Theme.of(context);
     final addresses = orderAddresses(state.addresses, ref.watch(settingsProvider).preferredLocalIp);
-    final host = addresses.isNotEmpty ? addresses.first : null;
+    final host = state.running ? addresses.firstOrNull : null;
+    final pill = serverStateOf(running: state.running, starting: starting, error: state.error);
+    final detail = transfersLabel(state.activeTransfers);
+    final nothing = state.folders.isEmpty && !state.forwardLibrary;
+    final locked = state.running ? lockedWhileRunning : null;
+    String urlOf(String ip) => 'http://$ip:${state.port}/consoles.json';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Retro Tools Server'),
-        actions: const [
-          InfoButton(
-            icon: Icons.dns_rounded,
-            title: 'Retro Tools Server',
-            text: 'Shares folders on this device as a catalog. On another device, open Settings > Library > Catalog source '
-                '(with Games Library & downloads on) and paste the link below. It browses and downloads straight from here. Same network.',
-          ),
+    final hero = host == null
+        ? AddressHero(state: pill, address: '', stateDetail: detail, label: 'Catalog link')
+        : AddressHero.url(
+            urlOf(host),
+            state: pill,
+            stateDetail: detail,
+            otherAddresses: addresses.length - 1,
+            onOtherAddresses: () => showOtherAddresses(context, area: AppArea.servers, addresses: [for (final ip in addresses.skip(1)) AddressChoice(urlOf(ip))]),
+          );
+
+    return KitScaffold(
+      title: 'Retro Tools Server',
+      subtitle: 'Share your ROM folders as a catalog',
+      icon: Icons.dns_rounded,
+      glyph: PixelIcons.rts,
+      area: AppArea.servers,
+      info: _info,
+      body: KitColumns(
+        start: [
+          hero,
+          if (state.error != null && !state.running) StatusPanel.error(line: 'The server did not start: ${errorReason(state.error!)}', details: state.error),
+          const KitLabel('On the other device'),
+          Steps(steps: [
+            'Open Settings > Library > Catalog source',
+            Handheld.current ? 'Type the link shown above' : 'Paste or type the link shown above',
+          ]),
+          if (state.running) ActivityPanel(count: state.activeTransfers, countLabel: detail ?? 'Idle', emptyText: state.activeTransfers > 0 ? 'Downloading from here' : 'No transfers right now'),
+          OptionList(children: [PortOption(port: state.port, onChanged: notifier.setPort, lockedReason: locked)]),
+        ],
+        end: [
+          KitLabel(state.folders.isEmpty ? 'Sharing' : 'Sharing ${_plural(state.folders.length, 'folder')}'),
+          OptionList(children: [
+            OptionToggle(
+              title: 'Forward my library',
+              subtitle: "Every console, with this device's sign-ins",
+              value: state.forwardLibrary,
+              onChanged: notifier.setForwardLibrary,
+              lockedReason: locked,
+            ),
+            for (var i = 0; i < state.folders.length; i++) _folderRow(context, i, state.folders[i], locked),
+            if (state.folders.isEmpty)
+              OptionAction(
+                title: 'No folders yet',
+                subtitle: 'Add a ROM folder to share it',
+                value: 'Add folder',
+                onTap: () => _addFolder(context),
+                lockedReason: locked,
+              ),
+          ]),
         ],
       ),
-      floatingActionButton: state.running
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _addFolder(context, ref),
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: const Text('Add folder'),
-            ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Enable server'),
-                    subtitle: Text(state.running
-                        ? 'Sharing ${state.folders.length} folder(s)${state.forwardLibrary ? ' and your library' : ''}'
-                        : state.folders.isEmpty && !state.forwardLibrary
-                            ? 'Add a folder or forward your library first'
-                            : 'Off'),
-                    value: state.running,
-                    onChanged: (state.folders.isEmpty && !state.forwardLibrary) && !state.running
-                        ? null
-                        : (v) => v ? notifier.enable() : notifier.disable(),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Forward my library'),
-                    subtitle: const Text(
-                        "Every console in your library, using this device's sign-ins. Games downloaded through here are kept on this device."),
-                    value: state.forwardLibrary,
-                    onChanged: state.running ? null : notifier.setForwardLibrary,
-                  ),
-                ],
-              ),
-            ),
+      actionBar: ActionBar(
+        primary: serverAction(
+          running: state.running,
+          starting: starting,
+          onToggle: nothing && !state.running ? null : () => toggleServer(running: state.running, start: notifier.enable, stop: notifier.disable),
+        ),
+        secondary: KitAction('Add folder', state.running ? null : () => _addFolder(context), icon: Icons.create_new_folder_outlined, button: PadButton.x),
+        hints: const [KitHint(PadButton.a, 'Edit'), KitHint(PadButton.y, 'Folder menu'), KitHint(PadButton.b, 'Back')],
+        summary: nothing && !state.running
+            ? 'Add a folder or forward your library first'
+            : (state.running ? 'Stop the server to change what is shared' : 'Port ${state.port}'),
+      ),
+    );
+  }
+
+  static String _plural(int n, String word) => n == 1 ? '1 $word' : '$n ${word}s';
+
+  /// A shared folder: A or a tap edits it, Y or a long press offers Edit and
+  /// Remove. While the server runs it is shown with the lock.
+  Widget _folderRow(BuildContext context, int index, RtsFolder f, String? locked) => Builder(builder: (context) => _folderRowIn(context, index, f, locked));
+
+  Widget _folderRowIn(BuildContext context, int index, RtsFolder f, String? locked) {
+    final t = KitType.of(context);
+    final chips = [
+      if (f.formats.isEmpty) 'all files' else ...f.formats,
+      if (f.boxartsUrl != null && f.boxartsUrl!.isNotEmpty) 'boxart',
+    ];
+    void edit() => _editFolder(context, index, f);
+    void menu() => showRowMenu(context, title: f.name, subtitle: f.path, items: [
+          RowMenuItem('Edit', locked == null ? edit : null, icon: Icons.edit_outlined, subtitle: locked),
+          RowMenuItem('Remove', locked == null ? () => ref.read(rtsServerProvider.notifier).removeFolder(index) : null, icon: Icons.delete_outline, destructive: true),
+        ]);
+    return RowMenuTarget(
+      onMenu: menu,
+      child: KitRow(
+        onTap: locked == null ? edit : null,
+        child: Row(children: [
+          Icon(Icons.folder_rounded, size: 20, color: t.k.accent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              KitRowText(title: f.name, lockedReason: locked),
+              PathText(f.path, style: t.subtitle),
+              const SizedBox(height: 4),
+              Wrap(spacing: 4, runSpacing: 4, children: [for (final c in chips) KitBadge(c)]),
+            ]),
           ),
-          if (!state.running) ...[
-            const SizedBox(height: 8),
-            AdvancedPort(port: state.port, onChanged: notifier.setPort),
-          ],
-          if (state.error != null) ...[
-            const SizedBox(height: 16),
-            Text(state.error!, style: TextStyle(color: theme.colorScheme.error)),
-          ],
-          if (state.running && host != null) ...[
-            const SizedBox(height: 20),
-            _linkCard(context, 'http://$host:${state.port}/consoles.json'),
-            const SizedBox(height: 12),
-            Center(
-              child: Text('Active transfers: ${state.activeTransfers}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ),
-          ],
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text('Shared folders', style: theme.textTheme.titleSmall),
-              const Spacer(),
-              Text('${state.folders.length}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (state.folders.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text('No folders yet. Tap “Add folder”.',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ),
-            ),
-          for (var i = 0; i < state.folders.length; i++) _folderCard(context, ref, i, state.folders[i], state.running),
-          const SizedBox(height: 80),
-        ],
+          if (locked == null) ...[const SizedBox(width: 8), Text('Edit', style: t.verb)],
+        ]),
       ),
     );
   }
 
-  Widget _linkCard(BuildContext context, String url) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      color: theme.colorScheme.primaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Catalog link', style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: SelectableText(
-                    url,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontFamily: 'monospace', fontWeight: FontWeight.w600, color: theme.colorScheme.onPrimaryContainer),
-                  ),
-                ),
-                // No clipboard on the handheld.
-                if (!Handheld.current)
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 20),
-                  color: theme.colorScheme.onPrimaryContainer,
-                  tooltip: 'Copy link',
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: url));
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(const SnackBar(content: Text('Link copied'), duration: Duration(seconds: 1)));
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Paste in Settings > Library > Catalog source on the other device.',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _folderCard(BuildContext context, WidgetRef ref, int index, RtsFolder f, bool locked) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: const Icon(Icons.folder_rounded),
-        title: Text(f.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(f.path, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              children: [
-                if (f.formats.isEmpty)
-                  _chip(theme, 'all files')
-                else
-                  for (final ext in f.formats) _chip(theme, ext),
-                if (f.boxartsUrl != null && f.boxartsUrl!.isNotEmpty) _chip(theme, 'boxart', Icons.image_outlined),
-              ],
-            ),
-          ],
-        ),
-        trailing: locked
-            ? null
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _editFolder(context, ref, index, f)),
-                  IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: () => ref.read(rtsServerProvider.notifier).removeFolder(index)),
-                ],
-              ),
-        isThreeLine: true,
-      ),
-    );
-  }
-
-  Widget _chip(ThemeData theme, String label, [IconData? icon]) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.secondaryContainer,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[Icon(icon, size: 12, color: theme.colorScheme.onSecondaryContainer), const SizedBox(width: 3)],
-            Text(label, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSecondaryContainer)),
-          ],
-        ),
-      );
-
-  Future<void> _addFolder(BuildContext context, WidgetRef ref) async {
+  Future<void> _addFolder(BuildContext context) async {
     final path = await pickDirectory(context, title: 'Pick a folder to share');
     if (path == null || !context.mounted) return;
     final name = p.basename(path);
@@ -251,7 +183,7 @@ class RtsServerScreen extends ConsumerWidget {
     if (result != null) ref.read(rtsServerProvider.notifier).addFolder(result);
   }
 
-  Future<void> _editFolder(BuildContext context, WidgetRef ref, int index, RtsFolder f) async {
+  Future<void> _editFolder(BuildContext context, int index, RtsFolder f) async {
     final result = await _showEditSheet(context, f, isNew: false);
     if (result != null) ref.read(rtsServerProvider.notifier).updateFolder(index, result);
   }
@@ -261,9 +193,13 @@ class RtsServerScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: _FolderEditSheet(folder: folder, isNew: isNew),
+      // The sheet is a route of its own: it takes the servers' accent again.
+      builder: (context) => KitArea(
+        area: AppArea.servers,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: _FolderEditSheet(folder: folder, isNew: isNew),
+        ),
       ),
     );
   }
@@ -307,41 +243,24 @@ class _FolderEditSheetState extends State<_FolderEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final t = KitType.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.isNew ? 'Add folder' : 'Edit folder', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(widget.folder.path, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'System name', isDense: true, border: OutlineInputBorder(), prefixIcon: Icon(Icons.videogame_asset)),
-          ),
+          Text(widget.isNew ? 'Add folder' : 'Edit folder', style: t.row.copyWith(fontSize: t.size(16))),
+          PathText(widget.folder.path, style: t.subtitle),
+          const SizedBox(height: 10),
+          KitPanel(children: [
+            FieldSlot(label: 'System name', controller: _name, icon: Icons.videogame_asset, autofocus: true),
+            FieldSlot(label: 'File formats (blank = all)', controller: _formats, hint: '.zip, .chd', icon: Icons.filter_alt),
+            FieldSlot(label: 'ROM subfolder', controller: _subfolder, icon: Icons.folder),
+            FieldSlot(label: 'Boxart URL (optional)', controller: _boxarts, icon: Icons.image_outlined, keyboardType: TextInputType.url),
+          ]),
           const SizedBox(height: 12),
-          TextField(
-            controller: _formats,
-            decoration: const InputDecoration(labelText: 'File formats (blank = all)', hintText: '.zip, .chd', isDense: true, border: OutlineInputBorder(), prefixIcon: Icon(Icons.filter_alt)),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _subfolder,
-            decoration: const InputDecoration(labelText: 'ROM subfolder', isDense: true, border: OutlineInputBorder(), prefixIcon: Icon(Icons.folder)),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _boxarts,
-            decoration: const InputDecoration(labelText: 'Boxart URL (optional)', isDense: true, border: OutlineInputBorder(), prefixIcon: Icon(Icons.image_outlined)),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(onPressed: _save, icon: const Icon(Icons.check), label: Text(widget.isNew ? 'Add' : 'Save')),
-          ),
+          FilledButton.icon(onPressed: _save, icon: const Icon(Icons.check), label: Text(widget.isNew ? 'Add' : 'Save')),
         ],
       ),
     );

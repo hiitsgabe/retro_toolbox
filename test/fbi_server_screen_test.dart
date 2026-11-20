@@ -33,12 +33,20 @@ void main() {
     expect(t.takeException(), isNull);
   });
 
+  // The address is typed in a sheet now; its field starts from the saved one.
+  Future<void> openChange(WidgetTester t) async {
+    await t.tap(find.text('Change'));
+    await t.pumpAndSettle();
+  }
+
   testWidgets('the IP field still starts from the saved 3DS address', (t) async {
     await t.pumpWidget(ProviderScope(
       overrides: [fbiServerProvider.overrideWith((ref) => _FakeFbi(const FbiServerState(running: true, threeDsIp: '10.0.0.7', addresses: ['10.0.0.2'])))],
       child: const MaterialApp(home: FbiServerScreen()),
     ));
     await t.pump();
+    expect(find.text('10.0.0.7'), findsOneWidget, reason: 'the hero shows the 3DS address');
+    await openChange(t);
     expect(find.widgetWithText(TextField, '10.0.0.7'), findsOneWidget);
   });
   testWidgets('an IP saved before the server is switched on still fills the field', (t) async {
@@ -52,6 +60,7 @@ void main() {
     await t.pump();
     fbi.set(const FbiServerState(running: true, threeDsIp: '10.0.0.7', addresses: ['10.0.0.2']));
     await t.pump();
+    await openChange(t);
     expect(find.widgetWithText(TextField, '10.0.0.7'), findsOneWidget);
   });
 }

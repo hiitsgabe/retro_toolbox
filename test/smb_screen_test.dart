@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/smb_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/screens/smb_screen.dart';
 import 'package:retro_toolbox/services/smb_service.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:smb_connect/smb_connect.dart';
 
@@ -96,7 +97,11 @@ void main() {
     expect(service.logins, [(host: '10.0.0.5', username: 'gabe', password: '', domain: 'WG')]);
   });
 
-  testWidgets('a refused login opens Advanced with the host filled and the error', (t) async {
+  /// The address sheet's field [label].
+  TextField field(WidgetTester t, String label) =>
+      t.widget<TextField>(find.descendant(of: find.widgetWithText(FieldSlot, label), matching: find.byType(TextField)));
+
+  testWidgets('a refused login opens the address sheet with the host filled and the error', (t) async {
     SharedPreferences.setMockInitialValues({});
     final service = _FakeService(fail: true);
     await _pump(t, _Scanned(service, const [_nas]));
@@ -106,12 +111,12 @@ void main() {
 
     expect(service.logins, hasLength(1));
     expect(find.text('Shares'), findsNothing);
-    final host = t.widget<TextField>(find.widgetWithText(TextField, 'Host / IP'));
-    expect(host.controller!.text, '10.0.0.5');
-    expect(find.text('Connect'), findsOneWidget, reason: 'Advanced is open');
+    expect(find.byType(BottomSheet), findsOneWidget, reason: 'the address sheet is up');
+    expect(field(t, 'Host / IP').controller!.text, '10.0.0.5');
+    expect(find.widgetWithText(FilledButton, 'Connect'), findsOneWidget);
     expect(find.textContaining('Login refused'), findsWidgets);
   });
-  testWidgets('the error shows once, under Connect, when Advanced is open', (t) async {
+  testWidgets('the error shows once, in the sheet, while the sheet is up', (t) async {
     SharedPreferences.setMockInitialValues({});
     await _pump(t, _Scanned(_FakeService(fail: true), const [_nas]));
 
@@ -119,20 +124,39 @@ void main() {
     await _settle(t);
 
     expect(find.textContaining('Login refused'), findsOneWidget);
-    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.textContaining('Login refused')), findsOneWidget);
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.textContaining('Login refused')), findsOneWidget);
   });
 
-  testWidgets('the error shows once, under the list, when Advanced is closed', (t) async {
+  testWidgets('the error shows once, under the list, when the sheet is closed', (t) async {
     SharedPreferences.setMockInitialValues({});
     await _pump(t, _Scanned(_FakeService(), const [_nas], error: 'Scan failed'));
 
     expect(find.text('Scan failed'), findsOneWidget);
-    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Scan failed')), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
 
-    await t.tap(find.text('Advanced'));
+    await t.tap(find.text('Enter address').first);
     await _settle(t);
 
     expect(find.text('Scan failed'), findsOneWidget);
-    expect(find.descendant(of: find.byType(ExpansionTile), matching: find.text('Scan failed')), findsOneWidget);
+    expect(find.descendant(of: find.byType(BottomSheet), matching: find.text('Scan failed')), findsOneWidget);
+  });
+
+  testWidgets('Connect in the sheet logs in with what was typed and opens the browser', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    final service = _FakeService();
+    await _pump(t, _Scanned(service, const []));
+
+    await t.tap(find.text('Enter address').first);
+    await _settle(t);
+    await t.enterText(find.descendant(of: find.widgetWithText(FieldSlot, 'Host / IP'), matching: find.byType(TextField)), '10.0.0.8');
+    await t.enterText(find.descendant(of: find.widgetWithText(FieldSlot, 'Username'), matching: find.byType(TextField)), 'gabe');
+    await t.enterText(find.descendant(of: find.widgetWithText(FieldSlot, 'Password'), matching: find.byType(TextField)), 'pw');
+    await t.pump();
+    await t.tap(find.widgetWithText(FilledButton, 'Connect'));
+    await _settle(t);
+
+    expect(service.logins, [(host: '10.0.0.8', username: 'gabe', password: 'pw', domain: '')]);
+    expect(find.byType(BottomSheet), findsNothing, reason: 'the sheet closes once connected');
+    expect(find.text('Shares'), findsOneWidget);
   });
 }

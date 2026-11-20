@@ -19,12 +19,14 @@ class RowMenuItem {
 /// The menu of one row (Y on a pad, a long press on touch): the row's name,
 /// then its actions. The first one has focus; B closes.
 Future<void> showRowMenu(BuildContext context, {required String title, String? subtitle, required List<RowMenuItem> items}) async {
+  // The row's theme, so the sheet keeps the screen's area accent.
+  final theme = Theme.of(context);
   final picked = await showModalBottomSheet<RowMenuItem>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     constraints: const BoxConstraints(maxWidth: 560),
-    builder: (_) => RowMenuSheet(title: title, subtitle: subtitle, items: items),
+    builder: (_) => Theme(data: theme, child: RowMenuSheet(title: title, subtitle: subtitle, items: items)),
   );
   picked?.onTap?.call();
 }

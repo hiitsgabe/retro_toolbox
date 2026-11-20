@@ -13,19 +13,21 @@ const phone = (Size(412, 915), 2.625);
 const linux640 = (Size(640, 480), 1.0);
 
 /// Pumps [home] as the app shows a screen: the style's theme, the text floor
-/// and DpadScope, at [device]'s size, with [mode] as the last input. Returns
-/// the provider container so a test can switch the input mode.
+/// and DpadScope, at [device]'s size, with [mode] as the last input, and
+/// [overrides] for the screen's providers. Returns the provider container so
+/// a test can switch the input mode.
 Future<ProviderContainer> pumpKit(
   WidgetTester t,
   Widget home, {
   CardStyle style = CardStyle.classic,
   (Size, double) device = odin2,
   InputMode mode = InputMode.touch,
+  List<Override> overrides = const [],
 }) async {
   t.view.devicePixelRatio = device.$2;
   t.view.physicalSize = device.$1 * device.$2;
   addTearDown(t.view.reset);
-  final c = ProviderContainer(overrides: [inputModeProvider.overrideWith((ref) => mode)]);
+  final c = ProviderContainer(overrides: [inputModeProvider.overrideWith((ref) => mode), ...overrides]);
   addTearDown(c.dispose);
   final nav = GlobalKey<NavigatorState>();
   await t.pumpWidget(UncontrolledProviderScope(
