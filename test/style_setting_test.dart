@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
@@ -149,24 +150,24 @@ void main() {
 
     await t.tap(swatch('Ash'));
     await t.pump();
-    expect(find.text('Reset'), findsOneWidget);
-    await t.tap(find.text('Reset'));
+    expect(rowReset(), findsOneWidget);
+    await t.tap(rowReset());
     await t.pump();
     // Back to Classic's own colours, and with its own kind that is no pick at all.
     expect(style().shownBackdrop, StyleTokens.classic.backdrop);
     expect(style().backdrop, isNull);
-    expect(find.text('Reset'), findsNothing);
+    expect(rowReset(), findsNothing);
 
     await t.tap(find.text('Image'));
     await t.pump();
     await t.tap(find.text('Picture'));
     await t.pump();
-    expect(find.text('Reset'), findsOneWidget);
-    await t.tap(find.text('Reset'));
+    expect(rowReset(), findsOneWidget);
+    await t.tap(rowReset());
     await t.pump();
     expect(style().shownBackdrop.imagePath, isNull);
     expect(style().shownBackdrop.kind, BackdropKind.image);
-    expect(find.text('Reset'), findsNothing);
+    expect(rowReset(), findsNothing);
 
     await pressX(t, find.byType(SettingsSegmentedRow<BackdropKind>));
     expect(style().shownBackdrop.kind, StyleTokens.classic.backdrop.kind);
@@ -205,3 +206,8 @@ void main() {
     expect(style().shownBackdrop.top, backdropPresets['Pink on black']!.$1);
   });
 }
+
+/// A changed row's Reset, not the "Reset menu order" action that shares the word.
+Finder rowReset() => find.byElementPredicate(
+      (e) => e.widget is Text && (e.widget as Text).data == 'Reset' && e.findAncestorWidgetOfExactType<SettingsActionRow>() == null,
+    );

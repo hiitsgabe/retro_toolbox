@@ -479,7 +479,7 @@ void main() {
     testWidgets("the header's back button closes a console page, then leaves Settings", (t) async {
       saved();
       await pump(t, consoleId: 'psx');
-      final back = find.descendant(of: find.byType(SettingsTopBar), matching: find.byIcon(Icons.arrow_back));
+      final back = find.descendant(of: find.byType(SettingsTopBar), matching: find.byTooltip('Back'));
       expect(find.widgetWithText(SettingsTopBar, 'PlayStation'), findsOneWidget);
       await t.tap(back);
       await t.pumpAndSettle();
@@ -522,7 +522,7 @@ void main() {
     testWidgets("the header's back button leaves Settings", (t) async {
       saved();
       await pump(t, size: const Size(400, 800));
-      await t.tap(find.descendant(of: find.byType(SettingsTopBar), matching: find.byIcon(Icons.arrow_back)));
+      await t.tap(find.descendant(of: find.byType(SettingsTopBar), matching: find.byTooltip('Back')));
       await t.pumpAndSettle();
       expect(find.byType(SettingsScreen), findsNothing);
       expect(find.text('open settings'), findsOneWidget);

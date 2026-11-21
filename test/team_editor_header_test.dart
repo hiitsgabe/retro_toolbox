@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart' show KitScaffold;
 import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
@@ -82,7 +83,9 @@ void main() {
     expect(tm.name, 'Atlético Mineiro');
     expect(tm.toJson()['team'], containsPair('code', 'ATL'));
     expect(logos, {3: '/logos/other.png'});
-    expect(find.text('Atlético Mineiro'), findsNWidgets(2)); // app bar and header
+    // The kit title (shown in caps on Classic) and the header.
+    expect(t.widget<KitScaffold>(find.byType(KitScaffold)).title, 'Atlético Mineiro');
+    expect(find.text('Atlético Mineiro'), findsOneWidget);
   });
 
   testWidgets('Cancel keeps everything; a blank name is not taken', (t) async {

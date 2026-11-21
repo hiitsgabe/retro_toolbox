@@ -5,6 +5,7 @@ import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/widgets/settings/dual_screen_setting.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 
 class FakeDualScreen extends StateNotifier<DualScreenState> implements DualScreenNotifier {
   FakeDualScreen(super.state);
@@ -52,7 +53,8 @@ void main() {
   testWidgets('shows an error in the error color', (tester) async {
     await pumpCard(tester, const DualScreenState(hasSecondDisplay: true, error: unavailableMessage));
     final text = tester.widget<Text>(find.text(unavailableMessage));
-    expect(text.style?.color, ThemeData().colorScheme.error);
+    // The style's own error colour, not Material's.
+    expect(text.style?.color, StyleTokens.of(tester.element(find.text(unavailableMessage))).error);
   });
 
   test('the card needs Android and a second display', () {
