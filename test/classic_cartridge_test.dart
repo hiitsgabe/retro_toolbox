@@ -153,8 +153,7 @@ void main() {
       expect(find.descendant(of: find.byKey(const ValueKey('cartridge-label')), matching: find.byType(PixelIcon)), findsOneWidget);
       expect(find.text('SERVERS'), findsOneWidget);
       expect(find.bySemanticsLabel('Servers'), findsOneWidget);
-      // On the area-coloured card the subtitle is in ink, a little faded.
-      expect(t.widget<Text>(find.text('1 on')).style?.color, StyleTokens.classic.surface.withValues(alpha: 0.8));
+      expect(t.widget<Text>(find.text('1 on')).style?.color, area);
       expect(paintedColors(t), isNot(contains(magenta)));
       for (final c in paintedColors(t)) {
         final hsl = HSLColor.fromColor(c);

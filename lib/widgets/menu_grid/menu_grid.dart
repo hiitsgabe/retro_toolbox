@@ -128,8 +128,9 @@ class MenuGrid extends StatelessWidget {
       final area = Size(box.maxWidth - 2 * pad, fill ? box.maxHeight - 2 * pad : double.infinity);
       final cell = fit.cell(area, gap: gap);
       // The rows fill the height, the tiles no taller than 1.3 times their
-      // width.
-      const tallest = 1.3;
+      // width; a cartridge stands taller, as the real ones do.
+      // Console cards are plain cards: no taller than the other tiles.
+      final tallest = cartridges && !tiles.every((t) => t.brandLogo) ? 2.4 : 1.3;
       final height = fill ? math.max(72.0, math.min(cell.height, cell.width * tallest)) : cell.width;
       final rows = (tiles.length / fit.columns).ceil();
       final content = rows * height + (rows - 1) * gap;
@@ -249,7 +250,7 @@ class _MenuTileCardState extends State<_MenuTileCard> {
   /// DpadScope draws round the focused box rises with it.
   Widget _cartridge(BuildContext context, bool showFocus) {
     final k = StyleTokens.of(context);
-    final shape = _cartridgeShape(k);
+    final shape = widget.tile.brandLogo ? BorderRadius.circular(k.cardRadius) : _cartridgeShape(k);
     final look = k.focus;
     return LayoutBuilder(builder: (context, box) {
       final rise = look.lift && showFocus ? (box.maxHeight.isFinite ? (box.maxHeight * 0.055).clamp(6.0, 14.0) : 10.0) : 0.0;
@@ -286,8 +287,9 @@ class _MenuTileCardState extends State<_MenuTileCard> {
   }
 }
 
-/// A Classic card's corners: the style's card radius all round.
-BorderRadius _cartridgeShape(StyleTokens k) => BorderRadius.circular(k.cardRadius);
+/// A cartridge's corners: the style's card radius on top, its button radius
+/// at the bottom edge.
+BorderRadius _cartridgeShape(StyleTokens k) => BorderRadius.vertical(top: Radius.circular(k.cardRadius), bottom: Radius.circular(k.buttonRadius));
 
 /// The visual face of a [MenuTile]: a cartridge when the tile has an area,
 /// else accent gradient (or neutral surface), optional background image,
@@ -500,9 +502,9 @@ class MenuTileFace extends StatelessWidget {
   }
 }
 
-/// A [MenuTile] in Classic: one card in the tile's area colour holding its
-/// art, with the name in condensed caps along its foot. No cartridge body
-/// around it: the card is the whole tile.
+/// A [MenuTile] as a cartridge: a body in the surface tone, a label in the
+/// tile's area colour holding its art, the name in condensed caps under it
+/// and the subtitle in the area colour.
 class _CartridgeFace extends StatelessWidget {
   const _CartridgeFace({required this.tile, required this.showLabel, required this.art});
 
@@ -515,31 +517,89 @@ class _CartridgeFace extends StatelessWidget {
     final k = StyleTokens.of(context);
     final area = tile.tint ?? k.area(tile.area!);
     final floor = DeviceClass.of(context).textFloor;
-    final ink = k.surface;
+    final shape = _cartridgeShape(k);
+    // A console is its logo on a plain card, no cartridge body round it.
+    if (tile.brandLogo) {
+      return LayoutBuilder(
+        builder: (context, box) => DecoratedBox(
+          key: const ValueKey('cartridge-label'),
+          decoration: BoxDecoration(color: area, borderRadius: BorderRadius.circular(k.cardRadius)),
+          child: Center(child: art(k.surface, box.biggest)),
+        ),
+      );
+    }
     return LayoutBuilder(builder: (context, box) {
       final w = box.maxWidth;
       final inset = (w * 0.09).clamp(5.0, 14.0);
       final name = (w * 0.125).clamp(floor + 1, 19.0);
       return DecoratedBox(
-        key: const ValueKey('cartridge-label'),
-        decoration: BoxDecoration(color: area, borderRadius: _cartridgeShape(k)),
+        decoration: BoxDecoration(
+          borderRadius: shape,
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color.lerp(k.surface, Colors.white, 0.14)!, Color.lerp(k.surface, Colors.white, 0.08)!],
+          ),
+        ),
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // The lip along the bottom edge, where the plastic folds under.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: inset * 0.6,
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.25), borderRadius: BorderRadius.vertical(bottom: shape.bottomLeft)),
+              ),
+            ),
             Padding(
-              padding: EdgeInsets.all(inset),
+              padding: EdgeInsets.fromLTRB(inset, inset * 1.1, inset, inset * 1.2),
               child: Column(
                 children: [
-                  Expanded(child: LayoutBuilder(builder: (context, room) => Center(child: art(ink, Size(room.maxWidth, room.maxHeight))))),
+                  // The label is as tall as the body allows, never much
+                  // taller than wide; grip ridges take what is left.
+                  Expanded(
+                    child: LayoutBuilder(builder: (context, room) {
+                      final height = math.min(room.maxHeight, room.maxWidth * 1.5);
+                      return Column(children: [
+                        SizedBox(
+                          width: room.maxWidth,
+                          height: height,
+                          child: DecoratedBox(
+                            key: const ValueKey('cartridge-label'),
+                            decoration: BoxDecoration(color: area, borderRadius: BorderRadius.circular(3)),
+                            child: Center(child: art(k.surface, Size(room.maxWidth, height))),
+                          ),
+                        ),
+                        if (room.maxHeight - height >= 24) Expanded(child: Center(child: _Ridges(width: room.maxWidth * 0.5))),
+                      ]);
+                    }),
+                  ),
                   if (showLabel) ...[
-                    SizedBox(height: inset * 0.5),
-                    Text(
-                      tile.label.toUpperCase(),
-                      semanticsLabel: tile.label,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontFamily: k.titleFont, fontWeight: FontWeight.w700, fontSize: name, height: 1.05, letterSpacing: 0.6, color: ink),
+                    SizedBox(height: inset * 0.7),
+                    // Room for two lines on every cartridge, so the labels
+                    // of a row line up whatever the names.
+                    SizedBox(
+                      height: name * 1.05 * 2 * MediaQuery.textScalerOf(context).scale(1),
+                      child: Center(
+                        child: Text(
+                          tile.label.toUpperCase(),
+                          semanticsLabel: tile.label,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: k.titleFont,
+                            fontWeight: FontWeight.w700,
+                            fontSize: name,
+                            height: 1.05,
+                            letterSpacing: 0.6,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
                     ),
                     if (tile.subtitle != null)
                       Text(
@@ -547,7 +607,7 @@ class _CartridgeFace extends StatelessWidget {
                         textAlign: TextAlign.center,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontFamily: StyleTokens.displayFont, fontWeight: FontWeight.w700, fontSize: floor, color: ink.withValues(alpha: 0.8)),
+                        style: TextStyle(fontFamily: StyleTokens.displayFont, fontWeight: FontWeight.w700, fontSize: floor, color: area),
                       ),
                   ],
                 ],
@@ -573,4 +633,25 @@ class _CartridgeFace extends StatelessWidget {
       );
     });
   }
+}
+
+/// Grip ridges moulded into a cartridge's body.
+class _Ridges extends StatelessWidget {
+  const _Ridges({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: [
+          for (var i = 0; i < 3; i++)
+            Container(
+              width: width,
+              height: 2,
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(1)),
+            ),
+        ],
+      );
 }
