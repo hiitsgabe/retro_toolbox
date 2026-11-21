@@ -2,9 +2,7 @@ package name.rafaismy.retrotoolbox
 
 import android.content.Context
 import android.os.Bundle
-import android.view.InputDevice
 import android.view.KeyEvent
-import android.view.MotionEvent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -30,16 +28,11 @@ class CompanionActivity : FlutterActivity() {
         CompanionBridge.attach(this)
     }
 
+    // Stick motion is left to this window: the system turns what no view
+    // takes into d-pad keys, which then come through here. Handing the
+    // motion to the main activity skipped that and left the stick dead.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         CompanionBridge.mainActivity?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
-
-    // Sticks and hat d-pads come as motion, not keys. Pointer motion (mouse,
-    // touchpad) stays here.
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        val main = CompanionBridge.mainActivity
-        val controller = event.isFromSource(InputDevice.SOURCE_JOYSTICK) || event.isFromSource(InputDevice.SOURCE_GAMEPAD)
-        return if (main != null && controller) main.dispatchGenericMotionEvent(event) else super.dispatchGenericMotionEvent(event)
-    }
 
     override fun provideFlutterEngine(context: Context): FlutterEngine = CompanionBridge.engine(context)
 
