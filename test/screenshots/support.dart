@@ -51,6 +51,9 @@ const _devices = <String, (Size, double, bool)>{
   'phone': (Size(412, 915), 2.625, false),
   'odin2': (Size(731, 411), 2.625, false),
   'linux640': (Size(640, 480), 1.0, true),
+  // AYN Thor: 1920x1080 top screen at 3x, and the 1240x1080 bottom one.
+  'thor': (Size(640, 360), 3.0, false),
+  'thorBottom': (Size(413, 360), 3.0, false),
 };
 final _dev = shotDevice.isEmpty ? (const Size(1280, 720), 1.5, false) : _devices[shotDevice]!;
 Size get _logical => _dev.$1;

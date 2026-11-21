@@ -547,23 +547,20 @@ class _CartridgeFace extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(inset, inset * 1.1, inset, inset * 1.2),
               child: Column(
                 children: [
-                  // The label is as tall as the body allows, never much
-                  // taller than wide; grip ridges take what is left.
+                  // The label takes the whole body: on a tall, narrow cartridge
+                  // (AYN Thor's bottom screen) anything drawn below it read as
+                  // a stray icon.
                   Expanded(
                     child: LayoutBuilder(builder: (context, room) {
-                      final height = math.min(room.maxHeight, room.maxWidth * 1.5);
-                      return Column(children: [
-                        SizedBox(
-                          width: room.maxWidth,
-                          height: height,
-                          child: DecoratedBox(
-                            key: const ValueKey('cartridge-label'),
-                            decoration: BoxDecoration(color: area, borderRadius: BorderRadius.circular(3)),
-                            child: Center(child: art(k.surface, Size(room.maxWidth, height))),
-                          ),
+                      return SizedBox(
+                        width: room.maxWidth,
+                        height: room.maxHeight,
+                        child: DecoratedBox(
+                          key: const ValueKey('cartridge-label'),
+                          decoration: BoxDecoration(color: area, borderRadius: BorderRadius.circular(3)),
+                          child: Center(child: art(k.surface, Size(room.maxWidth, room.maxHeight))),
                         ),
-                        if (room.maxHeight - height >= 24) Expanded(child: Center(child: _Ridges(width: room.maxWidth * 0.5))),
-                      ]);
+                      );
                     }),
                   ),
                   if (showLabel) ...[
@@ -622,25 +619,4 @@ class _CartridgeFace extends StatelessWidget {
       );
     });
   }
-}
-
-/// Grip ridges moulded into a cartridge's body.
-class _Ridges extends StatelessWidget {
-  const _Ridges({required this.width});
-
-  final double width;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 4,
-        children: [
-          for (var i = 0; i < 3; i++)
-            Container(
-              width: width,
-              height: 2,
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28), borderRadius: BorderRadius.circular(1)),
-            ),
-        ],
-      );
 }
