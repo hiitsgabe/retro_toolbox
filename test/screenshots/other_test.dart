@@ -1,7 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:retro_toolbox/companion/companion_tasks_view.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_metadata_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart' as gs;
+import 'package:retro_toolbox/models/patcher_info.dart';
+import 'package:retro_toolbox/models/roster_doc.dart';
+import 'package:retro_toolbox/providers/sports_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/providers/update_provider.dart';
 import 'package:retro_toolbox/services/update_service.dart';
@@ -9,12 +16,15 @@ import 'package:retro_toolbox/screens/about_screen.dart';
 import 'package:retro_toolbox/screens/save_sync_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/screens/setup_wizard_screen.dart';
+import 'package:retro_toolbox/screens/sport_games_grid_screen.dart';
+import 'package:retro_toolbox/screens/team_editor_screen.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
 import 'package:retro_toolbox/services/save_sync/engine.dart';
 import 'package:retro_toolbox/services/save_sync/gen.dart';
 import 'package:retro_toolbox/services/save_sync/recipe.dart';
 import 'package:retro_toolbox/services/save_sync/sync_planner.dart';
+import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 
@@ -119,4 +129,53 @@ void main() {
       await snap(t, 'other_settings_${s.name}');
     }, skip: !screenshotsEnabled);
   }
+
+  testWidgets('task manager', (t) async {
+    gs.GameState task(String title, gs.GameStatus status, {double? progress, bool done = false}) => gs.GameState(
+          game: Game(title: '$title.zip', url: 'https://example.com/$title.zip', size: 24 << 20, consoleId: 'md', metadata: GameMetadata(displayTitle: title)),
+          status: status,
+          showProgressBar: progress != null,
+          currentProgress: progress ?? 0,
+          hasJustCompleted: done,
+        );
+    final tabs = classifyTasks([
+      task('Sonic The Hedgehog', gs.GameStatus.downloading, progress: 0.4),
+      task('Streets of Rage 2', gs.GameStatus.downloadQueued),
+      task('Golden Axe', gs.GameStatus.downloadFailed),
+    ]);
+    CompanionTask row(gs.GameState s) => (state: s, favorite: false);
+    await launch(
+      t,
+      Scaffold(
+        body: CompanionTasksView(
+          tabs: [for (final l in [tabs.downloading, tabs.extracting, tabs.queued, tabs.completed, tabs.failed]) l.map(row).toList()],
+          onRequest: (_) {},
+        ),
+      ),
+    );
+    await realWait(t, 400);
+    await snap(t, 'other_task_manager');
+  }, skip: !screenshotsEnabled);
+
+  testWidgets('team editor', (t) async {
+    final team = RosterTeam(
+      teamRaw: {'id': 1, 'name': 'Chicago Bulls', 'code': 'CHI', 'color': 'C2185B'},
+      players: [
+        for (final (i, n) in ['Michael Jordan', 'Scottie Pippen', 'Horace Grant', 'B.J. Armstrong', 'Bill Cartwright', 'John Paxson', 'Stacey King'].indexed)
+          RosterPlayer(raw: {'id': i + 1, 'name': n, 'position': i.isEven ? 'G' : 'F'}),
+      ],
+      statsRaw: {},
+      extraRaw: {},
+    );
+    await launch(t, TeamEditorScreen(team: team, gameId: 'nbalive95-genesis', sport: 'basketball'));
+    await realWait(t, 400);
+    await snap(t, 'other_team_editor');
+  }, skip: !screenshotsEnabled);
+
+  testWidgets('sport games', (t) async {
+    const we = PatcherInfo(gameId: 'we2002-psx', platform: 'psx', sport: 'soccer', requiresSlotMapping: true, providers: ['espn']);
+    await launch(t, const SportGamesGridScreen(sport: 'soccer'), overrides: [patchersProvider.overrideWith((ref) async => [we])]);
+    await realWait(t, 400);
+    await snap(t, 'other_sport_games');
+  }, skip: !screenshotsEnabled);
 }

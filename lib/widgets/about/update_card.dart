@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/update_provider.dart';
 import 'package:retro_toolbox/services/update_service.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
+import 'package:retro_toolbox/widgets/kit/kit_base.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// About's update status, in the InfoCard style. [currentVersion] is null
@@ -30,7 +31,6 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final notifier = ref.read(updateProvider.notifier);
     final state = ref.watch(updateProvider);
     // The action button is disabled while busy, which drops its focus; hand
@@ -84,46 +84,33 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
     final notes = state.phase == UpdatePhase.available && release != null ? releaseNotesExcerpt(release.notes) : '';
     final readyNote = state.phase == UpdatePhase.ready ? state.message : null;
 
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    final t = KitType.of(context);
+    final failed = state.phase == UpdatePhase.error || state.installFailed;
+    return KitPanel(
+      padding: const EdgeInsets.all(12),
+      children: [
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withAlpha(20),
-                    borderRadius: BorderRadius.circular(8),
+                    color: (failed ? t.k.error : t.k.accent).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(t.k.buttonRadius.clamp(4, 8).toDouble()),
                   ),
-                  child: Icon(
-                    state.phase == UpdatePhase.error || state.installFailed ? Icons.error_outline_rounded : Icons.system_update_rounded,
-                    size: 20,
-                    color: state.phase == UpdatePhase.error || state.installFailed ? theme.colorScheme.error : theme.colorScheme.primary,
-                  ),
+                  child: Icon(failed ? Icons.error_outline_rounded : Icons.system_update_rounded, size: 18, color: failed ? t.k.error : t.k.accent),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
+                      Text(title, style: t.row),
                       const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
+                      Text(subtitle, style: t.subtitle.copyWith(fontSize: t.size(13))),
                     ],
                   ),
                 ),
@@ -131,18 +118,18 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
             ),
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(notes, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(notes, style: t.subtitle.copyWith(fontSize: t.size(13))),
             ],
             if (readyNote != null) ...[
               const SizedBox(height: 12),
-              Text(readyNote, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(readyNote, style: t.subtitle.copyWith(fontSize: t.size(13))),
             ],
             if (state.phase == UpdatePhase.downloading) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(value: state.progress > 0 ? state.progress : null),
             ],
             if (state.phase != UpdatePhase.portMaster) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerRight,
               child: state.installFailed
@@ -168,7 +155,7 @@ class _UpdateCardState extends ConsumerState<UpdateCard> {
             ],
           ],
         ),
-      ),
+      ],
     );
   }
 

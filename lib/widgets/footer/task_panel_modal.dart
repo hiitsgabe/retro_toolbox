@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/footer/task_list_view.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 
 /// Splits task states over the task manager's tabs. A running network transfer
 /// ([GameState.isTransfer]) reports as `extracting` (it shares the file-task
@@ -84,10 +87,22 @@ const taskTabs = [
   (label: 'Failed', icon: Icons.error, empty: 'No failed tasks', emptyIcon: Icons.error_outline),
 ];
 
+/// The tab the Task Manager opens on: the first of Downloads, Extractions
+/// and Queue with something in it, then Failed, then Completed; Downloads
+/// when every tab is empty.
+int taskTabWithWork(List<int> counts) {
+  for (final i in const [0, 1, 2, 4, 3]) {
+    if (i < counts.length && counts[i] > 0) return i;
+  }
+  return 0;
+}
+
 /// The Task Manager's look: its header, the [taskTabs] buttons with their
 /// [counts], and one list per tab in [tabs]. The main screen's sheet and the
 /// second screen both draw it, each with its own rows. [onClose] null: no
-/// close button (the second screen has nothing to close to).
+/// close button (the second screen has nothing to close to). It opens on the
+/// tab that has work ([taskTabWithWork]), and moves there when work arrives
+/// while the user has not picked a tab and the one shown is empty.
 class TaskPanelFrame extends StatefulWidget {
   const TaskPanelFrame({super.key, required this.counts, required this.tabs, this.onClose});
 
@@ -100,15 +115,24 @@ class TaskPanelFrame extends StatefulWidget {
 }
 
 class _TaskPanelFrameState extends State<TaskPanelFrame> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late final TabController _tabController = TabController(length: taskTabs.length, vsync: this, initialIndex: taskTabWithWork(widget.counts));
+
+  /// The user chose a tab: work arriving elsewhere no longer moves it.
+  bool _picked = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: taskTabs.length, vsync: this);
-    _tabController.addListener(() {
-      setState(() {});
-    });
+    _tabController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didUpdateWidget(TaskPanelFrame old) {
+    super.didUpdateWidget(old);
+    final i = _tabController.index;
+    if (_picked || widget.counts[i] > 0) return;
+    final next = taskTabWithWork(widget.counts);
+    if (next != i) _tabController.index = next;
   }
 
   @override
@@ -119,131 +143,90 @@ class _TaskPanelFrameState extends State<TaskPanelFrame> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 0.5,
-                ),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.task_alt,
-                  color: Theme.of(context).colorScheme.primary,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
+    final t = KitType.of(context);
+    final total = widget.counts.fold(0, (a, b) => a + b);
+    return KitArea(
+      area: AppArea.tasks,
+      child: Builder(builder: (context) {
+        final k = StyleTokens.of(context);
+        return Container(
+          decoration: BoxDecoration(
+            color: k.solidPanel,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(k.panelRadius.clamp(0, 16).toDouble())),
+            border: Border(top: BorderSide(color: k.panelLine)),
+          ),
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 4),
+              child: Row(children: [
+                const KitIconTile(icon: Icons.task_alt, glyph: PixelIcons.tasks, size: 30),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Task Manager',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                    Text('Task Manager', style: t.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(total == 0 ? 'Nothing running' : '$total ${total == 1 ? 'task' : 'tasks'}', style: t.subtitle, maxLines: 1),
+                  ]),
                 ),
-                if (widget.onClose != null)
-                  IconButton(
-                    icon: Icon(Icons.close, size: 20),
-                    onPressed: widget.onClose,
-                    constraints: BoxConstraints(minWidth: 32, minHeight: 32),
-                    padding: EdgeInsets.zero,
-                  ),
-              ],
+                if (widget.onClose != null) IconButton(icon: const Icon(Icons.close, size: 22), tooltip: 'Close', onPressed: widget.onClose),
+              ]),
             ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
                   for (var i = 0; i < taskTabs.length; i++) ...[
-                    if (i > 0) SizedBox(width: 6),
-                    _buildTabButton(i, taskTabs[i].label, taskTabs[i].icon, widget.counts[i]),
+                    if (i > 0) const SizedBox(width: 6),
+                    _tab(context, i, widget.counts[i]),
                   ],
-                ],
+                ]),
               ),
             ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: widget.tabs,
-            ),
-          ),
-        ],
-      ),
+            Divider(height: 1, thickness: 1, color: k.panelLine),
+            Expanded(child: TabBarView(controller: _tabController, children: widget.tabs)),
+          ]),
+        );
+      }),
     );
   }
 
-  Widget _buildTabButton(int index, String label, IconData icon, int count) {
-    final isSelected = _tabController.index == index;
+  Widget _tab(BuildContext context, int index, int count) {
+    final t = KitType.of(context);
+    final k = t.k;
+    final selected = _tabController.index == index;
+    final tab = taskTabs[index];
+    final fg = selected ? k.accent : t.muted;
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () => _tabController.animateTo(index),
-        autofocus: isSelected,
-        borderRadius: BorderRadius.circular(16),
-        focusColor: Colors.transparent,
+        onTap: () {
+          _picked = true;
+          _tabController.animateTo(index);
+        },
+        autofocus: selected,
+        borderRadius: BorderRadius.circular(k.buttonRadius.clamp(4, 18).toDouble()),
         child: AnimatedContainer(
-          duration: Duration(milliseconds: 150),
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          duration: const Duration(milliseconds: 150),
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-            border: isSelected
-                ? Border.all(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
-                  )
-                : null,
+            color: selected ? k.accent.withValues(alpha: 0.16) : Colors.transparent,
+            borderRadius: BorderRadius.circular(k.buttonRadius.clamp(4, 18).toDouble()),
+            border: Border.all(color: selected ? k.accent.withValues(alpha: 0.5) : k.panelLine),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(tab.icon, size: 16, color: fg),
+            const SizedBox(width: 6),
+            Text(tab.label, style: t.subtitle.copyWith(fontSize: t.size(13), fontWeight: selected ? FontWeight.w700 : FontWeight.w500, color: selected ? t.ink : t.muted)),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: selected ? k.accent : t.muted.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(9)),
+                child: Text('$count', style: TextStyle(fontSize: t.size(12), fontWeight: FontWeight.w700, color: selected ? k.onAccent : t.ink)),
               ),
-              SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
-                  color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (count > 0) ...[
-                SizedBox(width: 4),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    count.toString(),
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      color: isSelected ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
+          ]),
         ),
       ),
     );

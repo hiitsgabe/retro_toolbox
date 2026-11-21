@@ -259,4 +259,18 @@ void main() {
     expect(find.textContaining('Not enough free space'), findsOneWidget);
     expect(t.widget<FilledButton>(_button('Check for updates')).focusNode!.hasFocus, isTrue);
   });
+
+  testWidgets('the kit header says the version once; Play fair and the links follow, no emoji', (t) async {
+    _mockVersion(t, '0.3.0');
+    await _pumpAbout(t, _FakeService());
+
+    expect(find.byKey(const ValueKey('kit-subtitle')), findsOneWidget);
+    expect(t.widget<Text>(find.byKey(const ValueKey('kit-subtitle'))).data, 'Version 0.3.0');
+    for (final title in ['Play fair', 'Open Source', 'Authors', 'Credits', 'Buy me a coffee']) {
+      expect(find.text(title), findsOneWidget, reason: title);
+    }
+    final emoji = RegExp(r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]', unicode: true);
+    final texts = t.widgetList<Text>(find.byType(Text)).map((w) => w.data ?? '').where(emoji.hasMatch);
+    expect(texts, isEmpty);
+  });
 }

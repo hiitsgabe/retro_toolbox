@@ -70,6 +70,9 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     expect(find.text('Add team'), findsOneWidget); // Teams
+    // A quiet button in the list's header, not a filled round one over the step.
+    expect(find.ancestor(of: find.text('Add team'), matching: find.byWidgetPredicate((w) => w is TextButton)), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
     await t.sendKeyEvent(LogicalKeyboardKey.f5);
     await t.pumpAndSettle();
     expect(find.text('Output folder'), findsOneWidget); // Patch

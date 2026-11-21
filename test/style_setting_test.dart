@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
 import 'package:retro_toolbox/widgets/settings/style_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,9 +46,9 @@ void main() {
 
   testWidgets('shows Background, Colours and Cards, not Picture', (t) async {
     await pump(t);
-    expect(find.text('Background'), findsWidgets);
+    expect(find.text('Background'), findsOneWidget);
     expect(find.text('Colours'), findsOneWidget);
-    expect(find.text('Cards'), findsWidgets);
+    expect(find.text('Cards'), findsOneWidget);
     expect(find.text('Picture'), findsNothing);
     for (final k in BackdropKind.values) {
       expect(find.text(k.label), findsOneWidget);
@@ -57,6 +58,18 @@ void main() {
     }
     expect(swatch('Retro Toolbox'), findsOneWidget);
     expect(find.byType(Tooltip), findsNWidgets(backdropPresets.length));
+  });
+
+  testWidgets('each choice is named once: no group title repeats the row under it', (t) async {
+    await pump(t);
+    for (final label in ['BACKGROUND', 'CARDS', 'Background', 'Cards', 'Game list']) {
+      expect(find.text(label), label == label.toUpperCase() ? findsNothing : findsOneWidget, reason: label);
+    }
+    expect(find.byType(SettingsHeader), findsNothing);
+    // The style first, then what goes behind it.
+    double top(String label) => t.getTopLeft(find.text(label)).dy;
+    expect(top('Cards'), lessThan(top('Background')));
+    expect(top('Background'), lessThan(top('Colours')));
   });
 
   testWidgets('tapping a background and a card style stores them', (t) async {

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
@@ -61,5 +62,41 @@ void main() {
     final all = [...tabs.downloading, ...tabs.extracting, ...tabs.queued, ...tabs.completed, ...tabs.failed];
     expect(all.length, tasks.length);
     expect(all.toSet(), tasks.toSet());
+  });
+
+  test('the Task Manager opens on running work first, then Failed, then Completed', () {
+    expect(taskTabWithWork([0, 0, 0, 0, 0]), 0);
+    expect(taskTabWithWork([0, 2, 1, 0, 0]), 1);
+    expect(taskTabWithWork([0, 0, 1, 3, 1]), 2);
+    expect(taskTabWithWork([0, 0, 0, 3, 1]), 4, reason: 'a failure matters more than what is done');
+    expect(taskTabWithWork([0, 0, 0, 3, 0]), 3);
+  });
+
+  Widget frame(List<int> counts) => MaterialApp(
+        home: Scaffold(
+          body: TaskPanelFrame(counts: counts, tabs: [for (final t in taskTabs) Text('list ${t.label}')]),
+        ),
+      );
+
+  testWidgets('it shows the tab with work, not an empty Downloads', (t) async {
+    await t.pumpWidget(frame([0, 0, 0, 0, 2]));
+    await t.pumpAndSettle();
+    expect(find.text('list Failed'), findsOneWidget);
+    expect(find.text('list Downloads'), findsNothing);
+  });
+
+  testWidgets('work arriving moves an untouched, empty tab to it; a picked tab stays', (t) async {
+    await t.pumpWidget(frame([0, 0, 0, 0, 0]));
+    await t.pumpAndSettle();
+    expect(find.text('list Downloads'), findsOneWidget);
+    await t.pumpWidget(frame([0, 0, 1, 0, 0]));
+    await t.pumpAndSettle();
+    expect(find.text('list Queue'), findsOneWidget);
+
+    await t.tap(find.text('Completed'));
+    await t.pumpAndSettle();
+    await t.pumpWidget(frame([1, 0, 1, 0, 0]));
+    await t.pumpAndSettle();
+    expect(find.text('list Completed'), findsOneWidget, reason: 'the user chose it');
   });
 }

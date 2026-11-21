@@ -4,10 +4,12 @@ import 'package:retro_toolbox/models/patcher_info.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
 import 'package:retro_toolbox/screens/sport_patcher_wizard_screen.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 
-/// Level 2 of the Sports flow: the games for one group — either a [platform] or
+/// Level 2 of the Sports flow: the games for one group, either a [platform] or
 /// a [sport], whichever the level-1 toggle drilled in by. Reads the cached
 /// patcher list and filters; no refetch. Tapping a game opens its wizard.
 class SportGamesGridScreen extends ConsumerWidget {
@@ -37,9 +39,14 @@ class SportGamesGridScreen extends ConsumerWidget {
           ),
         ),
     ];
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: tiles.isEmpty ? const Center(child: Text('No games here.')) : MenuGrid(tiles: tiles),
+    return KitScaffold(
+      title: title,
+      subtitle: tiles.isEmpty ? null : '${tiles.length} ${tiles.length == 1 ? 'game' : 'games'}',
+      icon: byPlatform ? Icons.videogame_asset : sportIcon(sport!),
+      glyph: byPlatform ? PixelIcons.games : sportPixelIcon(sport!),
+      area: AppArea.sports,
+      padding: EdgeInsets.zero,
+      body: tiles.isEmpty ? const EmptyState(icon: Icons.sports_score, glyph: PixelIcons.sports, line: 'No games here.') : MenuGrid(tiles: tiles),
     );
   }
 

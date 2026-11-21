@@ -1,7 +1,11 @@
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/widgets/about/info_card.dart';
+import 'package:retro_toolbox/widgets/kit/kit_base.dart';
+import 'package:retro_toolbox/widgets/kit/option_list.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// One entry under an expandable About row.
 class InfoItem {
   final String title;
   final String subtitle;
@@ -10,6 +14,7 @@ class InfoItem {
   const InfoItem(this.title, this.subtitle, this.url);
 }
 
+/// An About row that opens its [items] in place (Authors, Credits).
 class ExpandableInfoCard extends StatefulWidget {
   final IconData icon;
   final String title;
@@ -41,130 +46,55 @@ class _ExpandableInfoCardState extends State<ExpandableInfoCard> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => setState(() => _isExpanded = !_isExpanded),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withAlpha(20),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(widget.icon, size: 20, color: theme.colorScheme.primary),
-                  ),
-                  SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          '${widget.items.length} ${widget.items.length == 1 ? 'item' : 'items'}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(
-                    _isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                    size: 20,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_isExpanded)
-            Padding(
-              padding: EdgeInsets.only(left: 16, right: 16, bottom: 16),
-              child: Column(
-                children: widget.items.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final item = entry.value;
-                  return Container(
-                    margin: EdgeInsets.only(top: index > 0 ? 8 : 0),
-                    child: Material(
-                      color: theme.colorScheme.surfaceContainer,
-                      borderRadius: BorderRadius.circular(8),
-                      child: InkWell(
-                        onTap: Handheld.current ? null : () => widget.onItemTap(item.url),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.title,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        fontWeight: FontWeight.w500,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      item.subtitle,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (!Handheld.current) ...[
-                              SizedBox(width: 8),
-                              IconButton(
-                                icon: Icon(Icons.open_in_new_rounded, size: 14, color: theme.colorScheme.onSurfaceVariant),
-                                tooltip: 'Open link',
-                                onPressed: () async {
-                                  final uri = Uri.tryParse(item.url);
-                                  if (uri != null && await canLaunchUrl(uri)) {
-                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                  }
-                                },
-                              ),
-                              IconButton(
-                                icon: Icon(Icons.copy_rounded, size: 14, color: theme.colorScheme.onSurfaceVariant),
-                                tooltip: 'Copy link',
-                                onPressed: () => widget.onItemTap(item.url),
-                              ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-        ],
+    final t = KitType.of(context);
+    final n = widget.items.length;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
+      Semantics(
+        expanded: _isExpanded,
+        child: KitRow(
+          onTap: () => setState(() => _isExpanded = !_isExpanded),
+          child: Row(children: [
+            AboutRowIcon(widget.icon),
+            const SizedBox(width: 12),
+            Expanded(child: KitRowText(title: widget.title, subtitle: '$n ${n == 1 ? 'item' : 'items'}')),
+            Icon(_isExpanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 22, color: t.muted),
+          ]),
+        ),
       ),
-    );
+      if (_isExpanded)
+        ColoredBox(
+          color: Colors.black.withValues(alpha: 0.12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            for (final item in widget.items) ...[
+              Divider(height: 1, thickness: 1, color: t.k.panelLine),
+              KitRow(
+                minHeight: 40,
+                onTap: Handheld.current ? null : () => widget.onItemTap(item.url),
+                child: Row(children: [
+                  const SizedBox(width: 46),
+                  Expanded(child: KitRowText(title: item.title, subtitle: item.subtitle)),
+                  if (!Handheld.current) ...[
+                    IconButton(
+                      icon: Icon(Icons.open_in_new_rounded, size: 16, color: t.muted),
+                      tooltip: 'Open link',
+                      onPressed: () async {
+                        final uri = Uri.tryParse(item.url);
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.copy_rounded, size: 16, color: t.muted),
+                      tooltip: 'Copy link',
+                      onPressed: () => widget.onItemTap(item.url),
+                    ),
+                  ],
+                ]),
+              ),
+            ],
+          ]),
+        ),
+    ]);
   }
 }

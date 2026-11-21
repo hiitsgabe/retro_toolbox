@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/widgets/game_list/game_row.dart';
+import 'package:retro_toolbox/widgets/kit/empty_state.dart';
 
 class TaskListView extends StatelessWidget {
   final List<GameState> games;
@@ -36,7 +37,7 @@ class TaskListView extends StatelessWidget {
   }
 }
 
-/// A Task Manager tab with nothing in it.
+/// A Task Manager tab with nothing in it: the kit's empty state.
 class TaskListEmpty extends StatelessWidget {
   const TaskListEmpty({super.key, required this.message, required this.icon});
 
@@ -44,25 +45,5 @@ class TaskListEmpty extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 48,
-            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-          ),
-          SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => EmptyState(icon: icon, line: message);
 }

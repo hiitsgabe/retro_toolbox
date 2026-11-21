@@ -10,7 +10,9 @@ import 'package:retro_toolbox/services/formation_cache_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/services/sports_service.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart' show ActionBar, KitAction, KitScaffold;
 import 'package:retro_toolbox/widgets/kit_picker.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/menu_grid/sport_slug.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 
@@ -425,7 +427,7 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
         ),
       );
 
-  /// Short screens: no FAB over the list, colors scroll with it, dense rows.
+  /// Short screens: colors scroll with the list, dense rows.
   bool get _compact => MediaQuery.sizeOf(context).height < 640;
 
   /// Index of the player picked to swap; the next row tapped trades places
@@ -814,27 +816,24 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
             last,
           ],
         );
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: compact ? 48 : null,
-        title: Text(team.name, overflow: TextOverflow.ellipsis),
-        actions: [
-          if (compact && !swapping) IconButton(icon: const Icon(Icons.person_add), tooltip: 'Add player', onPressed: () => _editPlayer(null)),
-          if (widget.team.id > 0)
-            IconButton(
-              icon: Icon(_hasSavedFormation ? Icons.bookmark : Icons.bookmark_add_outlined),
-              tooltip: _hasSavedFormation ? 'Update saved formation' : 'Save formation locally',
-              onPressed: _saveFormation,
-            ),
-        ],
-      ),
-      floatingActionButton: compact || swapping
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _editPlayer(null),
-              icon: const Icon(Icons.person_add),
-              label: const Text('Add player'),
-            ),
+    // Add player is the bar's primary (Start), never a button floating over
+    // the last rows; while swapping the bar steps aside for the swap banner.
+    return KitScaffold(
+      title: team.name,
+      subtitle: '${players.length} ${players.length == 1 ? 'player' : 'players'}',
+      icon: Icons.groups,
+      glyph: PixelIcons.roster,
+      area: AppArea.sports,
+      padding: EdgeInsets.zero,
+      actions: [
+        if (widget.team.id > 0)
+          IconButton(
+            icon: Icon(_hasSavedFormation ? Icons.bookmark : Icons.bookmark_add_outlined),
+            tooltip: _hasSavedFormation ? 'Update saved formation' : 'Save formation locally',
+            onPressed: _saveFormation,
+          ),
+      ],
+      actionBar: swapping ? null : ActionBar(primary: KitAction('Add player', () => _editPlayer(null), icon: Icons.person_add)),
       body: Column(
         children: [
           if (swapping)
@@ -882,11 +881,11 @@ class _TeamEditorScreenState extends State<TeamEditorScreen> {
           Expanded(
             child: players.isEmpty
                 ? ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                     children: [top(const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No players. Add one.'))))],
                   )
                 : ReorderableListView.builder(
-                    padding: EdgeInsets.fromLTRB(12, compact ? 4 : 8, 12, compact ? 12 : 88),
+                    padding: EdgeInsets.fromLTRB(12, compact ? 4 : 8, 12, 12),
                     itemCount: players.length,
                     onReorder: (oldI, newI) => setState(() {
                       if (newI > oldI) newI--;

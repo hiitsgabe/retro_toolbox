@@ -7,8 +7,13 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit_base.dart';
+import 'package:retro_toolbox/widgets/kit/kit_scaffold.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
+import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/settings_icons.dart';
 import 'package:retro_toolbox/widgets/settings/settings_sections.dart';
@@ -214,8 +219,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ---- Wide
 
   Widget _wide(BuildContext context, List<SettingsSection> visible, List<Widget> sectionRows, List<Console> consoles, Console? console) {
-    final scheme = Theme.of(context).colorScheme;
+    final k = StyleTokens.of(context);
     final crumbs = [_section.label, if (console != null) console.name];
+    // A handheld just past the breakpoint (Odin 2, 731) keeps more for the rows.
+    final railWidth = (MediaQuery.sizeOf(context).width * 0.3).clamp(232.0, 288.0);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -240,8 +247,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Expanded(
                 child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Container(
-                    width: 288,
-                    decoration: BoxDecoration(color: scheme.settingsTile, border: Border(right: BorderSide(color: scheme.settingsLine))),
+                    width: railWidth,
+                    decoration: BoxDecoration(color: k.settingsTile, border: Border(right: BorderSide(color: k.settingsLine))),
                     child: Focus(
                       focusNode: _rail,
                       onKeyEvent: _onRailKey,
@@ -260,7 +267,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       child: FocusTraversalGroup(
                         child: SingleChildScrollView(
                           key: ValueKey('rows ${_section.name} $_consoleId'),
-                          padding: const EdgeInsets.fromLTRB(40, 20 - settingsHalfGap, 40, 32),
+                          padding: const EdgeInsets.fromLTRB(24, 16 - settingsHalfGap, 24, 32),
                           child: Align(
                             alignment: Alignment.topLeft,
                             child: ConstrainedBox(
@@ -313,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-        child: Text('CONSOLES', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.96, color: Theme.of(context).colorScheme.outline)),
+        child: Text('CONSOLES', style: KitType.of(context).label.copyWith(fontSize: KitType.of(context).size(12))),
       ),
       for (final c in consoles)
         Padding(
@@ -354,7 +361,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         }
       });
     }
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return Scaffold(
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -369,32 +376,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: SettingsTile(
                       key: ValueKey('section ${s.name}'),
                       autofocus: s == visible.first,
-                      radius: 16,
-                      minHeight: 68,
+                      minHeight: 60,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _SectionPage(section: s))),
                       child: Row(children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(12)),
-                          child: SectionIcon(s, color: scheme.primary),
-                        ),
+                        _SectionIconTile(section: s, selected: false),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, spacing: 2, children: [
-                            Text(s.label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurface)),
-                            Text(
-                              settingsSectionSummary(s, ref),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-                            ),
+                            Text(s.label, style: t.row.copyWith(fontSize: t.size(16))),
+                            Text(settingsSectionSummary(s, ref), maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle.copyWith(fontSize: t.size(13))),
                           ]),
                         ),
                         const SizedBox(width: 14),
-                        SettingsIcon(SettingsIcons.chevronRight, size: 18, color: scheme.outline),
+                        SettingsIcon(SettingsIcons.chevronRight, size: 18, color: t.muted),
                       ]),
                     ),
                   ),
@@ -482,38 +477,38 @@ class SettingsTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
+    final k = t.k;
     final parts = page ? crumbs : ['Settings', ...crumbs];
     return Container(
-      height: 56,
-      padding: EdgeInsets.only(left: back ? 8 : 24, right: 24),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: scheme.settingsLine))),
+      height: t.portrait ? 56 : 48,
+      padding: EdgeInsets.only(left: back ? 4 : 16, right: 16),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: k.settingsLine))),
       child: Row(children: [
         if (back) ...[
           IconButton(
             tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: Icon(Icons.arrow_back, color: scheme.onSurface),
+            icon: k.pixelIcons ? const PixelIcon(PixelIcons.back, size: 20) : Icon(Icons.arrow_back, color: t.ink),
           ),
           const SizedBox(width: 4),
         ],
         if (gear && !page) ...[
-          SettingsIcon(SettingsIcons.gear, size: 22, color: scheme.primary),
-          const SizedBox(width: 12),
+          const KitIconTile(icon: Icons.settings, glyph: PixelIcons.settings, size: 30),
+          const SizedBox(width: 10),
         ],
         Expanded(
           child: Row(children: [
             for (var i = 0; i < parts.length; i++) ...[
-              if (i > 0) Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text('/', style: TextStyle(fontSize: 18, color: scheme.outline))),
+              if (i > 0) Padding(padding: const EdgeInsets.symmetric(horizontal: 10), child: Text('/', style: t.title.copyWith(color: t.muted))),
               Flexible(
                 child: Text(
                   parts[i],
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: i == 0 ? FontWeight.w600 : FontWeight.w400,
-                    color: i == 0 || i == parts.length - 1 && parts.length > 2 ? scheme.onSurface : scheme.onSurfaceVariant,
+                  style: t.title.copyWith(
+                    fontWeight: i == 0 ? FontWeight.w700 : FontWeight.w500,
+                    color: i == 0 || i == parts.length - 1 && parts.length > 2 ? t.ink : t.muted,
                   ),
                 ),
               ),
@@ -525,7 +520,7 @@ class SettingsTopBar extends StatelessWidget {
           const SizedBox(width: 8),
           const KeyCap('R1'),
           const SizedBox(width: 8),
-          Text('switch section', style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          Text('switch section', style: t.subtitle.copyWith(fontSize: t.size(13))),
         ],
       ]),
     );
@@ -560,9 +555,11 @@ class _RailTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final fg = selected ? scheme.onSecondaryContainer : scheme.onSurface;
+    final t = KitType.of(context);
+    final k = t.k;
+    final fg = t.ink;
     final console = section == null;
+    final wash = k.accent.withValues(alpha: 0.18);
     return SettingsTile(
       focusNode: focusNode,
       autofocus: autofocus,
@@ -570,32 +567,26 @@ class _RailTile extends StatelessWidget {
       onFocusChange: (f) {
         if (f) onFocused();
       },
-      color: selected ? scheme.secondaryContainer : Colors.transparent,
-      focusedColor: selected ? scheme.secondaryContainer : scheme.settingsTileFocused,
+      color: selected ? wash : Colors.transparent,
+      focusedColor: selected ? Color.alphaBlend(wash, k.settingsTileFocused) : k.settingsTileFocused,
       minHeight: console ? 52 : 60,
       padding: EdgeInsets.symmetric(horizontal: console ? 14 : 12, vertical: 8),
       child: Row(children: [
         if (section != null) ...[
-          Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: selected ? scheme.primary : scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(10)),
-            child: SectionIcon(section!, color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
-          ),
+          _SectionIconTile(section: section!, selected: selected, size: 34),
           const SizedBox(width: 12),
         ],
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, spacing: 2, children: [
-            Text(label, style: TextStyle(fontSize: 15, fontWeight: console && !selected ? FontWeight.w500 : FontWeight.w600, color: fg)),
-            if (hint != null) Text(hint!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: selected ? fg : scheme.outline)),
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.row.copyWith(fontSize: t.size(15), fontWeight: console && !selected ? FontWeight.w500 : FontWeight.w600, color: fg)),
+            if (hint != null) Text(hint!, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.subtitle.copyWith(color: selected ? fg.withValues(alpha: 0.8) : t.muted)),
           ]),
         ),
         if (badge > 0)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: selected ? scheme.primary : scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
-            child: Text('$badge', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? scheme.onPrimary : scheme.onSurface)),
+            decoration: BoxDecoration(color: selected ? k.accent : Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+            child: Text('$badge', style: TextStyle(fontSize: t.size(12), fontWeight: FontWeight.w700, color: selected ? k.onAccent : t.ink)),
           ),
       ]),
     );
@@ -619,6 +610,31 @@ class KeyCap extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(round ? 11 : 6)),
       child: Text(label, style: TextStyle(fontSize: 11, fontWeight: round ? FontWeight.w700 : FontWeight.w600, color: scheme.onSurface)),
+    );
+  }
+}
+
+/// A section's icon on a tile of the accent: filled when [selected], a wash
+/// of it otherwise.
+class _SectionIconTile extends StatelessWidget {
+  const _SectionIconTile({required this.section, required this.selected, this.size = 38});
+
+  final SettingsSection section;
+  final bool selected;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final k = StyleTokens.of(context);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? k.accent : k.accent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(k.buttonRadius.clamp(4, 10).toDouble()),
+      ),
+      child: SectionIcon(section, size: size * 0.55, color: selected ? k.onAccent : k.accent),
     );
   }
 }

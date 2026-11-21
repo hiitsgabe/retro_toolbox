@@ -12,8 +12,9 @@ import 'package:retro_toolbox/widgets/kit/kit_base.dart';
 /// width, where the thumb is.
 ///
 /// Give it to [KitScaffold.actionBar]: the scaffold binds Start to [primary]
-/// for the whole screen.
-class ActionBar extends ConsumerWidget {
+/// for the whole screen. Without a ProviderScope above it (a screen pumped on
+/// its own) there is no input mode to read: touch, no hints.
+class ActionBar extends StatelessWidget {
   const ActionBar({super.key, this.primary, this.secondary, this.more = const [], this.hints = const [], this.summary, this.autofocus = false});
 
   /// Null: no primary (Start then does nothing on this screen).
@@ -37,8 +38,12 @@ class ActionBar extends ConsumerWidget {
   final String? summary;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pad = ref.watch(inputModeProvider) == InputMode.gamepad;
+  Widget build(BuildContext context) {
+    if (context.getElementForInheritedWidgetOfExactType<UncontrolledProviderScope>() == null) return _bar(context, false);
+    return Consumer(builder: (context, ref, _) => _bar(context, ref.watch(inputModeProvider) == InputMode.gamepad));
+  }
+
+  Widget _bar(BuildContext context, bool pad) {
     final k = StyleTokens.of(context);
     final t = KitType.of(context);
     final portrait = DeviceClass.of(context) == DeviceClass.portrait;

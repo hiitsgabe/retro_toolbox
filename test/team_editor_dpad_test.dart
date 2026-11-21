@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/roster_doc.dart';
 import 'package:retro_toolbox/screens/team_editor_screen.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit.dart' show ActionBar;
 
 RosterTeam _team() => RosterTeam(
       teamRaw: {'id': 1, 'name': 'Team', 'color': '000000'},
@@ -98,5 +99,24 @@ void main() {
     Handheld.current = true;
     await pump(t);
     expect(find.byIcon(Icons.drag_handle), findsNothing);
+  });
+
+  testWidgets('Add player is the action bar primary (Start), no button floats over the squad; a swap hides the bar', (t) async {
+    final team = await pump(t);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(t.widget<ActionBar>(find.byType(ActionBar)).primary?.label, 'Add player');
+    Focus.of(t.element(find.text('Ann'))).requestFocus();
+    await t.pump();
+    await t.sendKeyEvent(LogicalKeyboardKey.f5); // Start, from a row
+    await t.pumpAndSettle();
+    expect(find.widgetWithText(AlertDialog, 'Add player'), findsOneWidget);
+    await t.sendKeyEvent(LogicalKeyboardKey.escape);
+    await t.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(team.players.length, 3, reason: 'cancelled, nothing added');
+
+    await t.tap(find.byIcon(Icons.swap_vert).first);
+    await t.pump();
+    expect(find.byType(ActionBar), findsNothing);
   });
 }

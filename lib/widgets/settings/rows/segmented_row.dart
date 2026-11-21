@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
 
@@ -47,13 +50,15 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final k = StyleTokens.of(context);
+    final round = math.min(k.buttonRadius, 22).toDouble();
     final index = options.indexWhere((o) => o.$1 == selected);
     final reset = changed ? onReset : null;
 
     Widget segment((T, String) o) {
       final picked = o.$1 == selected;
       return Material(
-        color: picked ? scheme.secondaryContainer : Colors.transparent,
+        color: picked ? k.accent : Colors.transparent,
         child: InkWell(
           canRequestFocus: false,
           onTap: onChanged == null || picked ? null : () => onChanged!(o.$1),
@@ -63,7 +68,7 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Center(
                 widthFactor: 1,
-                child: Text(o.$2, style: _segmentText.copyWith(color: picked ? scheme.onSecondaryContainer : scheme.onSurfaceVariant)),
+                child: Text(o.$2, style: _segmentText.copyWith(color: picked ? k.onAccent : scheme.onSurfaceVariant)),
               ),
             ),
           ),
@@ -74,9 +79,9 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
     Widget choices({required bool wrap}) => ExcludeFocus(
           child: DecoratedBox(
             position: DecorationPosition.foreground,
-            decoration: BoxDecoration(border: Border.all(color: scheme.outlineVariant), borderRadius: BorderRadius.circular(22)),
+            decoration: BoxDecoration(border: Border.all(color: k.panelLine), borderRadius: BorderRadius.circular(round)),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(round),
               child: wrap
                   ? Wrap(children: [for (final o in options) segment(o)])
                   : IntrinsicHeight(child: Row(mainAxisSize: MainAxisSize.min, children: [for (final o in options) segment(o)])),

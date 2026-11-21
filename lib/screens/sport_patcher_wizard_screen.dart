@@ -1228,7 +1228,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         Row(
           children: [
             Expanded(child: _sectionTitle(theme, Icons.groups, doc.leagueName, _reorderHint)),
-            _addButton(doc, iconOnly: _compact),
+            _addButton(doc, iconOnly: false),
           ],
         ),
         if (_leftOut(doc) > 0)
@@ -1256,11 +1256,14 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
           ? 'Move or swap to reorder (slot order), tap to edit a squad.'
           : 'Drag, move or swap to reorder (slot order), tap to edit a squad.';
 
+  /// Add team, in the header of the list it adds to: a quiet button, never
+  /// a round one floating over the step. [iconOnly] in a league's own row.
   Widget _addButton(RosterDoc doc, {required bool iconOnly}) => iconOnly
-      ? IconButton.filledTonal(onPressed: () => _addTeam(doc), icon: const Icon(Icons.add), tooltip: 'Add team')
-      : FilledButton.tonalIcon(
+      ? IconButton(onPressed: () => _addTeam(doc), icon: const Icon(Icons.add), tooltip: 'Add team', visualDensity: VisualDensity.compact)
+      : TextButton.icon(
           onPressed: () => _addTeam(doc),
-          icon: const Icon(Icons.add),
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+          icon: const Icon(Icons.add, size: 18),
           label: const Text('Add team'),
         );
 

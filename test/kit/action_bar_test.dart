@@ -71,6 +71,17 @@ void main() {
     expect(added, 2);
   });
 
+  testWidgets('a screen pumped without a ProviderScope still gets its bar, as on touch', (t) async {
+    var added = 0;
+    await t.pumpWidget(MaterialApp(
+      home: KitScaffold(title: 'Team', body: const SizedBox.expand(), actionBar: ActionBar(primary: KitAction('Add player', () => added++))),
+    ));
+    expect(t.takeException(), isNull);
+    expect(find.byType(PadKey), findsNothing);
+    await t.tap(find.byKey(const ValueKey('kit-primary')));
+    expect(added, 1);
+  });
+
   testWidgets('a tap on the primary runs it', (t) async {
     var ran = 0;
     await pumpKit(t, KitScaffold(title: 'T', body: const SizedBox(), actionBar: ActionBar(primary: KitAction('Go', () => ran++))));

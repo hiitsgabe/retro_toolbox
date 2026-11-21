@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/kit/kit_base.dart';
 
 /// Space a dependent row is pushed in by, under the row it depends on.
 const settingsIndent = 28.0;
@@ -8,19 +12,20 @@ const settingsIndent = 28.0;
 /// carries it above and below, so any two of them sit 6 apart.
 const settingsHalfGap = 3.0;
 
-/// The settings palette, from the theme: the tile, the focused tile, the line
-/// between panes.
-extension SettingsColors on ColorScheme {
-  Color get settingsTile => surfaceContainerLow;
-  Color get settingsTileFocused => surfaceContainerHigh;
-  Color get settingsLine => surfaceContainerHigh;
+/// The settings palette, from the style (the kit's panel): the tile, the
+/// focused tile, the line between panes.
+extension SettingsColors on StyleTokens {
+  Color get settingsTile => panel;
+  Color get settingsTileFocused => Color.alphaBlend(Colors.white.withValues(alpha: 0.08), solidPanel);
+  Color get settingsLine => panelLine;
 }
 
 /// Whether focus is showing (a d-pad or keyboard moved it, not a touch).
 bool get settingsFocusShows => FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
 
 /// A rounded tile that shows its own focus: a lighter fill and a 2 px outline
-/// inside its edge, in place of the app's global outline. [onTap] makes it a
+/// inside its edge, in place of the app's global outline. Drawn as the kit's
+/// panel: the style's material, edge and corners. [onTap] makes it a
 /// button; [onKeyEvent] (steppers, choices) keeps it focusable without one.
 /// [onReset] binds X (MarkIntent) while it has focus.
 class SettingsTile extends StatefulWidget {
@@ -35,7 +40,7 @@ class SettingsTile extends StatefulWidget {
     this.autofocus = false,
     this.color,
     this.focusedColor,
-    this.radius = 14,
+    this.radius,
     this.minHeight = 64,
     this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
   });
@@ -53,7 +58,8 @@ class SettingsTile extends StatefulWidget {
 
   /// Null: the focused settings tile colour.
   final Color? focusedColor;
-  final double radius;
+  /// Null: the style's panel corners, at most 14.
+  final double? radius;
   final double minHeight;
   final EdgeInsets padding;
 
@@ -82,9 +88,12 @@ class _SettingsTileState extends State<SettingsTile> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final k = StyleTokens.of(context);
     final shows = _focused && settingsFocusShows;
-    final radius = BorderRadius.circular(widget.radius);
+    final radius = BorderRadius.circular(widget.radius ?? math.min(k.panelRadius, 14));
+    // A plain tile has the panel's edge; one given its own colour (a rail
+    // tile) has none.
+    final edge = widget.color == null ? BorderSide(color: k.panelLine) : BorderSide.none;
     final box = ConstrainedBox(
       constraints: BoxConstraints(minHeight: widget.minHeight),
       child: Padding(padding: widget.padding, child: widget.child),
@@ -113,10 +122,10 @@ class _SettingsTileState extends State<SettingsTile> {
         widget.onFocusChange?.call(f);
       },
       child: Material(
-        color: shows ? (widget.focusedColor ?? scheme.settingsTileFocused) : (widget.color ?? scheme.settingsTile),
+        color: shows ? (widget.focusedColor ?? k.settingsTileFocused) : (widget.color ?? k.settingsTile),
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: shows ? BorderSide(color: scheme.primary, width: 2, strokeAlign: BorderSide.strokeAlignInside) : BorderSide.none,
+          side: shows ? BorderSide(color: k.accent, width: 2, strokeAlign: BorderSide.strokeAlignInside) : edge,
         ),
         clipBehavior: Clip.antiAlias,
         child: interactive,
@@ -194,11 +203,8 @@ class SettingsRowText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final titleText = Text(
-      title,
-      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: danger ? scheme.error : scheme.onSurface),
-    );
+    final t = KitType.of(context);
+    final titleText = Text(title, style: t.row.copyWith(fontSize: t.size(15), color: danger ? t.k.error : t.ink));
     final text = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -206,7 +212,7 @@ class SettingsRowText extends StatelessWidget {
         if (changed) Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [titleText, const ChangedChip()]) else titleText,
         if (subtitle != null && subtitle!.isNotEmpty) ...[
           SizedBox(height: changed ? 4 : 3),
-          Text(subtitle!, style: TextStyle(fontSize: 13, height: 1.35, color: scheme.onSurfaceVariant)),
+          Text(subtitle!, style: t.subtitle.copyWith(fontSize: t.size(13))),
         ],
       ],
     );
@@ -220,11 +226,11 @@ class ChangedChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(10)),
-      child: Text('Changed', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: scheme.onPrimary)),
+      decoration: BoxDecoration(color: t.k.accent, borderRadius: BorderRadius.circular(math.min(t.k.buttonRadius, 10))),
+      child: Text('Changed', style: TextStyle(fontFamily: t.k.titleFont, fontSize: t.size(11), fontWeight: FontWeight.w700, color: t.k.onAccent)),
     );
   }
 }
@@ -240,15 +246,16 @@ class RowPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
+    final k = t.k;
     final pill = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: danger ? null : scheme.secondaryContainer,
-        border: danger ? Border.all(color: scheme.error) : null,
-        borderRadius: BorderRadius.circular(20),
+        color: danger ? null : k.accent.withValues(alpha: 0.16),
+        border: Border.all(color: danger ? k.error : k.accent.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(k.buttonRadius.clamp(4, 20).toDouble()),
       ),
-      child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: danger ? scheme.error : scheme.onSecondaryContainer)),
+      child: Text(label, style: t.verb.copyWith(fontSize: t.size(14), color: danger ? k.error : k.accent)),
     );
     if (onPressed == null) return pill;
     return ExcludeFocus(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onPressed, child: pill));
@@ -263,15 +270,15 @@ class ResetPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return ExcludeFocus(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(16)),
-          child: Text('Reset', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: scheme.primary)),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(t.k.buttonRadius.clamp(4, 16).toDouble())),
+          child: Text('Reset', style: t.verb),
         ),
       ),
     );
@@ -289,13 +296,10 @@ class SettingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(4, top + settingsHalfGap, 4, 6 + settingsHalfGap),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.96, color: scheme.primary),
-      ),
+      child: Text(text.toUpperCase(), style: t.label.copyWith(fontSize: t.size(12), color: t.k.accent)),
     );
   }
 }
@@ -310,10 +314,10 @@ class SettingsInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final t = KitType.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(4 + (indent ? settingsIndent : 0), 4 + settingsHalfGap, 4, 8 + settingsHalfGap),
-      child: Text(text, style: TextStyle(fontSize: 13, height: 1.5, color: error ? scheme.error : scheme.onSurfaceVariant)),
+      child: Text(text, style: t.body.copyWith(height: 1.5, color: error ? t.k.error : t.muted)),
     );
   }
 }
@@ -323,5 +327,5 @@ class RowChevron extends StatelessWidget {
   const RowChevron({super.key});
 
   @override
-  Widget build(BuildContext context) => Icon(Icons.chevron_right, size: 22, color: Theme.of(context).colorScheme.outline);
+  Widget build(BuildContext context) => Icon(Icons.chevron_right, size: 22, color: KitType.of(context).muted);
 }

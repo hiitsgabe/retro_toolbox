@@ -30,8 +30,26 @@ class StyleSettingRows extends ConsumerWidget {
     final backdrop = style.shownBackdrop;
     // The card style's own: what Reset goes back to.
     final own = StyleTokens.forStyle(style.cards).backdrop;
+    // One row per choice and no group titles: a title over a row of the
+    // same name said everything twice. The style comes first (it themes the
+    // whole app), then what goes behind it. New rows go at the end.
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const SettingsHeader('Background', top: 0),
+      SettingsSegmentedRow<CardStyle>(
+        title: 'Cards',
+        options: [for (final c in CardStyle.values) (c, c.label)],
+        selected: style.cards,
+        changed: style.cards != _defaults.cards,
+        onChanged: notifier.setCards,
+        onReset: () => notifier.setCards(_defaults.cards),
+      ),
+      SettingsSegmentedRow<GameLayout>(
+        title: 'Game list',
+        options: [for (final l in GameLayout.values) (l, l.label)],
+        selected: style.gameLayout,
+        changed: style.gameLayout != _defaults.gameLayout,
+        onChanged: notifier.setGameLayout,
+        onReset: () => notifier.setGameLayout(_defaults.gameLayout),
+      ),
       SettingsSegmentedRow<BackdropKind>(
         title: 'Background',
         options: [for (final k in BackdropKind.values) (k, k.label)],
@@ -56,23 +74,6 @@ class StyleSettingRows extends ConsumerWidget {
           },
           onReset: () => notifier.setBackdrop(backdrop.copyWith(clearImage: true)),
         ),
-      const SettingsHeader('Cards'),
-      SettingsSegmentedRow<CardStyle>(
-        title: 'Cards',
-        options: [for (final c in CardStyle.values) (c, c.label)],
-        selected: style.cards,
-        changed: style.cards != _defaults.cards,
-        onChanged: notifier.setCards,
-        onReset: () => notifier.setCards(_defaults.cards),
-      ),
-      SettingsSegmentedRow<GameLayout>(
-        title: 'Game list',
-        options: [for (final l in GameLayout.values) (l, l.label)],
-        selected: style.gameLayout,
-        changed: style.gameLayout != _defaults.gameLayout,
-        onChanged: notifier.setGameLayout,
-        onReset: () => notifier.setGameLayout(_defaults.gameLayout),
-      ),
     ]);
   }
 }
@@ -140,6 +141,7 @@ class _SwatchState extends State<_Swatch> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final k = StyleTokens.of(context);
     final ring = widget.picked || (_focused && settingsFocusShows);
     return Tooltip(
       message: widget.name,
@@ -155,7 +157,7 @@ class _SwatchState extends State<_Swatch> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: ring ? (widget.picked ? scheme.onSurface : scheme.primary) : Colors.transparent, width: 2),
+            border: Border.all(color: ring ? (widget.picked ? scheme.onSurface : k.accent) : Colors.transparent, width: 2),
           ),
           child: Container(
             width: _swatchSize,
