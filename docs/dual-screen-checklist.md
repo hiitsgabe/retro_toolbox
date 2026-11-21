@@ -13,6 +13,8 @@ Go through the items in order. Each says what to do and what should happen.
    Manager. The controller still moves focus on the top screen, and nothing
    on the bottom screen takes it. If the controller stops moving focus on the
    top screen right after the bottom one opens, even for a moment, note it.
+   Then touch the bottom screen and press the d-pad: focus still moves on the
+   top screen at once, and no "isn't responding" dialog shows within 10 s.
 3. **Details follow the cursor.** Open a console's game list and move through
    the games with the d-pad. The bottom screen shows the details of the game
    under the cursor within a moment. Touch scrolls the details.

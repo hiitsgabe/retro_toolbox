@@ -8,7 +8,6 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.view.Display
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -47,9 +46,6 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     // display. Its Dart can still ask to close the companion while this one
     // goes down, and by then the companion may belong to the new one.
     private var moved = false
-
-    // Until when a lost window focus is put down to the companion launch.
-    private var refocusUntil = 0L
 
     init {
         for (d in displays.displays) wasOn[d.displayId] = d.state == Display.STATE_ON
@@ -126,23 +122,10 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
         activity.startActivity(intent, ActivityOptions.makeBasic().setLaunchDisplayId(displayId).toBundle())
         CompanionBridge.launched(displayId)
-        refocusUntil = SystemClock.uptimeMillis() + REFOCUS_MS
     }
 
     private fun closeCompanion() {
         if (!moved) CompanionBridge.close()
-    }
-
-    /// MainActivity lost window focus. The new companion's display becomes
-    /// the top focused one even though its window is not focusable (focus
-    /// follows the activity, not the window flag), and with one focus for all
-    /// displays the main screen is then left without key input. Bring this
-    /// task back to the front, once per launch so it can never loop. Item 2
-    /// of docs/dual-screen-checklist.md shows whether a device needs it.
-    fun onFocusLost() {
-        if (SystemClock.uptimeMillis() >= refocusUntil) return
-        refocusUntil = 0L
-        (activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).moveTaskToFront(activity.taskId, 0)
     }
 
     /// The same engine carries on in a new MainActivity on [displayId]:
@@ -167,7 +150,23 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
         }
         moved = true
         releaseKeys()
-        activity.finish()
+        removeDeadTasks()
+        // Its task too: holds only this activity, and left behind it stayed in
+        // recents as one more Retro Toolbox for every start that moved.
+        activity.finishAndRemoveTask()
+    }
+
+    /// A moved MainActivity lives in a task of its own, which outlives the
+    /// process in recents: each start that moved left one more Retro Toolbox
+    /// there. Drop the ones with nothing running in them.
+    private fun removeDeadTasks() {
+        val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        for (task in am.appTasks) {
+            val info = try { task.taskInfo } catch (e: IllegalArgumentException) { continue }
+            if (info.numActivities == 0 && info.baseIntent.component?.className == MainActivity::class.java.name) {
+                task.finishAndRemoveTask()
+            }
+        }
     }
 
     fun dispose() {
@@ -182,9 +181,5 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     /// This activity is going: the companion's keys wait for the next host.
     private fun releaseKeys() {
         if (CompanionBridge.mainActivity === activity) CompanionBridge.mainActivity = null
-    }
-
-    private companion object {
-        const val REFOCUS_MS = 2000L
     }
 }
