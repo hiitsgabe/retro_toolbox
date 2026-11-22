@@ -9,6 +9,7 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/download_model.dart';
 import 'package:retro_toolbox/models/favorites_model.dart';
+import 'package:retro_toolbox/models/game_addon_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
@@ -131,6 +132,27 @@ void main() {
     expect(sent, isEmpty);
     await t.pump(const Duration(milliseconds: 1));
     expect(titles(), ['Zelda']);
+  });
+
+  syncTest("details carry the game's discs and updates, each with its own state, and follow a disc's progress", (t) async {
+    final d1 = game('Lunar (Disc 1)'), d2 = game('Lunar (Disc 2)');
+    const patch = GameAddon(label: 'v1.1', size: 7, url: 'https://x/patch.zip', fileName: 'patch.zip');
+    final lunar = d1.copyWith(discs: [d1, d2], updates: [patch]);
+    onGamesScreen(true);
+    sync.start();
+    sent.clear();
+    container.read(focusedGameProvider.notifier).state = lunar;
+    await t.pump(const Duration(milliseconds: 150));
+    List<(String, String, String)> rows() => [
+          for (final f in sent.last['files'] as List) (f['section'] as String, f['label'] as String, f['status'] as String),
+        ];
+    // Not looked at by the manager yet, as the page would show them.
+    expect(rows(), [('Discs', 'Disc 1', 'Loading'), ('Discs', 'Disc 2', 'Loading'), ('Updates', 'v1.1', 'Loading')]);
+    expect((sent.last['files'] as List)[2]['gameId'], patch.toGame(lunar).gameId);
+
+    await t.pump(const Duration(milliseconds: 500));
+    games().put(downloading('Lunar (Disc 2)', 0.5));
+    expect(rows()[1], ('Discs', 'Disc 2', 'Downloading'));
   });
 
   syncTest('rapid focus changes send only the last game', (t) async {

@@ -289,6 +289,23 @@ void main() {
     expect(requests.last, {'kind': 'game', 'gameId': _sonic.gameId, 'action': 'cancel'});
   });
 
+  testWidgets("the game's discs and updates show as rows, and a row's press goes to the main app for that file", (t) async {
+    await start(t, size: const Size(1240, 3000));
+    await send(t, detailsPayload(_sonic, state: task(_sonic, GameStatus.ready, {GameAction.download}), files: [
+      {'section': 'Discs', 'label': 'Disc 1', 'gameId': 'md/d1.zip', 'size': 1024, 'status': 'Ready', 'action': 'download'},
+      {'section': 'Discs', 'label': 'Disc 2', 'gameId': 'md/d2.zip', 'size': 1024, 'status': 'Downloading', 'action': 'pause'},
+      {'section': 'Updates', 'label': 'v1.1', 'gameId': 'md/patch.zip', 'size': 7, 'status': 'Extracted', 'action': null},
+    ]));
+    expect(find.text('Discs'), findsOneWidget);
+    expect(find.text('Updates'), findsOneWidget);
+    expect(find.text('Disc 2'), findsOneWidget);
+    expect(find.text('v1.1'), findsOneWidget);
+    expect(find.textContaining('Extracted'), findsOneWidget);
+    await t.tap(find.widgetWithText(FilledButton, 'Pause'));
+    await t.pump();
+    expect(requests.last, {'kind': 'game', 'gameId': 'md/d2.zip', 'action': 'pause'});
+  });
+
   testWidgets('a malformed payload keeps the current view', (t) async {
     await start(t);
     await send(t, detailsPayload(_sonic));

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
+import 'package:retro_toolbox/widgets/game_details/game_box_view.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:photo_view/photo_view.dart';
@@ -51,7 +54,11 @@ const _lb = LaunchboxGame(
 
 Widget _image(BuildContext context, String url, {BoxFit fit = BoxFit.cover, Alignment alignment = Alignment.center, Widget? placeholder, Widget? fallback}) => SizedBox(key: ValueKey(url));
 
-Finder _url(String url) => find.byKey(ValueKey(url));
+/// The image at [url] outside the box section, which shows the front again.
+Finder _url(String url) => find.byElementPredicate((e) => e.widget.key == ValueKey(url) && e.findAncestorWidgetOfExactType<GameBoxView>() == null);
+
+/// The image at [url] on the box.
+Finder _onBox(String url) => find.descendant(of: find.byType(GameBoxView), matching: find.byKey(ValueKey(url)));
 
 void main() {
   Future<void> pump(
@@ -113,8 +120,10 @@ void main() {
 
     expect(find.text('About'), findsOneWidget);
     expect(find.text(_lb.overview!), findsOneWidget);
-    expect(find.text('Back of the box'), findsOneWidget);
-    expect(_url(_back.url), findsOneWidget);
+    // A roomy screen: the box in 3D, front turned to the screen.
+    expect(find.text('Box'), findsOneWidget);
+    expect(find.byType(GameBox3D), findsOneWidget);
+    expect(_onBox(_front.url), findsOneWidget);
   });
 
   // The hero was the whole first screen on a handheld: the details below it
@@ -165,7 +174,7 @@ void main() {
     expect(find.byIcon(Icons.star_outline_rounded), findsNothing);
     expect(find.text('Screenshots'), findsNothing);
     expect(find.text('About'), findsNothing);
-    expect(find.text('Back of the box'), findsNothing);
+    expect(find.text('Box'), findsNothing);
     row(t, 'Size', formatBytes(_game.size));
     row(t, 'Region', 'USA');
     expect(find.descendant(of: find.byType(Table), matching: find.text('Developer')), findsNothing);
@@ -266,7 +275,10 @@ void main() {
     await t.drag(find.byType(CustomScrollView), const Offset(0, -3000));
     await t.pumpAndSettle();
     expect(t.takeException(), isNull);
-    expect(_url(_back.url), findsOneWidget);
+    // The framebuffer handheld's size: front and back flat, side by side.
+    expect(find.byType(GameBox3D), findsNothing);
+    expect(_onBox(_front.url), findsOneWidget);
+    expect(_onBox(_back.url), findsOneWidget);
   });
 
   testWidgets('d-pad: down from the actions reaches the screenshots; back up shows the whole hero', (t) async {
@@ -438,9 +450,11 @@ void main() {
       home: Scaffold(body: GameDetailsView(game: _game, launchbox: _lb)),
     ));
     CachedNetworkImage net(String url) => t.widget<CachedNetworkImage>(find.byWidgetPredicate((w) => w is CachedNetworkImage && w.imageUrl == url).last);
-    expect((net(_back.url).memCacheWidth, net(_back.url).memCacheHeight), (null, 720));
     expect((net(_logo.url).memCacheWidth, net(_logo.url).memCacheHeight), (null, 192));
-    expect((net(_front.url).memCacheWidth, net(_front.url).memCacheHeight), (null, 240));
+    CachedNetworkImage first(String url) => t.widget<CachedNetworkImage>(find.byWidgetPredicate((w) => w is CachedNetworkImage && w.imageUrl == url).first);
+    expect((first(_front.url).memCacheWidth, first(_front.url).memCacheHeight), (null, 240));
+    // The box's front fills its face: by the face's width.
+    expect(net(_front.url).memCacheWidth, isNotNull);
     // Screenshots fill their box: by the box. The last one is the strip's.
     expect(net(_shot1.url).memCacheWidth, 384);
     t.takeException(); // the image cache has no plugin in tests
@@ -503,5 +517,46 @@ void main() {
     provider as ResizeImage;
     expect((provider.width, provider.height, provider.policy), (3840, 2160, ResizeImagePolicy.fit));
     t.takeException(); // the image cache has no plugin in tests
+  });
+
+  testWidgets('the 3D box turns with the d-pad and a drag, and A opens the face turned to the screen', (t) async {
+    final opened = <String>[];
+    final nav = GlobalKey<NavigatorState>();
+    t.view.physicalSize = const Size(1240, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    await t.pumpWidget(MaterialApp(
+      navigatorKey: nav,
+      theme: appTheme(CardStyle.classic),
+      builder: (context, child) => DpadScope(navigatorKey: nav, child: child!),
+      home: Scaffold(body: GameDetailsView(game: _game, launchbox: _lb, onOpenImage: opened.add, imageBuilder: _image)),
+    ));
+    await t.pumpAndSettle();
+    final box = t.state<GameBox3DState>(find.byType(GameBox3D));
+    expect(box.showingBack, isFalse);
+    expect(_onBox(_back.url), findsNothing);
+    Focus.of(t.element(_onBox(_front.url))).requestFocus();
+    await t.pump();
+
+    // Two quarter turns: the back.
+    for (var i = 0; i < 2; i++) {
+      await t.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await t.pumpAndSettle();
+    }
+    expect(box.showingBack, isTrue);
+    expect(_onBox(_back.url), findsOneWidget);
+    expect(_onBox(_front.url), findsNothing);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(opened, [_back.url]);
+
+    // A drag across the box turns it on to the front, where it settles.
+    // The box itself, at the left of the row the section gives it.
+    final turnable = find.descendant(of: find.byType(GameBox3D), matching: find.byType(GestureDetector)).first;
+    await t.timedDrag(turnable, const Offset(-400, 0), const Duration(seconds: 1));
+    await t.pumpAndSettle();
+    expect(box.showingBack, isFalse);
+    expect((box.angle / (math.pi / 2)) % 1, closeTo(0, 1e-9));
+    await t.tap(turnable);
+    expect(opened.last, _front.url);
   });
 }

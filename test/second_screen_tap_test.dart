@@ -10,6 +10,7 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
+import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/dual_screen/companion_action_listener.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_grid/game_grid_item.dart';
@@ -29,6 +30,9 @@ class _FakeFavorites extends StateNotifier<Favorites> implements FavoritesNotifi
 
 class _FakeCatalog extends StateNotifier<CatalogState> implements CatalogNotifier {
   _FakeCatalog([List<Game> games = const []]) : super(CatalogState(games: games));
+  final selected = <String>[];
+  @override
+  void toggleGameSelection(String gameId) => selected.add(gameId);
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -65,12 +69,13 @@ void main() {
     GameDetailsPage.debugImageBuilder = null;
   });
 
-  Future<ProviderContainer> pump(WidgetTester t, Widget body, {required bool open, List<Game> catalog = const [], Map<String, GameState> states = const {}}) async {
+  Future<ProviderContainer> pump(WidgetTester t, Widget body,
+      {required bool open, List<Game> catalog = const [], Map<String, GameState> states = const {}, _FakeCatalog? catalogNotifier}) async {
     final container = ProviderContainer(overrides: [
       gameStateProvider.overrideWith((ref, g) => states[g.gameId] ?? GameState(game: g, status: GameStatus.ready, availableActions: const {GameAction.download})),
       gameStateManagerProvider.overrideWith((ref) => _FakeGames(states)),
       favoritesProvider.overrideWith((ref) => _FakeFavorites()),
-      catalogProvider.overrideWith((ref) => _FakeCatalog(catalog)),
+      catalogProvider.overrideWith((ref) => catalogNotifier ?? _FakeCatalog(catalog)),
       dualScreenProvider.overrideWith((ref) => _Dual(ref, open)),
     ]);
     addTearDown(container.dispose);
@@ -106,8 +111,9 @@ void main() {
     return ctx != null && find.descendant(of: find.byElementPredicate((e) => e == ctx), matching: find.text(title)).evaluate().isNotEmpty;
   }
 
-  testWidgets('second screen open: a tap shows the game there and focuses its card; a tap on the shown game opens its page', (t) async {
-    final c = await pump(t, rows(), open: true);
+  testWidgets('second screen open: a tap shows the game there and focuses its card; a tap on the shown game selects it', (t) async {
+    final catalog = _FakeCatalog();
+    final c = await pump(t, rows(), open: true, catalogNotifier: catalog);
     await t.tap(find.text('Bravo'));
     await t.pumpAndSettle();
     expect(c.read(focusedGameProvider)?.gameId, b.gameId);
@@ -116,7 +122,16 @@ void main() {
     expect(highlighted(t, 'Bravo'), isTrue);
     expect(highlighted(t, 'Alpha'), isFalse);
 
+    expect(catalog.selected, isEmpty);
+
+    // The page, discs and updates included, is on the second screen already.
     await t.tap(find.text('Bravo'));
+    await t.pumpAndSettle();
+    expect(find.byType(GameDetailsPage), findsNothing);
+    expect(catalog.selected, [b.gameId]);
+
+    // Y still opens it here.
+    Actions.invoke(t.element(find.text('Bravo')), const ItemActionsIntent());
     await t.pumpAndSettle();
     expect(find.byType(GameDetailsPage), findsOneWidget);
   });

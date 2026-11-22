@@ -7,6 +7,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_files.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_payload.dart';
 
 /// The game card that last took focus (or was opened) on the games screen.
@@ -86,8 +87,27 @@ class CompanionSync {
   void _emitDetails() {
     final game = _container.read(focusedGameProvider);
     if (game == null) return;
-    final state = _container.read(gameStateManagerProvider)[game.gameId] ?? GameState(game: game);
-    _emit(detailsPayload(game, launchboxVersion: _container.read(launchboxVersionProvider), state: state));
+    final states = _container.read(gameStateManagerProvider);
+    final state = states[game.gameId] ?? GameState(game: game);
+    _emit(detailsPayload(
+      game,
+      launchboxVersion: _container.read(launchboxVersionProvider),
+      state: state,
+      files: [for (final f in gameFiles(game)) gameFileJson(f, _fileState(states, f.game))],
+    ));
+  }
+
+  /// As gameStateProvider reads it, which the page's rows watch: a file the
+  /// manager has not looked at yet is looked at now, and the answer comes
+  /// back as a state change.
+  GameState _fileState(Map<String, GameState> states, Game file) {
+    final state = states[file.gameId];
+    if (state == null) return GameState(game: file);
+    final manager = _container.read(gameStateManagerProvider.notifier);
+    if (state.status == GameStatus.init && !manager.isResolving(file.gameId)) {
+      Future.microtask(() => manager.resolveState(file.gameId));
+    }
+    return state;
   }
 
   void _emitTasks() {

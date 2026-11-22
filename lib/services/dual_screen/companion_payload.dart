@@ -5,14 +5,17 @@ import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 /// What the companion screen shows: one of these, sent as JSON. Details also
 /// say which LaunchBox import the game's data came from (null with metadata
 /// off), so the companion knows when its own copy of that import is stale,
-/// and carry the game's state, so its page can show the status and buttons.
-Map<String, dynamic> detailsPayload(Game game, {String? launchboxVersion, GameState? state}) => {
+/// and carry the game's state, so its page can show the status and buttons,
+/// and its [files] ([gameFileJson] rows: discs, versions, updates...), which
+/// the game's own JSON lacks.
+Map<String, dynamic> detailsPayload(Game game, {String? launchboxVersion, GameState? state, List<Map<String, dynamic>> files = const []}) => {
       'mode': 'details',
       'game': game.toJson(),
       // A box set is shown by the box's name, which the game's own JSON lacks.
       'displayTitle': game.displayTitle,
       'launchbox': launchboxVersion,
       if (state != null) 'state': gameStateJson(state),
+      if (files.isNotEmpty) 'files': files,
     };
 
 /// Rows past this in one tab are left out: the JSON goes over a platform

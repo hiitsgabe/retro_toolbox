@@ -6,6 +6,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_files.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 
@@ -28,11 +29,17 @@ class CompanionActionListener extends ConsumerWidget {
 }
 
 /// The game a companion request names: the shown one first (a grouped
-/// multi-disc entry carries its discs only there), then the console's
-/// catalog, then the tasks (a task can be from another console).
+/// multi-disc entry carries its discs only there), then its files (a disc,
+/// a version, an update), then the console's catalog, then the tasks (a task
+/// can be from another console).
 Game? companionGame(WidgetRef ref, String gameId) {
   final shown = ref.read(focusedGameProvider);
   if (shown?.gameId == gameId) return shown;
+  if (shown != null) {
+    for (final f in gameFiles(shown)) {
+      if (f.game.gameId == gameId) return f.game;
+    }
+  }
   for (final g in ref.read(catalogProvider).games) {
     if (g.gameId == gameId) return g;
   }

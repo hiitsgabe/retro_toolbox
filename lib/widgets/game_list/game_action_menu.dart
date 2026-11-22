@@ -64,9 +64,7 @@ class _GameCardActionsState extends ConsumerState<GameCardActions> {
     final actions = Actions(
       actions: {
         MarkIntent: CallbackAction<MarkIntent>(onInvoke: (_) {
-          if (selectable && (ref.read(gameStateProvider(game)).isInteractable || ref.read(gameSelectionProvider(game.gameId)))) {
-            ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId);
-          }
+          if (selectable) toggleCardSelection(ref, game);
           return null;
         }),
         ItemActionsIntent: CallbackAction<ItemActionsIntent>(
@@ -144,16 +142,29 @@ class _HoldForBoxartState extends State<_HoldForBoxart> {
   Widget build(BuildContext context) => Focus(canRequestFocus: false, skipTraversal: true, onKeyEvent: _onKey, child: widget.child);
 }
 
-/// A tap on a game card. With the second screen open, a game it does not show
-/// yet is shown there (and takes the focus here) instead of opening its page;
-/// a tap on the game it shows opens the page. [focus]: the card's focus stop.
+/// A tap on a game card (or A). With the second screen open, a game it does
+/// not show yet is shown there (and takes the focus here); a tap on the game
+/// it shows selects it, since its page, discs and updates included, is
+/// already on the second screen. Y still opens the page here. [focus]: the
+/// card's focus stop.
 void tapGameCard(BuildContext context, WidgetRef ref, Game game, {bool selectable = true, FocusNode? focus}) {
-  if (selectable && ref.read(dualScreenProvider).companionOpen && ref.read(focusedGameProvider)?.gameId != game.gameId) {
-    ref.read(focusedGameProvider.notifier).state = game;
-    focus?.requestFocus();
+  if (selectable && ref.read(dualScreenProvider).companionOpen) {
+    if (ref.read(focusedGameProvider)?.gameId != game.gameId) {
+      ref.read(focusedGameProvider.notifier).state = game;
+      focus?.requestFocus();
+    } else {
+      toggleCardSelection(ref, game);
+    }
     return;
   }
   showGameActionMenu(context, game, selectable: selectable);
+}
+
+/// X on a card: selects or unselects it, unless it is busy and not selected.
+void toggleCardSelection(WidgetRef ref, Game game) {
+  if (ref.read(gameStateProvider(game)).isInteractable || ref.read(gameSelectionProvider(game.gameId))) {
+    ref.read(catalogProvider.notifier).toggleGameSelection(game.gameId);
+  }
 }
 
 /// Outlines the card whose game the second screen shows, in the style's

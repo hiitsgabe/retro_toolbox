@@ -8,6 +8,7 @@ import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
+import 'package:retro_toolbox/services/dual_screen/companion_files.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
@@ -237,20 +238,10 @@ class _DiscRow extends ConsumerWidget {
   final Game disc;
   final int number;
 
-  static const _order = [
-    GameAction.download,
-    GameAction.pause,
-    GameAction.resume,
-    GameAction.cancel,
-    GameAction.extract,
-    GameAction.retryDownload,
-    GameAction.retryExtraction,
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(gameStateProvider(disc));
-    final action = _order.where(state.availableActions.contains).firstOrNull;
+    final action = fileRowAction(state);
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -368,9 +359,35 @@ class GameFileRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(gameStateProvider(game));
-    final action = _DiscRow._order.where(state.availableActions.contains).firstOrNull;
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final action = fileRowAction(state);
     final size = game.discs.length >= 2 ? game.discs.fold<int>(0, (sum, d) => sum + d.size) : game.size;
+    return GameFileRowBody(
+      label: label,
+      size: size,
+      status: state.statusText,
+      main: main,
+      action: action,
+      onAction: action == null ? null : () => runGameAction(ref, context, game, state, action),
+    );
+  }
+}
+
+/// A file row's look, from data: [GameFileRow] feeds it the app's state, the
+/// second screen what the main screen sent.
+class GameFileRowBody extends StatelessWidget {
+  const GameFileRowBody({super.key, required this.label, required this.size, required this.status, this.main = false, this.action, this.onAction});
+
+  final String label;
+  final int size;
+  final String status;
+  final bool main;
+  final GameAction? action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final action = this.action;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -387,7 +404,7 @@ class GameFileRow extends ConsumerWidget {
                   ],
                 ]),
                 Text(
-                  [formatBytes(size), if (state.statusText.isNotEmpty) state.statusText].join('  '),
+                  [formatBytes(size), if (status.isNotEmpty) status].join('  '),
                   style: TextStyle(color: muted),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -395,9 +412,9 @@ class GameFileRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (action != null)
+          if (action != null && gameActionLabels.containsKey(action))
             FilledButton.tonalIcon(
-              onPressed: () => runGameAction(ref, context, game, state, action),
+              onPressed: onAction,
               icon: Icon(gameActionIcons[action]),
               label: Text(gameActionLabels[action]!),
             ),

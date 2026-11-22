@@ -12,6 +12,7 @@ import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
+import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 
@@ -65,6 +66,9 @@ class _CompanionScreenState extends State<CompanionScreen> {
   LaunchboxGame? _launchbox;
   bool _lookingUp = false;
   GameState? _state;
+
+  /// The shown game's file rows (see gameFileJson), in the page's order.
+  List<Map<String, dynamic>> _files = const [];
   List<List<CompanionTask>> _taskTabs = [for (final _ in taskTabs) const <CompanionTask>[]];
 
   /// The LaunchBox import the last details came from (see detailsPayload).
@@ -101,6 +105,7 @@ class _CompanionScreenState extends State<CompanionScreen> {
           final game = Game.fromJson(gameJson);
           final state = payload['state'] as Map<String, dynamic>?;
           _state = state == null ? null : gameStateFromJson(state);
+          _files = [for (final f in (payload['files'] as List? ?? const [])) Map<String, dynamic>.from(f as Map)];
           final version = payload['launchbox'] as String?;
           final reimported = version != _launchboxVersion;
           if (reimported) {
@@ -189,9 +194,37 @@ class _CompanionScreenState extends State<CompanionScreen> {
     ];
   }
 
+  /// The rows of one section, each button sent to the main app for that file.
+  Widget _rows(List<Map<String, dynamic>> rows) {
+    final actions = GameAction.values.asNameMap();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (final f in rows)
+        if (f['gameId'] case final String gameId)
+          GameFileRowBody(
+            label: f['label'] as String? ?? '',
+            size: (f['size'] as num?)?.toInt() ?? 0,
+            status: f['status'] as String? ?? '',
+            main: f['main'] == true,
+            action: actions[f['action']],
+            onAction: actions[f['action']] == null ? null : () => _request(gameActionRequest(gameId, actions[f['action']]!)),
+          ),
+    ]);
+  }
+
+  /// Discs first, then the other sections, as the page orders them.
+  (Widget?, List<(String, Widget)>) _fileSections() {
+    final bySection = <String, List<Map<String, dynamic>>>{};
+    for (final f in _files) {
+      bySection.putIfAbsent(f['section'] as String? ?? '', () => []).add(f);
+    }
+    final discs = bySection.remove('Discs');
+    return (discs == null ? null : _rows(discs), [for (final e in bySection.entries) (e.key, _rows(e.value))]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final game = _game;
+    final (discs, sections) = _fileSections();
     return Scaffold(
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
@@ -207,6 +240,8 @@ class _CompanionScreenState extends State<CompanionScreen> {
                 onOpenImage: (url) => showImageViewer(context, url),
                 status: _status(context, _state),
                 actions: _actions(game, _state),
+                discs: discs,
+                sections: sections,
               ),
       ),
     );

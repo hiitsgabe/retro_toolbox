@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_images.dart';
+import 'package:retro_toolbox/widgets/game_details/game_box_view.dart';
 import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
@@ -127,6 +128,8 @@ class GameDetailsView extends StatelessWidget {
       ...launchboxImagesOf(info.images, LaunchboxImageType.titleScreen, region),
     ];
     final back = pickLaunchboxImage(info.images, LaunchboxImageType.boxBack, region);
+    // The front only with a back: on its own it is the hero's cover again.
+    final boxFront = back == null ? null : pickLaunchboxImage(info.images, LaunchboxImageType.boxFront, region)?.url ?? game.boxart;
     final rows = info.rows;
     final overview = launchbox?.overview;
     final details = rows.isEmpty || tableInHero ? null : _Section(title: 'Details', child: _DetailsTable(rows: rows));
@@ -177,17 +180,15 @@ class GameDetailsView extends StatelessWidget {
       ],
       if (back != null)
         _Section(
-          title: 'Back of the box',
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _Tappable(
-              url: back.url,
-              onOpen: onOpenImage,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: image(context, back.url, fit: BoxFit.contain, fallback: const _Missing(height: 360)),
-              ),
-            ),
+          title: 'Box',
+          child: GameBoxView(
+            front: boxFront,
+            back: back.url,
+            onOpen: onOpenImage,
+            height: DeviceClass.of(context) == DeviceClass.roomy ? 360 : 240,
+            // The test seam's images have no size to read.
+            aspect: imageBuilder == null ? null : 0.7,
+            face: (context, url, fallback) => image(context, url, fit: BoxFit.fill, fallback: fallback),
           ),
         ),
     ];
