@@ -22,6 +22,12 @@ class FakeProcess implements Process {
 
   void err(String lines) => _err.add(utf8.encode(lines));
 
+  /// A real pipe fills and blocks the emulator on its next write unless a
+  /// listener keeps reading it. isPaused alone is not enough: a controller
+  /// whose listener cancelled reports not paused.
+  bool get stdoutDrained => _out.hasListener && !_out.isPaused;
+  bool get stderrDrained => _err.hasListener && !_err.isPaused;
+
   /// Closes the pipes without waiting: a pipe nobody listens to never
   /// finishes closing.
   void finish(int code) {
@@ -143,6 +149,8 @@ void main() {
     final r = await launch(duckstation, found(duckstation, '/usr/bin/duckstation-qt'), owned('psx', rom));
     expect(r.code, LaunchCode.ok);
     expect(runner.process.exit.isCompleted, isFalse);
+    expect(runner.process.stdoutDrained, isTrue, reason: 'stdout is drained for the whole life, not only the window');
+    expect(runner.process.stderrDrained, isTrue, reason: 'stderr is drained for the whole life, not only the window');
   });
 
   test('exit 0 inside the window is ok', () async {
