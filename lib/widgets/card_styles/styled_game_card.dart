@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
@@ -47,6 +48,7 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
     final state = ref.watch(gameStateProvider(game));
     final selected = ref.watch(gameSelectionProvider(game.gameId));
     final shown = ref.watch(shownOnSecondScreenProvider(game.gameId));
+    final launcherMode = ref.watch(launcherModeProvider);
     // One focus stop per card, as GameGridItem.
     return Material(
       type: MaterialType.transparency,
@@ -63,6 +65,8 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
           onTap: () {
             if (tapFocus(widget.tapFocus, jumpFocus)) tapGameCard(context, ref, game, focus: jumpFocus);
           },
+          // In launcher mode a tap launches: a long press is the way to the page.
+          onLongPress: launcherMode ? () => showGameActionMenu(context, game) : null,
           onFocusChange: (v) {
             setFocused(v);
             widget.onFocusChange?.call(v);

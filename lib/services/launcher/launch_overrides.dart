@@ -48,13 +48,17 @@ class LaunchOverridesStore {
 
 class LaunchOverridesNotifier extends StateNotifier<Map<String, LaunchChoice>> {
   LaunchOverridesNotifier(this._store) : super(const {}) {
-    _store.load().then((loaded) {
+    loaded = _store.load().then((saved) {
       // A choice made while the file was loading is newer than the file.
-      if (mounted) state = {...loaded, ...state};
+      if (mounted) state = {...saved, ...state};
     });
   }
 
   final LaunchOverridesStore _store;
+
+  /// Completes once the saved overrides are in [state]: a card launch reads
+  /// them at once, where Play had its page's build to wait for them.
+  late final Future<void> loaded;
 
   void set(String gameId, LaunchChoice choice) {
     state = {...state, gameId: choice};

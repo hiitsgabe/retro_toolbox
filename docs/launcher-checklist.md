@@ -66,6 +66,26 @@ only once its row passed.
     (open a game's page once), install an emulator for a console that had
     none and restart the app: Play still reads "No emulator for <system>".
     Press Detect again beside it: Play comes on and opens the game.
+15. **Grid launch.** With the mode on, open a set up console: the list shows
+    only the games on disk (the Owned button is lit), each with a play
+    badge. A, a tap and Start with nothing selected start the game; Y and a
+    long press open its page; Back from the emulator lands on the same
+    list. With the second screen open, the first tap shows the game there
+    and the second starts it.
+16. **Loose files.** Copy a ROM the catalog does not list (a hack, a
+    homebrew `.zip`, a `.chd` with a name of your own) into a console's
+    folder, then come back to the app: the owned view lists it by its file
+    name, with no Download, and A starts it. A cue with its bin tracks, and
+    a set of discs with its `.m3u`, each show as one game.
+17. **Empty or failed catalog.** In airplane mode, open a console that has
+    loose games: they show instead of the error. With nothing in the folder,
+    the error shows as before.
+18. **Unreadable folder.** Point a console at a folder Retro Toolbox cannot
+    list (on desktop, `chmod 000`): the console page says "Cannot read
+    <folder>".
+19. **Console list.** With the mode on, the console list shows only the
+    consoles whose folder holds a game; the Owned button in its header shows
+    them all again.
 
 ## One row per Android preset
 
