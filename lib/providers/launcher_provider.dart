@@ -3,14 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
+import 'package:retro_toolbox/services/launcher/games_on_disk.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
@@ -149,6 +152,24 @@ final ownedGameProvider = FutureProvider.autoDispose.family<OwnedGame?, Game>((r
   final presence = await ref.read(librarySnapshotProvider(dir).notifier).getStatus(game.filename);
   final snapshot = ref.read(librarySnapshotProvider(dir))[dir];
   return snapshot == null ? null : OwnedGame.fromPresence(game, dir, presence, snapshot);
+});
+
+/// Whether [consoleId]'s library dir holds any of its games, as
+/// [hasGamesOnDisk] counts them; consoles sharing the dir split it by
+/// [ownFormats]. Wizard step 2 lists the consoles it holds for.
+final gamesOnDiskProvider = FutureProvider.autoDispose.family<bool, String>((ref, consoleId) async {
+  final consoles = ref.watch(appStateProvider.select((s) => s.consoles));
+  ref.watch(settingsProvider);
+  final settings = ref.read(settingsProvider.notifier);
+  final console = consoles[consoleId];
+  if (console == null) return false;
+  final dir = settings.getDownloadDir(consoleId);
+  if (dir.isEmpty) return false;
+  final sharing = [
+    for (final c in consoles.values)
+      if (p.equals(settings.getDownloadDir(c.id), dir)) c,
+  ];
+  return hasGamesOnDisk(dir, ownFormats(console, sharing));
 });
 
 final gameLauncherProvider = FutureProvider<GameLauncher>((ref) async {

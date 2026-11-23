@@ -93,6 +93,15 @@ class Console {
     ];
   }
 
+  /// What this console's folder can hold of its games, lowercased with the
+  /// dot: what the server sends, what unpacking keeps, and what each handler
+  /// that can run here writes. A `.chd`-only PlayStation folder and a kept
+  /// `.zip` both count.
+  Set<String> get onDiskFormats => {
+        for (final f in [...?originalFormat, ...?gameFilesFormat]) f.toLowerCase(),
+        for (final h in applicableHandlers) h.output.toLowerCase(),
+      };
+
   bool get hasUpdates => updateRegex != null;
 
   /// The primary URL (first in the list). Use [urls] when multiple URLs are needed.
