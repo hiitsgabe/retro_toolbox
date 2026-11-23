@@ -19,21 +19,7 @@ class ExternalEntryActivity : Activity() {
         } catch (_: Exception) {
             false
         }
-        val forward = if (home) {
-            // A HOME MainActivity this starts takes the engine from a standard
-            // task that still holds it (MainActivity.takeStrandedEngine).
-            HomeRole.homeIntent(this)
-        } else {
-            // A HOME intent with data would match no HOME filter, so only
-            // this one carries it.
-            Intent(this, MainActivity::class.java)
-                .setAction(Intent.ACTION_MAIN)
-                .addCategory(Intent.CATEGORY_LAUNCHER)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                .also { f -> intent?.data?.let { f.data = it } }
-        }
-        intent?.extras?.let { forward.putExtras(it) }
-        forward.putExtra(HomeRole.EXTRA_ENTRY, true)
+        val forward = HomeRole.entryForward(packageName, intent, home)
         // Not the home app, while a MainActivity started as one still runs
         // the engine in the home task (another home app was picked in system
         // Settings with Retro Toolbox in the background). A start by

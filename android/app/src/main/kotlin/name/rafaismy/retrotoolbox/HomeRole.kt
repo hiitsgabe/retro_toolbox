@@ -15,6 +15,10 @@ internal object HomeRole {
     /// Home press.
     const val EXTRA_ENTRY = "name.rafaismy.retrotoolbox.ENTRY"
 
+    /// On an intent ExternalEntryActivity forwarded home: the action the app
+    /// start came with, which the forward itself cannot carry (see entryForward).
+    const val EXTRA_ACTION = "name.rafaismy.retrotoolbox.ACTION"
+
     // By the class's own package: a debug build's applicationId ends in
     // ".dev", its classes do not.
     private fun alias(context: Context) =
@@ -82,36 +86,64 @@ internal object HomeRole {
         preferred != null && preferred != own && preferred in homes
 
     /// What the plugins are handed for [intent]. An app start forwarded to
-    /// the home task goes to them in its launcher shape, MAIN with LAUNCHER,
-    /// as getLaunchIntentForPackage gave it before HOME: flutter_foreground_task
-    /// answers a notification tap only on that shape. The HOME intent itself
+    /// the home task goes to them in its launcher shape, its own action with
+    /// LAUNCHER, as getLaunchIntentForPackage gave it before HOME:
+    /// flutter_foreground_task answers a notification tap only on MAIN with
+    /// LAUNCHER, background_downloader only on its tap action. The HOME intent itself
     /// keeps its HOME category, the one that makes the activity a home one.
     /// Anything else, a Home press too, goes as it is.
     fun forPlugins(intent: Intent): Intent {
         if (!intent.hasCategory(Intent.CATEGORY_HOME) || !intent.getBooleanExtra(EXTRA_ENTRY, false)) return intent
-        return Intent(intent).setAction(Intent.ACTION_MAIN).apply {
+        return Intent(intent).setAction(intent.getStringExtra(EXTRA_ACTION) ?: Intent.ACTION_MAIN).apply {
             removeCategory(Intent.CATEGORY_HOME)
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
     }
 
     /// [base], the cached engine intent of a handover to a standard task, with
-    /// the app start that set it off: its data and extras, and the launcher
-    /// shape the plugins look for (see forPlugins). With no app start it is
-    /// no launcher intent.
+    /// the app start that set it off (entryForward's, so its action is the
+    /// start's own): its data and extras, and the launcher shape the plugins
+    /// look for (see forPlugins). With no app start it is no launcher intent.
     fun standardEntry(base: Intent, incoming: Intent?): Intent {
         if (incoming == null) return base
         incoming.data?.let { base.data = it }
         incoming.extras?.let { base.putExtras(it) }
-        return base.setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return base.setAction(incoming.action ?: Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    }
+
+    /// What ExternalEntryActivity hands [incoming] on as, for the app [own]:
+    /// to the home task when [home], else to MainActivity by component. The
+    /// start's action comes along: background_downloader answers a tap on its
+    /// notification, and dismisses a finished or failed one, only on its own
+    /// action. Only MAIN with HOME matches the HomeAlias filter, so the home
+    /// forward carries it in EXTRA_ACTION, for forPlugins.
+    fun entryForward(own: String, incoming: Intent?, home: Boolean): Intent {
+        val action = incoming?.action ?: Intent.ACTION_MAIN
+        val forward = if (home) {
+            // A HOME MainActivity this starts takes the engine from a standard
+            // task that still holds it (MainActivity.takeStrandedEngine).
+            homeIntent(own)
+        } else {
+            // A HOME intent with data would match no HOME filter, so only
+            // this one carries it.
+            Intent(action)
+                .setComponent(ComponentName(own, MainActivity::class.java.name))
+                .addCategory(Intent.CATEGORY_LAUNCHER)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+                .also { f -> incoming?.data?.let { f.data = it } }
+        }
+        incoming?.extras?.let { forward.putExtras(it) }
+        // After the start's extras, so they cannot name the action.
+        if (home) forward.putExtra(EXTRA_ACTION, action)
+        return forward.putExtra(EXTRA_ENTRY, true)
     }
 
     /// Names no component, so the activity it starts gets the HOME activity
     /// type, as one a Home press starts does; a standard task is never reused
     /// for it.
-    fun homeIntent(context: Context): Intent =
+    private fun homeIntent(own: String): Intent =
         Intent(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_HOME)
-            .setPackage(context.packageName)
+            .setPackage(own)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 }

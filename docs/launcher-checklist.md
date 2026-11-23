@@ -160,7 +160,13 @@ separate app from the release one.
     running, open another app and tap the server's notification: Retro
     Toolbox opens on the JDKV screen. Do it again with HOME on but another
     home app picked in system Settings and Retro Toolbox in the background.
-35. **Dual screen.** On a dual screen device: with Main on bottom, the Home
+35. **Download Complete notification.** With HOME off, let a download
+    finish, open another app and tap its Download Complete notification: the
+    notification goes away and Retro Toolbox opens where it was. Do it again
+    with HOME on, and with HOME on but another home app picked in system
+    Settings and Retro Toolbox in the background. A Download Failed
+    notification goes away on a tap the same way.
+36. **Dual screen.** On a dual screen device: with Main on bottom, the Home
     screen switch is off and says why, in the wizard and in Settings; with
     HOME on, the dual screen card's Main on bottom is off and says why. With
     Main on top and HOME on, the companion opens on the other screen, closes
