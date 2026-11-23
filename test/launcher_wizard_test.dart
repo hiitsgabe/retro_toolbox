@@ -361,4 +361,13 @@ void main() {
     expect(find.textContaining('Android/data'), findsNothing);
     expect(find.textContaining('Allow all files access'), findsNothing);
   });
+  testWidgets('desktop: a saf emulator brings no Folder access step', (t) async {
+    await pump(t, detected: [_ppsspp], onDisk: {'sony-psp'});
+    await next(t);
+    expect(find.text('Step 2 of 3 · Systems'), findsOneWidget);
+    expect(valueOf(t, 'launcher-system-sony-psp'), 'PPSSPP');
+    await next(t);
+    expect(find.text('Step 3 of 3 · Done'), findsOneWidget);
+    expect(find.byKey(const ValueKey('launcher-folder-ppsspp')), findsNothing);
+  });
 }
