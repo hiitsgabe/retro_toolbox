@@ -78,6 +78,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   ProviderSubscription<Map<String, LibrarySnapshot>>? _librarySub;
   // Launcher mode turning off, listened to from the first load that reads it.
   ProviderSubscription<bool>? _modeSub;
+  // What the load would have said had launcher mode's loose games not stood
+  // in for a failed or empty catalog: said again once none of them is left.
+  String? _catalogFailure;
 
   Future<List<GameGroup>> _groupsOf(List<Game> games) {
     if (!identical(_groupsSource, games)) {
@@ -121,6 +124,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<void> loadCatalog(Console console) async {
     final gen = ++_loadGeneration;
+    _catalogFailure = null;
 
     state = state.copyWith(
       loading: true,
@@ -180,17 +184,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         }
         _ref.read(ownedLibraryProvider(console.id).notifier).state = owned;
         if (failed != null && owned.games.isEmpty) throw failed;
+        if (games.isEmpty) _catalogFailure = failed != null ? _failureMessage(console, failed) : _emptyMessage(console);
         games = [...games, ...owned.games];
       }
 
       // A source that answers but lists nothing (blocked, login page, down) is
       // a failure from the user's point of view: say so instead of "0 games".
       if (games.isEmpty) {
-        state = state.copyWith(
-          loading: false,
-          loadingStatus: '',
-          errorMessage: 'No games found for ${console.name}. The catalog source may be unavailable, try again later.',
-        );
+        state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _emptyMessage(console));
         return;
       }
 
@@ -286,15 +287,35 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     } catch (e) {
       debugPrint('Error loading catalog: $e');
       if (gen != _loadGeneration || !mounted) return;
-      final authMessage = console.auth?['auth_message'] as String?;
-      final needsAuth = authMessage != null && RegExp(r'HTTP (401|403|422)').hasMatch(e.toString());
-      state = state.copyWith(
-        loading: false,
-        loadingStatus: '',
-        errorMessage: needsAuth ? authMessage : 'Failed to load catalog: $e',
-        games: [],
-      );
+      state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _failureMessage(console, e), games: []);
     }
+  }
+
+  static String _emptyMessage(Console console) => 'No games found for ${console.name}. The catalog source may be unavailable, try again later.';
+
+  static String _failureMessage(Console console, Object e) {
+    final authMessage = console.auth?['auth_message'] as String?;
+    final needsAuth = authMessage != null && RegExp(r'HTTP (401|403|422)').hasMatch(e.toString());
+    return needsAuth ? authMessage : 'Failed to load catalog: $e';
+  }
+
+  /// [games] as the loaded list. None left (the loose games stood in for a
+  /// failed or empty catalog, and they went) is the load's failure again,
+  /// with its Retry: an empty list would keep the last page on screen.
+  void _setGames(List<Game> games) {
+    if (games.isNotEmpty) {
+      state = state.copyWith(games: games);
+      return;
+    }
+    _filterDebounce?.cancel();
+    state = state.copyWith(
+      games: games,
+      cachedFilteredGames: [],
+      cachedTotalCount: 0,
+      cachedHasMore: false,
+      selectedGames: {},
+      errorMessage: _catalogFailure ?? '',
+    );
   }
 
   /// [console]'s loose games, apart from [catalog]'s. In an isolate: the
@@ -321,7 +342,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (!mounted || !_ref.read(launcherModeProvider) || !identical(state.games, games) || owned.unreadable) return;
     _ref.read(ownedLibraryProvider(console.id).notifier).state = owned;
     if (setEquals({for (final g in games) if (g.isLocal) g.gameId}, {for (final g in owned.games) g.gameId})) return;
-    state = state.copyWith(games: [...catalog, ...owned.games]);
+    _setGames([...catalog, ...owned.games]);
     await reapplyLaunchbox();
   }
 
@@ -351,10 +372,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     final games = state.games;
     final loose = games.any((g) => g.isLocal);
     if (!loose && !state.filter.ownedOnly) return;
-    state = state.copyWith(
-      games: loose ? [for (final g in games) if (!g.isLocal) g] : games,
-      filter: state.filter.copyWith(ownedOnly: false),
-    );
+    state = state.copyWith(filter: state.filter.copyWith(ownedOnly: false));
+    if (loose) _setGames([for (final g in games) if (!g.isLocal) g]);
     updateFilteredGames(immediate: true);
   }
 

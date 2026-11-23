@@ -170,6 +170,40 @@ void main() {
     expect(c.read(catalogProvider).loading, isFalse);
   });
 
+  test('launcher mode turning off over a failed catalog shows the failure again, not the loose games it took away', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog(error: Exception('HTTP 503'));
+    await catalog.loadCatalog(_psx);
+    expect(shown(c), ['Spyro (USA)']);
+    await c.read(launchConfigProvider.notifier).setEnabled(false);
+    await until(() => !c.read(catalogProvider).filter.ownedOnly);
+    expect(c.read(catalogProvider).games, isEmpty);
+    expect(shown(c), isEmpty, reason: 'the loose game is gone from the list, not only from the games');
+    expect(c.read(catalogProvider).errorMessage, 'Failed to load catalog: Exception: HTTP 503');
+  });
+
+  test('launcher mode turning off over an empty catalog says it found no games, as it does with the mode off', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog(games: const []);
+    await catalog.loadCatalog(_psx);
+    await c.read(launchConfigProvider.notifier).setEnabled(false);
+    await until(() => c.read(catalogProvider).errorMessage.isNotEmpty);
+    expect(c.read(catalogProvider).errorMessage, 'No games found for PlayStation. The catalog source may be unavailable, try again later.');
+  });
+
+  test('the last loose game of a failed catalog going away shows the failure again', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog(error: Exception('HTTP 503'));
+    await catalog.loadCatalog(_psx);
+    expect(shown(c), ['Spyro (USA)']);
+    File(p.join(tmp.path, 'Spyro (USA).chd')).deleteSync();
+    await c.read(librarySnapshotProvider(tmp.path).notifier).refresh();
+    await until(() => c.read(catalogProvider).errorMessage.isNotEmpty);
+    expect(c.read(catalogProvider).games, isEmpty);
+    expect(shown(c), isEmpty);
+    expect(c.read(catalogProvider).errorMessage, 'Failed to load catalog: Exception: HTTP 503');
+  });
+
   test('launcher mode turning off takes the loose games and the owned view away, and a library change scans nothing', () async {
     touch('Spyro (USA).chd');
     final (c, catalog) = await setUpCatalog();
