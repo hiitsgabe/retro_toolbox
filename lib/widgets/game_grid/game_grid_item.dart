@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/theme/device_class.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
@@ -45,6 +46,7 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
     final gameState = ref.watch(gameStateProvider(game));
     final isSelected = ref.watch(gameSelectionProvider(game.gameId));
     final shown = widget.selectable && ref.watch(shownOnSecondScreenProvider(game.gameId));
+    final launcherMode = ref.watch(launcherModeProvider);
     final radius = StyleTokens.of(context).cardRadius;
 
     // One focus stop per card (A opens the game's page, X marks it, Start
@@ -61,13 +63,20 @@ class _GameGridItemState extends ConsumerState<GameGridItem> with JumpTarget<Gam
           autofocus: widget.autofocus,
           borderRadius: BorderRadius.circular(radius),
           onTap: () => tapGameCard(context, ref, game, selectable: widget.selectable, focus: jumpFocus),
+          // In launcher mode a tap launches: a long press is the way to the page.
+          onLongPress: launcherMode ? () => showGameActionMenu(context, game, selectable: widget.selectable) : null,
           child: SecondScreenHighlight(
             shown: shown,
             radius: radius,
-            child: SelectedMark(
-              selected: isSelected,
-              radius: radius,
-              child: _card(context, game, aspectRatio, gameState, radius),
+            // In launcher mode a long press opens the page: a tooltip under
+            // the finger would take it.
+            child: TooltipVisibility(
+              visible: !launcherMode,
+              child: SelectedMark(
+                selected: isSelected,
+                radius: radius,
+                child: _card(context, game, aspectRatio, gameState, radius),
+              ),
             ),
           ),
         ),

@@ -5,6 +5,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
 import 'package:retro_toolbox/widgets/card_styles/styled_menu_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
@@ -47,6 +48,7 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
     final state = ref.watch(gameStateProvider(game));
     final selected = ref.watch(gameSelectionProvider(game.gameId));
     final shown = ref.watch(shownOnSecondScreenProvider(game.gameId));
+    final launcherMode = ref.watch(launcherModeProvider);
     // One focus stop per card, as GameGridItem.
     return Material(
       type: MaterialType.transparency,
@@ -63,6 +65,8 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
           onTap: () {
             if (tapFocus(widget.tapFocus, jumpFocus)) tapGameCard(context, ref, game, focus: jumpFocus);
           },
+          // In launcher mode a tap launches: a long press is the way to the page.
+          onLongPress: launcherMode ? () => showGameActionMenu(context, game) : null,
           onFocusChange: (v) {
             setFocused(v);
             widget.onFocusChange?.call(v);
@@ -76,6 +80,20 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
       ),
     );
   }
+}
+
+/// Launcher mode over a games list: a game on disk wears a play badge where
+/// the check would be, since A launches it. HomeScreen sets it.
+class PlayBadges extends InheritedWidget {
+  const PlayBadges({super.key, required this.on, required super.child});
+
+  final bool on;
+
+  /// False with no PlayBadges above: the second screen, a test.
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PlayBadges>()?.on ?? false;
+
+  @override
+  bool updateShouldNotify(PlayBadges oldWidget) => oldWidget.on != on;
 }
 
 /// The game's state as small badges, for the styles' faces: downloading/
@@ -105,7 +123,9 @@ class GameStateBadges extends StatelessWidget {
             ),
           ),
         ),
-      if (status == GameStatus.downloaded || status == GameStatus.extracted)
+      if ((status == GameStatus.downloaded || status == GameStatus.extracted) && PlayBadges.of(context))
+        _badge(const ValueKey('badge-play'), Icon(Icons.play_arrow_rounded, size: size * 0.75, color: scheme.primary))
+      else if (status == GameStatus.downloaded || status == GameStatus.extracted)
         _badge(
           const ValueKey('badge-done'),
           Icon(Icons.check, size: size * 0.75, color: status == GameStatus.downloaded ? scheme.secondaryContainer : scheme.inversePrimary),

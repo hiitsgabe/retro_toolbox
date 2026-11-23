@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/input_mode_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/widgets/dual_screen/companion_action_listener.dart';
+import 'package:retro_toolbox/widgets/launcher/launcher_lifecycle.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -311,6 +313,12 @@ ColorScheme _scheme(StyleTokens k) {
   );
 }
 
+/// A Home press with Retro Toolbox as the home app.
+void _goHome() {
+  final nav = navigatorKey.currentState;
+  if (nav != null) goToLibraryRoot(nav);
+}
+
 class RetroToolboxApp extends ConsumerWidget {
   const RetroToolboxApp({super.key});
 
@@ -342,7 +350,8 @@ class RetroToolboxApp extends ConsumerWidget {
       ),
       home: const MenuScreen(),
     );
-    return Platform.isAndroid ? _DualScreenLifecycle(child: app) : app;
+    final launcher = ref.watch(launcherAvailableProvider) ? LauncherLifecycle(onHome: _goHome, child: app) : app;
+    return Platform.isAndroid ? _DualScreenLifecycle(child: launcher) : launcher;
   }
 }
 

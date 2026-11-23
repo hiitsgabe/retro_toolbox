@@ -11,6 +11,7 @@ import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/widgets/footer/task_panel_modal.dart';
 import 'package:retro_toolbox/screens/console_grid_screen.dart';
 import 'package:retro_toolbox/screens/console_info_screen.dart';
+import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
 import 'package:retro_toolbox/screens/link_download_screen.dart';
 import 'package:retro_toolbox/screens/sports_grid_screen.dart';
 import 'package:retro_toolbox/screens/menu_grid_screen.dart';
@@ -71,13 +72,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getBool(SetupWizardScreen.seenKey) ?? false;
     if (!mounted) return;
-    if (!seen) {
-      await Navigator.of(context).push(
-        MaterialPageRoute(fullscreenDialog: true, builder: (_) => const SetupWizardScreen()),
-      );
-      if (!mounted) return;
-    }
-    _push(const ConsoleGridScreen());
+    await enterGamesLibrary(Navigator.of(context), seen: seen);
   }
 
   @override
@@ -371,3 +366,60 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
     );
   }
 }
+
+/// The way into the Games Library: the setup wizard on the first visit, the
+/// launcher wizard when the setup's Finish asked for it, then the console
+/// grid. The setup only pops with that answer: a route it pushed on Finish
+/// would be the one its own pop removes, and one pushed after the pop would
+/// have a dead context. A Home press during a wizard closes it and opens the
+/// grid itself, so the grid is pushed only when it is not on top already.
+/// The builders are for tests.
+Future<void> enterGamesLibrary(
+  NavigatorState nav, {
+  required bool seen,
+  WidgetBuilder setup = _setup,
+  WidgetBuilder launcher = _launcherWizard,
+  WidgetBuilder grid = _grid,
+}) async {
+  if (!seen) {
+    final wantsLauncher = await nav.push<bool>(MaterialPageRoute(fullscreenDialog: true, builder: setup));
+    if (!nav.mounted) return;
+    if (wantsLauncher == true) {
+      await nav.push<bool>(MaterialPageRoute(fullscreenDialog: true, builder: launcher));
+      if (!nav.mounted) return;
+    }
+    if (_gridOnTop(nav)) return;
+  }
+  nav.push<void>(MaterialPageRoute(settings: const RouteSettings(name: ConsoleGridScreen.routeName), builder: grid));
+}
+
+/// Whether the console grid is the top route. A predicate that is true at
+/// once makes popUntil a peek: it sees the top route and pops nothing.
+bool _gridOnTop(NavigatorState nav) {
+  Route<dynamic>? top;
+  nav.popUntil((route) {
+    top = route;
+    return true;
+  });
+  return top?.settings.name == ConsoleGridScreen.routeName;
+}
+
+/// A Home press with Retro Toolbox as the home app: back to the console
+/// list, the library's root. Every route above it closes; with none open,
+/// what is open closes and the list opens over the menu.
+void goToLibraryRoot(NavigatorState nav, {WidgetBuilder grid = _grid}) {
+  Route<dynamic>? top;
+  nav.popUntil((route) {
+    top = route;
+    return route.settings.name == ConsoleGridScreen.routeName || route.isFirst;
+  });
+  if (top?.settings.name != ConsoleGridScreen.routeName) {
+    nav.push<void>(MaterialPageRoute(settings: const RouteSettings(name: ConsoleGridScreen.routeName), builder: grid));
+  }
+}
+
+Widget _setup(BuildContext _) => const SetupWizardScreen();
+
+Widget _launcherWizard(BuildContext _) => const LauncherWizardScreen();
+
+Widget _grid(BuildContext _) => const ConsoleGridScreen();

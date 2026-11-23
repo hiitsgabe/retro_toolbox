@@ -23,6 +23,34 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- No LAUNCHER filter here: ExternalEntryActivity has it, so a
+                 start from outside can go to the home task instead. -->
+        </activity>
+        <!-- Retro Toolbox as the home app (launcher mode, HomeRole.kt): off
+             until the user turns HOME on. It inherits singleTop and the empty
+             taskAffinity from MainActivity. -->
+        <activity-alias
+            android:name=".HomeAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity-alias>
+        <!-- The launcher icon, Settings > Open and the notifications land here
+             (getLaunchIntentForPackage), and it hands them on: to the home
+             task when Retro Toolbox is the home app, else to MainActivity.
+             Shows nothing and finishes at once. -->
+        <activity
+            android:name=".ExternalEntryActivity"
+            android:exported="true"
+            android:taskAffinity="${applicationId}.entry"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -63,6 +91,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Launcher: hands a ROM on shared storage to an emulator as a
+             content URI (LauncherBridge). A second provider, so the
+             updater's stays scoped to updates/. -->
+        <provider
+            android:name=".RomFileProvider"
+            android:authorities="${applicationId}.roms"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/rom_paths" />
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -98,6 +138,19 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Launcher: emulators built for TV only have no LAUNCHER entry.
+             Visibility is per package, so this is enough for detect; no
+             <package> list, which could never follow presets from GitHub. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <!-- Launcher mode, where Android has no home role: which home app is
+             picked, if any (HomeRole.otherHome). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
         </intent>
     </queries>
     <uses-permission android:name="android.permission.INTERNET"/>

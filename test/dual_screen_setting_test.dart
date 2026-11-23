@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/widgets/settings/dual_screen_setting.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
@@ -18,10 +21,10 @@ class FakeDualScreen extends StateNotifier<DualScreenState> implements DualScree
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<FakeDualScreen> pumpCard(WidgetTester tester, DualScreenState state) async {
+Future<FakeDualScreen> pumpCard(WidgetTester tester, DualScreenState state, {bool home = false}) async {
   final fake = FakeDualScreen(state);
   await tester.pumpWidget(ProviderScope(
-    overrides: [dualScreenProvider.overrideWith((ref) => fake)],
+    overrides: [dualScreenProvider.overrideWith((ref) => fake), homeModeProvider.overrideWithValue(home)],
     child: const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: DualScreenSetting()))),
   ));
   return fake;
@@ -43,6 +46,27 @@ void main() {
     await tester.tap(find.text('Main on bottom'));
     await tester.pump();
     expect(fake.modes, [DualScreenMode.mainOnBottom]);
+  });
+
+  testWidgets('with Retro Toolbox the home screen, Main on bottom cannot be picked, and the card says why', (tester) async {
+    final fake = await pumpCard(tester, const DualScreenState(mode: DualScreenMode.mainOnTop, hasSecondDisplay: true), home: true);
+    expect(find.text(mainOnBottomLockedReason), findsOneWidget);
+    await tester.tap(find.text('Main on bottom'));
+    await tester.pump();
+    expect(fake.modes, isEmpty);
+    Focus.of(tester.element(find.text('Layout'))).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(fake.modes, isEmpty, reason: 'right from Main on top would land on it');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(fake.modes, [DualScreenMode.off]);
+  });
+
+  testWidgets('not the home screen: no reason line', (tester) async {
+    await pumpCard(tester, const DualScreenState(hasSecondDisplay: true));
+    expect(find.text(mainOnBottomLockedReason), findsNothing);
   });
 
   testWidgets('shows no error by default', (tester) async {

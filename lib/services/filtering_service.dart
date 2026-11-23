@@ -18,7 +18,9 @@ class FilteringService {
     final limit = input.limit;
 
     List<Game> allMatched;
-    if (input.groupVersions) {
+    // The owned view lists each file on disk: grouped, an owned EU file or an
+    // older revision would hide behind its game's main version.
+    if (input.groupVersions && !filter.ownedOnly) {
       allMatched = [
         for (final group in input.groups ?? buildGameGroups(games))
           if (entryFor(group, input) case final entry?) entry,
@@ -110,11 +112,12 @@ class FilteringService {
       if (!favoriteGameIds.contains(game.gameId)) return false;
     }
 
-    if (filter.showInLibraryOnly && inLibraryStatus != null) {
-      if (inLibraryStatus[game.gameId] != GameStatus.downloaded && inLibraryStatus[game.gameId] != GameStatus.extracted) {
-        return false;
-      }
-    }
+    // A loose game is on disk whatever its status says: its real name may
+    // not be the filename the snapshot is asked about.
+    final status = inLibraryStatus?[game.gameId];
+    final onDisk = game.isLocal || status == GameStatus.downloaded || status == GameStatus.extracted;
+    if (filter.showInLibraryOnly && inLibraryStatus != null && !onDisk) return false;
+    if (filter.ownedOnly && !onDisk) return false;
 
     if (checkText && filterText.isNotEmpty) {
       final titleMatch = game.displayTitle.toLowerCase().contains(filterText);
@@ -131,6 +134,10 @@ class FilteringService {
       final rating = details?.rating;
       if (rating == null || rating < filter.minRating) return false;
     }
+
+    // Region, language, category, dump, ROM type, modification and
+    // distribution never hide a game the user has.
+    if (filter.ownedOnly) return true;
 
     final metadata = game.metadata;
     if (metadata == null) return true;

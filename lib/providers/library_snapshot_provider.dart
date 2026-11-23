@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 
 final librarySnapshotProvider = StateNotifierProvider.family<LibrarySnapshotNotifier, Map<String, LibrarySnapshot>, String>(
@@ -56,6 +57,7 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     final related = (raw['related'] as Map).map<String, List<String>>(
       (k, v) => MapEntry(k as String, List<String>.from(v as List)),
     );
+    final aliases = Map<String, String>.from(raw['aliases'] as Map);
 
     state = {
       ...state,
@@ -64,6 +66,7 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
         exactFiles: exact,
         baseNames: bases,
         relatedFiles: related,
+        aliases: aliases,
         timestamp: DateTime.now(),
       ),
     };
@@ -109,6 +112,10 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     return snap.allStatuses();
   }
 
+  /// Where the root file [filename] is on disk, by the snapshot there is:
+  /// itself, or the file whose real name `Game.sanitizeForFat` turns into it.
+  String pathFor(String filename) => state[_libraryDir]?.pathFor(filename) ?? p.join(_libraryDir, p.basename(filename));
+
   Future<List<String>> getRelatedFiles(String filename) async {
     final snap = await _ensure();
     return snap.relatedFilesFor(filename);
@@ -142,11 +149,15 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     };
   }
 
+  /// [filename] may be a catalog name only an alias has: the file under its
+  /// real name is the one that went.
   void markFileRemoved(String filename) {
     final base = p.basename(filename);
     final baseNoExt = p.basenameWithoutExtension(base);
     final snap = state[_libraryDir];
     if (snap == null) return;
+    final real = snap.exactFiles.contains(base) ? null : snap.aliases[base];
+    if (real != null) return markFileRemoved(real);
 
     final exact = {...snap.exactFiles}..remove(base);
     final bases = {...snap.baseNames};
@@ -176,7 +187,12 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
 
     state = {
       ...state,
-      _libraryDir: snap.copyWith(exactFiles: exact, baseNames: bases, relatedFiles: related),
+      _libraryDir: snap.copyWith(
+        exactFiles: exact,
+        baseNames: bases,
+        relatedFiles: related,
+        aliases: {...snap.aliases}..removeWhere((_, file) => file == base),
+      ),
     };
   }
 
@@ -255,10 +271,12 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
       'exact': <String>[],
       'bases': <String>[],
       'related': <String, List<String>>{},
+      'aliases': <String, String>{},
     };
   }
 
   final exact = <String>{};
+  final aliases = <String, String>{};
   final bases = <String>{};
   final related = <String, List<String>>{};
   String abs(String name) => p.join(libraryDir, name);
@@ -271,6 +289,8 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
       if (e is File) {
         exact.add(base);
         bases.add(baseNoExt);
+        final fat = Game.sanitizeForFat(base);
+        if (fat != base) aliases.putIfAbsent(fat, () => base);
         related[base] = [abs(base)];
         related.putIfAbsent(baseNoExt, () => <String>[]).add(abs(base));
       } else if (e is Directory) {
@@ -302,5 +322,6 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
     'exact': exact.toList(),
     'bases': bases.toList(),
     'related': related,
+    'aliases': aliases,
   };
 }

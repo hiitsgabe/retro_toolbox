@@ -4,14 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/widgets/launcher/launch_flow.dart';
 
 /// Gamepad buttons for a focused game card: X marks it (where the checkbox
 /// would work), Y opens its page, holding A opens its box art. Focus here also
@@ -145,19 +149,86 @@ class _HoldForBoxartState extends State<_HoldForBoxart> {
 /// A tap on a game card (or A). With the second screen open, a game it does
 /// not show yet is shown there (and takes the focus here); a tap on the game
 /// it shows selects it, since its page, discs and updates included, is
-/// already on the second screen. Y still opens the page here. [focus]: the
-/// card's focus stop.
+/// already on the second screen, or in launcher mode launches it when it
+/// would launch. Y still opens the page here. [focus]: the card's focus stop.
 void tapGameCard(BuildContext context, WidgetRef ref, Game game, {bool selectable = true, FocusNode? focus}) {
   if (selectable && ref.read(dualScreenProvider).companionOpen) {
     if (ref.read(focusedGameProvider)?.gameId != game.gameId) {
       ref.read(focusedGameProvider.notifier).state = game;
       focus?.requestFocus();
+    } else if (_mayLaunch(ProviderScope.containerOf(context, listen: false), game)) {
+      _launchOr(context, game, () => toggleCardSelection(ref, game));
     } else {
       toggleCardSelection(ref, game);
     }
     return;
   }
-  showGameActionMenu(context, game, selectable: selectable);
+  activateGame(context, game, selectable: selectable);
+}
+
+/// Test seam: what a card's launch runs instead of the emulator, telling
+/// [onStarting] as LaunchFlow does.
+@visibleForTesting
+Future<void> Function(BuildContext context, Game game, LaunchChoice choice, void Function(String? emulator) onStarting)? debugLaunchGame;
+
+/// Whether a card's launch is under way: one at a time. On desktop a launch
+/// waits out the emulator's first seconds, and a second A or tap meanwhile
+/// would start a second emulator.
+final cardLaunchingProvider = StateProvider<bool>((ref) => false);
+
+/// A card activated: a tap, A, or Start with nothing selected. In launcher
+/// mode a game on disk launches with the emulator Play would pick (its
+/// override, its console's default, the one covering emulator); anything
+/// else opens its page, at once and exactly as with the mode off. A Task
+/// Manager row ([selectable] false) only ever opens its page: its game may
+/// be another console's.
+Future<void> activateGame(BuildContext context, Game game, {bool selectable = true}) {
+  if (!selectable || !_mayLaunch(ProviderScope.containerOf(context, listen: false), game)) {
+    return showGameActionMenu(context, game, selectable: selectable);
+  }
+  return _launchOr(context, game, () => showGameActionMenu(context, game));
+}
+
+/// Launcher mode is on and [game] is on disk: a catalog game downloaded or
+/// extracted, or a loose game, which is on disk by construction.
+bool _mayLaunch(ProviderContainer c, Game game) {
+  if (!c.read(launcherModeProvider)) return false;
+  final status = c.read(gameStateProvider(game)).status;
+  return game.isLocal || status == GameStatus.downloaded || status == GameStatus.extracted;
+}
+
+/// Launches [game] with its resolved choice, or runs [otherwise] when it has
+/// none; nothing while another card's launch is under way. The session and
+/// the saved overrides come first: the one covering emulator is only known
+/// from the session, and nothing may have read the overrides yet.
+Future<void> _launchOr(BuildContext context, Game game, void Function() otherwise) async {
+  final c = ProviderScope.containerOf(context, listen: false);
+  final launching = c.read(cardLaunchingProvider.notifier);
+  if (launching.state) return;
+  launching.state = true;
+  // A card has no Play button to relabel, as the page does: a snackbar says
+  // it instead. Closed through its controller, so a card rebuilt or gone
+  // meanwhile does not leave it up.
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? starting;
+  void onStarting(String? emulator) {
+    if (messenger?.mounted == true) starting?.close();
+    starting = emulator == null ? null : messenger?.showSnackBar(SnackBar(content: Text('Starting $emulator'), duration: const Duration(minutes: 1)));
+  }
+
+  try {
+    await c.read(launcherSessionProvider.future);
+    await c.read(launchOverridesProvider.notifier).loaded;
+    if (!context.mounted) return;
+    final choice = c.read(resolveChoiceProvider(game));
+    if (choice == null) return otherwise();
+    // As the page does on open: the second screen shows the game launched.
+    c.read(focusedGameProvider.notifier).state = game;
+    await (debugLaunchGame ?? (context, game, choice, onStarting) => LaunchFlow(context, game, onStarting: onStarting).launch(choice))(context, game, choice, onStarting);
+  } finally {
+    onStarting(null);
+    if (launching.mounted) launching.state = false;
+  }
 }
 
 /// X on a card: selects or unselects it, unless it is busy and not selected.

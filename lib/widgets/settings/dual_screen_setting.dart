@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 
@@ -16,6 +18,8 @@ final dualScreenCardProvider = Provider<bool>(
 );
 
 /// Picks which screen the main app takes; the other one shows the companion.
+/// Not Main on bottom while Retro Toolbox is the home app: moving the main
+/// screen would end the home app and start a second one.
 class DualScreenSetting extends ConsumerWidget {
   const DualScreenSetting({super.key});
 
@@ -23,6 +27,7 @@ class DualScreenSetting extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(dualScreenProvider);
     final notifier = ref.read(dualScreenProvider.notifier);
+    final home = ref.watch(homeModeProvider);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       SettingsSegmentedRow<DualScreenMode>(
         title: 'Layout',
@@ -34,7 +39,9 @@ class DualScreenSetting extends ConsumerWidget {
         ],
         selected: s.mode,
         onChanged: notifier.setMode,
+        disabled: home ? const {DualScreenMode.mainOnBottom} : const {},
       ),
+      if (home) const SettingsInfo(mainOnBottomLockedReason),
       const SettingsInfo(
         'The other screen shows the focused game on a game list, and the Task Manager everywhere else. '
         'Changing which screen is the main one restarts the app there.',

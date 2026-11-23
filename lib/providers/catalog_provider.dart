@@ -13,7 +13,9 @@ import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
@@ -21,6 +23,8 @@ import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_platforms.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
+import 'package:retro_toolbox/services/launcher/games_on_disk.dart';
+import 'package:retro_toolbox/services/launcher/owned_library.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
@@ -66,6 +70,19 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   @visibleForTesting
   int debugGroupBuilds = 0;
 
+  /// How many loose game scans started (a test reads it).
+  @visibleForTesting
+  int debugLooseScans = 0;
+
+  // The loaded console's library listener. Each load replaces it: added to
+  // instead, every load would add one more scan of the whole dir per change.
+  ProviderSubscription<Map<String, LibrarySnapshot>>? _librarySub;
+  // Launcher mode turning off, listened to from the first load that reads it.
+  ProviderSubscription<bool>? _modeSub;
+  // What the load would have said had launcher mode's loose games not stood
+  // in for a failed or empty catalog: said again once none of them is left.
+  String? _catalogFailure;
+
   Future<List<GameGroup>> _groupsOf(List<Game> games) {
     if (!identical(_groupsSource, games)) {
       _groupsSource = games;
@@ -108,6 +125,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<void> loadCatalog(Console console) async {
     final gen = ++_loadGeneration;
+    _catalogFailure = null;
 
     state = state.copyWith(
       loading: true,
@@ -124,33 +142,57 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     try {
       final settings = _ref.read(settingsProvider);
-      final games = await catalogService.loadCatalog(
-        console.id,
-        iaAccessKey: settings.iaAccessKey,
-        iaSecretKey: settings.iaSecretKey,
-        authToken: settings.consoleSettings[console.id]?.authToken,
-        onProgress: (done, total) {
-          if (mounted && gen == _loadGeneration && total > 1) {
-            state = state.copyWith(loadingStatus: 'Reading page $done of $total');
-          }
-        },
-        onStatus: (status) {
-          if (mounted && gen == _loadGeneration) {
-            state = state.copyWith(loadingStatus: status);
-          }
-        },
-      );
+      List<Game> games;
+      Object? failed;
+      try {
+        games = await catalogService.loadCatalog(
+          console.id,
+          iaAccessKey: settings.iaAccessKey,
+          iaSecretKey: settings.iaSecretKey,
+          authToken: settings.consoleSettings[console.id]?.authToken,
+          onProgress: (done, total) {
+            if (mounted && gen == _loadGeneration && total > 1) {
+              state = state.copyWith(loadingStatus: 'Reading page $done of $total');
+            }
+          },
+          onStatus: (status) {
+            if (mounted && gen == _loadGeneration) {
+              state = state.copyWith(loadingStatus: status);
+            }
+          },
+        );
+      } catch (e) {
+        // Launcher mode shows the loose games instead, when there are any;
+        // otherwise it is the load's failure, rethrown below.
+        failed = e;
+        games = const [];
+      }
 
       if (gen != _loadGeneration || !mounted) return;
+      final launcher = await _launcherMode();
+      if (gen != _loadGeneration || !mounted) return;
+      if (failed != null && !launcher) throw failed;
+
+      // The loose games join before LaunchBox matching: one enrich matches
+      // them by file name with the catalog's, and writes its cache once.
+      if (launcher) {
+        final owned = await _scanOwned(console, games);
+        if (gen != _loadGeneration || !mounted) return;
+        // A dir that cannot be listed would read as owning nothing.
+        if (owned.unreadable) {
+          state = state.copyWith(loading: false, loadingStatus: '', errorMessage: 'Cannot read ${_ref.read(settingsProvider.notifier).getDownloadDir(console.id)}');
+          return;
+        }
+        _ref.read(ownedLibraryProvider(console.id).notifier).state = owned;
+        if (failed != null && owned.games.isEmpty) throw failed;
+        if (games.isEmpty) _catalogFailure = failed != null ? _failureMessage(console, failed) : _emptyMessage(console);
+        games = [...games, ...owned.games];
+      }
 
       // A source that answers but lists nothing (blocked, login page, down) is
       // a failure from the user's point of view: say so instead of "0 games".
       if (games.isEmpty) {
-        state = state.copyWith(
-          loading: false,
-          loadingStatus: '',
-          errorMessage: 'No games found for ${console.name}. The catalog source may be unavailable, try again later.',
-        );
+        state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _emptyMessage(console));
         return;
       }
 
@@ -166,6 +208,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         enriched = await _ref.read(launchboxServiceProvider).enrich(console, games, useCovers: await launchboxUseCovers());
         if (gen != _loadGeneration || !mounted) return;
       } while (launchboxGen != _launchboxGen);
+      // The mode may have turned while the dir was scanned or the games were
+      // matched, and its listener found no list to change: the list follows
+      // the mode now. Turned off, the loose games go; turned on, they are
+      // scanned once the list is in.
+      final launcherNow = _ref.read(launcherModeProvider);
+      if (launcher && !launcherNow) {
+        enriched = [for (final g in enriched) if (!g.isLocal) g];
+        if (enriched.isEmpty) {
+          state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _catalogFailure ?? _emptyMessage(console));
+          return;
+        }
+      }
       _console = console;
 
       Set<String> regions = <String>{};
@@ -188,8 +242,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
       final settingsNotifier = _ref.read(settingsProvider.notifier);
       final downloadDir = settingsNotifier.getDownloadDir(console.id);
-      _ref.listen(librarySnapshotProvider(downloadDir), (_, __) {
-        if (state.filter.showInLibraryOnly) {
+      _librarySub?.close();
+      _librarySub = _ref.listen(librarySnapshotProvider(downloadDir), (_, __) async {
+        // The mode now, not the load's: it may have turned on or off since.
+        if (_ref.read(launcherModeProvider)) await _relistLoose();
+        // The scan outlives a notifier disposed meanwhile.
+        if (!mounted) return;
+        if (state.filter.showInLibraryOnly || state.filter.ownedOnly) {
           updateFilteredGames();
         } else {
           _repickShown();
@@ -203,7 +262,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         availableCategories: categories,
         availableGenres: _genresOf(enriched),
       );
-      state = loaded.copyWith(filter: _offeredOnly(loaded));
+      // Launcher mode opens a console on what is on disk. Off, the owned view
+      // is off too: only launcher mode shows its button.
+      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcherNow));
 
       await updateFilteredGames(immediate: true);
       _refocus(enriched);
@@ -223,6 +284,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             distributionTypes: {},
             showFavoritesOnly: false,
             showInLibraryOnly: false,
+            // Nothing owned is the truthful answer of the owned view: kept.
+            ownedOnly: state.filter.ownedOnly,
             sort: state.filter.sort,
             genres: {},
             players: {},
@@ -234,18 +297,100 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
       if (gen != _loadGeneration || !mounted) return;
       state = state.copyWith(loading: false, loadingStatus: '');
+      // Not awaited inside the load: a scan that fails is no failed catalog.
+      if (launcherNow && !launcher) unawaited(_relistLoose().catchError((Object e) => debugPrint('Error listing loose games: $e')));
     } catch (e) {
       debugPrint('Error loading catalog: $e');
       if (gen != _loadGeneration || !mounted) return;
-      final authMessage = console.auth?['auth_message'] as String?;
-      final needsAuth = authMessage != null && RegExp(r'HTTP (401|403|422)').hasMatch(e.toString());
-      state = state.copyWith(
-        loading: false,
-        loadingStatus: '',
-        errorMessage: needsAuth ? authMessage : 'Failed to load catalog: $e',
-        games: [],
-      );
+      state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _failureMessage(console, e), games: []);
     }
+  }
+
+  static String _emptyMessage(Console console) => 'No games found for ${console.name}. The catalog source may be unavailable, try again later.';
+
+  static String _failureMessage(Console console, Object e) {
+    final authMessage = console.auth?['auth_message'] as String?;
+    final needsAuth = authMessage != null && RegExp(r'HTTP (401|403|422)').hasMatch(e.toString());
+    return needsAuth ? authMessage : 'Failed to load catalog: $e';
+  }
+
+  /// [games] as the loaded list. None left (the loose games stood in for a
+  /// failed or empty catalog, and they went) is the load's failure again,
+  /// with its Retry: an empty list would keep the last page on screen.
+  void _setGames(List<Game> games) {
+    if (games.isNotEmpty) {
+      state = state.copyWith(games: games);
+      return;
+    }
+    _filterDebounce?.cancel();
+    state = state.copyWith(
+      games: games,
+      cachedFilteredGames: [],
+      cachedTotalCount: 0,
+      cachedHasMore: false,
+      selectedGames: {},
+      errorMessage: _catalogFailure ?? '',
+    );
+  }
+
+  /// [console]'s loose games, apart from [catalog]'s. In an isolate: the
+  /// catalog's file names are the costly part. Consoles sharing the dir split
+  /// it as [ownFormats] does, from the console list gamesOnDiskProvider reads,
+  /// so the console grid and the list never disagree.
+  Future<OwnedLibrary> _scanOwned(Console console, List<Game> catalog) async {
+    debugLooseScans++;
+    final settings = _ref.read(settingsProvider.notifier);
+    final dir = settings.getDownloadDir(console.id);
+    if (dir.isEmpty) return OwnedLibrary.empty;
+    final sharing = {..._ref.read(appStateProvider).consoles, console.id: console}.values.where((c) => p.equals(settings.getDownloadDir(c.id), dir));
+    final snapshot = await _ref.read(librarySnapshotProvider(dir).notifier).current();
+    return compute(OwnedLibrary.scan, (consoleId: console.id, dir: dir, formats: ownFormats(console, sharing), snapshot: snapshot, catalog: catalog));
+  }
+
+  /// Launcher mode, after the library changed: the loose games found now. A
+  /// different set replaces the shown one and is matched again with the rest.
+  Future<void> _relistLoose() async {
+    final console = _console, games = state.games;
+    if (console == null || games.isEmpty) return;
+    final catalog = [for (final g in games) if (!g.isLocal) g];
+    final owned = await _scanOwned(console, catalog);
+    // The mode may have turned off during the scan: what it found is not shown.
+    if (!mounted || !_ref.read(launcherModeProvider) || !identical(state.games, games) || owned.unreadable) return;
+    _ref.read(ownedLibraryProvider(console.id).notifier).state = owned;
+    if (setEquals({for (final g in games) if (g.isLocal) g.gameId}, {for (final g in owned.games) g.gameId})) return;
+    _setGames([...catalog, ...owned.games]);
+    await reapplyLaunchbox();
+  }
+
+  /// Scans the loaded console's library dir again: the snapshot's listener
+  /// then brings the list up to date. Nothing when no console is loaded.
+  Future<void> rescanLibrary() async {
+    final consoleId = _console?.id;
+    if (consoleId == null) return;
+    final dir = _ref.read(settingsProvider.notifier).getDownloadDir(consoleId);
+    if (dir.isNotEmpty) await _ref.read(librarySnapshotProvider(dir).notifier).refresh();
+  }
+
+  /// Whether launcher mode is on, once its saved config is in.
+  Future<bool> _launcherMode() async {
+    if (!_ref.read(launcherAvailableProvider)) return false;
+    await _ref.read(launchConfigProvider.notifier).loaded;
+    if (!mounted) return false;
+    _modeSub ??= _ref.listen<bool>(launcherModeProvider, (was, on) {
+      if (was == true && !on) _leaveLauncherMode();
+    });
+    return _ref.read(launcherModeProvider);
+  }
+
+  /// Launcher mode turned off with a console loaded: its loose games go, and
+  /// so does the owned view, whose button hides with the mode.
+  void _leaveLauncherMode() {
+    final games = state.games;
+    final loose = games.any((g) => g.isLocal);
+    if (!loose && !state.filter.ownedOnly) return;
+    state = state.copyWith(filter: state.filter.copyWith(ownedOnly: false));
+    if (loose) _setGames([for (final g in games) if (!g.isLocal) g]);
+    updateFilteredGames(immediate: true);
   }
 
   /// Applies LaunchBox data again to the loaded list, after an import or after
@@ -319,11 +464,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<FilterResult> _runFilterAndPaginate({required int skip, required int limit, bool reuseOwned = false}) async {
     final favs = state.filter.showFavoritesOnly ? _ref.read(favoritesProvider).gameIds : null;
-    final grouped = groupsVersions;
+    // The owned view lists every file on disk, ungrouped (FilteringService):
+    // no groups to build for it.
+    final grouped = groupsVersions && !state.filter.ownedOnly;
     final games = state.games;
-    // The library is read for the in-library filter, and to put a version the
-    // user has first among a game's.
-    final lib = state.filter.showInLibraryOnly ? await getLibraryStatus() : null;
+    // The library is read for the in-library filter and the owned view, and
+    // to put a version the user has first among a game's.
+    final lib = state.filter.showInLibraryOnly || state.filter.ownedOnly ? await getLibraryStatus() : null;
     final groups = grouped ? await _groupsOf(games) : null;
     final owned = grouped ? (skip > 0 || reuseOwned ? _listOwned : (_listOwned = await _ownedIds(games))) : null;
 
@@ -357,9 +504,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> _repick() async {
-    // With the in-library filter on, the list is filtered again instead.
+    // With the in-library filter or the owned view on, the list is filtered
+    // again instead.
     final games = state.games, shown = state.paginatedFilteredGames;
-    if (shown.isEmpty || state.filter.showInLibraryOnly || !groupsVersions) return;
+    if (shown.isEmpty || state.filter.showInLibraryOnly || state.filter.ownedOnly || !groupsVersions) return;
     final owned = await _ownedIds(games);
     if (!mounted || !identical(state.games, games) || !identical(state.paginatedFilteredGames, shown)) return;
     // Under a sort by something the version changes (size, rating), the next
@@ -604,6 +752,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     updateFilter(newFilter);
   }
 
+  /// Launcher mode's owned view on or off.
+  void toggleOwnedOnly() => updateFilter(state.filter.copyWith(ownedOnly: !state.filter.ownedOnly));
+
   void toggleLibraryOnly() async {
     final newFilter = state.filter.copyWith(
       showInLibraryOnly: !state.filter.showInLibraryOnly,
@@ -615,24 +766,27 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     updateFilter(state.filter.copyWith(sort: sort));
   }
 
+  /// Every filter off. The owned view is not one of them: it stays as it is.
   void clearFilters() async {
-    updateFilter(const CatalogFilter(
-      regions: {},
-      languages: {},
-      dumpQualities: {},
-      romTypes: {},
-      modifications: {},
-      distributionTypes: {},
+    updateFilter(CatalogFilter(
+      regions: const {},
+      languages: const {},
+      dumpQualities: const {},
+      romTypes: const {},
+      modifications: const {},
+      distributionTypes: const {},
       showFavoritesOnly: false,
       showInLibraryOnly: false,
-      genres: {},
-      players: {},
+      ownedOnly: state.filter.ownedOnly,
+      genres: const {},
+      players: const {},
       minRating: 0,
     ));
   }
 
+  /// The default filters, the owned view as it is.
   void defaultFilters() async {
-    updateFilter(const CatalogFilter());
+    updateFilter(CatalogFilter(ownedOnly: state.filter.ownedOnly));
   }
 
   Future<void> clearCatalogCache([String? consoleId]) async {

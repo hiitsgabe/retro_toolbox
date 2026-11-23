@@ -12,6 +12,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
@@ -96,6 +97,9 @@ void main() {
         gameStateProvider.overrideWith((ref, game) => gs),
         favoritesProvider.overrideWith((ref) => favorites),
         catalogProvider.overrideWith((ref) => catalog),
+        // Play has its own tests (game_details_launch_test.dart); off here,
+        // these games keep the page as it was before launcher mode.
+        launcherAvailableProvider.overrideWithValue(false),
         ...overrides,
       ],
       child: MaterialApp(

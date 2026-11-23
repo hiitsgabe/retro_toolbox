@@ -7,7 +7,9 @@ import 'package:retro_toolbox/utils/formatters.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
+import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
@@ -50,6 +52,7 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
     final gameState = ref.watch(gameStateProvider(widget.game));
     final isSelected = ref.watch(gameSelectionProvider(gameId));
     final shown = widget.selectable && ref.watch(shownOnSecondScreenProvider(gameId));
+    final launcherMode = ref.watch(launcherModeProvider);
 
     // One focus stop per card (A opens the menu); inner controls are
     // ExcludeFocus'd so the d-pad skips them but touch still hits them.
@@ -63,22 +66,29 @@ class _GameRowState extends ConsumerState<GameRow> with JumpTarget<GameRow> {
           focusColor: Colors.transparent, // DpadScope draws the one outline
           autofocus: widget.autofocus,
           onTap: () => tapGameCard(context, ref, widget.game, selectable: widget.selectable, focus: jumpFocus),
+          // In launcher mode a tap launches: a long press is the way to the page.
+          onLongPress: launcherMode ? () => showGameActionMenu(context, widget.game, selectable: widget.selectable) : null,
           child: SecondScreenHighlight(
             shown: shown,
-            child: GameRowBody(
-              game: widget.game,
-              gameState: gameState,
-              isSelected: isSelected,
-              selectable: widget.selectable,
-              isNarrow: widget.isNarrow,
-              sizeColumnWidth: widget.sizeColumnWidth,
-              statusColumnWidth: widget.statusColumnWidth,
-              actionsColumnWidth: widget.actionsColumnWidth,
-              onToggleSelected: () => catalogNotifier.toggleGameSelection(gameId),
-              actions: GameActionButtons(
+            // In launcher mode a long press opens the page: a tooltip under
+            // the finger would take it.
+            child: TooltipVisibility(
+              visible: !launcherMode,
+              child: GameRowBody(
                 game: widget.game,
                 gameState: gameState,
+                isSelected: isSelected,
+                selectable: widget.selectable,
                 isNarrow: widget.isNarrow,
+                sizeColumnWidth: widget.sizeColumnWidth,
+                statusColumnWidth: widget.statusColumnWidth,
+                actionsColumnWidth: widget.actionsColumnWidth,
+                onToggleSelected: () => catalogNotifier.toggleGameSelection(gameId),
+                actions: GameActionButtons(
+                  game: widget.game,
+                  gameState: gameState,
+                  isNarrow: widget.isNarrow,
+                ),
               ),
             ),
           ),
@@ -143,6 +153,10 @@ class GameRowBody extends StatelessWidget {
               ),
             ),
             SizedBox(width: 6),
+          ],
+          if (PlayBadges.of(context) && (gameState.status == GameStatus.downloaded || gameState.status == GameStatus.extracted)) ...[
+            Icon(Icons.play_arrow_rounded, key: const ValueKey('row-play'), size: 18, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 4),
           ],
           // The style's mark too, as its grid cards wear it: the checkbox
           // alone says nothing of the style.

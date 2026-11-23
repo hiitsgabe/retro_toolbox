@@ -22,4 +22,20 @@ void main() {
       expect(await snap.getStatus('Gamma.zip'), LibraryPresence.none);
     });
   }
+
+  test('a file whose real name sanitizeForFat changes is on disk under the name it gives, at its real path', () async {
+    File('${dir.path}/Metroid Prime 4: Beyond.chd').writeAsStringSync('x');
+    final snap = await LibrarySnapshotNotifier(dir.path).current();
+    expect(snap.statusFor('Metroid Prime 4 Beyond.chd'), LibraryPresence.file);
+    expect(snap.presentBaseNames(), contains('Metroid Prime 4 Beyond'));
+    expect(snap.pathFor('Metroid Prime 4 Beyond.chd'), '${dir.path}/Metroid Prime 4: Beyond.chd');
+    expect(snap.pathFor('Beta (USA).gbc'), '${dir.path}/Beta (USA).gbc');
+  });
+
+  test('a real file of the name sanitizeForFat gives wins over the file renamed to it', () async {
+    File('${dir.path}/Metroid Prime 4: Beyond.chd').writeAsStringSync('x');
+    File('${dir.path}/Metroid Prime 4 Beyond.chd').writeAsStringSync('x');
+    final snap = await LibrarySnapshotNotifier(dir.path).current();
+    expect(snap.pathFor('Metroid Prime 4 Beyond.chd'), '${dir.path}/Metroid Prime 4 Beyond.chd');
+  });
 }

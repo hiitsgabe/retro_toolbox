@@ -16,11 +16,15 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/input_mode_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
+import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icon.dart';
 import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
+import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
 import 'package:retro_toolbox/widgets/settings/rows/segmented_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/stepper_row.dart';
@@ -60,6 +64,21 @@ class _FakeDualScreen extends StateNotifier<DualScreenState> implements DualScre
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class _MemoryConfig implements LaunchConfigStore {
+  _MemoryConfig(this.initial);
+
+  final LaunchConfig initial;
+
+  @override
+  Future<LaunchConfig> load() async => initial;
+
+  @override
+  Future<void> save(LaunchConfig config) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 const _psx = Console(id: 'psx', name: 'PlayStation', urls: [], gameFilesFormat: ['.chd']);
 const _snes = Console(id: 'snes', name: 'Super Nintendo', urls: [], gameFilesFormat: ['.sfc']);
 const _switch = Console(
@@ -80,7 +99,14 @@ void main() {
       });
 
   /// Settings over a home page, so leaving Settings has somewhere to go.
-  Future<ProviderContainer> pump(WidgetTester t, {Size size = const Size(1280, 900), String? consoleId, bool? hints, Map<String, Console>? consoles}) async {
+  Future<ProviderContainer> pump(
+    WidgetTester t, {
+    Size size = const Size(1280, 900),
+    String? consoleId,
+    bool? hints,
+    Map<String, Console>? consoles,
+    List<Override> extra = const [],
+  }) async {
     await t.binding.setSurfaceSize(size);
     addTearDown(() => t.binding.setSurfaceSize(null));
     final c = ProviderContainer(overrides: [
@@ -89,6 +115,7 @@ void main() {
       launchboxProvider.overrideWith((ref) => _FakeLaunchbox()),
       favoritesProvider.overrideWith((ref) => _FakeFavorites()),
       dualScreenProvider.overrideWith((ref) => _FakeDualScreen()),
+      ...extra,
     ]);
     addTearDown(c.dispose);
     // Outside the fake-async zone: it reads the (mocked) preferences.
@@ -453,6 +480,27 @@ void main() {
       await t.pump();
       expect(c.read(settingsProvider).consoleSettings['switch']!.updateDecompress, 'none');
     });
+
+    for (final card in [true, false]) {
+      testWidgets('Library ${card ? 'has' : 'has no'} Launcher mode card where launching ${card ? 'works' : 'does not'}', (t) async {
+        saved();
+        await pump(t, extra: [launcherCardProvider.overrideWithValue(card)]);
+        expect(find.text('LAUNCHER MODE'), card ? findsOneWidget : findsNothing);
+        expect(find.byType(LauncherSetting), card ? findsOneWidget : findsNothing);
+      });
+    }
+
+    for (final on in [true, false]) {
+      testWidgets("a console's page ${on ? 'has' : 'has no'} Default emulator with launcher mode ${on ? 'on' : 'off'}", (t) async {
+        saved();
+        await pump(t, consoleId: 'psx', extra: [
+          launcherCardProvider.overrideWithValue(true),
+          launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(_MemoryConfig(LaunchConfig(enabled: on)))),
+          launcherSessionProvider.overrideWith((ref) async => const LauncherSession(presets: [], detected: [])),
+        ]);
+        expect(find.byType(DefaultEmulatorRow), on ? findsOneWidget : findsNothing);
+      });
+    }
 
     testWidgets('the Consoles list names the update changes', (t) async {
       saved(general: {

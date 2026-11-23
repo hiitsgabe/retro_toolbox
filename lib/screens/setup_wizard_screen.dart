@@ -9,6 +9,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/pick.dart';
@@ -17,6 +18,7 @@ import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/settings/console_auth_setting.dart';
 import 'package:retro_toolbox/widgets/settings/ia_credentials_setting.dart';
+import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 /// Where the console catalog comes from: the one in the app, or the user's.
@@ -61,6 +63,10 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   /// Only a choice until Finish: the import is a 110 MB download.
   bool _wantLaunchbox = false;
+
+  /// Only a choice until Finish, which pops with it: the caller opens the
+  /// launcher wizard once this route is gone.
+  bool _wantLauncher = false;
 
   /// Holds the step's body, so a new step can take focus from the button
   /// that moved to it.
@@ -154,13 +160,14 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
 
   Future<void> _finish() => _leave(importMetadata: true);
 
-  /// B on step 0 leaves as a skip: nothing is imported.
+  /// B on step 0 leaves as a skip: nothing is imported, and the launcher
+  /// wizard is not asked for. Pops true when Finish asks for it.
   Future<void> _leave({bool importMetadata = false}) async {
     if (_leaving) return;
     _leaving = true;
     await SetupWizardScreen.markSeen();
     if (importMetadata && _wantLaunchbox && mounted) await _importLaunchbox();
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop(importMetadata && _wantLauncher);
   }
 
   Future<void> _importLaunchbox() async {
@@ -369,6 +376,7 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
     bool authed(Console c) =>
         (settings.consoleSettings[c.id]?.authToken?.isNotEmpty ?? false) || ((c.auth?['token'] as String?)?.isNotEmpty ?? false);
     final metadataOn = ref.watch(launchboxProvider).manifest != null;
+    final launcherOn = ref.watch(launchConfigProvider.select((c) => c.enabled));
     String state(bool on) => on ? 'Connected' : 'Not connected';
 
     final logins = [
@@ -409,6 +417,13 @@ class _SetupWizardScreenState extends ConsumerState<SetupWizardScreen> {
             value: metadataOn || _wantLaunchbox,
             onChanged: metadataOn ? null : (v) => setState(() => _wantLaunchbox = v),
           ),
+          if (ref.watch(launcherCardProvider))
+            OptionToggle(
+              title: 'Launcher mode',
+              subtitle: launcherOn ? 'Already on' : 'Play opens the games you have in an emulator. Set up right after this.',
+              value: launcherOn || _wantLauncher,
+              onChanged: launcherOn ? null : (v) => setState(() => _wantLauncher = v),
+            ),
         ]),
       ],
     );
