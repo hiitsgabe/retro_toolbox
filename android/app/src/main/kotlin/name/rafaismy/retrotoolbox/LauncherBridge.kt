@@ -36,6 +36,7 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
                     }
                 )
                 "openApp" -> result.success(openApp(call.argument<String>("package")))
+                "viewActivity" -> result.success(viewActivity(call.argument<String>("package")))
                 "isHomeHeld" -> result.success(heldNow())
                 "setHome" -> setHome(call.argument<Boolean>("on") == true, result)
                 "openAllFilesAccess" -> result.success(openAllFilesAccess(call.argument<String>("package")))
@@ -350,6 +351,31 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
             true
         } catch (_: Exception) {
             false
+        }
+    }
+
+    /// The activity of [pkg] that a game file goes to when the user added
+    /// the app with "Just open the file": the exported one that answers
+    /// ACTION_VIEW on a content URI of our ROM provider, the shape launch
+    /// builds, of any type and then of the octet-stream type; else the
+    /// package's launcher activity; else null. Dart sends it back as the
+    /// preset's activity, so launch checks it is still exported as for any
+    /// preset.
+    private fun viewActivity(pkg: String?): String? {
+        if (pkg == null) return null
+        return try {
+            val pm = activity.packageManager
+            val uri = Uri.parse("content://${activity.packageName}.roms/rom")
+            for (mime in listOf("*/*", "application/octet-stream")) {
+                val probe = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).setPackage(pkg)
+                @Suppress("DEPRECATION")
+                val hit = pm.queryIntentActivities(probe, 0).firstOrNull { it.activityInfo?.exported == true }
+                if (hit != null) return hit.activityInfo.name
+            }
+            pm.getLaunchIntentForPackage(pkg)?.component?.className
+        } catch (_: Exception) {
+            // Not installed, or the package manager refused: no activity.
+            null
         }
     }
 
