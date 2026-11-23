@@ -321,12 +321,30 @@ void main() {
     test('a saved detection opens what its preset opens in the file in use, and keeps the rest', () async {
       final icon = Uint8List.fromList(const [1, 2, 3]);
       final c = container(LaunchConfig(lastDetected: [
-        DetectedEmulator(presetId: 'ra', variant: 'org.example.ra', label: 'RetroArch', systems: const ['psx'], icon: icon, version: '1.19', pathAccess: false, manageGrant: true),
+        DetectedEmulator(
+          presetId: 'ra',
+          variant: 'org.example.ra',
+          label: 'RetroArch',
+          systems: const ['psx'],
+          icon: icon,
+          version: '1.19',
+          dataDir: '/data/ra',
+          requestsManage: true,
+          pathAccess: false,
+          manageGrant: true,
+          exe: '/usr/bin/flatpak',
+          prefixArgs: const ['run', 'org.example.ra'],
+        ),
       ]));
       final session = await c.read(launcherSessionProvider.future);
       final ra = session.covering('snes').single;
       expect(ra.systems, ['psx', 'snes']);
-      expect((ra.variant, ra.label, ra.icon, ra.version, ra.pathAccess, ra.manageGrant), ('org.example.ra', 'RetroArch', icon, '1.19', false, true));
+      // Every launch after the first session reads this copy: a lost exe or dataDir is a dead Play.
+      expect(
+        (ra.variant, ra.label, ra.icon, ra.version, ra.dataDir, ra.requestsManage, ra.pathAccess, ra.manageGrant, ra.exe),
+        ('org.example.ra', 'RetroArch', icon, '1.19', '/data/ra', true, false, true, '/usr/bin/flatpak'),
+      );
+      expect(ra.prefixArgs, ['run', 'org.example.ra']);
       expect(detector.runs, 0);
     });
 
