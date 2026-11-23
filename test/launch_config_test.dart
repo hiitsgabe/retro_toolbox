@@ -154,6 +154,18 @@ void main() {
       expect(store.saved, hasLength(3));
     });
 
+    test('finishSetup puts a pick over the saved default of the same console', () async {
+      const snes = LaunchChoice(presetId: 'retroarch', variant: 'com.retroarch', core: 'snes9x');
+      const psx = LaunchChoice(presetId: 'retroarch', variant: 'com.retroarch', core: 'swanstation');
+      final store = GatedStore(const LaunchConfig(defaults: {'sony-psx': _duck, 'nintendo-snes': snes}))..gate.complete();
+      final n = LaunchConfigNotifier(store);
+      addTearDown(n.dispose);
+      await n.finishSetup({'sony-psx': psx});
+      expect(n.state.defaults['sony-psx'], psx);
+      expect(n.state.defaults['nintendo-snes'], snes);
+      expect(store.saved.single.defaults['sony-psx'], psx);
+    });
+
     test('setDetected keeps the icons in memory', () async {
       final store = GatedStore(const LaunchConfig())..gate.complete();
       final n = LaunchConfigNotifier(store);

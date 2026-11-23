@@ -299,6 +299,21 @@ void main() {
     });
   });
 
+  testWidgets('Finish puts the pick over the saved default it started on', (t) async {
+    await pump(t, onDisk: {'sony-psx'}, saved: const LaunchConfig(defaults: {'sony-psx': LaunchChoice(presetId: 'ds', variant: 'org.example.ds')}));
+    await next(t);
+    expect(valueOf(t, 'launcher-system-sony-psx'), 'DuckStation');
+    await t.tap(find.byKey(const ValueKey('launcher-system-sony-psx')));
+    await t.pumpAndSettle();
+    await t.tap(inSheet('RetroArch'));
+    await t.pumpAndSettle();
+    await next(t);
+    expect(find.text('Step 3 of 3 · Done'), findsOneWidget);
+    await next(t);
+    expect(popped, [true]);
+    expect(config.saved.last.defaults['sony-psx'], const LaunchChoice(presetId: 'ra', variant: 'org.example.ra'));
+  });
+
   testWidgets('Android: a saf choice brings the Folder access step, with Open <emulator>', (t) async {
     await pump(t, os: 'android', detected: [_ra, _ds, _ppsspp], onDisk: {'sony-psx', 'sony-psp'});
     await next(t);
