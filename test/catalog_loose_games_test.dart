@@ -18,11 +18,13 @@ import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Answers [games], or throws [error] when it is set.
+/// Answers [games] (a console in [others], its own), or throws [error] when
+/// it is set.
 class _FakeCatalogService extends CatalogService {
-  _FakeCatalogService(this.games, {this.error});
+  _FakeCatalogService(this.games, {this.error, this.others = const {}});
   final List<Game> games;
   final Object? error;
+  final Map<String, List<Game>> others;
 
   @override
   Future<List<Game>> loadCatalog(String consoleId,
@@ -32,7 +34,7 @@ class _FakeCatalogService extends CatalogService {
       void Function(int done, int total)? onProgress,
       void Function(String status)? onStatus}) async {
     if (error != null) throw error!;
-    return games;
+    return others[consoleId] ?? games;
   }
 }
 
@@ -66,6 +68,8 @@ class MemoryConfig implements LaunchConfigStore {
 
 const _psx = Console(id: 'psx', name: 'PlayStation', urls: [], originalFormat: ['.chd']);
 const _crash = Game(title: 'Crash Bandicoot (USA)', url: 'https://example.com/Crash%20Bandicoot%20(USA).chd', size: 1, consoleId: 'psx');
+const _snes = Console(id: 'snes', name: 'Super Nintendo', urls: [], originalFormat: ['.sfc']);
+const _mario = Game(title: 'Super Mario World (USA)', url: 'https://example.com/Super%20Mario%20World%20(USA).sfc', size: 1, consoleId: 'snes');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -86,7 +90,7 @@ void main() {
   Future<(ProviderContainer, CatalogNotifier)> setUpCatalog({bool launcher = true, List<Game> games = const [_crash], Object? error, String? dir}) async {
     SharedPreferences.setMockInitialValues({});
     final c = ProviderContainer(overrides: [
-      catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService(games, error: error))),
+      catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService(games, error: error, others: const {'snes': [_mario]}))),
       launcherAvailableProvider.overrideWithValue(true),
       launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(launcher))),
       launchboxServiceProvider.overrideWithValue(launchbox),
@@ -334,6 +338,21 @@ void main() {
     }
     expect(shown(c), ['Spyro (USA)', 'Tekken 3 (USA)']);
     expect(launchbox.enriched.last, ['Crash Bandicoot (USA)', 'Spyro (USA)', 'Tekken 3 (USA)']);
+  });
+
+  test('a library change still being scanned when another console opens never lists the first console\'s games there', () async {
+    touch('Spyro (USA).chd');
+    final snesDir = Directory(p.join(tmp.path, 'snes'))..createSync();
+    final (c, catalog) = await setUpCatalog();
+    await c.read(settingsProvider.notifier).setSetting<String>(AppSettings.downloadDir, snesDir.path, 'snes');
+    await catalog.loadCatalog(_psx);
+    expect(loose(c), ['Spyro (USA)']);
+    touch('Tekken 3 (USA).chd');
+    await c.read(librarySnapshotProvider(tmp.path).notifier).refresh();
+    await catalog.loadCatalog(_snes);
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(loose(c), isEmpty);
+    expect(c.read(catalogProvider).games.map((g) => g.title), ['Super Mario World (USA)']);
   });
 
   test('rescanLibrary reads the loaded console\'s dir again, and the list follows', () async {
