@@ -13,6 +13,11 @@ class CatalogFilter {
   final Set<String> distributionTypes;
   final bool showFavoritesOnly;
   final bool showInLibraryOnly;
+
+  /// Launcher mode's owned view: the games on disk, catalog or loose, every
+  /// version and region of them. Its own header button shows it, so it is not
+  /// one of [changesFromDefault], and Clear and Reset keep it.
+  final bool ownedOnly;
   final CatalogSort sort;
   // LaunchBox fields: a game without LaunchBox data fails any of these.
   final Set<String> genres;
@@ -30,6 +35,7 @@ class CatalogFilter {
     this.distributionTypes = const {'standard', 'multiCart'},
     this.showFavoritesOnly = false,
     this.showInLibraryOnly = false,
+    this.ownedOnly = false,
     this.sort = CatalogSort.name,
     this.genres = const {},
     this.players = const {},
@@ -49,6 +55,7 @@ class CatalogFilter {
     Set<String>? distributionTypes,
     bool? showFavoritesOnly,
     bool? showInLibraryOnly,
+    bool? ownedOnly,
     CatalogSort? sort,
     String? version,
     int? minYear,
@@ -68,6 +75,7 @@ class CatalogFilter {
       distributionTypes: distributionTypes ?? this.distributionTypes,
       showFavoritesOnly: showFavoritesOnly ?? this.showFavoritesOnly,
       showInLibraryOnly: showInLibraryOnly ?? this.showInLibraryOnly,
+      ownedOnly: ownedOnly ?? this.ownedOnly,
       sort: sort ?? this.sort,
       genres: genres ?? this.genres,
       players: players ?? this.players,
