@@ -4,19 +4,27 @@ import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/game_addon_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/disc_sets.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_files.dart';
 import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
+import 'package:retro_toolbox/services/launcher/launch_choice.dart';
+import 'package:retro_toolbox/services/launcher/launch_preset.dart';
+import 'package:retro_toolbox/services/launcher/launch_result.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
+import 'package:retro_toolbox/widgets/game_details/launch_picker.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
@@ -44,6 +52,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
   LaunchboxGame? _launchbox;
   bool _lookingUp = false;
   bool _busy = false;
+
+  /// The emulator a launch is starting, for the Play button's label.
+  String? _starting;
   final _scroll = ScrollController();
 
   /// The Game of each addon (update, DLC, mod), by the addon itself, built once: Game has no ==, and
@@ -82,6 +93,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         if (mounted) setState(() => _lookingUp = false);
       });
     }
+    if (ref.read(launcherAvailableProvider)) ref.read(presetRefreshProvider);
   }
 
   @override
@@ -101,6 +113,63 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     if (mounted) Navigator.pop(context);
   }
 
+  /// Launches with the resolved choice; with none (several emulators cover
+  /// the system and no override was kept), asks which.
+  Future<void> _play() async {
+    await ref.read(launcherSessionProvider.future);
+    final choice = ref.read(resolveChoiceProvider(widget.game));
+    if (choice == null) return _openWith();
+    await _launch(choice);
+  }
+
+  Future<void> _openWith() async {
+    final session = await ref.read(launcherSessionProvider.future);
+    if (!mounted) return;
+    final emulators = session.covering(ref.read(gameSystemProvider(widget.game.consoleId)).slug);
+    if (emulators.isEmpty) return;
+    final picked = await showLaunchPicker(context, session, emulators);
+    if (picked == null || !mounted) return;
+    if (picked.always) ref.read(launchOverridesProvider.notifier).set(widget.game.gameId, picked.emulator.choice);
+    await _launch(picked.emulator.choice);
+  }
+
+  Future<void> _launch(LaunchChoice choice) async {
+    final session = await ref.read(launcherSessionProvider.future);
+    final name = session.detectedFor(choice.presetId)?.label ?? session.preset(choice.presetId)?.name ?? choice.presetId;
+    if (!mounted) return;
+    setState(() => _starting = name);
+    LaunchResult result;
+    try {
+      final owned = await ref.read(ownedGameProvider(widget.game).future);
+      final launcher = await ref.read(gameLauncherProvider.future);
+      result = owned == null ? const LaunchResult(LaunchCode.romUnreadable) : await launcher.launch(owned, choice);
+    } finally {
+      if (mounted) setState(() => _starting = null);
+    }
+    if (mounted) _report(result, name);
+  }
+
+  void _report(LaunchResult result, String emulator) {
+    final (:text, :fix) = result.describe(emulator);
+    if (text == null) return;
+    final action = switch (fix) {
+      LaunchFix.none => null,
+      LaunchFix.detectAgain => SnackBarAction(label: 'Detect again', onPressed: () => ref.invalidate(launcherSessionProvider)),
+      LaunchFix.chooseAnother => SnackBarAction(label: 'Choose another', onPressed: _openWith),
+      LaunchFix.chooseFolder => SnackBarAction(label: 'Choose folder', onPressed: _chooseFolder),
+    };
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text), action: action));
+  }
+
+  /// The library folder, as the setup wizard sets it.
+  Future<void> _chooseFolder() async {
+    final picked = await pickDirectory(context, title: 'Select download folder');
+    if (picked == null) return;
+    final notifier = ref.read(settingsProvider.notifier);
+    await notifier.saveDownloadDirectory(picked);
+    await notifier.setGeneralSetting(AppSettings.downloadDir, picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final game = widget.game;
@@ -113,6 +182,16 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         if (gameActionLabels.containsKey(a)) a,
     ];
 
+    // Play only for a game on disk, and only where launching works.
+    final launcher = ref.watch(launcherAvailableProvider) && (gameState.status == GameStatus.downloaded || gameState.status == GameStatus.extracted);
+    final system = ref.watch(gameSystemProvider(game.consoleId));
+    final session = launcher ? ref.watch(launcherSessionProvider).valueOrNull : null;
+    final noEmulator = session != null && session.covering(system.slug).isEmpty;
+    final choice = launcher ? ref.watch(resolveChoiceProvider(game)) : null;
+    final safChoice = choice != null && ref.watch(launchModeProvider(game)).valueOrNull == RomMode.saf ? session?.detectedFor(choice.presetId) : null;
+    // The folder a saf emulator needs a grant for: the console's library folder.
+    final safFolder = safChoice == null ? null : ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
+
     (String, Widget) section(String title, List<GameAddon> list) {
       final games = [for (final a in list) _addonGames.putIfAbsent(a, () => a.toGame(game))];
       return (title, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -122,13 +201,25 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     }
 
     final error = gameState.errorMessage;
-    // The bar: Start runs the first action, Y favourites, X selects; the
-    // other actions sit beside them. The box art opens from the cover. Focus
-    // starts in the page, at its top, so Down reads it through to the bar.
+    // The bar: Start runs the primary, Y favourites, X selects; the other
+    // actions sit beside them. For a game on disk where launching works the
+    // primary is Play and the first action moves beside the others. The box
+    // art opens from the cover. Focus starts in the page, at its top, so Down
+    // reads it through to the bar.
     final bar = ActionBar(
-      primary: actions.isEmpty ? null : KitAction(gameActionLabels[actions.first]!, () => _run(gameState, actions.first), icon: gameActionIcons[actions.first]),
+      primary: launcher
+          ? KitAction(
+              _starting != null ? 'Starting $_starting' : (noEmulator ? 'No emulator for ${system.name}' : 'Play'),
+              _starting != null || noEmulator ? null : _play,
+              icon: Icons.play_arrow_rounded,
+            )
+          : actions.isEmpty
+              ? null
+              : KitAction(gameActionLabels[actions.first]!, () => _run(gameState, actions.first), icon: gameActionIcons[actions.first]),
       more: [
-        for (final a in actions.skip(1)) KitAction(gameActionLabels[a]!, () => _run(gameState, a), icon: gameActionIcons[a]),
+        if (launcher) KitAction('Open with…', _starting != null || noEmulator ? null : _openWith, icon: Icons.apps_rounded),
+        if (safChoice != null) KitAction('Open ${safChoice.label}', () => ref.read(launcherChannelProvider).openApp(safChoice.variant), icon: Icons.open_in_new_rounded),
+        for (final a in actions.skip(launcher ? 0 : 1)) KitAction(gameActionLabels[a]!, () => _run(gameState, a), icon: gameActionIcons[a]),
         if (widget.selectable && (gameState.isInteractable || isSelected))
           KitAction(
             isSelected ? 'Unselect' : 'Select',
@@ -186,6 +277,9 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
                         children: [
                           Text(gameState.statusText),
                           if (error != null) Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                          // A saf launch carries no grant: an emulator without a folder
+                          // grant fails in its own UI, where we cannot see it.
+                          if (safChoice != null) Text('If ${safChoice.label} says it cannot open the file, give it access to $safFolder'),
                         ],
                       ),
                 discs: game.discs.length >= 2 ? GameDiscList(discs: game.discs) : null,

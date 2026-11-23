@@ -12,6 +12,7 @@ import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
+import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset_store.dart';
 import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
@@ -89,4 +90,15 @@ final ownedGameProvider = FutureProvider.autoDispose.family<OwnedGame?, Game>((r
 final gameLauncherProvider = FutureProvider<GameLauncher>((ref) async {
   final session = await ref.watch(launcherSessionProvider.future);
   return GameLauncher(session: session, systemSlugFor: (consoleId) => ref.read(gameSystemProvider(consoleId)).slug);
+});
+
+/// The ROM mode a launch of [game] with its resolved choice would use, for
+/// the details page's folder-access hint. Null on desktop, or when nothing
+/// would launch.
+final launchModeProvider = FutureProvider.autoDispose.family<RomMode?, Game>((ref, game) async {
+  final choice = ref.watch(resolveChoiceProvider(game));
+  if (choice == null) return null;
+  final owned = await ref.watch(ownedGameProvider(game).future);
+  final launcher = await ref.watch(gameLauncherProvider.future);
+  return owned == null ? null : launcher.modeFor(owned, choice);
 });
