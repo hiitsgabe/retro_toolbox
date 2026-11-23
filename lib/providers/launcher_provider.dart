@@ -23,6 +23,7 @@ import 'package:retro_toolbox/services/launcher/launch_preset_store.dart';
 import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
 import 'package:retro_toolbox/services/launcher/owned_library.dart';
 import 'package:retro_toolbox/services/pick.dart';
@@ -91,18 +92,43 @@ class _Detection {
 
 final _detectionProvider = Provider<_Detection>((ref) => _Detection());
 
-Future<List<DetectedEmulator>> _detect(Ref ref) {
+/// [fresh] never joins a detection already running: that one read its
+/// presets before the caller's change (an emulator just added), so this waits
+/// for it and then detects again.
+Future<List<DetectedEmulator>> _detect(Ref ref, {bool fresh = false}) async {
   final detection = ref.read(_detectionProvider);
+  final stale = fresh ? detection.running : null;
+  if (stale != null) {
+    try {
+      await stale;
+    } catch (_) {
+      // Its own caller hears of the failure; this one only needs it over.
+    }
+  }
   return detection.running ??= () async {
     try {
       final file = await ref.read(launchPresetsProvider.future);
-      final detected = await ref.read(emulatorDetectorProvider).detect(file.presets);
-      await ref.read(launchConfigProvider.notifier).setDetected(detected);
+      final config = ref.read(launchConfigProvider.notifier);
+      // The manual emulators are presets too, and they are in the saved config.
+      await config.loaded;
+      final presets = _presetsInUse(ref, file.presets, ref.read(launchConfigProvider).manual);
+      final detected = await ref.read(emulatorDetectorProvider).detect(presets);
+      await config.setDetected(detected);
       return detected;
     } finally {
       detection.running = null;
     }
   }();
+}
+
+/// The presets in use: the file's, then one per manual emulator, built for
+/// this OS. A generic one takes its consoles' formats from the catalog as it
+/// is now: the catalog loads at start, and a slug it does not know yet opens
+/// any file.
+List<LaunchPreset> _presetsInUse(Ref ref, List<LaunchPreset> file, List<ManualEmulator> manual) {
+  if (manual.isEmpty) return file;
+  final extensions = manual.any((m) => m.isGeneric) ? ref.read(consoleExtensionsProvider) : const <String, List<String>>{};
+  return presetsWithManual(file, manual, os: ref.read(launcherOsProvider), extensions: extensions);
 }
 
 /// Runs a detection, keeps it as the config's lastDetected and rebuilds the
@@ -114,6 +140,26 @@ final detectEmulatorsProvider = Provider<Future<List<DetectedEmulator>> Function
       return detected;
     });
 
+/// Saves a manual emulator, then detects again, so its row comes with what a
+/// detection brings (the icon, the version) and the session lists it. The
+/// detection is a fresh one: a resume may have started one before the save,
+/// which would find everything but the new emulator.
+final addManualEmulatorProvider = Provider<Future<void> Function(ManualEmulator manual)>((ref) => (manual) async {
+      await ref.read(launchConfigProvider.notifier).addManual(manual);
+      await _detect(ref, fresh: true);
+      ref.invalidate(launcherSessionProvider);
+    });
+
+/// Removes the manual emulator [id] with every console default and per-game
+/// override that names it. The overrides are read in first: one dropped
+/// before its file loaded would come back with it.
+final removeManualEmulatorProvider = Provider<Future<void> Function(String id)>((ref) => (id) async {
+      final overrides = ref.read(launchOverridesProvider.notifier);
+      await overrides.loaded;
+      overrides.dropPreset(id);
+      await ref.read(launchConfigProvider.notifier).removeManual(id);
+    });
+
 /// The presets and what of them is installed. The detection is the saved
 /// lastDetected, so opening a page never detects again; only with none saved
 /// yet does this detect, and it saves what it found.
@@ -122,8 +168,14 @@ final launcherSessionProvider = FutureProvider<LauncherSession>((ref) async {
   final config = ref.read(launchConfigProvider.notifier);
   // Until the saved config is in, its lastDetected is not known to be empty.
   await config.loaded;
-  final saved = ref.read(launchConfigProvider).lastDetected;
-  return LauncherSession(presets: file.presets, detected: saved == null ? await _detect(ref) : _asTheFileReads(saved, file.presets));
+  // A manual emulator added or removed is a preset more or less. Watched only
+  // once the saved config is in: watched before, the load itself would mark
+  // this build stale while it waits.
+  final manual = ref.watch(launchConfigProvider.select((c) => c.manual));
+  final state = ref.read(launchConfigProvider);
+  final presets = _presetsInUse(ref, file.presets, manual);
+  final saved = state.lastDetected;
+  return LauncherSession(presets: presets, detected: saved == null ? await _detect(ref) : _asTheFileReads(saved, presets));
 });
 
 /// [saved] as the preset file in use has it. The detection may be older than
@@ -141,6 +193,22 @@ typedef GameSystem = ({String? slug, String name});
 final gameSystemProvider = Provider.family<GameSystem, String>((ref, consoleId) {
   final console = CatalogService.consoleByIdSync(consoleId);
   return (slug: console == null ? null : consoleArtSlug(console), name: console?.name ?? consoleId);
+});
+
+/// Each console art slug of the catalog and the formats its consoles' games
+/// take on disk, lowercase with no dot, merged where consoles share a slug:
+/// what a generic manual emulator opens for a console it was ticked for.
+final consoleExtensionsProvider = Provider<Map<String, List<String>>>((ref) {
+  final bySlug = <String, Set<String>>{};
+  for (final c in ref.watch(appStateProvider.select((s) => s.consoles)).values) {
+    final slug = ref.watch(gameSystemProvider(c.id)).slug;
+    if (slug == null) continue;
+    bySlug.putIfAbsent(slug, () => <String>{}).addAll([
+      for (final f in c.onDiskFormats)
+        if (f.replaceFirst('.', '').isNotEmpty) f.replaceFirst('.', ''),
+    ]);
+  }
+  return {for (final e in bySlug.entries) e.key: e.value.toList()..sort()};
 });
 
 /// Launcher mode's settings: on or off, the console defaults, the last
