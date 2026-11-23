@@ -164,6 +164,12 @@ class Game {
 
   String get gameId => '$consoleId/$filename';
 
+  /// The scheme of a game launcher mode built from a loose file in the
+  /// library dir (see OwnedLibrary): on disk already, never downloaded.
+  static const localScheme = 'local';
+
+  bool get isLocal => url.startsWith('$localScheme://');
+
   /// A box set shows as the box; anything else by its parsed title.
   String get displayTitle => group?.isBoxSet == true ? group!.title : metadata?.displayTitle ?? title;
 

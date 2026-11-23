@@ -37,4 +37,11 @@ class OwnedGame {
     };
     return paths == null ? null : OwnedGame(game: game, dir: dir, paths: paths);
   }
+
+  /// A loose game (see OwnedLibrary): the files [sideMap] keeps for its
+  /// gameId, by their real names. Null when it keeps none.
+  static OwnedGame? fromLoose(Game game, String dir, Map<String, List<String>> sideMap) {
+    final paths = sideMap[game.gameId];
+    return paths == null || paths.isEmpty ? null : OwnedGame(game: game, dir: dir, paths: paths);
+  }
 }
