@@ -57,8 +57,12 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
     private var homeResult: MethodChannel.Result? = null
     private var homeSettingsOpen = false
 
+    /// isHome, not held: after setHome(false) Android keeps reporting the
+    /// role held until it handles the package change, which comes a while
+    /// after the alias went off, and a resume in between would turn home on
+    /// again in Dart.
     private fun heldNow(): Boolean = try {
-        HomeRole.held(activity)
+        HomeRole.isHome(activity)
     } catch (_: Exception) {
         false
     }

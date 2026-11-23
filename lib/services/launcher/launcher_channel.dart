@@ -43,8 +43,9 @@ class LauncherChannel {
     }
   }
 
-  /// Whether Retro Toolbox is the device's home app now. False when it
-  /// cannot tell.
+  /// Whether Retro Toolbox is the device's home app now: offered as one and
+  /// the one picked, so false as soon as setHome(false) answers, even while
+  /// Android still reports the role held. False when it cannot tell.
   Future<bool> isHomeHeld() async {
     try {
       return await _channel.invokeMethod<bool>('isHomeHeld') ?? false;
