@@ -132,10 +132,13 @@ void main() {
     final s = store();
     server.body = presets(version: 5, id: 'fresh');
     await s.refresh();
+    // A body that would validate, so only the status check can refuse it.
     server
       ..etag = null
-      ..status = HttpStatus.internalServerError;
+      ..status = HttpStatus.internalServerError
+      ..body = presets(version: 6, id: 'error');
     await s.refresh();
+    expect(cacheOf(s).readAsStringSync(), presets(version: 5, id: 'fresh'));
     await server.server.close(force: true);
     await s.refresh();
     expect((await s.load()).presets.single.id, 'fresh');
