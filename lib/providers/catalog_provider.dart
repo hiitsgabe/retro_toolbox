@@ -14,6 +14,7 @@ import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
@@ -142,6 +143,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       );
 
       if (gen != _loadGeneration || !mounted) return;
+      final launcher = await _launcherMode();
+      if (gen != _loadGeneration || !mounted) return;
 
       // A source that answers but lists nothing (blocked, login page, down) is
       // a failure from the user's point of view: say so instead of "0 games".
@@ -189,7 +192,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       final settingsNotifier = _ref.read(settingsProvider.notifier);
       final downloadDir = settingsNotifier.getDownloadDir(console.id);
       _ref.listen(librarySnapshotProvider(downloadDir), (_, __) {
-        if (state.filter.showInLibraryOnly) {
+        if (state.filter.showInLibraryOnly || state.filter.ownedOnly) {
           updateFilteredGames();
         } else {
           _repickShown();
@@ -203,7 +206,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         availableCategories: categories,
         availableGenres: _genresOf(enriched),
       );
-      state = loaded.copyWith(filter: _offeredOnly(loaded));
+      // Launcher mode opens a console on what is on disk. Off, the owned view
+      // is off too: only launcher mode shows its button.
+      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcher));
 
       await updateFilteredGames(immediate: true);
       _refocus(enriched);
@@ -223,6 +228,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             distributionTypes: {},
             showFavoritesOnly: false,
             showInLibraryOnly: false,
+            // Nothing owned is the truthful answer of the owned view: kept.
+            ownedOnly: state.filter.ownedOnly,
             sort: state.filter.sort,
             genres: {},
             players: {},
@@ -246,6 +253,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         games: [],
       );
     }
+  }
+
+  /// Whether launcher mode is on, once its saved config is in.
+  Future<bool> _launcherMode() async {
+    if (!_ref.read(launcherAvailableProvider)) return false;
+    await _ref.read(launchConfigProvider.notifier).loaded;
+    return _ref.read(launcherModeProvider);
   }
 
   /// Applies LaunchBox data again to the loaded list, after an import or after
@@ -319,11 +333,13 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<FilterResult> _runFilterAndPaginate({required int skip, required int limit, bool reuseOwned = false}) async {
     final favs = state.filter.showFavoritesOnly ? _ref.read(favoritesProvider).gameIds : null;
-    final grouped = groupsVersions;
+    // The owned view lists every file on disk, ungrouped (FilteringService):
+    // no groups to build for it.
+    final grouped = groupsVersions && !state.filter.ownedOnly;
     final games = state.games;
-    // The library is read for the in-library filter, and to put a version the
-    // user has first among a game's.
-    final lib = state.filter.showInLibraryOnly ? await getLibraryStatus() : null;
+    // The library is read for the in-library filter and the owned view, and
+    // to put a version the user has first among a game's.
+    final lib = state.filter.showInLibraryOnly || state.filter.ownedOnly ? await getLibraryStatus() : null;
     final groups = grouped ? await _groupsOf(games) : null;
     final owned = grouped ? (skip > 0 || reuseOwned ? _listOwned : (_listOwned = await _ownedIds(games))) : null;
 
@@ -357,9 +373,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> _repick() async {
-    // With the in-library filter on, the list is filtered again instead.
+    // With the in-library filter or the owned view on, the list is filtered
+    // again instead.
     final games = state.games, shown = state.paginatedFilteredGames;
-    if (shown.isEmpty || state.filter.showInLibraryOnly || !groupsVersions) return;
+    if (shown.isEmpty || state.filter.showInLibraryOnly || state.filter.ownedOnly || !groupsVersions) return;
     final owned = await _ownedIds(games);
     if (!mounted || !identical(state.games, games) || !identical(state.paginatedFilteredGames, shown)) return;
     // Under a sort by something the version changes (size, rating), the next
@@ -604,6 +621,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     updateFilter(newFilter);
   }
 
+  /// Launcher mode's owned view on or off.
+  void toggleOwnedOnly() => updateFilter(state.filter.copyWith(ownedOnly: !state.filter.ownedOnly));
+
   void toggleLibraryOnly() async {
     final newFilter = state.filter.copyWith(
       showInLibraryOnly: !state.filter.showInLibraryOnly,
@@ -615,24 +635,27 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     updateFilter(state.filter.copyWith(sort: sort));
   }
 
+  /// Every filter off. The owned view is not one of them: it stays as it is.
   void clearFilters() async {
-    updateFilter(const CatalogFilter(
-      regions: {},
-      languages: {},
-      dumpQualities: {},
-      romTypes: {},
-      modifications: {},
-      distributionTypes: {},
+    updateFilter(CatalogFilter(
+      regions: const {},
+      languages: const {},
+      dumpQualities: const {},
+      romTypes: const {},
+      modifications: const {},
+      distributionTypes: const {},
       showFavoritesOnly: false,
       showInLibraryOnly: false,
-      genres: {},
-      players: {},
+      ownedOnly: state.filter.ownedOnly,
+      genres: const {},
+      players: const {},
       minRating: 0,
     ));
   }
 
+  /// The default filters, the owned view as it is.
   void defaultFilters() async {
-    updateFilter(const CatalogFilter());
+    updateFilter(CatalogFilter(ownedOnly: state.filter.ownedOnly));
   }
 
   Future<void> clearCatalogCache([String? consoleId]) async {

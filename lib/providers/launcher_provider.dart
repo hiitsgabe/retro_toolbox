@@ -37,6 +37,10 @@ final launcherAvailableProvider = Provider<bool>((ref) => launcherSupported(
       server: ServerMode.current,
     ));
 
+/// Launcher mode is on: a build that launches, and the config says so. False
+/// until the saved config is in.
+final launcherModeProvider = Provider<bool>((ref) => ref.watch(launcherAvailableProvider) && ref.watch(launchConfigProvider.select((c) => c.enabled)));
+
 /// `Platform.operatingSystem`, as a provider tests can set: the wizard's
 /// Android-only rows and step follow it.
 final launcherOsProvider = Provider<String>((ref) => Platform.operatingSystem);
