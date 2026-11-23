@@ -5,13 +5,17 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/screens/launcher_app_picker_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
+import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/launcher_wizard_plan.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
+import 'package:retro_toolbox/services/launcher/manual_recipes.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
@@ -38,6 +42,12 @@ typedef _Row = ({Console console, String? slug, String dir, List<DetectedEmulato
 class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   int _index = 0;
   bool _detecting = false;
+
+  /// The label of the app being added while its recipe test runs.
+  String? _testing;
+
+  /// Why the last app picked to add was not added.
+  String? _addProblem;
 
   /// What the user picked on a Systems row, by console id; a row not in it
   /// shows [preselect]'s choice.
@@ -81,6 +91,53 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     } finally {
       if (mounted) setState(() => _detecting = false);
     }
+  }
+
+  /// "Add an emulator": an app the user says is an emulator, paired with a
+  /// recipe. Saved, then detected like the rest, so its row comes with what
+  /// a detection brings. Left anywhere on the way, nothing changes.
+  Future<void> _addEmulator(LauncherSession session) async {
+    setState(() => _addProblem = null);
+    final manual = await _pickAndroid(session);
+    if (manual == null || !mounted) return;
+    setState(() => _detecting = true);
+    try {
+      await ref.read(addManualEmulatorProvider)(manual);
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
+  }
+
+  Future<ManualEmulator?> _pickAndroid(LauncherSession session) async {
+    final app = await Navigator.of(context).push<({String package, AppInfo info})>(
+      MaterialPageRoute(builder: (_) => LauncherAppPickerScreen(exclude: {for (final d in session.detected) d.variant})),
+    );
+    if (app == null || !mounted) return null;
+    final label = app.info.label;
+    setState(() => _testing = label);
+    final file = await ref.read(launchPresetsProvider.future);
+    final recipes = await androidRecipesFor(ref.read(launcherChannelProvider), file.presets, app.package);
+    if (!mounted) return null;
+    setState(() => _testing = null);
+    final recipe = await _chooseRecipe(label, recipes);
+    if (recipe == null || !mounted) return null;
+    return ManualEmulator(variant: app.package, label: label, recipe: recipe);
+  }
+
+  /// The ways to open an app being added: each recipe that fits it, the
+  /// first focused even when it is the only one, so the pick is always the
+  /// user's. Null when the menu is closed, or when nothing fits (the step
+  /// then says so).
+  Future<String?> _chooseRecipe(String label, List<LaunchPreset> recipes) async {
+    if (recipes.isEmpty) {
+      setState(() => _addProblem = '$label cannot be opened by Retro Toolbox.');
+      return null;
+    }
+    String? picked;
+    await showRowMenu(context, title: label, subtitle: 'Opens games', items: [
+      for (final r in recipes) RowMenuItem('Opens like ${r.name}', () => picked = r.id, subtitle: r.verified ? null : 'not tested'),
+    ]);
+    return picked;
   }
 
   /// The consoles with games on disk, in catalog order; null while any of
@@ -132,7 +189,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
       ];
 
   bool _canAdvance(_Step step, LauncherSession? session, List<_Row>? rows) => switch (step) {
-        _Step.emulators => !_detecting && session != null && session.detected.isNotEmpty,
+        _Step.emulators => !_detecting && _testing == null && session != null && session.detected.isNotEmpty,
         // No console with games yet still lets the mode on: a game downloaded
         // later opens in the one emulator that covers it, or asks which.
         _Step.systems => session != null && rows != null && (rows.isEmpty || _picks(session, rows).isNotEmpty),
@@ -232,8 +289,11 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   Widget _emulatorsStep(BuildContext context, LauncherSession? session) {
     final t = KitType.of(context);
     final detected = session?.detected ?? const <DetectedEmulator>[];
+    final busy = _detecting || _testing != null;
     final Widget found;
-    if (_detecting || session == null) {
+    if (_testing != null) {
+      found = StatusPanel.working(items: [WorkItem('Testing $_testing')]);
+    } else if (_detecting || session == null) {
       found = const StatusPanel.working(items: [WorkItem('Looking for emulators')]);
     } else if (detected.isEmpty) {
       final slugs = {
@@ -251,8 +311,16 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
       start: [
         const KitLabel('On this device'),
         found,
+        if (_addProblem != null) KitPanel(padding: const EdgeInsets.all(12), children: [Text(_addProblem!, style: t.body)]),
         OptionList(children: [
-          OptionAction(title: 'Detect again', subtitle: 'After installing or removing an emulator', autofocus: true, onTap: _detecting ? null : _detect),
+          OptionAction(title: 'Detect again', subtitle: 'After installing or removing an emulator', autofocus: true, onTap: busy ? null : _detect),
+          if (_android)
+            OptionAction(
+              key: const ValueKey('launcher-add'),
+              title: 'Add an emulator',
+              subtitle: 'For one that was not found',
+              onTap: busy || session == null ? null : () => _addEmulator(session),
+            ),
         ]),
       ],
       end: [
