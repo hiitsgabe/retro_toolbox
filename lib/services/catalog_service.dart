@@ -68,6 +68,10 @@ class CatalogService {
     return null;
   }
 
+  /// Every console of the in-memory cache, by id, as [consoleByIdSync] finds
+  /// them. Empty before the first getConsoles call.
+  static Map<String, Console> consolesSync() => {for (final consoles in _consolesCache.values) ...consoles};
+
   static String _nameToId(String name) {
     return name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
   }
