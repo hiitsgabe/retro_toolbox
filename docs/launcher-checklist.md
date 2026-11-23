@@ -172,6 +172,45 @@ separate app from the release one.
     Main on top and HOME on, the companion opens on the other screen, closes
     when an emulator starts and opens again on the way back.
 
+## Emulators added by hand
+
+The tests pin what Dart sends: the recipe test is `detect` with the picked
+package under every Android recipe's activity, and `viewActivity` answers a
+class name or null. Only a device shows what the picked app does with it.
+Note the app, its package and the Android version on each item.
+
+37. **Add with a recipe (Android).** Install an emulator under a package the
+    preset file does not list (a fork, a renamed build). Settings > Launcher
+    mode > Set up > Add an emulator: the list holds every app with an icon,
+    but not Retro Toolbox and not the emulators already found. Pick it:
+    "Testing <app>" shows, then a menu with "Opens like <preset>" for each
+    preset whose activity the app has, the first one focused, and "Just open
+    the file". Pick a preset: the Emulators step lists the app with its icon,
+    its version and "added by you". Finish, then Play on a game of its
+    console opens it.
+38. **Just open the file (Android).** Add an app no recipe fits that opens
+    files (a file viewer, or an emulator with an open-file entry): pick "Just
+    open the file", tick a console that has games, Add. The wizard shows no
+    Folder access step for it. Play on one of its games opens the app with
+    the game file, with no folder to set up. Note whether the app answered
+    ACTION_VIEW (it opened the file) or only its launcher activity was found
+    (it opened on its own screen). Tick a disc console too and play a cue
+    game: the app gets the cue alone through our provider, with no grant on
+    the bins beside it; note whether it plays or says the tracks are missing.
+39. **Gone, then back.** Uninstall an app added by hand and press Detect
+    again: its row is gone, and Play on its consoles uses another emulator
+    or says none. Install it again and press Detect again: the row and its
+    console defaults are back.
+40. **Remove.** Tap the row of an app added by hand, then Remove: the row
+    goes, and Play on a game that used it opens in the one emulator left for
+    its console, or asks which.
+41. **Desktop.** Add an emulator and pick an executable the find rules do
+    not reach (a renamed AppImage, a portable build): the presets whose find
+    rules name the file come first in the menu. Pick one: Play opens a game
+    in it. Move the file away and press Detect again: the row is gone. On
+    macOS pick an `.app`: it is added under the bundle's name and Play runs
+    the binary inside it.
+
 ## One row per Android preset
 
 For each preset: install the emulator, launch one single-file game and one

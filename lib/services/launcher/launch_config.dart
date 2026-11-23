@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Launcher mode's own settings, apart from AppSettings as dual screen keeps
@@ -11,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// the last detection found.
 @immutable
 class LaunchConfig {
-  const LaunchConfig({this.enabled = false, this.home = false, this.defaults = const {}, this.lastDetected});
+  const LaunchConfig({this.enabled = false, this.home = false, this.defaults = const {}, this.lastDetected, this.manual = const []});
 
   final bool enabled;
 
@@ -25,11 +26,23 @@ class LaunchConfig {
   /// Null until the first detection. Saved without icons.
   final List<DetectedEmulator>? lastDetected;
 
-  LaunchConfig copyWith({bool? enabled, bool? home, Map<String, LaunchChoice>? defaults, List<DetectedEmulator>? lastDetected}) => LaunchConfig(
+  /// The emulators the user added by hand, each a preset of its own
+  /// (presetsWithManual).
+  final List<ManualEmulator> manual;
+
+  LaunchConfig copyWith({
+    bool? enabled,
+    bool? home,
+    Map<String, LaunchChoice>? defaults,
+    List<DetectedEmulator>? lastDetected,
+    List<ManualEmulator>? manual,
+  }) =>
+      LaunchConfig(
         enabled: enabled ?? this.enabled,
         home: home ?? this.home,
         defaults: defaults ?? this.defaults,
         lastDetected: lastDetected ?? this.lastDetected,
+        manual: manual ?? this.manual,
       );
 
   Map<String, Object?> toJson() => {
@@ -37,13 +50,14 @@ class LaunchConfig {
         'home': home,
         'defaults': {for (final e in defaults.entries) e.key: e.value.toJson()},
         if (lastDetected != null) 'lastDetected': [for (final d in lastDetected!) d.toJson()],
+        'manual': [for (final m in manual) m.toJson()],
       };
 
   /// What [j] holds, a bad default or detection left out; anything that is
   /// not a saved config reads as the default one.
   static LaunchConfig fromJson(Object? j) {
     if (j is! Map) return const LaunchConfig();
-    final defaults = j['defaults'], detected = j['lastDetected'];
+    final defaults = j['defaults'], detected = j['lastDetected'], manual = j['manual'];
     return LaunchConfig(
       enabled: j['enabled'] == true,
       home: j['home'] == true,
@@ -58,6 +72,11 @@ class LaunchConfig {
                 if (DetectedEmulator.fromJson(d) != null) DetectedEmulator.fromJson(d)!,
             ]
           : null,
+      manual: [
+        if (manual is List)
+          for (final m in manual)
+            if (ManualEmulator.fromJson(m) != null) ManualEmulator.fromJson(m)!,
+      ],
     );
   }
 }
@@ -129,4 +148,24 @@ class LaunchConfigNotifier extends StateNotifier<LaunchConfig> {
 
   /// What Android says: Retro Toolbox is the home app or not.
   Future<void> setHome(bool home) => _update((c) => c.copyWith(home: home));
+
+  /// [m] after the others, or in the place of the one with its id: adding
+  /// the same app again changes how it opens, and never lists it twice.
+  Future<void> addManual(ManualEmulator m) => _update((c) => c.copyWith(manual: [
+        for (final e in c.manual) e.id == m.id ? m : e,
+        if (!c.manual.any((e) => e.id == m.id)) m,
+      ]));
+
+  /// Drops the manual emulator [id], every console default that names it and
+  /// its saved detection, so no default points at nothing. The per-game
+  /// overrides have their own file: removeManualEmulatorProvider drops
+  /// those.
+  Future<void> removeManual(String id) => _update((c) => c.copyWith(
+        manual: [for (final e in c.manual) if (e.id != id) e],
+        defaults: {
+          for (final e in c.defaults.entries)
+            if (e.value.presetId != id) e.key: e.value,
+        },
+        lastDetected: c.lastDetected == null ? null : [for (final d in c.lastDetected!) if (d.presetId != id) d],
+      ));
 }

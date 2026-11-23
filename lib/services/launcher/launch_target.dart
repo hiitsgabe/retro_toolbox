@@ -76,7 +76,7 @@ LaunchTarget resolveLaunchTarget(OwnedGame game, PresetSystem system) {
   final ranked = [...candidates]..sort((a, b) => _rank(a) != _rank(b) ? _rank(a).compareTo(_rank(b)) : byKey(a, b));
   final accepted = system.extensions.toSet();
   for (final c in ranked) {
-    if (!accepted.contains(_ext(c))) continue;
+    if (accepted.isNotEmpty && !accepted.contains(_ext(c))) continue;
     return LaunchTarget(c, discs: _ext(c) == 'm3u' ? _m3uDiscs(c) : const []);
   }
   return LaunchTarget.unsupported(_ext(ranked.first));

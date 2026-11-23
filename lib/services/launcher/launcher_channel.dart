@@ -77,6 +77,20 @@ class LauncherChannel {
           if (call.method == 'home') onHome();
         });
 
+  /// The activity of [package] that a file is handed to when no recipe fits
+  /// it: the one that answers ACTION_VIEW on a content URI, else its launcher
+  /// activity. Null when it has neither, or when unsupported.
+  Future<String?> viewActivity(String package) async {
+    try {
+      final reply = await _channel.invokeMethod<Object?>('viewActivity', {'package': package});
+      return reply is String && reply.isNotEmpty ? reply : null;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
   /// Opens [package] the way its launcher icon does. False when it cannot.
   Future<bool> openApp(String package) async {
     try {

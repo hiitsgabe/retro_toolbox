@@ -119,6 +119,14 @@ void main() {
     expect(t.unsupportedExtension, isNull);
   });
 
+  test('a system with no extensions opens any file, the best ranked one first', () {
+    final bin = touch('Spyro/Spyro.bin');
+    final cue = touch('Spyro/Spyro.cue');
+    expect(resolveLaunchTarget(owned('Spyro.zip', [bin, cue]), system(const [])).path, cue);
+    final zip = touch('Ridge Racer.zip');
+    expect(resolveLaunchTarget(owned('Ridge Racer.zip', [zip]), system(const [])).path, zip);
+  });
+
   group('OwnedGame.fromPresence', () {
     LibrarySnapshot snap(Map<String, List<String>> related) =>
         LibrarySnapshot(libraryDir: dir, exactFiles: const {}, baseNames: const {}, relatedFiles: related, timestamp: DateTime(2026));

@@ -6,8 +6,11 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
@@ -18,6 +21,7 @@ import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
 
 /// Keeps overrides in memory; [saved] records what would be written.
@@ -72,23 +76,48 @@ class MemoryConfig implements LaunchConfigStore {
 }
 
 /// Answers every detection with [next], once [gate] completes when one is
-/// set, and counts them.
+/// set, counts them, and keeps the preset ids each one was asked about.
 class CountingDetector implements EmulatorDetector {
   CountingDetector(this.next);
 
   List<DetectedEmulator> next;
   Completer<void>? gate;
   int runs = 0;
+  final asked = <List<String>>[];
 
   @override
   Future<List<DetectedEmulator>> detect(List<LaunchPreset> presets) async {
     runs++;
+    asked.add([for (final p in presets) p.id]);
     await gate?.future;
     return next;
   }
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
+  FakeApp(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// A detector as a device is: of [next] it finds only what it was asked
+/// about, so a detection started before an add cannot find the new one.
+class AskedOnlyDetector extends CountingDetector {
+  AskedOnlyDetector(super.next);
+
+  @override
+  Future<List<DetectedEmulator>> detect(List<LaunchPreset> presets) async {
+    final found = await super.detect(presets);
+    final ids = {for (final p in presets) p.id};
+    return [
+      for (final d in found)
+        if (ids.contains(d.presetId)) d,
+    ];
+  }
 }
 
 LaunchPreset _preset(String id, List<String> systems) => LaunchPreset.fromJson({
@@ -394,6 +423,151 @@ void main() {
       final c = container(LaunchConfig(lastDetected: [emu('ds', ['psx']), emu('gone', ['psx']), emu('ra', ['psx'])]));
       final session = await c.read(launcherSessionProvider.future);
       expect([for (final d in session.detected) d.presetId], ['ra', 'ds']);
+    });
+  });
+
+  group('LaunchOverridesNotifier.dropPreset', () {
+    const mine = LaunchChoice(presetId: 'manual-org.example.fork', variant: 'org.example.fork');
+    const other = LaunchChoice(presetId: 'ds', variant: 'org.example.ds');
+
+    test('drops every override that names the preset and saves the rest', () async {
+      final store = MemoryOverrides({'psx/a.chd': mine, 'psx/b.chd': other, 'psx/c.chd': mine});
+      final n = LaunchOverridesNotifier(store);
+      addTearDown(n.dispose);
+      await n.loaded;
+      n.dropPreset(mine.presetId);
+      expect(n.state, {'psx/b.chd': other});
+      expect(store.saved.single, {'psx/b.chd': other});
+    });
+
+    test('with none naming it nothing is written', () async {
+      final store = MemoryOverrides({'psx/b.chd': other});
+      final n = LaunchOverridesNotifier(store);
+      addTearDown(n.dispose);
+      await n.loaded;
+      n.dropPreset(mine.presetId);
+      expect(n.state, {'psx/b.chd': other});
+      expect(store.saved, isEmpty);
+    });
+  });
+
+  group('manual emulators', () {
+    LaunchPreset android(String id, List<String> systems) => LaunchPreset.fromJson({
+          'id': id,
+          'name': id,
+          'systems': {
+            for (final s in systems) s: {'extensions': ['chd']},
+          },
+          'android': {'packages': ['org.example.$id'], 'activity': 'org.example.$id.Main', 'action': 'android.intent.action.VIEW', 'rom': {'mode': 'provider'}},
+        });
+    final file = LaunchPresetFile(schema: 1, version: 1, presets: [android('ra', ['psx', 'snes']), android('ds', ['psx'])]);
+    const fork = ManualEmulator(variant: 'org.example.fork', label: 'Fork', recipe: 'ds');
+
+    late CountingDetector detector;
+    late MemoryConfig store;
+    late MemoryOverrides overrides;
+
+    ProviderContainer container(LaunchConfig saved, {Map<String, LaunchChoice> games = const {}, Map<String, List<String>> extensions = const {}}) {
+      store = MemoryConfig(saved);
+      overrides = MemoryOverrides(games);
+      final c = ProviderContainer(overrides: [
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(store)),
+        launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(overrides)),
+        launchPresetsProvider.overrideWith((ref) async => file),
+        emulatorDetectorProvider.overrideWithValue(detector),
+        launcherOsProvider.overrideWithValue('android'),
+        consoleExtensionsProvider.overrideWithValue(extensions),
+      ]);
+      addTearDown(c.dispose);
+      return c;
+    }
+
+    setUp(() => detector = CountingDetector([emu('ds', ['psx'])]));
+
+    test('the session lists a manual emulator after the file presets, and the detection is asked about it', () async {
+      final c = container(const LaunchConfig(manual: [fork]));
+      final session = await c.read(launcherSessionProvider.future);
+      expect([for (final p in session.presets) p.id], ['ra', 'ds', fork.id]);
+      expect(detector.asked.single, ['ra', 'ds', fork.id]);
+      expect(session.preset(fork.id)!.android!.packages, ['org.example.fork']);
+    });
+
+    test('a saved detection of a manual emulator stays while it is configured, in preset order', () async {
+      final c = container(LaunchConfig(manual: const [fork], lastDetected: [emu(fork.id, ['psx']), emu('ds', ['psx'])]));
+      final session = await c.read(launcherSessionProvider.future);
+      expect([for (final d in session.detected) d.presetId], ['ds', fork.id]);
+      expect(detector.runs, 0);
+    });
+
+    test('adding one saves it, detects again and the session has it; removing it rebuilds the session without it', () async {
+      final c = container(LaunchConfig(lastDetected: [emu('ds', ['psx'])]));
+      expect([for (final p in (await c.read(launcherSessionProvider.future)).presets) p.id], ['ra', 'ds']);
+      detector.next = [emu('ds', ['psx']), emu(fork.id, ['psx'])];
+      await c.read(addManualEmulatorProvider)(fork);
+      final added = await c.read(launcherSessionProvider.future);
+      expect([for (final p in added.presets) p.id], ['ra', 'ds', fork.id]);
+      expect(added.detectedFor(fork.id), isNotNull);
+      expect(detector.asked.single, contains(fork.id), reason: 'the detection after the add knows the new preset');
+      expect(store.saved.last.manual.single.id, fork.id);
+      await c.read(removeManualEmulatorProvider)(fork.id);
+      final removed = await c.read(launcherSessionProvider.future);
+      expect([for (final p in removed.presets) p.id], ['ra', 'ds']);
+      expect(removed.detectedFor(fork.id), isNull);
+      expect(detector.runs, 1, reason: 'removing detects nothing');
+    });
+
+    test('an add while a detection runs waits for it, then detects again with the new preset', () async {
+      detector = AskedOnlyDetector([emu('ds', ['psx']), emu(fork.id, ['psx'])]);
+      final c = container(LaunchConfig(lastDetected: [emu('ds', ['psx'])]));
+      await c.read(launcherSessionProvider.future);
+      // What a resume in launcher mode starts, and the desktop file dialog's
+      // focus coming back is a resume.
+      detector.gate = Completer<void>();
+      final resumed = c.read(detectEmulatorsProvider)();
+      await pumpEventQueue();
+      expect(detector.asked.single, ['ra', 'ds'], reason: 'the running detection read its presets before the add');
+      final added = c.read(addManualEmulatorProvider)(fork);
+      await pumpEventQueue();
+      detector.gate!.complete();
+      await resumed;
+      await added;
+      expect(detector.asked.last, contains(fork.id), reason: 'the add did not join the detection that predates it');
+      expect((await c.read(launcherSessionProvider.future)).detectedFor(fork.id), isNotNull);
+    });
+
+    test('removing one drops the console defaults and the game overrides that name it, and keeps the rest', () async {
+      final mine = LaunchChoice(presetId: fork.id, variant: 'org.example.fork');
+      const other = LaunchChoice(presetId: 'ds', variant: 'org.example.ds');
+      final c = container(
+        LaunchConfig(manual: const [fork], defaults: {'sony-psx': mine, 'nintendo-snes': other}, lastDetected: const []),
+        games: {'psx/a.chd': mine, 'psx/b.chd': other},
+      );
+      await c.read(removeManualEmulatorProvider)(fork.id);
+      expect(c.read(launchConfigProvider).defaults, {'nintendo-snes': other});
+      expect(c.read(launchOverridesProvider), {'psx/b.chd': other});
+      expect(overrides.saved.last, {'psx/b.chd': other});
+    });
+
+    test('a generic one opens its ticked consoles with the catalog formats of each, and any file where none is known', () async {
+      const viewer = ManualEmulator(variant: 'org.example.viewer', label: 'Viewer', recipe: ManualEmulator.generic, systems: ['psx', 'saturn'], activity: 'org.example.viewer.Open');
+      final c = container(const LaunchConfig(manual: [viewer], lastDetected: []), extensions: {'psx': ['chd', 'cue']});
+      final preset = (await c.read(launcherSessionProvider.future)).preset(viewer.id)!;
+      expect(preset.systems['psx']!.extensions, ['chd', 'cue']);
+      expect(preset.systems['saturn']!.extensions, isEmpty);
+    });
+
+    test('consoleExtensionsProvider: each art slug and the on-disk formats of its consoles, without the dot, merged', () {
+      final c = ProviderContainer(overrides: [
+        appStateProvider.overrideWith((ref) => FakeApp(const AppState(consoles: {
+              'a': Console(id: 'a', name: 'PS one', urls: [], originalFormat: ['.zip'], gameFilesFormat: ['.CUE']),
+              'b': Console(id: 'b', name: 'PS two', urls: [], gameFilesFormat: ['.pbp']),
+              'c': Console(id: 'c', name: 'Unknown', urls: [], gameFilesFormat: ['.bin']),
+            }))),
+        gameSystemProvider.overrideWith((ref, id) => (slug: id == 'c' ? null : 'psx', name: id)),
+      ]);
+      addTearDown(c.dispose);
+      // a: the zip it comes as, the cue inside, and the chd that Convert to CHD writes from a cue.
+      expect(c.read(consoleExtensionsProvider), {'psx': ['chd', 'cue', 'pbp', 'zip']});
     });
   });
 }

@@ -1,23 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/screens/launcher_app_picker_screen.dart';
+import 'package:retro_toolbox/screens/launcher_console_picker_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
+import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/launcher_wizard_plan.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
+import 'package:retro_toolbox/services/launcher/manual_recipes.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 enum _Step { emulators, systems, folders, home, done }
+
+/// The desktop file picker of "Add an emulator", as a provider tests can set.
+final pickExecutableProvider = Provider<Future<String?> Function(BuildContext context)>((ref) => (context) => pickFile(context, title: 'Choose the emulator'));
 
 /// Launcher mode's setup: which emulators are installed, which one opens
 /// each console with games on disk, the folder grants a `saf` emulator needs
@@ -38,6 +48,12 @@ typedef _Row = ({Console console, String? slug, String dir, List<DetectedEmulato
 class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   int _index = 0;
   bool _detecting = false;
+
+  /// The label of the app being added while its recipe test runs.
+  String? _testing;
+
+  /// Why the last app picked to add was not added.
+  String? _addProblem;
 
   /// What the user picked on a Systems row, by console id; a row not in it
   /// shows [preselect]'s choice.
@@ -81,6 +97,100 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     } finally {
       if (mounted) setState(() => _detecting = false);
     }
+  }
+
+  /// "Add an emulator": an app (Android) or an executable (desktop) the user
+  /// says is an emulator, paired with a recipe or with none. Saved, then
+  /// detected like the rest, so its row comes with what a detection brings.
+  /// Left anywhere on the way, nothing changes.
+  Future<void> _addEmulator(LauncherSession session) async {
+    setState(() => _addProblem = null);
+    final manual = _android ? await _pickAndroid(session) : await _pickDesktop();
+    if (manual == null || !mounted) return;
+    setState(() => _detecting = true);
+    try {
+      await ref.read(addManualEmulatorProvider)(manual);
+    } finally {
+      if (mounted) setState(() => _detecting = false);
+    }
+  }
+
+  /// An emulator added by hand. Remove also drops the console defaults and
+  /// game choices that name it, and a Systems pick of it, so none points at
+  /// nothing.
+  Future<void> _manualMenu(DetectedEmulator d) => showRowMenu(context, title: d.label, subtitle: 'Added by you', items: [
+        RowMenuItem(
+          'Remove',
+          () {
+            setState(() => _chosen.removeWhere((_, c) => c.presetId == d.presetId));
+            ref.read(removeManualEmulatorProvider)(d.presetId);
+          },
+          icon: Icons.delete_outline,
+          destructive: true,
+          subtitle: 'Consoles and games set to it choose again',
+        ),
+      ]);
+
+  Future<ManualEmulator?> _pickAndroid(LauncherSession session) async {
+    final app = await Navigator.of(context).push<({String package, AppInfo info})>(
+      MaterialPageRoute(builder: (_) => LauncherAppPickerScreen(exclude: {for (final d in session.detected) d.variant})),
+    );
+    if (app == null || !mounted) return null;
+    final label = app.info.label;
+    setState(() => _testing = label);
+    final file = await ref.read(launchPresetsProvider.future);
+    final channel = ref.read(launcherChannelProvider);
+    final recipes = await androidRecipesFor(channel, file.presets, app.package);
+    final activity = await channel.viewActivity(app.package);
+    if (!mounted) return null;
+    setState(() => _testing = null);
+    // A generic launch needs an activity to send the file to: without one it
+    // is not offered.
+    final recipe = await _chooseRecipe(label, recipes, generic: activity != null);
+    if (recipe == null || !mounted) return null;
+    return _withSystems(ManualEmulator(variant: app.package, label: label, recipe: recipe, activity: recipe == ManualEmulator.generic ? activity : null));
+  }
+
+  /// The recipes come with the ones whose find rules name the picked file
+  /// first; "Just open the file" is always there, since any executable can
+  /// be handed the path.
+  Future<ManualEmulator?> _pickDesktop() async {
+    final os = ref.read(launcherOsProvider);
+    final picked = await ref.read(pickExecutableProvider)(context);
+    if (picked == null || !mounted) return null;
+    final exe = await executableFor(picked, os);
+    final file = await ref.read(launchPresetsProvider.future);
+    if (!mounted) return null;
+    final label = p.basenameWithoutExtension(picked);
+    final recipe = await _chooseRecipe(label, desktopRecipesFor(file.presets, os, picked), generic: true);
+    if (recipe == null || !mounted) return null;
+    return _withSystems(ManualEmulator(variant: exe, label: label, recipe: recipe));
+  }
+
+  /// A generic [m] with the consoles the user ticks for it; one with a recipe
+  /// as it is. Null when the console list is left.
+  Future<ManualEmulator?> _withSystems(ManualEmulator m) async {
+    if (!m.isGeneric) return m;
+    final ticked = await Navigator.of(context).push<List<String>>(MaterialPageRoute(builder: (_) => LauncherConsolePickerScreen(label: m.label)));
+    if (ticked == null || ticked.isEmpty) return null;
+    return ManualEmulator(variant: m.variant, label: m.label, recipe: m.recipe, systems: ticked, activity: m.activity);
+  }
+
+  /// The ways to open an app being added: each recipe that fits it, then
+  /// "Just open the file" when [generic], the first focused even when it is
+  /// the only one, so the pick is always the user's. Null when the menu is
+  /// closed, or when nothing fits (the step then says so).
+  Future<String?> _chooseRecipe(String label, List<LaunchPreset> recipes, {required bool generic}) async {
+    if (recipes.isEmpty && !generic) {
+      setState(() => _addProblem = '$label cannot be opened by Retro Toolbox.');
+      return null;
+    }
+    String? picked;
+    await showRowMenu(context, title: label, subtitle: 'Opens games', items: [
+      for (final r in recipes) RowMenuItem('Opens like ${r.name}', () => picked = r.id, subtitle: r.verified ? null : 'not tested'),
+      if (generic) RowMenuItem('Just open the file', () => picked = ManualEmulator.generic, subtitle: 'Hands it the game file, for an app no recipe fits'),
+    ]);
+    return picked;
   }
 
   /// The consoles with games on disk, in catalog order; null while any of
@@ -132,7 +242,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
       ];
 
   bool _canAdvance(_Step step, LauncherSession? session, List<_Row>? rows) => switch (step) {
-        _Step.emulators => !_detecting && session != null && session.detected.isNotEmpty,
+        _Step.emulators => !_detecting && _testing == null && session != null && session.detected.isNotEmpty,
         // No console with games yet still lets the mode on: a game downloaded
         // later opens in the one emulator that covers it, or asks which.
         _Step.systems => session != null && rows != null && (rows.isEmpty || _picks(session, rows).isNotEmpty),
@@ -232,8 +342,11 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   Widget _emulatorsStep(BuildContext context, LauncherSession? session) {
     final t = KitType.of(context);
     final detected = session?.detected ?? const <DetectedEmulator>[];
+    final busy = _detecting || _testing != null;
     final Widget found;
-    if (_detecting || session == null) {
+    if (_testing != null) {
+      found = StatusPanel.working(items: [WorkItem('Testing $_testing')]);
+    } else if (_detecting || session == null) {
       found = const StatusPanel.working(items: [WorkItem('Looking for emulators')]);
     } else if (detected.isEmpty) {
       final slugs = {
@@ -245,14 +358,29 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         Text(names.isEmpty ? 'No emulator found.' : 'No emulator found. Install ${_list(names)}, then Detect again.', style: t.body),
       ]);
     } else {
-      found = OptionList(children: [for (final d in detected) _EmulatorRow(emulator: d, verified: session.preset(d.presetId)?.verified ?? false)]);
+      final manual = {for (final m in ref.watch(launchConfigProvider.select((c) => c.manual))) m.id};
+      found = OptionList(children: [
+        for (final d in detected)
+          _EmulatorRow(
+            emulator: d,
+            verified: session.preset(d.presetId)?.verified ?? false,
+            onMenu: manual.contains(d.presetId) ? () => _manualMenu(d) : null,
+          ),
+      ]);
     }
     return KitColumns(
       start: [
         const KitLabel('On this device'),
         found,
+        if (_addProblem != null) KitPanel(padding: const EdgeInsets.all(12), children: [Text(_addProblem!, style: t.body)]),
         OptionList(children: [
-          OptionAction(title: 'Detect again', subtitle: 'After installing or removing an emulator', autofocus: true, onTap: _detecting ? null : _detect),
+          OptionAction(title: 'Detect again', subtitle: 'After installing or removing an emulator', autofocus: true, onTap: busy ? null : _detect),
+          OptionAction(
+            key: const ValueKey('launcher-add'),
+            title: 'Add an emulator',
+            subtitle: 'For one that was not found',
+            onTap: busy || session == null ? null : () => _addEmulator(session),
+          ),
         ]),
       ],
       end: [
@@ -434,17 +562,21 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
 String _list(List<String> names) => names.length < 2 ? names.join() : '${names.take(names.length - 1).join(', ')} or ${names.last}';
 
 class _EmulatorRow extends StatelessWidget {
-  const _EmulatorRow({required this.emulator, required this.verified});
+  const _EmulatorRow({required this.emulator, required this.verified, this.onMenu});
 
   final DetectedEmulator emulator;
   final bool verified;
 
+  /// An emulator added by hand: tagged so, and A or a tap opens its menu.
+  final VoidCallback? onMenu;
+
   @override
   Widget build(BuildContext context) {
     final icon = emulator.icon;
-    final line = [if (emulator.version != null) emulator.version!, if (!verified) 'not tested'].join(' · ');
+    final line = [if (emulator.version != null) emulator.version!, if (onMenu != null) 'added by you', if (!verified) 'not tested'].join(' · ');
     return KitRow(
       key: ValueKey('launcher-found-${emulator.presetId}'),
+      onTap: onMenu,
       child: Row(children: [
         if (icon != null) Image.memory(icon, width: 32, height: 32) else const Icon(Icons.videogame_asset_outlined, size: 32),
         const SizedBox(width: 12),
