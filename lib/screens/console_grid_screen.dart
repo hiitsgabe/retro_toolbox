@@ -4,6 +4,7 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/screens/app_drawer_screen.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
@@ -22,12 +23,16 @@ import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 final consoleGridOwnedOnlyProvider = StateProvider<bool>((ref) => true);
 
 /// Grid of consoles. Tapping a console selects it (which starts its catalog
-/// load) and opens the game list (HomeScreen).
+/// load) and opens the game list (HomeScreen). With Retro Toolbox as the
+/// home app, an Apps tile after the consoles opens the app drawer.
 class ConsoleGridScreen extends ConsumerWidget {
   const ConsoleGridScreen({super.key});
 
   /// Its route's name: a Home press finds the library's root by it.
   static const routeName = 'console-grid';
+
+  /// The Apps tile's id, apart from every console id.
+  static const appsTileId = 'launcher-apps';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,6 +42,11 @@ class ConsoleGridScreen extends ConsumerWidget {
     final launcherMode = ref.watch(launcherModeProvider);
     final ownedOnly = launcherMode && ref.watch(consoleGridOwnedOnlyProvider);
     void toggleOwned() => ref.read(consoleGridOwnedOnlyProvider.notifier).update((on) => !on);
+    // As the home app, the other apps are only reachable from here: the
+    // drawer stays in reach when there is no console to show too.
+    final homeMode = ref.watch(homeModeProvider);
+    void openApps() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AppDrawerScreen()));
+    final apps = homeMode ? KitAction('Apps', openApps, icon: Icons.apps) : null;
     // The check wizard step 2 makes. A console still being checked shows, so
     // the list only ever shrinks while it settles.
     final consoles = [
@@ -57,6 +67,7 @@ class ConsoleGridScreen extends ConsumerWidget {
           () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen(consoleId: null))),
           icon: Icons.settings,
         ),
+        secondAction: apps,
       );
     } else if (consoles.isEmpty) {
       body = EmptyState(
@@ -64,11 +75,13 @@ class ConsoleGridScreen extends ConsumerWidget {
         glyph: PixelIcons.games,
         line: 'No console has games on disk yet',
         action: KitAction('Show all', toggleOwned),
+        secondAction: apps,
       );
     } else {
       final k = StyleTokens.of(context);
       final tiles = [
         for (final (i, console) in consoles.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
+        if (homeMode) MenuTile(id: appsTileId, label: 'Apps', area: AppArea.games, pixelIcon: PixelIcons.tools, icon: Icons.apps, onTap: openApps),
       ];
       body = ReorderableMenu(
         menuId: 'consoles',
