@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": 1,
+  "version": 2,
   "presets": [
     {
       "id": "retroarch",
@@ -201,7 +201,19 @@
       "verified": false,
       "systems": {"switch": {"extensions": ["nsp", "xci", "nsz", "xcz"]}},
       "android": {
-        "packages": ["dev.eden.eden_emulator"],
+        "packages": ["dev.eden.eden_emulator", "dev.eden.eden_emulator.nightly", "com.miHoYo.Yuanshen", "dev.legacy.eden_emulator"],
+        "activity": "org.yuzu.yuzu_emu.activities.EmulationActivity",
+        "action": "android.nfc.action.TECH_DISCOVERED",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "eden-duo",
+      "name": "Eden Duo",
+      "verified": false,
+      "systems": {"switch": {"extensions": ["nsp", "xci", "nsz", "xcz"]}},
+      "android": {
+        "packages": ["dev.igawa6.edenduo"],
         "activity": "org.yuzu.yuzu_emu.activities.EmulationActivity",
         "action": "android.nfc.action.TECH_DISCOVERED",
         "rom": {"mode": "provider"}
