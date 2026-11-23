@@ -43,6 +43,39 @@ class LauncherChannel {
     }
   }
 
+  /// Whether Retro Toolbox is the device's home app now. False when it
+  /// cannot tell.
+  Future<bool> isHomeHeld() async {
+    try {
+      return await _channel.invokeMethod<bool>('isHomeHeld') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// [on]: offers Retro Toolbox as a home app and asks Android to make it the
+  /// one, answering once the user has; true when it is. Off: no longer
+  /// offered, and false.
+  Future<bool> setHome(bool on) async {
+    try {
+      return await _channel.invokeMethod<bool>('setHome', {'on': on}) ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// [onHome] runs on each Home press that reaches Retro Toolbox as the home
+  /// app. Null stops it.
+  void setHomeHandler(void Function()? onHome) => _channel.setMethodCallHandler(onHome == null
+      ? null
+      : (call) async {
+          if (call.method == 'home') onHome();
+        });
+
   /// Opens [package] the way its launcher icon does. False when it cannot.
   Future<bool> openApp(String package) async {
     try {

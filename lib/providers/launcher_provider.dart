@@ -14,6 +14,7 @@ import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
 import 'package:retro_toolbox/services/launcher/games_on_disk.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
@@ -40,6 +41,21 @@ final launcherAvailableProvider = Provider<bool>((ref) => launcherSupported(
 /// Launcher mode is on: a build that launches, and the config says so. False
 /// until the saved config is in.
 final launcherModeProvider = Provider<bool>((ref) => ref.watch(launcherAvailableProvider) && ref.watch(launchConfigProvider.select((c) => c.enabled)));
+
+/// Whether this build can be the device's home app: Android, where
+/// launching works.
+final homeRoleAvailableProvider = Provider<bool>((ref) => ref.watch(launcherAvailableProvider) && Platform.isAndroid);
+
+final homeRoleProvider = Provider<HomeRole>((ref) => HomeRole(
+      channel: ref.watch(launcherChannelProvider),
+      config: ref.watch(launchConfigProvider.notifier),
+      available: ref.watch(homeRoleAvailableProvider),
+    ));
+
+/// Retro Toolbox is the home app: Android, launcher mode on, and HOME on.
+final homeModeProvider = Provider<bool>(
+  (ref) => ref.watch(homeRoleAvailableProvider) && ref.watch(launcherModeProvider) && ref.watch(launchConfigProvider.select((c) => c.home)),
+);
 
 /// `Platform.operatingSystem`, as a provider tests can set: the wizard's
 /// Android-only rows and step follow it.

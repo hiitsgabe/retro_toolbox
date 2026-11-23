@@ -15,7 +15,7 @@ class LaunchConfig {
 
   final bool enabled;
 
-  /// Android: Retro Toolbox is the home app. Slice 4 writes it.
+  /// Android: Retro Toolbox is the home app, as Android last said (HomeRole).
   final bool home;
 
   /// By catalog console id, which works for a console with no art slug too.
@@ -126,4 +126,7 @@ class LaunchConfigNotifier extends StateNotifier<LaunchConfig> {
   Future<void> finishSetup(Map<String, LaunchChoice> picks) => _update((c) => c.copyWith(enabled: true, defaults: {...c.defaults, ...picks}));
 
   Future<void> setDetected(List<DetectedEmulator> detected) => _update((c) => c.copyWith(lastDetected: detected));
+
+  /// What Android says: Retro Toolbox is the home app or not.
+  Future<void> setHome(bool home) => _update((c) => c.copyWith(home: home));
 }
