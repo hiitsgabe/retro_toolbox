@@ -15,11 +15,12 @@ class OwnedGame {
   final List<String> paths;
 
   /// From a catalog game's presence in [snapshot], or null when it has none.
-  /// A downloaded file is `<dir>/<filename>`; an extracted game is what the
+  /// A downloaded file is `<dir>/<filename>`, or the file whose real name
+  /// `sanitizeForFat` turns into that one; an extracted game is what the
   /// snapshot indexed for it (its folder, or its root siblings), sorted by
   /// path, with the archive itself last when it was kept.
   static OwnedGame? fromPresence(Game game, String dir, LibraryPresence presence, LibrarySnapshot snapshot) {
-    final file = p.join(dir, game.filename);
+    final file = snapshot.pathFor(game.filename);
     String abs(String path) => p.isAbsolute(path) ? path : p.join(dir, path);
     // Sorted because the snapshot keeps the directory's listing order, which differs between devices and
     // would make a tie in resolveLaunchTarget pick a different file on each. A set because the scan files a

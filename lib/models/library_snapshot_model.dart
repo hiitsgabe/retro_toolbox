@@ -20,6 +20,11 @@ class LibrarySnapshot {
   final Set<String> baseNames;
   final Map<String, List<String>> relatedFiles;
 
+  /// Root files under a real name `Game.sanitizeForFat` changes, by the name
+  /// it gives them: a file copied in from a disk that allows `:` or a
+  /// trailing dot is the catalog game of that name.
+  final Map<String, String> aliases;
+
   final DateTime timestamp;
 
   const LibrarySnapshot({
@@ -27,6 +32,7 @@ class LibrarySnapshot {
     required this.exactFiles,
     required this.baseNames,
     required this.relatedFiles,
+    this.aliases = const {},
     required this.timestamp,
   });
 
@@ -34,7 +40,7 @@ class LibrarySnapshot {
     final base = p.basename(filename);
     final ext = p.extension(base).toLowerCase();
     final baseNoExt = p.basenameWithoutExtension(base);
-    final hasExact = exactFiles.contains(base);
+    final hasExact = exactFiles.contains(base) || aliases.containsKey(base);
 
     // Files we indexed for this base (includes root siblings and any files from an extracted folder)
     final rel = relatedFiles[baseNoExt] ?? const <String>[];
@@ -76,7 +82,15 @@ class LibrarySnapshot {
         ...baseNames,
         ...relatedFiles.keys,
         for (final f in exactFiles) p.basenameWithoutExtension(f),
+        for (final a in aliases.keys) p.basenameWithoutExtension(a),
       };
+
+  /// The root file [filename] is on disk: itself, or else the file whose
+  /// real name `Game.sanitizeForFat` turns into it.
+  String pathFor(String filename) {
+    final base = p.basename(filename);
+    return p.join(libraryDir, exactFiles.contains(base) ? base : aliases[base] ?? base);
+  }
 
   Map<String, LibraryPresence> allStatuses() {
     final map = <String, LibraryPresence>{};
@@ -114,6 +128,7 @@ class LibrarySnapshot {
       exactFiles: exactFiles ?? this.exactFiles,
       baseNames: baseNames ?? this.baseNames,
       relatedFiles: relatedFiles ?? this.relatedFiles,
+      aliases: aliases,
       timestamp: timestamp ?? DateTime.now(),
     );
   }

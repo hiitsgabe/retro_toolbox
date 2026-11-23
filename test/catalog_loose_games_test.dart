@@ -162,6 +162,18 @@ void main() {
     expect(await c.read(gamesOnDiskProvider('ps2').future), isFalse, reason: 'the grid agrees: the .chd is no one\'s');
   });
 
+  test('a file whose real name sanitizeForFat turns into a catalog game\'s shows as that game, owned and launchable from its real path', () async {
+    const metroid = Game(title: 'Metroid Prime 4 Beyond', url: 'https://example.com/Metroid%20Prime%204%20Beyond.chd', size: 1, consoleId: 'psx');
+    touch('Metroid Prime 4: Beyond.chd');
+    final (c, catalog) = await setUpCatalog(games: const [_crash, metroid]);
+    await catalog.loadCatalog(_psx);
+    expect(loose(c), isEmpty);
+    expect(shown(c), ['Metroid Prime 4 Beyond'], reason: 'the owned view');
+    expect(await catalog.ownedGameIds(), {metroid.gameId}, reason: 'Download all leaves it out, as any game on disk');
+    final owned = await c.read(ownedGameProvider(metroid).future);
+    expect(owned?.paths, [p.join(tmp.path, 'Metroid Prime 4: Beyond.chd')]);
+  });
+
   test('a LaunchBox reapply matches the loose games again with the rest', () async {
     touch('Spyro (USA).chd');
     final (c, catalog) = await setUpCatalog();

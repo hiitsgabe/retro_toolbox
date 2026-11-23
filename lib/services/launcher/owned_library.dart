@@ -122,7 +122,7 @@ class OwnedLibrary {
 
     final claimed = _claimed(dir, snapshot, catalog);
     bool mine(Iterable<String> files) => !files.any((f) => claimed.contains(p.normalize(f)));
-    final catalogIds = {for (final g in catalog) g.gameId};
+    final catalogById = {for (final g in catalog) g.gameId: g};
     final games = <Game>[];
     final paths = <String, List<String>>{};
     Future<void> entry({required String name, required String title, required List<String> files}) async {
@@ -133,9 +133,11 @@ class OwnedLibrary {
         consoleId: consoleId,
         metadata: TitleMetadataParser.parseRomTitle(title),
       );
-      // Two real names sanitizeForFat turns into one, or a catalog game under
-      // another real name: the first one keeps the id.
-      if (catalogIds.contains(game.gameId) || paths.containsKey(game.gameId)) return;
+      // Two real names sanitizeForFat turns into one: the first one keeps the
+      // id. A catalog game of that id keeps it only while it is on disk: one
+      // the snapshot does not know yet would leave this file nowhere.
+      final clash = catalogById[game.gameId];
+      if ((clash != null && snapshot.statusFor(clash.filename) != LibraryPresence.none) || paths.containsKey(game.gameId)) return;
       games.add(game);
       paths[game.gameId] = [...files]..sort();
     }

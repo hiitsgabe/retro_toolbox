@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 
 final librarySnapshotProvider = StateNotifierProvider.family<LibrarySnapshotNotifier, Map<String, LibrarySnapshot>, String>(
@@ -56,6 +57,7 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     final related = (raw['related'] as Map).map<String, List<String>>(
       (k, v) => MapEntry(k as String, List<String>.from(v as List)),
     );
+    final aliases = Map<String, String>.from(raw['aliases'] as Map);
 
     state = {
       ...state,
@@ -64,6 +66,7 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
         exactFiles: exact,
         baseNames: bases,
         relatedFiles: related,
+        aliases: aliases,
         timestamp: DateTime.now(),
       ),
     };
@@ -255,10 +258,12 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
       'exact': <String>[],
       'bases': <String>[],
       'related': <String, List<String>>{},
+      'aliases': <String, String>{},
     };
   }
 
   final exact = <String>{};
+  final aliases = <String, String>{};
   final bases = <String>{};
   final related = <String, List<String>>{};
   String abs(String name) => p.join(libraryDir, name);
@@ -271,6 +276,8 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
       if (e is File) {
         exact.add(base);
         bases.add(baseNoExt);
+        final fat = Game.sanitizeForFat(base);
+        if (fat != base) aliases.putIfAbsent(fat, () => base);
         related[base] = [abs(base)];
         related.putIfAbsent(baseNoExt, () => <String>[]).add(abs(base));
       } else if (e is Directory) {
@@ -302,5 +309,6 @@ Map<String, dynamic> _scanLibraryDirIsolate(String libraryDir) {
     'exact': exact.toList(),
     'bases': bases.toList(),
     'related': related,
+    'aliases': aliases,
   };
 }

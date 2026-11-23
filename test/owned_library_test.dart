@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_handler.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/services/launcher/games_on_disk.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
@@ -153,9 +154,36 @@ void main() {
     expect(OwnedGame.fromLoose(game, tmp.path, lib.paths)?.paths, [abs('Metroid Prime 4: Beyond.chd')]);
   });
 
-  test('a loose game whose id a catalog game has is left to the catalog game', () async {
+  test('a file whose real name sanitizeForFat turns into a catalog game\'s is that catalog game, launched from its real path', () async {
     touch('Metroid Prime 4: Beyond.chd');
-    expect((await scan(_psx, catalog: [_catalog('Metroid Prime 4 Beyond.chd')])).games, isEmpty);
+    final metroid = _catalog('Metroid Prime 4 Beyond.chd');
+    final snapshot = await LibrarySnapshotNotifier(tmp.path).current();
+    final lib = await scan(_psx, catalog: [metroid]);
+    expect(lib.games, isEmpty, reason: 'no second game of the same id');
+    final presence = snapshot.statusFor(metroid.filename);
+    expect(presence, LibraryPresence.file);
+    expect(OwnedGame.fromPresence(metroid, tmp.path, presence, snapshot)?.paths, [abs('Metroid Prime 4: Beyond.chd')]);
+    expect(await hasGamesOnDisk(tmp.path, ownFormats(_psx, [_psx])), isTrue, reason: 'the console list and the owned view agree');
+  });
+
+  test('a loose game whose id a catalog game the snapshot does not know yet has is listed, and launches from its real path', () async {
+    touch('Metroid Prime 4: Beyond.chd');
+    final metroid = _catalog('Metroid Prime 4 Beyond.chd');
+    // A snapshot taken before the file came.
+    final stale = LibrarySnapshot(libraryDir: tmp.path, exactFiles: const {}, baseNames: const {}, relatedFiles: const {}, timestamp: DateTime(2026));
+    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: ownFormats(_psx, [_psx]), snapshot: stale, catalog: [metroid]));
+    final game = lib.games.single;
+    expect(game.gameId, metroid.gameId);
+    expect(OwnedGame.fromLoose(game, tmp.path, lib.paths)?.paths, [abs('Metroid Prime 4: Beyond.chd')]);
+  });
+
+  test('with the catalog game\'s own file on disk too, that file is the game and the other name is no second one', () async {
+    touch('Metroid Prime 4: Beyond.chd');
+    touch('Metroid Prime 4 Beyond.chd');
+    final metroid = _catalog('Metroid Prime 4 Beyond.chd');
+    final snapshot = await LibrarySnapshotNotifier(tmp.path).current();
+    expect((await scan(_psx, catalog: [metroid])).games, isEmpty);
+    expect(OwnedGame.fromPresence(metroid, tmp.path, snapshot.statusFor(metroid.filename), snapshot)?.paths, [abs('Metroid Prime 4 Beyond.chd')]);
   });
 
   test('a dir that cannot be listed is unreadable; one that does not exist is empty', () async {
