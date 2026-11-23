@@ -98,6 +98,14 @@ void main() {
     expect(t.path, d1);
   });
 
+  test('a set of discs keeps the place of its first listed disc among the files of its rank', () {
+    final d2 = touch('FF7/FF7 (Disc 2).cue');
+    final extras = touch('FF7/Extras.cue');
+    final d1 = touch('FF7/FF7 (Disc 1).cue');
+    final t = resolveLaunchTarget(owned('FF7.zip', [d2, extras, d1]), system(['cue']));
+    expect(t.path, d1);
+  });
+
   test('a zip the emulator does not take, with no extracted copy, is unsupported', () {
     final zip = touch('Ridge Racer.zip');
     final t = resolveLaunchTarget(owned('Ridge Racer.zip', [zip]), system(['chd', 'cue']));
