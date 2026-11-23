@@ -396,4 +396,29 @@ void main() {
       expect([for (final d in session.detected) d.presetId], ['ra', 'ds']);
     });
   });
+
+  group('LaunchOverridesNotifier.dropPreset', () {
+    const mine = LaunchChoice(presetId: 'manual-org.example.fork', variant: 'org.example.fork');
+    const other = LaunchChoice(presetId: 'ds', variant: 'org.example.ds');
+
+    test('drops every override that names the preset and saves the rest', () async {
+      final store = MemoryOverrides({'psx/a.chd': mine, 'psx/b.chd': other, 'psx/c.chd': mine});
+      final n = LaunchOverridesNotifier(store);
+      addTearDown(n.dispose);
+      await n.loaded;
+      n.dropPreset(mine.presetId);
+      expect(n.state, {'psx/b.chd': other});
+      expect(store.saved.single, {'psx/b.chd': other});
+    });
+
+    test('with none naming it nothing is written', () async {
+      final store = MemoryOverrides({'psx/b.chd': other});
+      final n = LaunchOverridesNotifier(store);
+      addTearDown(n.dispose);
+      await n.loaded;
+      n.dropPreset(mine.presetId);
+      expect(n.state, {'psx/b.chd': other});
+      expect(store.saved, isEmpty);
+    });
+  });
 }

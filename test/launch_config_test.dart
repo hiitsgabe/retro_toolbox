@@ -8,6 +8,7 @@ import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Hands out [config] when [gate] completes; [saved] records each write.
@@ -44,6 +45,8 @@ const _ra = DetectedEmulator(
 );
 
 const _duck = LaunchChoice(presetId: 'duckstation', variant: 'com.github.stenzek.duckstation');
+
+const _duo = ManualEmulator(variant: 'dev.igawa6.edenduo', label: 'Eden Duo', recipe: 'eden');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -84,6 +87,21 @@ void main() {
     expect((back.enabled, back.home), (true, true));
     expect(back.defaults, {'sony-psx': _duck});
     expect([for (final d in back.lastDetected!) d.toJson()], [_ra.toJson()]);
+  });
+
+  test('manual emulators round-trip, a missing field reads as none and a bad entry is left out', () {
+    const viewer = ManualEmulator(variant: 'org.example.viewer', label: 'Viewer', recipe: ManualEmulator.generic, systems: ['psx'], activity: 'org.example.viewer.Open');
+    final back = LaunchConfig.fromJson(jsonDecode(jsonEncode(const LaunchConfig(manual: [_duo, viewer]).toJson())));
+    expect([for (final m in back.manual) m.toJson()], [_duo.toJson(), viewer.toJson()]);
+    expect(const LaunchConfig().manual, isEmpty);
+    expect(LaunchConfig.fromJson(const {'enabled': true}).manual, isEmpty);
+    expect(LaunchConfig.fromJson(const {'manual': 'junk'}).manual, isEmpty);
+    expect([
+      for (final m in LaunchConfig.fromJson({
+        'manual': [_duo.toJson(), {'variant': 7}, 'junk'],
+      }).manual)
+        m.id,
+    ], [_duo.id]);
   });
 
   test('a bad default or detection is left out, and junk is the default config', () {
@@ -164,6 +182,36 @@ void main() {
       expect(n.state.defaults['sony-psx'], psx);
       expect(n.state.defaults['nintendo-snes'], snes);
       expect(store.saved.single.defaults['sony-psx'], psx);
+    });
+
+    test('addManual adds after the others, and the same variant again replaces it in place', () async {
+      const ra = ManualEmulator(variant: 'org.example.ra', label: 'RA fork', recipe: 'retroarch');
+      const again = ManualEmulator(variant: 'dev.igawa6.edenduo', label: 'Eden Duo', recipe: 'generic', systems: ['switch'], activity: 'dev.igawa6.edenduo.Open');
+      final store = GatedStore(const LaunchConfig())..gate.complete();
+      final n = LaunchConfigNotifier(store);
+      addTearDown(n.dispose);
+      await n.addManual(_duo);
+      await n.addManual(ra);
+      await n.addManual(again);
+      expect([for (final m in n.state.manual) (m.id, m.recipe)], [(_duo.id, 'generic'), (ra.id, 'retroarch')]);
+      expect(store.saved.last.manual, hasLength(2));
+    });
+
+    test('removeManual drops it, the console defaults that name it and its saved detection, and keeps the rest', () async {
+      final mine = LaunchChoice(presetId: _duo.id, variant: _duo.variant);
+      final store = GatedStore(LaunchConfig(
+        manual: const [_duo],
+        defaults: {'nintendo-switch': mine, 'sony-psx': _duck},
+        lastDetected: [DetectedEmulator(presetId: _duo.id, variant: _duo.variant, label: 'Eden Duo', systems: const ['switch']), _ra],
+      ))
+        ..gate.complete();
+      final n = LaunchConfigNotifier(store);
+      addTearDown(n.dispose);
+      await n.removeManual(_duo.id);
+      expect(n.state.manual, isEmpty);
+      expect(n.state.defaults, {'sony-psx': _duck});
+      expect([for (final d in n.state.lastDetected!) d.presetId], ['retroarch']);
+      expect(store.saved.single.defaults, {'sony-psx': _duck});
     });
 
     test('setDetected keeps the icons in memory', () async {

@@ -64,4 +64,16 @@ class LaunchOverridesNotifier extends StateNotifier<Map<String, LaunchChoice>> {
     state = {...state, gameId: choice};
     _store.save(state);
   }
+
+  /// Drops every override that names [presetId]: a removed manual emulator
+  /// leaves no game pointing at nothing. Writes only when one went.
+  void dropPreset(String presetId) {
+    final kept = {
+      for (final e in state.entries)
+        if (e.value.presetId != presetId) e.key: e.value,
+    };
+    if (kept.length == state.length) return;
+    state = kept;
+    _store.save(state);
+  }
 }
