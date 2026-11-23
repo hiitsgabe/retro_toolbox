@@ -154,7 +154,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     if (text == null) return;
     final action = switch (fix) {
       LaunchFix.none => null,
-      LaunchFix.detectAgain => SnackBarAction(label: 'Detect again', onPressed: () => ref.invalidate(launcherSessionProvider)),
+      LaunchFix.detectAgain => SnackBarAction(label: 'Detect again', onPressed: () => ref.read(detectEmulatorsProvider)()),
       LaunchFix.chooseAnother => SnackBarAction(label: 'Choose another', onPressed: _openWith),
       LaunchFix.chooseFolder => SnackBarAction(label: 'Choose folder', onPressed: _chooseFolder),
     };
@@ -217,7 +217,14 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
               ? null
               : KitAction(gameActionLabels[actions.first]!, () => _run(gameState, actions.first), icon: gameActionIcons[actions.first]),
       more: [
-        if (launcher) KitAction('Open with…', _starting != null || noEmulator ? null : _openWith, icon: Icons.apps_rounded),
+        // With no emulator for the system Open with has nothing to list, so
+        // Detect again takes its place: the saved detection may predate an
+        // emulator installed since, and with launcher mode off no resume
+        // detects again.
+        if (launcher)
+          noEmulator
+              ? KitAction('Detect again', () => ref.read(detectEmulatorsProvider)(), icon: Icons.refresh_rounded)
+              : KitAction('Open with…', _starting != null ? null : _openWith, icon: Icons.apps_rounded),
         if (safChoice != null) KitAction('Open ${safChoice.label}', () => ref.read(launcherChannelProvider).openApp(safChoice.variant), icon: Icons.open_in_new_rounded),
         for (final a in actions.skip(launcher ? 0 : 1)) KitAction(gameActionLabels[a]!, () => _run(gameState, a), icon: gameActionIcons[a]),
         if (widget.selectable && (gameState.isInteractable || isSelected))

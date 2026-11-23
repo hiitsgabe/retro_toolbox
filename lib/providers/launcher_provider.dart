@@ -8,6 +8,7 @@ import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
@@ -47,13 +48,60 @@ final emulatorDetectorProvider = Provider<EmulatorDetector>((ref) => EmulatorDet
 
 final launcherChannelProvider = Provider<LauncherChannel>((ref) => const LauncherChannel());
 
-/// The presets and what of them is installed, detected on first use and kept
-/// for the session. "Detect again" invalidates it.
+/// The preset file in use, the seed or the cache, read once a session.
+final launchPresetsProvider = FutureProvider<LaunchPresetFile>((ref) => ref.read(launchPresetStoreProvider).load());
+
+/// The detection running now, which a second caller joins: the wizard's
+/// step 1 and a session with nothing saved would otherwise both detect.
+class _Detection {
+  Future<List<DetectedEmulator>>? running;
+}
+
+final _detectionProvider = Provider<_Detection>((ref) => _Detection());
+
+Future<List<DetectedEmulator>> _detect(Ref ref) {
+  final detection = ref.read(_detectionProvider);
+  return detection.running ??= () async {
+    try {
+      final file = await ref.read(launchPresetsProvider.future);
+      final detected = await ref.read(emulatorDetectorProvider).detect(file.presets);
+      await ref.read(launchConfigProvider.notifier).setDetected(detected);
+      return detected;
+    } finally {
+      detection.running = null;
+    }
+  }();
+}
+
+/// Runs a detection, keeps it as the config's lastDetected and rebuilds the
+/// session on it: wizard step 1, "Detect again", and a resume in launcher
+/// mode call it.
+final detectEmulatorsProvider = Provider<Future<List<DetectedEmulator>> Function()>((ref) => () async {
+      final detected = await _detect(ref);
+      ref.invalidate(launcherSessionProvider);
+      return detected;
+    });
+
+/// The presets and what of them is installed. The detection is the saved
+/// lastDetected, so opening a page never detects again; only with none saved
+/// yet does this detect, and it saves what it found.
 final launcherSessionProvider = FutureProvider<LauncherSession>((ref) async {
-  final file = await ref.read(launchPresetStoreProvider).load();
-  final detected = await ref.read(emulatorDetectorProvider).detect(file.presets);
-  return LauncherSession(presets: file.presets, detected: detected);
+  final file = await ref.watch(launchPresetsProvider.future);
+  final config = ref.read(launchConfigProvider.notifier);
+  // Until the saved config is in, its lastDetected is not known to be empty.
+  await config.loaded;
+  final saved = ref.read(launchConfigProvider).lastDetected;
+  return LauncherSession(presets: file.presets, detected: saved == null ? await _detect(ref) : _asTheFileReads(saved, file.presets));
 });
+
+/// [saved] as the preset file in use has it. The detection may be older than
+/// the file: a preset there may open a system it did not, or be gone, and
+/// with launcher mode off nothing detects again on its own.
+List<DetectedEmulator> _asTheFileReads(List<DetectedEmulator> saved, List<LaunchPreset> presets) => [
+      for (final p in presets)
+        for (final d in saved)
+          if (d.presetId == p.id) d.withSystems(p.systems.keys.toList()),
+    ];
 
 typedef GameSystem = ({String? slug, String name});
 

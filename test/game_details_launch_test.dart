@@ -89,6 +89,7 @@ void main() {
     List<DetectedEmulator> detected = const [],
     bool available = true,
     Map<String, LaunchChoice> overrides = const {},
+    List<Override> extra = const [],
   }) async {
     store = MemoryOverrides(overrides);
     // A desktop window: the test font is wider than any real one, and with
@@ -107,6 +108,7 @@ void main() {
         ownedGameProvider.overrideWith((ref, game) async => OwnedGame(game: game, dir: '/roms/snes', paths: const ['/roms/snes/Mario World.sfc'])),
         gameLauncherProvider.overrideWith((ref) async => launcher),
         launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(store)),
+        ...extra,
       ],
       child: MaterialApp(
         navigatorKey: nav,
@@ -219,6 +221,37 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('RetroArch is not installed anymore'), findsOneWidget);
     expect(find.widgetWithText(SnackBarAction, 'Detect again'), findsOneWidget);
+  });
+
+  testWidgets('Detect again runs a detection', (t) async {
+    launcher.result = const LaunchResult(LaunchCode.notInstalled);
+    var detections = 0;
+    await pump(t, detected: [emu('ra', 'RetroArch')], extra: [
+      detectEmulatorsProvider.overrideWithValue(() async {
+        detections++;
+        return const <DetectedEmulator>[];
+      }),
+    ]);
+    await t.tap(find.text('PLAY'));
+    await t.pumpAndSettle();
+    await t.tap(find.widgetWithText(SnackBarAction, 'Detect again'));
+    await t.pumpAndSettle();
+    expect(detections, 1);
+  });
+
+  testWidgets('no covering emulator: Detect again beside the disabled Play runs a detection', (t) async {
+    var detections = 0;
+    await pump(t, detected: [emu('melonds', 'melonDS', systems: const ['nds'])], extra: [
+      detectEmulatorsProvider.overrideWithValue(() async {
+        detections++;
+        return const <DetectedEmulator>[];
+      }),
+    ]);
+    expect(find.text('DETECT AGAIN'), findsOneWidget);
+    expect(find.text('OPEN WITH…'), findsNothing, reason: 'it would list nothing, and the bar has room for one of them');
+    await t.tap(find.text('DETECT AGAIN'));
+    await t.pumpAndSettle();
+    expect(detections, 1);
   });
 
   testWidgets('a saf choice shows the folder-access hint and Open <emulator>', (t) async {

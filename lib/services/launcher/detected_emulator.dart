@@ -90,6 +90,23 @@ class DetectedEmulator {
 
   LaunchChoice get choice => LaunchChoice(presetId: presetId, variant: variant);
 
+  /// This detection opening [systems] instead: a saved one takes them from
+  /// the preset file in use, which may have grown since.
+  DetectedEmulator withSystems(List<String> systems) => DetectedEmulator(
+        presetId: presetId,
+        variant: variant,
+        label: label,
+        systems: systems,
+        icon: icon,
+        version: version,
+        dataDir: dataDir,
+        requestsManage: requestsManage,
+        pathAccess: pathAccess,
+        manageGrant: manageGrant,
+        exe: exe,
+        prefixArgs: prefixArgs,
+      );
+
   /// Everything but [icon], which only a fresh detection brings back: the
   /// saved list stays small.
   Map<String, Object?> toJson() => {
