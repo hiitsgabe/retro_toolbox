@@ -9,6 +9,7 @@ import 'package:retro_toolbox/screens/console_grid_screen.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
+import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'kit/kit_support.dart';
@@ -83,6 +84,9 @@ void main() {
   testWidgets('as the home app the list ends with an Apps tile, which opens the app drawer', (t) async {
     await pump(t, on: true, home: true);
     expect(find.text('2 consoles'), findsOneWidget, reason: 'Apps is no console');
+    final ids = [for (final tile in t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles) tile.id];
+    expect(ids.last, ConsoleGridScreen.appsTileId);
+    expect(ids.take(ids.length - 1), unorderedEquals(['snes', 'psx']));
     // A cartridge's label is in capitals.
     await t.tap(find.text('APPS'));
     await t.pumpAndSettle();
