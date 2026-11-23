@@ -19,6 +19,7 @@ import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_page.dart';
+import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 
 class FakeLauncher implements GameLauncher {
   final launched = <LaunchChoice>[];
@@ -83,6 +84,7 @@ void main() {
   Future<void> pump(
     WidgetTester t, {
     GameStatus status = GameStatus.downloaded,
+    Set<GameAction> actions = const {},
     List<DetectedEmulator> detected = const [],
     bool available = true,
     Map<String, LaunchChoice> overrides = const {},
@@ -98,7 +100,7 @@ void main() {
       overrides: [
         launcherAvailableProvider.overrideWithValue(available),
         presetRefreshProvider.overrideWithValue(null),
-        gameStateProvider.overrideWith((ref, game) => GameState(game: game, status: status)),
+        gameStateProvider.overrideWith((ref, game) => GameState(game: game, status: status, availableActions: actions)),
         launcherSessionProvider.overrideWith((ref) async => LauncherSession(presets: const [], detected: detected)),
         gameSystemProvider.overrideWith((ref, consoleId) => (slug: 'snes', name: 'Super Nintendo')),
         ownedGameProvider.overrideWith((ref, game) async => OwnedGame(game: game, dir: '/roms/snes', paths: const ['/roms/snes/Mario World.sfc'])),
@@ -127,6 +129,20 @@ void main() {
       expect(launcher.launched, [const LaunchChoice(presetId: 'ra', variant: 'org.example.ra')]);
     });
   }
+
+  testWidgets('Play takes the primary and the first game action moves into the bar, where it still runs', (t) async {
+    final ran = <GameAction>[];
+    debugRunGameAction = (ref, context, game, state, action) async => ran.add(action);
+    addTearDown(() => debugRunGameAction = null);
+    await pump(t, actions: {GameAction.extract}, detected: [emu('ra', 'RetroArch')]);
+    expect(primary('PLAY'), findsOneWidget);
+    expect(primary('EXTRACT'), findsNothing);
+    expect(find.text('EXTRACT'), findsOneWidget);
+    await t.tap(find.text('EXTRACT'));
+    await t.pumpAndSettle();
+    expect(ran, [GameAction.extract]);
+    expect(launcher.launched, isEmpty);
+  });
 
   testWidgets('a game not on disk has no Play', (t) async {
     await pump(t, status: GameStatus.ready, detected: [emu('ra', 'RetroArch')]);
