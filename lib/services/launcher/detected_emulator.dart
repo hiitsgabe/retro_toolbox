@@ -33,6 +33,14 @@ bool pathAccess(AndroidPackageFacts f) =>
     (f.sdkInt < 29 && f.requestsRead) ||
     (f.requestsRead && (f.targetSdk <= 28 || (f.targetSdk == 29 && f.legacyStorage)));
 
+/// Whether [pathAccess] holds only through MANAGE_EXTERNAL_STORAGE on Android
+/// 11+, where it is an app op the user turns on in system Settings, not a
+/// grant at install. The wizard then offers to open that setting.
+bool restsOnManage(AndroidPackageFacts f) =>
+    f.requestsManage &&
+    f.sdkInt >= 30 &&
+    !pathAccess(AndroidPackageFacts(targetSdk: f.targetSdk, sdkInt: f.sdkInt, legacyStorage: f.legacyStorage, requestsRead: f.requestsRead));
+
 /// One preset found installed.
 class DetectedEmulator {
   const DetectedEmulator({
@@ -45,6 +53,7 @@ class DetectedEmulator {
     this.dataDir,
     this.requestsManage = false,
     this.pathAccess = true,
+    this.manageGrant = false,
     this.exe,
     this.prefixArgs = const [],
   });
@@ -70,6 +79,9 @@ class DetectedEmulator {
 
   /// Android: whether a `path` launch can work; otherwise `scopedMode`.
   final bool pathAccess;
+
+  /// Android: [pathAccess] rests on all files access (see [restsOnManage]).
+  final bool manageGrant;
 
   /// Desktop: what to run, and the arguments before the preset's own
   /// (`run <id>` for a flatpak).

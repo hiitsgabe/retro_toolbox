@@ -37,6 +37,11 @@ only once its row passed.
 7. **Folder access hint.** With a `saf` preset chosen, the page shows "If
    <emulator> says it cannot open the file, give it access to <folder>" and
    "Open <emulator>", which opens the emulator.
+8. **All files access.** On Android 11 or later, with an emulator that asks
+   for all files access (the website RetroArch, DuckStation), the launcher
+   wizard's Systems step shows "Allow all files access for <emulator>". It
+   opens the system page of that emulator, not of Retro Toolbox; with the
+   access on there, a `path` launch opens the game.
 
 ## One row per Android preset
 

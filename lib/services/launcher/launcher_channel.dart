@@ -31,6 +31,18 @@ class LauncherChannel {
     }
   }
 
+  /// Opens the system page where the user turns on all files access for
+  /// [package] (Android 11+). False when it cannot.
+  Future<bool> openAllFilesAccess(String package) async {
+    try {
+      return await _channel.invokeMethod<bool>('openAllFilesAccess', {'package': package}) ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// Opens [package] the way its launcher icon does. False when it cannot.
   Future<bool> openApp(String package) async {
     try {

@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.view.Display
 import androidx.core.content.FileProvider
 import io.flutter.plugin.common.BinaryMessenger
@@ -35,6 +36,7 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
                     }
                 )
                 "openApp" -> result.success(openApp(call.argument<String>("package")))
+                "openAllFilesAccess" -> result.success(openAllFilesAccess(call.argument<String>("package")))
                 else -> result.notImplemented()
             }
         }
@@ -213,6 +215,20 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
             }
         }
         grants.clear()
+    }
+
+    /// The system page for [pkg]'s all files access, Android 11+. Another
+    /// app's app op can only be shown to the user, never read or set here.
+    private fun openAllFilesAccess(pkg: String?): Boolean {
+        if (pkg == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+        return try {
+            activity.startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$pkg")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun openApp(pkg: String?): Boolean {

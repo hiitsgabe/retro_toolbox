@@ -46,6 +46,22 @@ void main() {
     });
   });
 
+  group('restsOnManage', () {
+    test('MANAGE_EXTERNAL_STORAGE on API 30+ with nothing else that reaches paths', () {
+      expect(restsOnManage(const AndroidPackageFacts(targetSdk: 35, sdkInt: 30, requestsManage: true, requestsRead: true)), isTrue);
+    });
+    test('below API 30 there is no all files access to turn on', () {
+      expect(restsOnManage(const AndroidPackageFacts(targetSdk: 35, sdkInt: 29, requestsManage: true)), isFalse);
+    });
+    test('legacy storage reaches paths without it', () {
+      expect(restsOnManage(const AndroidPackageFacts(targetSdk: 28, sdkInt: 34, requestsManage: true, requestsRead: true)), isFalse);
+      expect(restsOnManage(const AndroidPackageFacts(targetSdk: 29, sdkInt: 34, requestsManage: true, requestsRead: true, legacyStorage: true)), isFalse);
+    });
+    test('no MANAGE_EXTERNAL_STORAGE request, nothing to open', () {
+      expect(restsOnManage(const AndroidPackageFacts(targetSdk: 35, sdkInt: 34, requestsRead: true)), isFalse);
+    });
+  });
+
   group('Android detection over the channel', () {
     test('sends id, packages and activity, and the first variant in preset order wins', () async {
       Object? sent;
@@ -91,6 +107,15 @@ void main() {
       expect(found.first.dataDir, '/data/user/0/org.example.a');
     });
 
+    test('manageGrant comes from the reported facts', () async {
+      messenger.setMockMethodCallHandler(_channel, (call) async => [
+            {'id': 'a', 'package': 'org.example.a', 'targetSdk': 35, 'sdkInt': 35, 'requestsManage': true},
+            {'id': 'b', 'package': 'org.example.b', 'targetSdk': 35, 'sdkInt': 29, 'requestsManage': true},
+          ]);
+      final found = await EmulatorDetector(os: 'android').detect([preset('a', ['org.example.a']), preset('b', ['org.example.b'])]);
+      expect([for (final d in found) (d.presetId, d.manageGrant)], [('a', true), ('b', false)]);
+    });
+
     test('no plugin (desktop, tests) detects nothing instead of throwing', () async {
       expect(await EmulatorDetector(os: 'android').detect([preset('a', ['org.example.a'])]), isEmpty);
     });
@@ -112,6 +137,25 @@ void main() {
       messenger.setMockMethodCallHandler(_channel, (call) async => throw PlatformException(code: 'x', message: 'boom'));
       final r = await const LauncherChannel().launch(const {});
       expect((r.code, r.message), (LaunchCode.refused, 'boom'));
+    });
+  });
+
+  group('openAllFilesAccess', () {
+    test('sends the package and passes the answer on', () async {
+      final calls = <MethodCall>[];
+      messenger.setMockMethodCallHandler(_channel, (call) async {
+        calls.add(call);
+        return true;
+      });
+      expect(await const LauncherChannel().openAllFilesAccess('com.retroarch'), isTrue);
+      expect(calls.single.method, 'openAllFilesAccess');
+      expect(calls.single.arguments, {'package': 'com.retroarch'});
+    });
+
+    test('no plugin or a native error is false, never a throw', () async {
+      expect(await const LauncherChannel().openAllFilesAccess('com.retroarch'), isFalse);
+      messenger.setMockMethodCallHandler(_channel, (call) async => throw PlatformException(code: 'x'));
+      expect(await const LauncherChannel().openAllFilesAccess('com.retroarch'), isFalse);
     });
   });
 

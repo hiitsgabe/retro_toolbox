@@ -79,6 +79,7 @@ class EmulatorDetector {
       dataDir: f['dataDir'] is String ? f['dataDir'] as String : null,
       requestsManage: facts.requestsManage,
       pathAccess: pathAccess(facts),
+      manageGrant: restsOnManage(facts),
     );
   }
 }
