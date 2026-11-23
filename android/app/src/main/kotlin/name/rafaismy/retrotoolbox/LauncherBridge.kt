@@ -36,6 +36,8 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
                     }
                 )
                 "openApp" -> result.success(openApp(call.argument<String>("package")))
+                "isHomeHeld" -> result.success(heldNow())
+                "setHome" -> setHome(call.argument<Boolean>("on") == true, result)
                 "openAllFilesAccess" -> result.success(openAllFilesAccess(call.argument<String>("package")))
                 else -> result.notImplemented()
             }
@@ -44,6 +46,103 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
 
     fun dispose() {
         channel.setMethodCallHandler(null)
+        // The answer a setHome waited for cannot come back to this activity:
+        // Dart gets what Android says now.
+        homeSettingsOpen = false
+        finishHome()
+    }
+
+    /// A setHome(true) waiting for the user: the role dialog's result, or the
+    /// return from the home settings page.
+    private var homeResult: MethodChannel.Result? = null
+    private var homeSettingsOpen = false
+
+    private fun heldNow(): Boolean = try {
+        HomeRole.held(activity)
+    } catch (_: Exception) {
+        false
+    }
+
+    /// On: the alias goes on, so Android can offer the app as a home app, and
+    /// the user is asked; the answer comes in finishHome. Off: the alias goes
+    /// off, and Android falls back to the previous home app or asks.
+    private fun setHome(on: Boolean, result: MethodChannel.Result) {
+        try {
+            if (!on) {
+                // Running as the home app (the card's switch, or launcher mode
+                // turned off, from the home task): the engine goes on in a
+                // standard task, or Back on the root would end it and the
+                // launcher icon would start a second one. Before the alias
+                // goes off, so the engine has moved whatever Android does with
+                // an activity started through it.
+                (activity as? MainActivity)?.handOverToStandard()
+                HomeRole.setAliasEnabled(activity, false)
+                result.success(false)
+                return
+            }
+            // One question at a time.
+            if (homeResult != null) {
+                result.success(false)
+                return
+            }
+            HomeRole.setAliasEnabled(activity, true)
+            if (HomeRole.held(activity)) {
+                result.success(true)
+                return
+            }
+            homeResult = result
+            val request = HomeRole.requestIntent(activity)
+            if (request != null) {
+                activity.startActivityForResult(request, HOME_REQUEST)
+            } else {
+                homeSettingsOpen = true
+                activity.startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            }
+        } catch (_: Exception) {
+            homeSettingsOpen = false
+            homeResult = null
+            try {
+                HomeRole.setAliasEnabled(activity, false)
+            } catch (_: Exception) {
+                // Left as it was.
+            }
+            result.success(false)
+        }
+    }
+
+    /// The user answered. Not the home app: the alias goes off again, so the
+    /// app is not left offered as one it did not become.
+    private fun finishHome() {
+        val result = homeResult ?: return
+        homeResult = null
+        val held = heldNow()
+        if (!held) {
+            try {
+                HomeRole.setAliasEnabled(activity, false)
+            } catch (_: Exception) {
+                // Left on: the next setHome(false) or a reinstall turns it off.
+            }
+        }
+        result.success(held)
+    }
+
+    /// MainActivity.onActivityResult: true when it was the role dialog's.
+    fun onActivityResult(requestCode: Int): Boolean {
+        if (requestCode != HOME_REQUEST) return false
+        finishHome()
+        return true
+    }
+
+    /// MainActivity.onResume: back from the home settings page.
+    fun onResume() {
+        if (!homeSettingsOpen) return
+        homeSettingsOpen = false
+        finishHome()
+    }
+
+    /// A Home press reached the app as the home app.
+    fun home() {
+        channel.invokeMethod("home", null)
     }
 
     /// One entry per installed variant whose activity is exported. A package
@@ -246,5 +345,8 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
         /// Outlives a bridge: a moved MainActivity gets a new one, and the
         /// grants it made must still be revoked.
         val grants = ArrayList<Pair<String, Uri>>()
+
+        /// MainActivity's own picker uses 0x5AF.
+        const val HOME_REQUEST = 0x4E0
     }
 }

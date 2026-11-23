@@ -23,6 +23,34 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- No LAUNCHER filter here: ExternalEntryActivity has it, so a
+                 start from outside can go to the home task instead. -->
+        </activity>
+        <!-- Retro Toolbox as the home app (launcher mode, HomeRole.kt): off
+             until the user turns HOME on. It inherits singleTop and the empty
+             taskAffinity from MainActivity. -->
+        <activity-alias
+            android:name=".HomeAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity-alias>
+        <!-- The launcher icon, Settings > Open and the notifications land here
+             (getLaunchIntentForPackage), and it hands them on: to the home
+             task when Retro Toolbox is the home app, else to MainActivity.
+             Shows nothing and finishes at once. -->
+        <activity
+            android:name=".ExternalEntryActivity"
+            android:exported="true"
+            android:taskAffinity="${applicationId}.entry"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

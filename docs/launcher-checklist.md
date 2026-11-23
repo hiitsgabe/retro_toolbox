@@ -87,6 +87,69 @@ only once its row passed.
     consoles whose folder holds a game; the Owned button in its header shows
     them all again.
 
+## Home screen (Android)
+
+Dart cannot run any of this: the tests pin what Dart sends over
+`retro_toolbox/launcher` (`isHomeHeld`, `setHome`, the `home` call back), and
+only a device shows what Android does with it. Note the Android version and
+the device on each item. A debug build is `name.rafaismy.retrotoolbox.dev`, a
+separate app from the release one.
+
+20. **Launcher icon after the update.** The icon now names
+    ExternalEntryActivity, so a home screen shortcut made before this build
+    may be gone or need adding again. The icon, Settings > Apps > Retro
+    Toolbox > Open and a tap on a download notification each open the app
+    where it was, with no blank screen and no second Retro Toolbox in
+    recents.
+21. **HOME on, in the wizard.** Settings > Launcher mode > Set up: a Home
+    screen step comes before Done. Turn the switch on and Finish: Android
+    asks which app is the home app (the role dialog on Android 10 and
+    later). Pick Retro Toolbox: the app stays where it was, Settings >
+    Launcher mode shows the switch on, and recents holds one Retro Toolbox.
+22. **Home button.** From a game's details page, press Home: the console
+    list shows, with nothing above it. From the main menu, press Home: the
+    console list opens.
+23. **App drawer.** The console list ends with an Apps tile. It lists every
+    app with an icon, by name; choosing one opens it, and Home comes back to
+    the console list.
+24. **HOME off.** Turn the switch off in Settings > Launcher mode: Android
+    goes back to the previous home app, or asks which one. Turning launcher
+    mode off does the same.
+25. **HOME on mid-session.** Start a download, then turn HOME on in Settings
+    and press Home: recents holds one Retro Toolbox, and the download goes on
+    in the Task Manager without starting over.
+26. **Notification in HOME mode.** With HOME on and a download running, tap
+    its notification: the app shows as it was, the download goes on, and
+    recents still holds one Retro Toolbox (no second engine started).
+27. **B on the root.** With HOME on and a download running, press B (or
+    Back) on the main menu until nothing is left to close: the app stays,
+    and the download goes on.
+28. **Below Android 10, and with no home role.** On Android 9 or older, and
+    on a build without the home role (a TV box): turning HOME on opens the
+    system's home app settings instead of a dialog. Pick Retro Toolbox and
+    come back: the switch is on. Come back without picking it: the switch is
+    off.
+29. **Another home app picked outside.** With HOME on, pick another home app
+    in system Settings, then come back to Retro Toolbox: the switch reads
+    off.
+30. **HOME off mid-session.** With HOME on, start a download, then turn the
+    switch off in Settings > Launcher mode: the app stays on that page and
+    the download goes on. Press Home (Android goes to another home app or
+    asks), then tap the Retro Toolbox icon: the app shows as it was, recents
+    holds one Retro Toolbox, and the download goes on in the Task Manager
+    without starting over. Do it all again turning launcher mode off instead
+    of the switch.
+31. **Another home app picked, then the icon.** With HOME on and a download
+    running, pick another home app in system Settings, then tap the Retro
+    Toolbox icon: the app shows as it was, recents holds one Retro Toolbox,
+    and the download goes on without starting over. Do it again tapping the
+    download notification instead of the icon.
+32. **Dual screen.** On a dual screen device: with Main on bottom, the Home
+    screen switch is off and says why, in the wizard and in Settings; with
+    HOME on, the dual screen card's Main on bottom is off and says why. With
+    Main on top and HOME on, the companion opens on the other screen, closes
+    when an emulator starts and opens again on the way back.
+
 ## One row per Android preset
 
 For each preset: install the emulator, launch one single-file game and one

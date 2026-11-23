@@ -132,7 +132,10 @@ class DualScreenHost(private val activity: MainActivity, private val engine: Flu
     /// running downloads, imports and extractions are not interrupted, and
     /// the background downloader keeps the engine it reports to.
     private fun moveMain(displayId: Int) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || moved) return
+        // The home app cannot move: finishing it here would leave Android to
+        // start a second engine for the default display. The settings never
+        // offer Main on bottom with HOME on; this holds if one slips through.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || moved || activity.isHome) return
         CompanionBridge.close()
         FlutterEngineCache.getInstance().put(MainActivity.ENGINE_ID, engine)
         val intent = FlutterActivity.CachedEngineIntentBuilder(MainActivity::class.java, MainActivity.ENGINE_ID)

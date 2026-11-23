@@ -1,5 +1,6 @@
 package name.rafaismy.retrotoolbox
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -7,6 +8,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -17,6 +19,7 @@ import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.lang.ref.WeakReference
 
 /// An app icon as PNG bytes at [ICON_PX], the size the list draws it at.
 /// Adaptive icons are not Bitmaps, so they go through a Canvas.
@@ -47,7 +50,23 @@ class MainActivity : FlutterActivity() {
 
     /// Set by DualScreenHost.moveMain: this activity's engine, and the Dart
     /// work running in it, go on in the MainActivity on the other display.
+    /// Set by handOverToHome too, for the MainActivity in the home task.
     var handingOver = false
+
+    /// Started as the home app: through the HOME alias, by a Home press, or
+    /// by a handover. A standard task's MainActivity is not.
+    val isHome: Boolean
+        get() = intent?.hasCategory(Intent.CATEGORY_HOME) == true
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (isHome) homeActivity = WeakReference(this)
+    }
+
+    override fun onDestroy() {
+        if (homeActivity?.get() === this) homeActivity = null
+        super.onDestroy()
+    }
 
     // A handed-over engine is listed under ENGINE_ID. Once it is gone (the
     // process died, or the last activity on it closed), the intent that named
@@ -251,8 +270,108 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
+    override fun onResume() {
+        super.onResume()
+        launcher?.onResume()
+        // Made the home app while running as a standard task (the role
+        // dialog, or system Settings): the engine moves to the home task now,
+        // or the next Home press would start a second one there.
+        val home = try {
+            HomeRole.isHome(this)
+        } catch (_: Exception) {
+            false
+        }
+        if (!isHome && !handingOver && home) handOverToHome()
+        // The reverse: run as the home app, and it is not one now (another
+        // home app picked in system Settings, then back here). Left in the
+        // home task, Back on the root would end the engine and the launcher
+        // icon would start a second one.
+        if (isHome && !home) handOverToStandard()
+    }
+
+    /// The handover DualScreenHost.moveMain makes across displays, into the
+    /// home task: the same engine goes on there, so running downloads and
+    /// extractions do too, and this standard task goes.
+    private fun handOverToHome() {
+        val engine = flutterEngine ?: return
+        FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+        // Flutter's own extras for a cached engine, on an intent that names no
+        // component: only that one starts an activity of the HOME type.
+        val home = FlutterActivity.CachedEngineIntentBuilder(MainActivity::class.java, ENGINE_ID)
+            .destroyEngineWithActivity(true)
+            .build(this)
+            .setComponent(null)
+            .setAction(Intent.ACTION_MAIN)
+            .addCategory(Intent.CATEGORY_HOME)
+            .setPackage(packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        handingOver = true
+        try {
+            startActivity(home)
+        } catch (_: Exception) {
+            handingOver = false
+            // Unlisted again, unless this activity itself came from the cache.
+            if (cachedEngineId == null) FlutterEngineCache.getInstance().remove(ENGINE_ID)
+            return
+        }
+        finishAndRemoveTask()
+    }
+
+    /// The way back out: this activity runs as the home app and the app is
+    /// not home now (the switch or launcher mode off, or another home app
+    /// picked in system Settings). The same engine goes on in a standard task,
+    /// where Back on the root behaves as before HOME and the launcher icon
+    /// finds it, and this home task goes. [starter] starts it: the
+    /// ExternalEntryActivity in front when an app start found this activity
+    /// in the background. [incoming] is that start's intent, whose data and
+    /// extras come along. False when nothing moved.
+    fun handOverToStandard(starter: Activity = this, incoming: Intent? = null): Boolean {
+        if (!isHome || handingOver || isFinishing) return false
+        val engine = flutterEngine ?: return false
+        FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+        // MULTIPLE_TASK as moveMain: a MainActivity found by component would
+        // take this through onNewIntent and leave the engine listed, unused.
+        val standard = FlutterActivity.CachedEngineIntentBuilder(MainActivity::class.java, ENGINE_ID)
+            .destroyEngineWithActivity(true)
+            .build(this)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+        incoming?.data?.let { standard.data = it }
+        incoming?.extras?.let { standard.putExtras(it) }
+        handingOver = true
+        try {
+            starter.startActivity(standard)
+        } catch (_: Exception) {
+            handingOver = false
+            // Unlisted again, unless this activity itself came from the cache.
+            if (cachedEngineId == null) FlutterEngineCache.getInstance().remove(ENGINE_ID)
+            return false
+        }
+        finishAndRemoveTask()
+        return true
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // A Home press brings the home task forward with a HOME intent. One
+        // ExternalEntryActivity forwarded is an app start, not a press.
+        if (intent.hasCategory(Intent.CATEGORY_HOME) && !intent.getBooleanExtra(HomeRole.EXTRA_ENTRY, false)) launcher?.home()
+    }
+
+    // Back on the root route finishes the activity (PlatformPlugin), which for
+    // the home app would end its engine and any running download with it. The
+    // home app stays instead, as launchers do.
+    override fun popSystemNavigator(): Boolean {
+        if (!isHome) return false
+        return try {
+            HomeRole.held(this)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (launcher?.onActivityResult(requestCode) == true) return
         if (requestCode != PICK_REQUEST) return
         val result = pickResult ?: return
         pickResult = null
@@ -276,5 +395,12 @@ class MainActivity : FlutterActivity() {
         const val ENGINE_ID = "main"
 
         private var parkedShizuku: Pair<FlutterEngine, ShizukuBridge>? = null
+
+        /// The MainActivity started as the home app, while it lives: an app
+        /// start that finds the app no longer home takes its engine from it
+        /// instead of starting a second one (ExternalEntryActivity).
+        private var homeActivity: WeakReference<MainActivity>? = null
+
+        fun runningAsHome(): MainActivity? = homeActivity?.get()?.takeUnless { it.isFinishing || it.isDestroyed }
     }
 }
