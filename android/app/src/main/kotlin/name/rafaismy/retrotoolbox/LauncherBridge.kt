@@ -178,7 +178,7 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
                         entry["versionName"] = info.versionName
                         entry["dataDir"] = app.dataDir
                         entry["targetSdk"] = app.targetSdkVersion
-                        entry["legacyStorage"] = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && app.hasRequestedLegacyExternalStorage()
+                        entry["legacyStorage"] = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && requestedLegacyStorage(app)
                         entry["requestsManage"] = "android.permission.MANAGE_EXTERNAL_STORAGE" in requested
                         entry["requestsRead"] = "android.permission.READ_EXTERNAL_STORAGE" in requested
                         entry["sdkInt"] = Build.VERSION.SDK_INT
@@ -191,6 +191,14 @@ class LauncherBridge(private val activity: Activity, messenger: BinaryMessenger)
             }
             activity.runOnUiThread { result.success(out) }
         }.start()
+    }
+
+    // ApplicationInfo.hasRequestedLegacyExternalStorage is not in the public SDK, so the
+    // compiler cannot see it. Read it by reflection; false (no raw path access) is the safe answer.
+    private fun requestedLegacyStorage(app: android.content.pm.ApplicationInfo): Boolean = try {
+        app.javaClass.getMethod("hasRequestedLegacyExternalStorage").invoke(app) as? Boolean ?: false
+    } catch (_: Exception) {
+        false
     }
 
     private fun code(code: String, message: String? = null): Map<String, Any?> = mapOf("code" to code, "message" to message)
