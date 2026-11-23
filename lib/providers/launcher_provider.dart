@@ -119,17 +119,25 @@ final launchOverridesProvider = StateNotifierProvider<LaunchOverridesNotifier, M
   (ref) => LaunchOverridesNotifier(LaunchOverridesStore(supportDir: getApplicationSupportDirectory)),
 );
 
-/// The emulator that opens [game]: its per-game override, else the one
-/// detected emulator that covers its system. The override counts while its
-/// emulator is detected or detection runs. Null when none or several cover
-/// it, or while detection runs. Slice 2 puts the system defaults between the
-/// two.
+/// The emulator that opens [game]: its per-game override, else its
+/// console's default, else the one detected emulator that covers its system.
+/// An override or a default counts while its emulator is detected or
+/// detection runs. Null when none or several cover it, or while detection
+/// runs with neither.
 final resolveChoiceProvider = Provider.family<LaunchChoice?, Game>((ref, game) {
   final override = ref.watch(launchOverridesProvider)[game.gameId];
   final session = ref.watch(launcherSessionProvider).valueOrNull;
-  // An override for an emulator that is gone would fail every Play the same
+  // A choice for an emulator that is gone would fail every Play the same
   // way. It is skipped, not deleted, so it comes back with the emulator.
-  if (override != null && (session == null || session.detectedFor(override.presetId) != null)) return override;
+  bool detected(LaunchChoice c) => session == null || session.detectedFor(c.presetId) != null;
+  if (override != null && detected(override)) return override;
+  final fallback = ref.watch(launchConfigProvider.select((c) => c.defaults[game.consoleId]));
+  if (fallback != null && detected(fallback)) {
+    // A default names a preset: the variant is the one installed now, so a
+    // move from com.retroarch to com.retroarch.aarch64 keeps it.
+    final now = session?.detectedFor(fallback.presetId);
+    return now == null ? fallback : LaunchChoice(presetId: fallback.presetId, variant: now.variant, core: fallback.core);
+  }
   final covering = session?.covering(ref.watch(gameSystemProvider(game.consoleId)).slug) ?? const [];
   return covering.length == 1 ? covering.single.choice : null;
 });

@@ -11,6 +11,7 @@ import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset_store.dart';
@@ -66,6 +67,21 @@ class MemoryOverrides implements LaunchOverridesStore {
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class MemoryConfig implements LaunchConfigStore {
+  MemoryConfig([this.initial = const LaunchConfig()]);
+
+  final LaunchConfig initial;
+
+  @override
+  Future<LaunchConfig> load() async => initial;
+
+  @override
+  Future<void> save(LaunchConfig config) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 const _game = Game(title: 'Mario World', url: 'https://example.com/snes/Mario%20World.sfc', size: 1, consoleId: 'nintendo-snes');
 
 DetectedEmulator emu(String id, String label, {List<String> systems = const ['snes']}) =>
@@ -89,6 +105,7 @@ void main() {
     List<DetectedEmulator> detected = const [],
     bool available = true,
     Map<String, LaunchChoice> overrides = const {},
+    Map<String, LaunchChoice> defaults = const {},
     List<Override> extra = const [],
   }) async {
     store = MemoryOverrides(overrides);
@@ -108,6 +125,7 @@ void main() {
         ownedGameProvider.overrideWith((ref, game) async => OwnedGame(game: game, dir: '/roms/snes', paths: const ['/roms/snes/Mario World.sfc'])),
         gameLauncherProvider.overrideWith((ref) async => launcher),
         launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(store)),
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(LaunchConfig(defaults: defaults)))),
         ...extra,
       ],
       child: MaterialApp(
@@ -171,6 +189,14 @@ void main() {
     await t.tap(find.text('PLAY'));
     await t.pumpAndSettle();
     expect(launcher.launched, [kept]);
+  });
+
+  testWidgets("two covering emulators and the console's default: Play launches the default without asking", (t) async {
+    await pump(t, detected: [emu('ra', 'RetroArch'), emu('ds', 'DuckStation')], defaults: {'nintendo-snes': const LaunchChoice(presetId: 'ds', variant: 'org.example.ds')});
+    await t.tap(find.text('PLAY'));
+    await t.pumpAndSettle();
+    expect(find.text('Always for this game'), findsNothing);
+    expect(launcher.launched, [const LaunchChoice(presetId: 'ds', variant: 'org.example.ds')]);
   });
 
   testWidgets('Open with: Just this once launches and keeps nothing', (t) async {

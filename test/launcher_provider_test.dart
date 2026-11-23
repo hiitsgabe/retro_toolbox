@@ -156,9 +156,17 @@ void main() {
   });
 
   group('resolveChoice', () {
-    ProviderContainer container({Map<String, LaunchChoice> overrides = const {}, List<DetectedEmulator> detected = const []}) {
+    late MemoryConfig config;
+
+    ProviderContainer container({
+      Map<String, LaunchChoice> overrides = const {},
+      Map<String, LaunchChoice> defaults = const {},
+      List<DetectedEmulator> detected = const [],
+    }) {
+      config = MemoryConfig(LaunchConfig(defaults: defaults));
       final c = ProviderContainer(overrides: [
         launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(MemoryOverrides(overrides))),
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(config)),
         launcherSessionProvider.overrideWith((ref) async => LauncherSession(presets: const [], detected: detected)),
         gameSystemProvider.overrideWith((ref, consoleId) => (slug: 'psx', name: 'PlayStation')),
       ]);
@@ -168,6 +176,7 @@ void main() {
 
     Future<LaunchChoice?> resolve(ProviderContainer c) async {
       c.listen(resolveChoiceProvider(_game), (_, __) {});
+      await c.read(launchConfigProvider.notifier).loaded;
       await c.read(launcherSessionProvider.future);
       await Future<void>.delayed(Duration.zero);
       return c.read(resolveChoiceProvider(_game));
@@ -190,6 +199,7 @@ void main() {
       const override = LaunchChoice(presetId: 'ds', variant: 'com.github.stenzek.duckstation');
       final c = ProviderContainer(overrides: [
         launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(MemoryOverrides({_game.gameId: override}))),
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig())),
         launcherSessionProvider.overrideWith((ref) => Completer<LauncherSession>().future),
         gameSystemProvider.overrideWith((ref, consoleId) => (slug: 'psx', name: 'PlayStation')),
       ]);
@@ -203,6 +213,38 @@ void main() {
     test('with no override, the single detected emulator that covers the system', () async {
       final c = container(detected: [emu('ra', ['psx', 'snes']), emu('melonds', ['nds'])]);
       expect(await resolve(c), const LaunchChoice(presetId: 'ra', variant: 'org.example.ra'));
+    });
+
+    test('with no override the console default comes before the single covering emulator', () async {
+      final c = container(defaults: {'sony-psx': const LaunchChoice(presetId: 'ds', variant: 'org.example.ds')}, detected: [emu('ra', ['psx']), emu('ds', ['psx'])]);
+      expect(await resolve(c), const LaunchChoice(presetId: 'ds', variant: 'org.example.ds'));
+    });
+
+    test('a default takes the variant detected now and keeps its core', () async {
+      final c = container(defaults: {'sony-psx': const LaunchChoice(presetId: 'ra', variant: 'com.retroarch', core: 'swanstation')}, detected: [emu('ra', ['psx'])]);
+      expect(await resolve(c), const LaunchChoice(presetId: 'ra', variant: 'org.example.ra', core: 'swanstation'));
+    });
+
+    test('the per-game override still beats the default', () async {
+      const override = LaunchChoice(presetId: 'ra', variant: 'org.example.ra');
+      final c = container(
+        overrides: {_game.gameId: override},
+        defaults: {'sony-psx': const LaunchChoice(presetId: 'ds', variant: 'org.example.ds')},
+        detected: [emu('ra', ['psx']), emu('ds', ['psx'])],
+      );
+      expect(await resolve(c), override);
+    });
+
+    test('a default whose emulator is not detected is skipped, and kept', () async {
+      const gone = LaunchChoice(presetId: 'ds', variant: 'org.example.ds');
+      final c = container(defaults: {'sony-psx': gone}, detected: [emu('ra', ['psx'])]);
+      expect(await resolve(c), const LaunchChoice(presetId: 'ra', variant: 'org.example.ra'));
+      expect(c.read(launchConfigProvider).defaults, {'sony-psx': gone});
+    });
+
+    test("another console's default is not this game's", () async {
+      final c = container(defaults: {'nintendo-snes': const LaunchChoice(presetId: 'ds', variant: 'org.example.ds')}, detected: [emu('ra', ['psx']), emu('ds', ['psx'])]);
+      expect(await resolve(c), isNull);
     });
 
     test('two covering emulators and no override is no choice yet', () async {
