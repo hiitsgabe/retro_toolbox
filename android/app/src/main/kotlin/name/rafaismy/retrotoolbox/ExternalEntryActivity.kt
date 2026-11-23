@@ -20,6 +20,8 @@ class ExternalEntryActivity : Activity() {
             false
         }
         val forward = if (home) {
+            // A HOME MainActivity this starts takes the engine from a standard
+            // task that still holds it (MainActivity.takeStrandedEngine).
             HomeRole.homeIntent(this)
         } else {
             // A HOME intent with data would match no HOME filter, so only

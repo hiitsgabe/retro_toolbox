@@ -53,6 +53,59 @@ internal object HomeRole {
         return if (roles.isRoleAvailable(RoleManager.ROLE_HOME)) roles.createRequestRoleIntent(RoleManager.ROLE_HOME) else null
     }
 
+    /// The app stopped being the home app: HOME was turned off, or another
+    /// home app was picked. Not the same as !isHome: with no home app picked
+    /// ("ask every time", which below API 29 comes back whenever another app
+    /// with a HOME filter is installed) the held check reads false, and yet
+    /// the user may pick Retro Toolbox just once, so a HOME activity started
+    /// that way is still the home app.
+    fun homeLost(context: Context): Boolean = !aliasEnabled(context) || otherHome(context)
+
+    private fun otherHome(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val roles = context.getSystemService(RoleManager::class.java)
+            if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME)) return !roles.isRoleHeld(RoleManager.ROLE_HOME)
+        }
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val pm = context.packageManager
+        @Suppress("DEPRECATION")
+        val preferred = pm.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+        @Suppress("DEPRECATION")
+        val homes = pm.queryIntentActivities(home, 0).mapNotNull { it.activityInfo?.packageName }
+        return pickedOther(preferred, homes, context.packageName)
+    }
+
+    /// [preferred] is what a HOME intent resolves to: the home app when one
+    /// is picked, else the system's chooser, which is none of [homes] (its
+    /// package differs between Android builds, so it is not named here).
+    fun pickedOther(preferred: String?, homes: Collection<String>, own: String): Boolean =
+        preferred != null && preferred != own && preferred in homes
+
+    /// What the plugins are handed for [intent]. An app start forwarded to
+    /// the home task goes to them in its launcher shape, MAIN with LAUNCHER,
+    /// as getLaunchIntentForPackage gave it before HOME: flutter_foreground_task
+    /// answers a notification tap only on that shape. The HOME intent itself
+    /// keeps its HOME category, the one that makes the activity a home one.
+    /// Anything else, a Home press too, goes as it is.
+    fun forPlugins(intent: Intent): Intent {
+        if (!intent.hasCategory(Intent.CATEGORY_HOME) || !intent.getBooleanExtra(EXTRA_ENTRY, false)) return intent
+        return Intent(intent).setAction(Intent.ACTION_MAIN).apply {
+            removeCategory(Intent.CATEGORY_HOME)
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+    }
+
+    /// [base], the cached engine intent of a handover to a standard task, with
+    /// the app start that set it off: its data and extras, and the launcher
+    /// shape the plugins look for (see forPlugins). With no app start it is
+    /// no launcher intent.
+    fun standardEntry(base: Intent, incoming: Intent?): Intent {
+        if (incoming == null) return base
+        incoming.data?.let { base.data = it }
+        incoming.extras?.let { base.putExtras(it) }
+        return base.setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+    }
+
     /// Names no component, so the activity it starts gets the HOME activity
     /// type, as one a Home press starts does; a standard task is never reused
     /// for it.

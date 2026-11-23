@@ -144,7 +144,23 @@ separate app from the release one.
     Toolbox icon: the app shows as it was, recents holds one Retro Toolbox,
     and the download goes on without starting over. Do it again tapping the
     download notification instead of the icon.
-32. **Dual screen.** On a dual screen device: with Main on bottom, the Home
+32. **Another home app, the icon, then Retro Toolbox again.** With HOME on
+    and a download running, pick another home app in system Settings and tap
+    the Retro Toolbox icon. Pick Retro Toolbox again in system Settings, then
+    press Home: the app shows as it was, recents holds one Retro Toolbox, and
+    the download goes on without starting over. Do it again tapping the icon
+    instead of pressing Home.
+33. **Ask every time, below Android 10.** On Android 9 or older with HOME on,
+    install another app with a home screen, so Android asks which home app
+    to use. Start a download, press Home and pick Retro Toolbox just once:
+    the app stays where it was. Press Home and pick it just once again, and
+    press B on the main menu until nothing is left to close: recents holds
+    one Retro Toolbox, and the download goes on without starting over.
+34. **JDKV notification in HOME mode.** With HOME on and the JDKV server
+    running, open another app and tap the server's notification: Retro
+    Toolbox opens on the JDKV screen. Do it again with HOME on but another
+    home app picked in system Settings and Retro Toolbox in the background.
+35. **Dual screen.** On a dual screen device: with Main on bottom, the Home
     screen switch is off and says why, in the wizard and in Settings; with
     HOME on, the dual screen card's Main on bottom is off and says why. With
     Main on top and HOME on, the companion opens on the other screen, closes

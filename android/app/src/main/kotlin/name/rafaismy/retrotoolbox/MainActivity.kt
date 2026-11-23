@@ -58,26 +58,68 @@ class MainActivity : FlutterActivity() {
     val isHome: Boolean
         get() = intent?.hasCategory(Intent.CATEGORY_HOME) == true
 
+    /// This HOME activity took its engine from a standard one as it was
+    /// created (takeStrandedEngine), so the intent that started it names none.
+    private var adopted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super: the embedding picks the engine there.
+        val stranded = if (isHome) takeStrandedEngine() else null
         super.onCreate(savedInstanceState)
-        if (isHome) homeActivity = WeakReference(this)
+        if (isHome) homeActivity = WeakReference(this) else standardActivity = WeakReference(this)
+        stranded?.finishAndRemoveTask()
+        // The plugins read the intent an activity starts with as they attach,
+        // and the one that starts a HOME activity is no launcher intent. Not
+        // again when the activity is recreated with it.
+        val start = intent
+        if (savedInstanceState == null && start != null) {
+            val seen = HomeRole.forPlugins(start)
+            if (seen !== start) flutterEngine?.activityControlSurface?.onNewIntent(seen)
+        }
     }
 
     override fun onDestroy() {
         if (homeActivity?.get() === this) homeActivity = null
+        if (standardActivity?.get() === this) standardActivity = null
         super.onDestroy()
+    }
+
+    /// Android starts a HOME activity on its own (a Home press, or a launcher
+    /// entry forwarded home) while the engine runs in a standard task: the
+    /// app became home again in system Settings after an app start had moved
+    /// the engine out, or the user picked it just once from the chooser. That
+    /// standard activity is not resumed, so its handOverToHome never runs:
+    /// this activity takes the engine instead of starting a second one, the
+    /// way a handed-over intent would have given it, and the standard task
+    /// goes once this one holds it.
+    private fun takeStrandedEngine(): MainActivity? {
+        if (super.getCachedEngineId()?.let { FlutterEngineCache.getInstance().contains(it) } == true) return null
+        val standard = runningAsStandard() ?: return null
+        if (standard.handingOver) return null
+        // The embedding reads its delegate unchecked, and one that has let go
+        // of its engine has none.
+        val engine = try {
+            standard.flutterEngine
+        } catch (_: NullPointerException) {
+            null
+        } ?: return null
+        FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+        standard.handingOver = true
+        adopted = true
+        return standard
     }
 
     // A handed-over engine is listed under ENGINE_ID. Once it is gone (the
     // process died, or the last activity on it closed), the intent that named
     // it starts a fresh engine as a launcher start does.
     override fun getCachedEngineId(): String? =
-        super.getCachedEngineId()?.takeIf { FlutterEngineCache.getInstance().contains(it) }
+        (if (adopted) ENGINE_ID else super.getCachedEngineId())?.takeIf { FlutterEngineCache.getInstance().contains(it) }
 
     // Kept while handing over: the embedding refuses to let another activity
     // take an engine its host would destroy. Otherwise destroyed with this
-    // activity as usual, which the handed-over intent asks for too.
-    override fun shouldDestroyEngineWithHost(): Boolean = !handingOver && super.shouldDestroyEngineWithHost()
+    // activity as usual, which the handed-over intent asks for too, and an
+    // adopted engine with no intent to ask.
+    override fun shouldDestroyEngineWithHost(): Boolean = !handingOver && (adopted || super.shouldDestroyEngineWithHost())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -276,17 +318,26 @@ class MainActivity : FlutterActivity() {
         // Made the home app while running as a standard task (the role
         // dialog, or system Settings): the engine moves to the home task now,
         // or the next Home press would start a second one there.
-        val home = try {
-            HomeRole.isHome(this)
-        } catch (_: Exception) {
-            false
+        if (!isHome && !handingOver) {
+            val home = try {
+                HomeRole.isHome(this)
+            } catch (_: Exception) {
+                false
+            }
+            if (home) handOverToHome()
         }
-        if (!isHome && !handingOver && home) handOverToHome()
         // The reverse: run as the home app, and it is not one now (another
         // home app picked in system Settings, then back here). Left in the
         // home task, Back on the root would end the engine and the launcher
-        // icon would start a second one.
-        if (isHome && !home) handOverToStandard()
+        // icon would start a second one. Not on a held check that merely reads
+        // false: with no home app picked, the user just chose this one.
+        if (isHome && homeLost()) handOverToStandard()
+    }
+
+    private fun homeLost(): Boolean = try {
+        HomeRole.homeLost(this)
+    } catch (_: Exception) {
+        false
     }
 
     /// The handover DualScreenHost.moveMain makes across displays, into the
@@ -331,12 +382,13 @@ class MainActivity : FlutterActivity() {
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
         // MULTIPLE_TASK as moveMain: a MainActivity found by component would
         // take this through onNewIntent and leave the engine listed, unused.
-        val standard = FlutterActivity.CachedEngineIntentBuilder(MainActivity::class.java, ENGINE_ID)
-            .destroyEngineWithActivity(true)
-            .build(this)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-        incoming?.data?.let { standard.data = it }
-        incoming?.extras?.let { standard.putExtras(it) }
+        val standard = HomeRole.standardEntry(
+            FlutterActivity.CachedEngineIntentBuilder(MainActivity::class.java, ENGINE_ID)
+                .destroyEngineWithActivity(true)
+                .build(this)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK),
+            incoming,
+        )
         handingOver = true
         try {
             starter.startActivity(standard)
@@ -351,7 +403,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
+        super.onNewIntent(HomeRole.forPlugins(intent))
         // A Home press brings the home task forward with a HOME intent. One
         // ExternalEntryActivity forwarded is an app start, not a press.
         if (intent.hasCategory(Intent.CATEGORY_HOME) && !intent.getBooleanExtra(HomeRole.EXTRA_ENTRY, false)) launcher?.home()
@@ -359,15 +411,9 @@ class MainActivity : FlutterActivity() {
 
     // Back on the root route finishes the activity (PlatformPlugin), which for
     // the home app would end its engine and any running download with it. The
-    // home app stays instead, as launchers do.
-    override fun popSystemNavigator(): Boolean {
-        if (!isHome) return false
-        return try {
-            HomeRole.held(this)
-        } catch (_: Exception) {
-            false
-        }
-    }
+    // home app stays instead, as launchers do, picked just once too: the
+    // same test onResume hands over on.
+    override fun popSystemNavigator(): Boolean = isHome && !homeLost()
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -402,5 +448,11 @@ class MainActivity : FlutterActivity() {
         private var homeActivity: WeakReference<MainActivity>? = null
 
         fun runningAsHome(): MainActivity? = homeActivity?.get()?.takeUnless { it.isFinishing || it.isDestroyed }
+
+        /// The MainActivity in a standard task, while it lives: a HOME
+        /// activity Android starts takes its engine (takeStrandedEngine).
+        private var standardActivity: WeakReference<MainActivity>? = null
+
+        private fun runningAsStandard(): MainActivity? = standardActivity?.get()?.takeUnless { it.isFinishing || it.isDestroyed }
     }
 }
