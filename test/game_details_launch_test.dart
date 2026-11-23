@@ -117,13 +117,16 @@ void main() {
   /// The action bar's primary, labelled [label] (the bar writes Classic caps).
   Finder primary(String label) => find.descendant(of: find.byKey(const ValueKey('kit-primary')), matching: find.text(label));
 
-  testWidgets('an owned game with one covering emulator: Play is the primary and Start launches it', (t) async {
-    await pump(t, detected: [emu('ra', 'RetroArch')]);
-    expect(primary('PLAY'), findsOneWidget);
-    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
-    await t.pumpAndSettle();
-    expect(launcher.launched, [const LaunchChoice(presetId: 'ra', variant: 'org.example.ra')]);
-  });
+  // Extracted is the common case for disc consoles: the zip was unpacked.
+  for (final status in [GameStatus.downloaded, GameStatus.extracted]) {
+    testWidgets('an owned game, ${status.name}, with one covering emulator: Play is the primary and Start launches it', (t) async {
+      await pump(t, status: status, detected: [emu('ra', 'RetroArch')]);
+      expect(primary('PLAY'), findsOneWidget);
+      await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+      await t.pumpAndSettle();
+      expect(launcher.launched, [const LaunchChoice(presetId: 'ra', variant: 'org.example.ra')]);
+    });
+  }
 
   testWidgets('a game not on disk has no Play', (t) async {
     await pump(t, status: GameStatus.ready, detected: [emu('ra', 'RetroArch')]);
