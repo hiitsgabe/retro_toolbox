@@ -314,4 +314,46 @@ void main() {
     expect(config.saved.where((c) => c.manual.isNotEmpty), isEmpty);
     expect(detector.asked, hasLength(1), reason: 'only the arrival detection ran');
   });
+
+  testWidgets('Just open the file comes after the recipes when the app has a view activity, and ticked consoles save a generic emulator', (t) async {
+    await pump(t, onDisk: {'sega-saturn'});
+    channel.fits = {'eden'};
+    channel.view = 'dev.igawa6.edenduo.Open';
+    await pickApp(t, 'dev.igawa6.edenduo');
+    expect(channel.viewCalls, ['dev.igawa6.edenduo']);
+    expect(t.getTopLeft(inSheet('Opens like Eden')).dy, lessThan(t.getTopLeft(inSheet('Just open the file')).dy));
+    await tapAndSettle(t, inSheet('Just open the file'));
+    expect(find.text('Tick the ones Eden Duo opens'), findsOneWidget);
+    expect(find.text('No slug'), findsNothing, reason: 'a console with no art slug opens in no preset');
+    expect(t.getTopLeft(find.text('Saturn')).dy, lessThan(t.getTopLeft(find.text('PlayStation')).dy), reason: 'games on disk first');
+    expect(nextEnabled(t), isFalse, reason: 'Add waits for a console');
+    await tapAndSettle(t, find.text('PlayStation'));
+    await tapAndSettle(t, find.text('Saturn'));
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
+    final m = config.saved.last.manual.single;
+    expect((m.variant, m.recipe, m.activity), ('dev.igawa6.edenduo', 'generic', 'dev.igawa6.edenduo.Open'));
+    expect(m.systems, ['saturn', 'psx'], reason: 'in the order shown');
+    expect(detector.asked.last, contains(_duoId));
+    expect(find.byKey(const ValueKey('launcher-found-$_duoId')), findsOneWidget);
+  });
+
+  testWidgets('no recipe fits but the app has a view activity: the menu offers only Just open the file', (t) async {
+    await pump(t);
+    channel.view = 'dev.igawa6.edenduo.Open';
+    await pickApp(t, 'dev.igawa6.edenduo');
+    expect(inSheet('Just open the file'), findsOneWidget);
+    expect(find.descendant(of: find.byType(RowMenuSheet), matching: find.textContaining('Opens like')), findsNothing);
+  });
+
+  testWidgets('Back on the console picker saves nothing', (t) async {
+    await pump(t);
+    channel.view = 'dev.igawa6.edenduo.Open';
+    await pickApp(t, 'dev.igawa6.edenduo');
+    await tapAndSettle(t, inSheet('Just open the file'));
+    await tapAndSettle(t, find.text('PlayStation'));
+    nav.currentState!.pop();
+    await t.pumpAndSettle();
+    expect(find.text('Tick the ones Eden Duo opens'), findsNothing);
+    expect(config.saved.where((c) => c.manual.isNotEmpty), isEmpty);
+  });
 }

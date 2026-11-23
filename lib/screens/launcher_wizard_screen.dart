@@ -6,6 +6,7 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/launcher_app_picker_screen.dart';
+import 'package:retro_toolbox/screens/launcher_console_picker_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
@@ -116,26 +117,40 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     final label = app.info.label;
     setState(() => _testing = label);
     final file = await ref.read(launchPresetsProvider.future);
-    final recipes = await androidRecipesFor(ref.read(launcherChannelProvider), file.presets, app.package);
+    final channel = ref.read(launcherChannelProvider);
+    final recipes = await androidRecipesFor(channel, file.presets, app.package);
+    final activity = await channel.viewActivity(app.package);
     if (!mounted) return null;
     setState(() => _testing = null);
-    final recipe = await _chooseRecipe(label, recipes);
+    // A generic launch needs an activity to send the file to: without one it
+    // is not offered.
+    final recipe = await _chooseRecipe(label, recipes, generic: activity != null);
     if (recipe == null || !mounted) return null;
-    return ManualEmulator(variant: app.package, label: label, recipe: recipe);
+    return _withSystems(ManualEmulator(variant: app.package, label: label, recipe: recipe, activity: recipe == ManualEmulator.generic ? activity : null));
   }
 
-  /// The ways to open an app being added: each recipe that fits it, the
-  /// first focused even when it is the only one, so the pick is always the
-  /// user's. Null when the menu is closed, or when nothing fits (the step
-  /// then says so).
-  Future<String?> _chooseRecipe(String label, List<LaunchPreset> recipes) async {
-    if (recipes.isEmpty) {
+  /// A generic [m] with the consoles the user ticks for it; one with a recipe
+  /// as it is. Null when the console list is left.
+  Future<ManualEmulator?> _withSystems(ManualEmulator m) async {
+    if (!m.isGeneric) return m;
+    final ticked = await Navigator.of(context).push<List<String>>(MaterialPageRoute(builder: (_) => LauncherConsolePickerScreen(label: m.label)));
+    if (ticked == null || ticked.isEmpty) return null;
+    return ManualEmulator(variant: m.variant, label: m.label, recipe: m.recipe, systems: ticked, activity: m.activity);
+  }
+
+  /// The ways to open an app being added: each recipe that fits it, then
+  /// "Just open the file" when [generic], the first focused even when it is
+  /// the only one, so the pick is always the user's. Null when the menu is
+  /// closed, or when nothing fits (the step then says so).
+  Future<String?> _chooseRecipe(String label, List<LaunchPreset> recipes, {required bool generic}) async {
+    if (recipes.isEmpty && !generic) {
       setState(() => _addProblem = '$label cannot be opened by Retro Toolbox.');
       return null;
     }
     String? picked;
     await showRowMenu(context, title: label, subtitle: 'Opens games', items: [
       for (final r in recipes) RowMenuItem('Opens like ${r.name}', () => picked = r.id, subtitle: r.verified ? null : 'not tested'),
+      if (generic) RowMenuItem('Just open the file', () => picked = ManualEmulator.generic, subtitle: 'Hands it the game file, for an app no recipe fits'),
     ]);
     return picked;
   }
