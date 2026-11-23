@@ -106,4 +106,32 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('grid'), findsOneWidget);
   });
+
+  group('a Home press during the first visit', () {
+    /// Home with the wizards still awaited: the grid it opens must be the
+    /// only one, so a single Back lands on the menu.
+    Future<void> homeThenBack(WidgetTester t) async {
+      goToLibraryRoot(t.state<NavigatorState>(find.byType(Navigator)), grid: (_) => const Text('new grid'));
+      await t.pumpAndSettle();
+      expect(find.text('grid'), findsNothing, reason: 'the wizard Home closed does not lead to a second grid');
+      expect(find.text('new grid'), findsOneWidget);
+      t.state<NavigatorState>(find.byType(Navigator)).pop();
+      await t.pumpAndSettle();
+      expect(find.text('enter'), findsOneWidget, reason: 'Back from the grid Home opened is the menu');
+    }
+
+    testWidgets('in the setup wizard leaves one console grid', (t) async {
+      await pump(t, seen: false);
+      expect(find.text('setup'), findsOneWidget);
+      await homeThenBack(t);
+    });
+
+    testWidgets('in the launcher wizard leaves one console grid', (t) async {
+      await pump(t, seen: false);
+      await t.tap(find.text('setup: yes'));
+      await t.pumpAndSettle();
+      expect(find.text('launcher'), findsOneWidget);
+      await homeThenBack(t);
+    });
+  });
 }

@@ -371,7 +371,9 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
 /// launcher wizard when the setup's Finish asked for it, then the console
 /// grid. The setup only pops with that answer: a route it pushed on Finish
 /// would be the one its own pop removes, and one pushed after the pop would
-/// have a dead context. The builders are for tests.
+/// have a dead context. A Home press during a wizard closes it and opens the
+/// grid itself, so the grid is pushed only when it is not on top already.
+/// The builders are for tests.
 Future<void> enterGamesLibrary(
   NavigatorState nav, {
   required bool seen,
@@ -386,8 +388,20 @@ Future<void> enterGamesLibrary(
       await nav.push<bool>(MaterialPageRoute(fullscreenDialog: true, builder: launcher));
       if (!nav.mounted) return;
     }
+    if (_gridOnTop(nav)) return;
   }
   nav.push<void>(MaterialPageRoute(settings: const RouteSettings(name: ConsoleGridScreen.routeName), builder: grid));
+}
+
+/// Whether the console grid is the top route. A predicate that is true at
+/// once makes popUntil a peek: it sees the top route and pops nothing.
+bool _gridOnTop(NavigatorState nav) {
+  Route<dynamic>? top;
+  nav.popUntil((route) {
+    top = route;
+    return true;
+  });
+  return top?.settings.name == ConsoleGridScreen.routeName;
 }
 
 /// A Home press with Retro Toolbox as the home app: back to the console
