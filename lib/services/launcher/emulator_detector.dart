@@ -1,23 +1,42 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:retro_toolbox/services/launcher/desktop_finder.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 
-/// Which presets are installed: on Android through the native `detect`.
-/// Desktop detection comes with the find rules (desktop_finder.dart).
+/// Which presets are installed: on Android through the native `detect`, on
+/// desktop through each preset's find rules.
 class EmulatorDetector {
-  EmulatorDetector({LauncherChannel? channel, String? os})
+  EmulatorDetector({LauncherChannel? channel, DesktopFinder? finder, String? os})
       : _channel = channel ?? const LauncherChannel(),
+        _finder = finder,
         _os = os ?? Platform.operatingSystem;
 
   final LauncherChannel _channel;
+  final DesktopFinder? _finder;
   final String _os;
 
   Future<List<DetectedEmulator>> detect(List<LaunchPreset> presets) async {
     if (_os == 'android') return _android(presets);
-    return const [];
+    final finder = _finder ?? DesktopFinder(os: _os);
+    final out = <DetectedEmulator>[];
+    for (final preset in presets) {
+      final block = preset.desktopFor(_os);
+      if (block == null) continue;
+      final hit = await finder.find(block.find);
+      if (hit == null) continue;
+      out.add(DetectedEmulator(
+        presetId: preset.id,
+        variant: hit.variant,
+        label: preset.name,
+        systems: preset.systems.keys.toList(),
+        exe: hit.exe,
+        prefixArgs: hit.prefixArgs,
+      ));
+    }
+    return out;
   }
 
   Future<List<DetectedEmulator>> _android(List<LaunchPreset> presets) async {
