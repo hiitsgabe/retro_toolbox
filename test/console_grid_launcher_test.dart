@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/screens/app_drawer_screen.dart';
 import 'package:retro_toolbox/screens/console_grid_screen.dart';
@@ -27,10 +29,12 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   /// The console list under launcher mode [on]; the consoles in [withGames]
-  /// have games on disk, and [checking] are still being checked.
-  Future<void> pump(WidgetTester t, {required bool on, Set<String> withGames = const {'snes', 'psx'}, Set<String> checking = const {}, bool home = false}) async {
+  /// have games on disk, and [checking] are still being checked. With
+  /// [noCatalog] there is no console at all.
+  Future<void> pump(WidgetTester t,
+      {required bool on, Set<String> withGames = const {'snes', 'psx'}, Set<String> checking = const {}, bool home = false, bool noCatalog = false}) async {
     await pumpKit(t, const ConsoleGridScreen(), overrides: [
-      ...consolesOverrides(),
+      if (noCatalog) appStateProvider.overrideWith((ref) => FakeApp(const AppState())) else ...consolesOverrides(),
       launcherModeProvider.overrideWithValue(on),
       homeModeProvider.overrideWithValue(home),
       installedAppsProvider.overrideWithValue(const NoApps()),
@@ -88,6 +92,19 @@ void main() {
   testWidgets('not the home app: no Apps tile', (t) async {
     await pump(t, on: true);
     expect(find.text('APPS'), findsNothing);
+  });
+
+  // The empty states take their Apps action from the same gate as the tile.
+  testWidgets('not the home app, with no console holding a game: no Apps button', (t) async {
+    await pump(t, on: true, withGames: const {});
+    expect(find.text('No console has games on disk yet'), findsOneWidget);
+    expect(find.text('Apps'), findsNothing);
+  });
+
+  testWidgets('not the home app, with no catalog: no Apps button', (t) async {
+    await pump(t, on: true, noCatalog: true);
+    expect(find.text('No catalog configured. Add one in Settings.'), findsOneWidget);
+    expect(find.text('Apps'), findsNothing);
   });
 
   testWidgets('as the home app with no console holding a game, Apps is still in reach', (t) async {
