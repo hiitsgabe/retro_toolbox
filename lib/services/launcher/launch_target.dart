@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
@@ -35,7 +36,8 @@ class LaunchTarget {
 
 /// Picks the file of [game] that [system] opens. A disc of a set whose
 /// `<set>.m3u` sits in the library dir launches the m3u; otherwise the order
-/// is m3u, then cue/gdi, then a disc image, then any other file.
+/// is m3u, then cue/gdi, then a disc image, then any other file, and within
+/// one of those a set's lowest disc first.
 LaunchTarget resolveLaunchTarget(OwnedGame game, PresetSystem system) {
   final candidates = <String>[];
   void add(String path) {
@@ -52,7 +54,26 @@ LaunchTarget resolveLaunchTarget(OwnedGame game, PresetSystem system) {
   game.paths.forEach(add);
   if (candidates.isEmpty) return const LaunchTarget.unsupported(null);
 
-  final ranked = [...candidates]..sort((a, b) => _rank(a).compareTo(_rank(b)));
+  // Ties keep the order of game.paths, except that the discs of one set go by disc number, so a folder of
+  // discs with no m3u starts disc 1 whatever order its listing came in. The key is explicit because List.sort
+  // is not stable.
+  final key = {for (final (i, c) in candidates.indexed) c: (lead: i, disc: 0)};
+  for (final folder in {for (final c in candidates) p.dirname(c)}) {
+    final here = {for (final c in candidates) if (p.dirname(c) == folder) p.basename(c): c};
+    for (final set in M3uService.detectDiscSets(here.keys.toList(), extensions: launchDiscExtensions)) {
+      final discs = [for (final d in set.discs) here[d]!];
+      final lead = discs.map((d) => key[d]!.lead).reduce(min);
+      for (final (n, d) in discs.indexed) {
+        key[d] = (lead: lead, disc: n);
+      }
+    }
+  }
+  int byKey(String a, String b) {
+    final (ka, kb) = (key[a]!, key[b]!);
+    return ka.lead != kb.lead ? ka.lead.compareTo(kb.lead) : ka.disc.compareTo(kb.disc);
+  }
+
+  final ranked = [...candidates]..sort((a, b) => _rank(a) != _rank(b) ? _rank(a).compareTo(_rank(b)) : byKey(a, b));
   final accepted = system.extensions.toSet();
   for (final c in ranked) {
     if (!accepted.contains(_ext(c))) continue;

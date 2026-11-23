@@ -80,6 +80,24 @@ void main() {
     expect(t.path, d1);
   });
 
+  test("a game beside another set's m3u launches itself, not that set", () {
+    final crash = touch('Crash.chd');
+    touch('FF7 (Disc 1).chd');
+    touch('FF7 (Disc 2).chd');
+    touch('FF7.m3u', 'FF7 (Disc 1).chd\nFF7 (Disc 2).chd\n');
+    final t = resolveLaunchTarget(owned('Crash.chd', [crash]), system(['chd', 'm3u']));
+    expect(t.path, crash);
+  });
+
+  test('a folder of discs and no m3u launches disc 1, whatever order the folder lists them in', () {
+    final d2 = touch('FF7/FF7 (Disc 2).cue');
+    final b2 = touch('FF7/FF7 (Disc 2).bin');
+    final d1 = touch('FF7/FF7 (Disc 1).cue');
+    final b1 = touch('FF7/FF7 (Disc 1).bin');
+    final t = resolveLaunchTarget(owned('FF7.zip', [d2, b2, d1, b1]), system(['cue', 'bin']));
+    expect(t.path, d1);
+  });
+
   test('a zip the emulator does not take, with no extracted copy, is unsupported', () {
     final zip = touch('Ridge Racer.zip');
     final t = resolveLaunchTarget(owned('Ridge Racer.zip', [zip]), system(['chd', 'cue']));
@@ -102,16 +120,17 @@ void main() {
       expect(o.paths, [p.join(dir, 'Crash.chd')]);
     });
 
-    test("an extracted presence is the folder's files", () {
-      final files = [p.join(dir, 'Spyro', 'Spyro.cue'), p.join(dir, 'Spyro', 'Spyro.bin')];
-      final o = OwnedGame.fromPresence(game('Spyro.zip'), dir, LibraryPresence.extracted, snap({'Spyro': files}))!;
-      expect(o.paths, files);
+    // The snapshot keeps the directory's listing order, which differs between devices.
+    test("an extracted presence is the folder's files, sorted by path", () {
+      final cue = p.join(dir, 'Spyro', 'Spyro.cue'), bin = p.join(dir, 'Spyro', 'Spyro.bin');
+      final o = OwnedGame.fromPresence(game('Spyro.zip'), dir, LibraryPresence.extracted, snap({'Spyro': [cue, bin]}))!;
+      expect(o.paths, [bin, cue]);
     });
 
-    test('a kept archive comes after its extracted files', () {
-      final files = [p.join(dir, 'Spyro', 'Spyro.cue')];
-      final o = OwnedGame.fromPresence(game('Spyro.zip'), dir, LibraryPresence.fileAndExtracted, snap({'Spyro': files}))!;
-      expect(o.paths, [...files, p.join(dir, 'Spyro.zip')]);
+    test('a kept archive comes after its extracted files, which are sorted by path', () {
+      final cue = p.join(dir, 'Spyro', 'Spyro.cue'), bin = p.join(dir, 'Spyro', 'Spyro.bin');
+      final o = OwnedGame.fromPresence(game('Spyro.zip'), dir, LibraryPresence.fileAndExtracted, snap({'Spyro': [cue, bin]}))!;
+      expect(o.paths, [bin, cue, p.join(dir, 'Spyro.zip')]);
     });
 
     test('no presence is not owned', () {
