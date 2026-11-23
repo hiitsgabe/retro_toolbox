@@ -8,13 +8,31 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/screens/setup_wizard_screen.dart';
 import 'package:retro_toolbox/services/catalog_service.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_store.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/settings/ia_credentials_setting.dart';
+import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _MemoryConfig implements LaunchConfigStore {
+  _MemoryConfig(this.initial);
+
+  final LaunchConfig initial;
+
+  @override
+  Future<LaunchConfig> load() async => initial;
+
+  @override
+  Future<void> save(LaunchConfig config) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
 
 /// No consoles: the wizard's text must not depend on a git-ignored catalog in
 /// assets/catalog, which a developer may have and CI does not.
@@ -76,7 +94,7 @@ void main() {
   });
 
   Future<List<String>> pumpWizard(WidgetTester tester,
-      {required int step, required List<bool> popped, List<Override> overrides = const [], Override? catalog}) async {
+      {required int step, required List<bool> popped, List<bool?>? results, List<Override> overrides = const [], Override? catalog}) async {
     SharedPreferences.setMockInitialValues({});
     final tmp = Directory.systemTemp.createTempSync('setup');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -95,9 +113,9 @@ void main() {
           body: Builder(
             builder: (ctx) => TextButton(
               onPressed: () async {
-                await Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(builder: (_) => SetupWizardScreen(initialStep: step)));
+                final result = await Navigator.of(ctx).push(MaterialPageRoute<bool>(builder: (_) => SetupWizardScreen(initialStep: step)));
                 popped.add(true);
+                results?.add(result);
               },
               child: const Text('open'),
             ),
@@ -374,6 +392,75 @@ void main() {
       await finish(tester);
       expect(launchbox.imports, isEmpty);
       expect(popped, [true]);
+    });
+  });
+
+  group('launcher mode on the Connections step', () {
+    final tile = find.widgetWithText(OptionToggle, 'Launcher mode');
+
+    Override config({bool enabled = false}) => launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(_MemoryConfig(LaunchConfig(enabled: enabled))));
+
+    Future<void> finish(WidgetTester tester) async {
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('kit-primary')));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offered below LaunchBox where launching works, off by default', (tester) async {
+      await pumpWizard(tester, step: 2, popped: [], overrides: [config(), launcherCardProvider.overrideWithValue(true)]);
+      expect(tester.widget<OptionToggle>(tile).value, isFalse);
+      expect(tester.getTopLeft(tile).dy, greaterThan(tester.getTopLeft(find.widgetWithText(OptionToggle, 'Download LaunchBox metadata')).dy));
+    });
+
+    testWidgets('not offered where launching does not work', (tester) async {
+      await pumpWizard(tester, step: 2, popped: [], overrides: [config(), launcherCardProvider.overrideWithValue(false)]);
+      expect(tile, findsNothing);
+    });
+
+    testWidgets('switched on, Finish pops true so the launcher wizard opens next', (tester) async {
+      final results = <bool?>[];
+      await pumpWizard(tester, step: 2, popped: [], results: results, overrides: [config(), launcherCardProvider.overrideWithValue(true)]);
+      await tester.tap(tile);
+      await tester.pump();
+      await finish(tester);
+      expect(results, [true]);
+    });
+
+    testWidgets('left off, Finish pops false', (tester) async {
+      final results = <bool?>[];
+      await pumpWizard(tester, step: 2, popped: [], results: results, overrides: [config(), launcherCardProvider.overrideWithValue(true)]);
+      await finish(tester);
+      expect(results, [false]);
+    });
+
+    testWidgets('switched on, then leaving with B from the first step asks for nothing', (tester) async {
+      final results = <bool?>[];
+      await pumpWizard(tester, step: 2, popped: [], results: results, overrides: [config(), launcherCardProvider.overrideWithValue(true)]);
+      await tester.tap(tile);
+      await tester.pump();
+      for (var i = 0; i < 2; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+      }
+      await tester.runAsync(() async {
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pumpAndSettle();
+      expect(results, [false]);
+    });
+
+    testWidgets('already on: shown on and disabled, and Finish asks for nothing', (tester) async {
+      final results = <bool?>[];
+      await pumpWizard(tester, step: 2, popped: [], results: results, overrides: [config(enabled: true), launcherCardProvider.overrideWithValue(true)]);
+      await tester.pump();
+      final s = tester.widget<OptionToggle>(tile);
+      expect((s.value, s.onChanged), (true, null));
+      expect(find.descendant(of: tile, matching: find.text('Already on')), findsOneWidget);
+      await finish(tester);
+      expect(results, [false]);
     });
   });
 }
