@@ -42,6 +42,30 @@ only once its row passed.
    wizard's Systems step shows "Allow all files access for <emulator>". It
    opens the system page of that emulator, not of Retro Toolbox; with the
    access on there, a `path` launch opens the game.
+9. **Wizard, Emulators.** Settings > Library > Launcher mode > Set up. Step 1
+   lists the installed emulators with their version, "not tested" beside
+   each unverified one. Uninstall one, press Detect again: it is gone. With
+   none installed, it names up to three to install.
+10. **Wizard, Systems.** One row per console whose folder holds a game, none
+    for the others; each starts on the first emulator the preset file lists.
+    A RetroArch row has a core row under it and says to install the core.
+    With the library left in the app's own `Android/data` folder, a row
+    warns "Other apps cannot read this folder".
+11. **Wizard, Folder access.** Pick a `saf` emulator (PPSSPP, Flycast): the
+    Folder access step names it and its folder; "Open <emulator>" opens it.
+    Give the folder inside the emulator, then Play opens a game. With only
+    `path` and `provider` emulators picked, the step is not there.
+12. **Wizard, Finish.** Finish turns the mode on. Play on a game of a set up
+    console starts its emulator without asking, also after an app restart,
+    and the restart does not detect again first. B on step 1 leaves without
+    turning anything on. With no game in any console folder, Systems says
+    so, Next stays on, and Finish turns the mode on with no console set up.
+13. **Resume.** With the mode on, uninstall an emulator from system Settings
+    and come back to the app: Open with no longer lists it.
+14. **Mode off, new emulator.** With the mode off and a detection saved
+    (open a game's page once), install an emulator for a console that had
+    none and restart the app: Play still reads "No emulator for <system>".
+    Press Detect again beside it: Play comes on and opens the game.
 
 ## One row per Android preset
 

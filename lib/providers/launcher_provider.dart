@@ -23,6 +23,7 @@ import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
@@ -34,6 +35,13 @@ final launcherAvailableProvider = Provider<bool>((ref) => launcherSupported(
       handheld: Handheld.current,
       server: ServerMode.current,
     ));
+
+/// `Platform.operatingSystem`, as a provider tests can set: the wizard's
+/// Android-only rows and step follow it.
+final launcherOsProvider = Provider<String>((ref) => Platform.operatingSystem);
+
+/// Android's internal storage root, `/storage/emulated/<user>`. Android only.
+final primaryStorageRootProvider = FutureProvider<String>((ref) => primaryStorageRoot());
 
 final launchPresetStoreProvider = Provider<LaunchPresetStore>((ref) => LaunchPresetStore(
       url: LaunchPresetsSource.resolve(),
