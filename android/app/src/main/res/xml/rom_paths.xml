@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher: a ROM handed to an emulator as a content URI. LauncherBridge
+     refuses any path outside /storage/ before it asks for one. -->
+<paths>
+    <root-path name="roms" path="/storage/" />
+</paths>

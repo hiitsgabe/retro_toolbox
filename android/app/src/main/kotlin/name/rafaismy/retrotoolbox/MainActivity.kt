@@ -22,26 +22,28 @@ import java.io.File
 /// Adaptive icons are not Bitmaps, so they go through a Canvas.
 private const val ICON_PX = 96
 
-class MainActivity : FlutterActivity() {
-    private fun iconPng(d: Drawable): ByteArray? = try {
-        val bitmap = if (d is BitmapDrawable && d.bitmap != null) {
-            Bitmap.createScaledBitmap(d.bitmap, ICON_PX, ICON_PX, true)
-        } else {
-            Bitmap.createBitmap(ICON_PX, ICON_PX, Bitmap.Config.ARGB_8888).also {
-                val canvas = Canvas(it)
-                d.setBounds(0, 0, canvas.width, canvas.height)
-                d.draw(canvas)
-            }
+// Top level so LauncherBridge's detect draws icons the same way.
+internal fun iconPng(d: Drawable): ByteArray? = try {
+    val bitmap = if (d is BitmapDrawable && d.bitmap != null) {
+        Bitmap.createScaledBitmap(d.bitmap, ICON_PX, ICON_PX, true)
+    } else {
+        Bitmap.createBitmap(ICON_PX, ICON_PX, Bitmap.Config.ARGB_8888).also {
+            val canvas = Canvas(it)
+            d.setBounds(0, 0, canvas.width, canvas.height)
+            d.draw(canvas)
         }
-        ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
-    } catch (_: Exception) {
-        null
     }
+    ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+} catch (_: Exception) {
+    null
+}
 
+class MainActivity : FlutterActivity() {
     private var pickResult: MethodChannel.Result? = null
     private var pickingDir = false
     private var shizuku: ShizukuBridge? = null
     private var dualScreen: DualScreenHost? = null
+    private var launcher: LauncherBridge? = null
 
     /// Set by DualScreenHost.moveMain: this activity's engine, and the Dart
     /// work running in it, go on in the MainActivity on the other display.
@@ -229,12 +231,15 @@ class MainActivity : FlutterActivity() {
         shizuku = parked?.takeIf { it.first === flutterEngine }?.second
             ?: ShizukuBridge(packageName, flutterEngine.dartExecutor.binaryMessenger)
         dualScreen = DualScreenHost(this, flutterEngine)
+        launcher = LauncherBridge(this, flutterEngine.dartExecutor.binaryMessenger)
     }
 
     // Runs when this activity lets go of the engine: on destroy, or, after a
     // move, when the MainActivity on the other display takes it, before that
     // one configures it.
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        launcher?.dispose()
+        launcher = null
         dualScreen?.dispose()
         dualScreen = null
         val bridge = shizuku
