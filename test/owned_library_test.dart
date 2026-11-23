@@ -109,6 +109,13 @@ void main() {
     expect(lib.games, isEmpty, reason: 'the zip was extracted at the root: its cue and bin are related to it, and the track joins the cue');
   });
 
+  test('a folder a catalog game was extracted to, its archive deleted, is that game', () async {
+    touch('Vagrant Story (USA)/Vagrant Story (USA).cue');
+    touch('Vagrant Story (USA)/Vagrant Story (USA).bin');
+    touch('Spyro (USA)/Spyro (USA).cue');
+    expect(titles(await scan(_psx, catalog: [_catalog('Vagrant Story (USA).zip')])), ['Spyro (USA)']);
+  });
+
   test('a dir with only .chd files counts for a cue/bin console that converts to CHD', () async {
     touch('Crash (USA).chd');
     expect(titles(await scan(_psx)), ['Crash (USA)']);
