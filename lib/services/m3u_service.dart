@@ -18,11 +18,12 @@ class M3uService {
 
   /// Groups [filenames] into multi-disc sets, keyed by the title with its
   /// disc token stripped. Only sets with two or more discs are returned, each
-  /// ordered by disc number.
-  static List<DiscSet> detectDiscSets(List<String> filenames) {
+  /// ordered by disc number. [extensions] (lowercase, with the dot) widens the
+  /// disc types for the launcher, which also sees GameCube and Wii sets.
+  static List<DiscSet> detectDiscSets(List<String> filenames, {Set<String> extensions = discExtensions}) {
     final groups = <String, List<({int n, String file})>>{};
     for (final f in filenames) {
-      if (!discExtensions.contains(p.extension(f).toLowerCase())) continue;
+      if (!extensions.contains(p.extension(f).toLowerCase())) continue;
       final m = _discToken.firstMatch(f);
       if (m == null) continue;
       final n = int.tryParse(m.group(1)!) ?? 0;

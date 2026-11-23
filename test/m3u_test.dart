@@ -30,6 +30,13 @@ void main() {
     expect(sets.first.discs.length, 2);
   });
 
+  test('detectDiscSets takes a wider extension set when asked, the default stays', () {
+    const names = ['Tales (Disc 1).rvz', 'Tales (Disc 2).rvz'];
+    expect(M3uService.detectDiscSets(names), isEmpty);
+    final sets = M3uService.detectDiscSets(names, extensions: {...M3uService.discExtensions, '.rvz'});
+    expect(sets.single.discs, names);
+  });
+
   test('detectDiscSets ignores singletons and non-disc media', () {
     final sets = M3uService.detectDiscSets([
       'Solo Game (Disc 1).chd',
