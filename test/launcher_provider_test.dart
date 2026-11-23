@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -100,8 +101,29 @@ void main() {
 
     test('the per-game override comes first', () async {
       const override = LaunchChoice(presetId: 'ds', variant: 'com.github.stenzek.duckstation');
-      final c = container(overrides: {_game.gameId: override}, detected: [emu('ra', ['psx'])]);
+      final c = container(overrides: {_game.gameId: override}, detected: [emu('ra', ['psx']), emu('ds', ['psx'])]);
       expect(await resolve(c), override);
+    });
+
+    test('an override whose emulator is not detected falls through to the single covering one, and is kept', () async {
+      const override = LaunchChoice(presetId: 'ds', variant: 'com.github.stenzek.duckstation');
+      final c = container(overrides: {_game.gameId: override}, detected: [emu('ra', ['psx'])]);
+      expect(await resolve(c), const LaunchChoice(presetId: 'ra', variant: 'org.example.ra'));
+      expect(c.read(launchOverridesProvider)[_game.gameId], override);
+    });
+
+    test('while detection runs the override is the choice', () async {
+      const override = LaunchChoice(presetId: 'ds', variant: 'com.github.stenzek.duckstation');
+      final c = ProviderContainer(overrides: [
+        launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(MemoryOverrides({_game.gameId: override}))),
+        launcherSessionProvider.overrideWith((ref) => Completer<LauncherSession>().future),
+        gameSystemProvider.overrideWith((ref, consoleId) => (slug: 'psx', name: 'PlayStation')),
+      ]);
+      addTearDown(c.dispose);
+      c.listen(resolveChoiceProvider(_game), (_, __) {});
+      await Future<void>.delayed(Duration.zero);
+      expect(c.read(launcherSessionProvider).isLoading, isTrue);
+      expect(c.read(resolveChoiceProvider(_game)), override);
     });
 
     test('with no override, the single detected emulator that covers the system', () async {
