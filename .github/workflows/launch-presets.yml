@@ -1,0 +1,40 @@
+name: Launch presets
+
+# The app downloads launch_presets.json from main, so a preset that fails the
+# strict check must never land there. The same check runs in
+# test/launch_presets_file_test.dart; this job needs no full test run.
+on:
+  pull_request:
+    paths:
+      - "launch_presets/**"
+      - "lib/services/launcher/**"
+      - "lib/utils/console_slugs.dart"
+      - "tool/launch_presets_check.dart"
+      - ".github/workflows/launch-presets.yml"
+  push:
+    branches: [main]
+    paths:
+      - "launch_presets/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.35.7"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: dart run tool/launch_presets_check.dart

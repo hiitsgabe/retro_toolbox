@@ -72,6 +72,9 @@ flutter:
     - assets/boxarts/
     - assets/console_art/
     - assets/sport_art/
+    # Launch presets: the seed the app falls back on, and the same file it
+    # downloads from main (lib/services/launcher/launch_preset_store.dart).
+    - launch_presets/launch_presets.json
     # chdman binaries are per-platform. Each <os> folder ships the binary plus
     # any sibling libs, listed in its manifest.txt. See assets/chdman/README.md.
     - assets/chdman/

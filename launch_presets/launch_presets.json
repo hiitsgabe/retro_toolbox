@@ -1,0 +1,568 @@
+{
+  "schema": 1,
+  "version": 1,
+  "presets": [
+    {
+      "id": "retroarch",
+      "name": "RetroArch",
+      "verified": false,
+      "systems": {
+        "nes": {"cores": ["mesen", "fceumm", "nestopia", "quicknes"], "extensions": ["nes", "fds", "unf", "zip"]},
+        "snes": {"cores": ["snes9x", "snes9x2010", "bsnes"], "extensions": ["sfc", "smc", "fig", "bs", "zip"]},
+        "gb": {"cores": ["gambatte", "sameboy", "gearboy", "mgba"], "extensions": ["gb", "zip"]},
+        "gbc": {"cores": ["gambatte", "sameboy", "mgba"], "extensions": ["gbc", "zip"]},
+        "gba": {"cores": ["mgba", "vba_next", "gpsp"], "extensions": ["gba", "zip"]},
+        "nds": {"cores": ["melonds", "desmume"], "extensions": ["nds", "zip"]},
+        "3ds": {"cores": ["citra"], "extensions": ["3ds", "cci", "cxi"]},
+        "n64": {"cores": ["mupen64plus_next_gles3", "parallel_n64"], "extensions": ["n64", "z64", "v64", "zip"]},
+        "gamecube": {"cores": ["dolphin"], "extensions": ["iso", "gcm", "rvz", "gcz", "ciso", "m3u"]},
+        "wii": {"cores": ["dolphin"], "extensions": ["iso", "wbfs", "rvz", "gcz"]},
+        "psx": {"cores": ["swanstation", "pcsx_rearmed", "mednafen_psx_hw"], "extensions": ["chd", "cue", "pbp", "m3u", "iso"]},
+        "ps2": {"cores": ["pcsx2"], "extensions": ["chd", "iso"]},
+        "psp": {"cores": ["ppsspp"], "extensions": ["iso", "cso", "chd", "pbp"]},
+        "genesis": {"cores": ["genesis_plus_gx", "picodrive"], "extensions": ["md", "gen", "smd", "bin", "zip"]},
+        "saturn": {"cores": ["mednafen_saturn", "yabasanshiro"], "extensions": ["chd", "cue", "m3u"]},
+        "dreamcast": {"cores": ["flycast"], "extensions": ["chd", "gdi", "cdi", "m3u"]},
+        "arcade": {"cores": ["fbneo", "mame2003_plus", "mamearcade"], "extensions": ["zip", "7z"]}
+      },
+      "android": {
+        "packages": ["com.retroarch.aarch64", "com.retroarch", "com.retroarch.ra32"],
+        "activity": "com.retroarch.browser.retroactivity.RetroActivityFuture",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "path", "scopedMode": "saf", "extra": "ROM"},
+        "extras": [{"key": "LIBRETRO", "type": "string", "value": "{retroarch.core}"}, {"key": "CONFIGFILE", "type": "string", "value": "{retroarch.config}"}],
+        "flags": ["clearTask", "clearTop"]
+      },
+      "linux": {
+        "find": [
+          {"type": "path", "names": ["retroarch"]},
+          {"type": "flatpak", "id": "org.libretro.RetroArch"},
+          {"type": "static", "paths": ["~/Applications/RetroArch-Linux*.AppImage"]}
+        ],
+        "args": ["-L", "{retroarch.core}", "{rom}"]
+      },
+      "windows": {
+        "find": [
+          {"type": "static", "paths": ["%APPDATA%\\RetroArch\\retroarch.exe", "C:\\RetroArch-Win64\\retroarch.exe"]},
+          {"type": "path", "names": ["retroarch.exe"]}
+        ],
+        "args": ["-L", "{retroarch.core}", "{rom}"]
+      },
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/RetroArch.app"]}], "args": ["-L", "{retroarch.core}", "{rom}"]}
+    },
+    {
+      "id": "duckstation",
+      "name": "DuckStation",
+      "verified": false,
+      "systems": {"psx": {"extensions": ["chd", "cue", "pbp", "m3u", "iso", "img"]}},
+      "android": {
+        "packages": ["com.github.stenzek.duckstation"],
+        "activity": "com.github.stenzek.duckstation.EmulationActivity",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "path", "scopedMode": "saf", "extra": "bootPath"},
+        "extras": [{"key": "resumeState", "type": "bool", "value": false}],
+        "flags": ["clearTask", "clearTop"]
+      },
+      "linux": {
+        "find": [
+          {"type": "path", "names": ["duckstation-qt"]},
+          {"type": "flatpak", "id": "org.duckstation.DuckStation"},
+          {"type": "static", "paths": ["~/Applications/DuckStation*.AppImage"]}
+        ],
+        "args": ["-batch", "{rom}"]
+      },
+      "windows": {"find": [{"type": "path", "names": ["duckstation-qt-x64-ReleaseLTCG.exe"]}], "args": ["-batch", "{rom}"]},
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/DuckStation.app"]}], "args": ["-batch", "{rom}"]}
+    },
+    {
+      "id": "epsxe",
+      "name": "ePSXe",
+      "verified": false,
+      "systems": {"psx": {"extensions": ["cue", "pbp", "iso", "img", "bin"]}},
+      "android": {
+        "packages": ["com.epsxe.ePSXe"],
+        "activity": "com.epsxe.ePSXe.ePSXe",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "path", "extra": "com.epsxe.ePSXe.isoName"}
+      }
+    },
+    {
+      "id": "fpse",
+      "name": "FPse",
+      "verified": false,
+      "systems": {"psx": {"extensions": ["cue", "pbp", "iso", "img", "bin"]}},
+      "android": {"packages": ["com.emulator.fpse"], "activity": "com.emulator.fpse.Main", "action": "android.intent.action.VIEW", "rom": {"mode": "provider"}}
+    },
+    {
+      "id": "nethersx2",
+      "name": "NetherSX2",
+      "verified": false,
+      "systems": {"ps2": {"extensions": ["iso", "chd", "cso", "gz"]}},
+      "android": {
+        "packages": ["xyz.aethersx2.android", "xyz.aethersx2.tturnip", "xyz.aethersx2.cturnip"],
+        "activity": "xyz.aethersx2.android.EmulationActivity",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "saf", "extra": "bootPath"},
+        "flags": ["clearTask", "clearTop"]
+      }
+    },
+    {
+      "id": "play",
+      "name": "Play!",
+      "verified": false,
+      "systems": {"ps2": {"extensions": ["iso", "chd", "cso"]}},
+      "android": {
+        "packages": ["com.virtualapplications.play"],
+        "activity": "com.virtualapplications.play.MainActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "pcsx2",
+      "name": "PCSX2",
+      "verified": false,
+      "systems": {"ps2": {"extensions": ["iso", "chd", "cso", "gz"]}},
+      "linux": {
+        "find": [
+          {"type": "path", "names": ["pcsx2-qt"]},
+          {"type": "flatpak", "id": "net.pcsx2.PCSX2"},
+          {"type": "static", "paths": ["~/Applications/pcsx2-*.AppImage"]}
+        ],
+        "args": ["-batch", "{rom}"]
+      },
+      "windows": {
+        "find": [{"type": "static", "paths": ["%PROGRAMFILES%\\PCSX2\\pcsx2-qt.exe"]}, {"type": "path", "names": ["pcsx2-qt.exe"]}],
+        "args": ["-batch", "{rom}"]
+      },
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/PCSX2.app"]}], "args": ["-batch", "{rom}"]}
+    },
+    {
+      "id": "ppsspp",
+      "name": "PPSSPP",
+      "verified": false,
+      "systems": {"psp": {"extensions": ["iso", "cso", "chd", "pbp"]}},
+      "android": {
+        "packages": ["org.ppsspp.ppsspp", "org.ppsspp.ppssppgold"],
+        "activity": "org.ppsspp.ppsspp.PpssppActivity",
+        "action": "android.intent.action.VIEW",
+        "categories": ["android.intent.category.DEFAULT"],
+        "rom": {"mode": "saf"}
+      },
+      "linux": {"find": [{"type": "path", "names": ["PPSSPPSDL", "ppsspp"]}, {"type": "flatpak", "id": "org.ppsspp.PPSSPP"}], "args": ["{rom}"]},
+      "windows": {
+        "find": [
+          {
+            "type": "registry",
+            "key": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PPSSPP_is1",
+            "value": "InstallLocation",
+            "file": "PPSSPPWindows64.exe"
+          },
+          {"type": "static", "paths": ["%PROGRAMFILES%\\PPSSPP\\PPSSPPWindows64.exe"]},
+          {"type": "path", "names": ["PPSSPPWindows64.exe"]}
+        ],
+        "args": ["{rom}"]
+      },
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/PPSSPPSDL.app"]}], "args": ["{rom}"]}
+    },
+    {
+      "id": "dolphin",
+      "name": "Dolphin",
+      "verified": false,
+      "systems": {"gamecube": {"extensions": ["iso", "gcm", "rvz", "gcz", "ciso", "m3u"]}, "wii": {"extensions": ["iso", "wbfs", "rvz", "gcz", "wia"]}},
+      "android": {
+        "packages": ["org.dolphinemu.dolphinemu"],
+        "activity": "org.dolphinemu.dolphinemu.ui.main.MainActivity",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "provider", "multiFileMode": "provider", "extra": "AutoStartFile", "clipDataDiscs": true}
+      },
+      "linux": {"find": [{"type": "path", "names": ["dolphin-emu"]}, {"type": "flatpak", "id": "org.DolphinEmu.dolphin-emu"}], "args": ["-b", "-e", "{rom}"]},
+      "windows": {
+        "find": [{"type": "static", "paths": ["%PROGRAMFILES%\\Dolphin\\Dolphin.exe"]}, {"type": "path", "names": ["Dolphin.exe"]}],
+        "args": ["-b", "-e", "{rom}"]
+      },
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/Dolphin.app"]}], "args": ["-b", "-e", "{rom}"]}
+    },
+    {
+      "id": "dolphin-mmjr",
+      "name": "Dolphin MMJR",
+      "verified": false,
+      "systems": {"gamecube": {"extensions": ["iso", "gcm", "rvz", "gcz", "ciso"]}, "wii": {"extensions": ["iso", "wbfs", "rvz", "gcz", "wia"]}},
+      "android": {
+        "packages": ["org.mm.jr"],
+        "activity": "org.dolphinemu.dolphinemu.ui.main.MainActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "path", "scopedMode": "saf", "extra": "AutoStartFile"}
+      }
+    },
+    {
+      "id": "eden",
+      "name": "Eden",
+      "verified": false,
+      "systems": {"switch": {"extensions": ["nsp", "xci", "nsz", "xcz"]}},
+      "android": {
+        "packages": ["dev.eden.eden_emulator"],
+        "activity": "org.yuzu.yuzu_emu.activities.EmulationActivity",
+        "action": "android.nfc.action.TECH_DISCOVERED",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "kenjinx",
+      "name": "Kenji-NX",
+      "verified": false,
+      "systems": {"switch": {"extensions": ["nsp", "xci"]}},
+      "android": {
+        "packages": ["org.kenjinx.android"],
+        "activity": "org.kenjinx.android.MainActivity",
+        "action": "org.kenjinx.android.LAUNCH_GAME",
+        "rom": {"mode": "saf", "extra": "bootPath"}
+      }
+    },
+    {
+      "id": "skyline",
+      "name": "Skyline",
+      "verified": false,
+      "systems": {"switch": {"extensions": ["nsp", "xci", "nro"]}},
+      "android": {"packages": ["skyline.emu"], "activity": "emu.skyline.EmulationActivity", "action": "android.intent.action.VIEW", "rom": {"mode": "saf"}}
+    },
+    {
+      "id": "azahar",
+      "name": "Azahar",
+      "verified": false,
+      "systems": {"3ds": {"extensions": ["3ds", "cci", "cxi", "3dsx"]}},
+      "android": {
+        "packages": ["org.azahar_emu.azahar"],
+        "activity": "org.citra.citra_emu.activities.EmulationActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      },
+      "linux": {"find": [{"type": "path", "names": ["azahar"]}, {"type": "flatpak", "id": "org.azahar_emu.Azahar"}], "args": ["{rom}"]},
+      "windows": {"find": [{"type": "path", "names": ["azahar.exe"]}], "args": ["{rom}"]},
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/Azahar.app"]}], "args": ["{rom}"]}
+    },
+    {
+      "id": "citra",
+      "name": "Citra",
+      "verified": false,
+      "systems": {"3ds": {"extensions": ["3ds", "cci", "cxi", "3dsx"]}},
+      "android": {
+        "packages": ["org.citra.citra_emu"],
+        "activity": "org.citra.citra_emu.activities.EmulationActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "mandarine",
+      "name": "Mandarine",
+      "verified": false,
+      "systems": {"3ds": {"extensions": ["3ds", "cci", "cxi", "3dsx"]}},
+      "android": {
+        "packages": ["io.github.mandarine3ds.mandarine"],
+        "activity": "io.github.mandarine3ds.mandarine.activities.EmulationActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "panda3ds",
+      "name": "Panda3DS",
+      "verified": false,
+      "systems": {"3ds": {"extensions": ["3ds", "cci", "cxi"]}},
+      "android": {
+        "packages": ["com.panda3ds.pandroid"],
+        "activity": "com.panda3ds.pandroid.app.MainActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "melonds",
+      "name": "melonDS",
+      "verified": false,
+      "systems": {"nds": {"extensions": ["nds", "zip"]}},
+      "android": {
+        "packages": ["me.magnum.melonds"],
+        "activity": "me.magnum.melonds.ui.emulator.EmulatorActivity",
+        "action": "me.magnum.melonds.LAUNCH_ROM",
+        "rom": {"mode": "provider", "extra": "uri"}
+      },
+      "linux": {"find": [{"type": "path", "names": ["melonDS"]}, {"type": "flatpak", "id": "net.kuribo64.melonDS"}], "args": ["{rom}"]},
+      "windows": {"find": [{"type": "path", "names": ["melonDS.exe"]}], "args": ["{rom}"]},
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/melonDS.app"]}], "args": ["{rom}"]}
+    },
+    {
+      "id": "melonds-nightly",
+      "name": "melonDS Nightly",
+      "verified": false,
+      "systems": {"nds": {"extensions": ["nds", "zip"]}},
+      "android": {
+        "packages": ["me.magnum.melonds.nightly"],
+        "activity": "me.magnum.melonds.ui.emulator.EmulatorActivity",
+        "action": "me.magnum.melonds.nightly.LAUNCH_ROM",
+        "rom": {"mode": "provider", "extra": "uri"}
+      }
+    },
+    {
+      "id": "drastic",
+      "name": "DraStic",
+      "verified": false,
+      "systems": {"nds": {"extensions": ["nds", "zip"]}},
+      "android": {
+        "packages": ["com.dsemu.drastic"],
+        "activity": "com.dsemu.drastic.DraSticActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"},
+        "flags": ["clearTask", "clearTop"]
+      }
+    },
+    {
+      "id": "noods",
+      "name": "NooDS",
+      "verified": false,
+      "systems": {"nds": {"extensions": ["nds"]}},
+      "android": {
+        "packages": ["com.hydra.noods"],
+        "activity": "com.hydra.noods.FileBrowser",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "path", "extra": "LaunchPath"}
+      }
+    },
+    {
+      "id": "m64plus-fz",
+      "name": "M64Plus FZ",
+      "verified": false,
+      "systems": {"n64": {"extensions": ["n64", "z64", "v64", "zip"]}},
+      "android": {
+        "packages": ["org.mupen64plusae.v3.fzurita.pro", "org.mupen64plusae.v3.fzurita"],
+        "activity": "paulscode.android.mupen64plusae.SplashActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "mupen64plus-ae",
+      "name": "Mupen64Plus AE",
+      "verified": false,
+      "systems": {"n64": {"extensions": ["n64", "z64", "v64", "zip"]}},
+      "android": {
+        "packages": ["org.mupen64plusae.v3.alpha"],
+        "activity": "paulscode.android.mupen64plusae.SplashActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "nes-emu",
+      "name": "NES.emu",
+      "verified": false,
+      "systems": {"nes": {"extensions": ["nes", "fds", "unf", "zip"]}},
+      "android": {
+        "packages": ["com.explusalpha.NesEmu"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "snes9x-ex",
+      "name": "Snes9x EX+",
+      "verified": false,
+      "systems": {"snes": {"extensions": ["sfc", "smc", "fig", "zip"]}},
+      "android": {
+        "packages": ["com.explusalpha.Snes9xPlus"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "gbc-emu",
+      "name": "GBC.emu",
+      "verified": false,
+      "systems": {"gb": {"extensions": ["gb", "zip"]}, "gbc": {"extensions": ["gbc", "zip"]}},
+      "android": {
+        "packages": ["com.explusalpha.GbcEmu"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "gba-emu",
+      "name": "GBA.emu",
+      "verified": false,
+      "systems": {"gba": {"extensions": ["gba", "zip"]}},
+      "android": {
+        "packages": ["com.explusalpha.GbaEmu"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "md-emu",
+      "name": "MD.emu",
+      "verified": false,
+      "systems": {"genesis": {"extensions": ["md", "gen", "smd", "bin", "zip"]}},
+      "android": {
+        "packages": ["com.explusalpha.MdEmu"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "saturn-emu",
+      "name": "Saturn.emu",
+      "verified": false,
+      "systems": {"saturn": {"extensions": ["chd", "cue", "m3u"]}},
+      "android": {
+        "packages": ["com.explusalpha.SaturnEmu"],
+        "activity": "com.imagine.BaseActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "pizza-boy-gbc",
+      "name": "Pizza Boy GBC",
+      "verified": false,
+      "systems": {"gb": {"extensions": ["gb", "zip"]}, "gbc": {"extensions": ["gbc", "zip"]}},
+      "android": {
+        "packages": ["it.dbtecno.pizzaboypro"],
+        "activity": "it.dbtecno.pizzaboypro.MainActivity",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "saf", "extra": "rom_uri"}
+      }
+    },
+    {
+      "id": "pizza-boy-sc",
+      "name": "Pizza Boy SC",
+      "verified": false,
+      "systems": {"genesis": {"extensions": ["md", "gen", "smd", "bin", "zip"]}},
+      "android": {
+        "packages": ["it.dbtecno.pizzaboyscpro"],
+        "activity": "it.dbtecno.pizzaboyscpro.MainActivity",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "saf", "extra": "rom_uri"}
+      }
+    },
+    {
+      "id": "skyemu",
+      "name": "SkyEmu",
+      "verified": false,
+      "systems": {"gb": {"extensions": ["gb", "zip"]}, "gbc": {"extensions": ["gbc", "zip"]}, "gba": {"extensions": ["gba", "zip"]}},
+      "android": {
+        "packages": ["com.sky.SkyEmu"],
+        "activity": "com.sky.SkyEmu.EnhancedNativeActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "linkboy",
+      "name": "Linkboy",
+      "verified": false,
+      "systems": {"gb": {"extensions": ["gb", "zip"]}, "gbc": {"extensions": ["gbc", "zip"]}},
+      "android": {
+        "packages": ["com.pixelrespawn.linkboy"],
+        "activity": "com.pixelrespawn.linkboy.EmulatorActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "my-boy",
+      "name": "My Boy!",
+      "verified": false,
+      "systems": {"gba": {"extensions": ["gba", "zip"]}},
+      "android": {
+        "packages": ["com.fastemulator.gba"],
+        "activity": "com.fastemulator.gba.EmulatorActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "yaba-sanshiro-2",
+      "name": "Yaba Sanshiro 2",
+      "verified": false,
+      "systems": {"saturn": {"extensions": ["chd", "cue", "iso", "m3u"]}},
+      "android": {
+        "packages": ["org.devmiyax.yabasanshioro2.pro", "org.devmiyax.yabasanshioro2"],
+        "activity": "org.uoyabause.android.Yabause",
+        "action": "android.intent.action.MAIN",
+        "rom": {"mode": "saf", "extra": "org.uoyabause.android.FileNameUri"}
+      }
+    },
+    {
+      "id": "flycast",
+      "name": "Flycast",
+      "verified": false,
+      "systems": {"dreamcast": {"extensions": ["chd", "gdi", "cdi", "m3u"]}},
+      "android": {
+        "packages": ["com.flycast.emulator"],
+        "activity": "com.flycast.emulator.MainActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      },
+      "linux": {"find": [{"type": "path", "names": ["flycast"]}, {"type": "flatpak", "id": "org.flycast.Flycast"}], "args": ["{rom}"]},
+      "windows": {"find": [{"type": "path", "names": ["flycast.exe"]}], "args": ["{rom}"]},
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/Flycast.app"]}], "args": ["{rom}"]}
+    },
+    {
+      "id": "redream",
+      "name": "Redream",
+      "verified": false,
+      "systems": {"dreamcast": {"extensions": ["chd", "gdi", "cdi"]}},
+      "android": {
+        "packages": ["io.recompiled.redream"],
+        "activity": "io.recompiled.redream.MainActivity",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "saf"}
+      }
+    },
+    {
+      "id": "mame4droid-2024",
+      "name": "MAME4droid 2024",
+      "verified": false,
+      "systems": {"arcade": {"extensions": ["zip", "7z"]}},
+      "android": {
+        "packages": ["com.seleuco.mame4d2024"],
+        "activity": "com.seleuco.mame4droid.MAME4droid",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "mame4droid",
+      "name": "MAME4droid 0.139",
+      "verified": false,
+      "systems": {"arcade": {"extensions": ["zip"]}},
+      "android": {
+        "packages": ["com.seleuco.mame4droid"],
+        "activity": "com.seleuco.mame4droid.MAME4droid",
+        "action": "android.intent.action.VIEW",
+        "rom": {"mode": "provider"}
+      }
+    },
+    {
+      "id": "cemu",
+      "name": "Cemu",
+      "verified": false,
+      "systems": {"wiiu": {"extensions": ["wud", "wux", "wua", "rpx"]}},
+      "linux": {
+        "find": [
+          {"type": "path", "names": ["cemu", "Cemu"]},
+          {"type": "flatpak", "id": "info.cemu.Cemu"},
+          {"type": "static", "paths": ["~/Applications/Cemu*.AppImage"]}
+        ],
+        "args": ["-g", "{rom}"]
+      },
+      "windows": {"find": [{"type": "path", "names": ["Cemu.exe"]}], "args": ["-g", "{rom}"]},
+      "macos": {"find": [{"type": "app", "paths": ["/Applications/Cemu.app"]}], "args": ["-g", "{rom}"]}
+    }
+  ]
+}
