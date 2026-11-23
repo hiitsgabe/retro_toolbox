@@ -93,6 +93,9 @@ class DesktopFinder {
       }
     } on ProcessException {
       // which, where, flatpak or reg is not there: this rule finds nothing.
+    } on FileSystemException {
+      // A binary Info.plist or a folder we may not list: one bad file must not
+      // stop the later rules, or the other presets, from being tried.
     }
     return null;
   }

@@ -83,6 +83,73 @@ void main() {
         isNull);
   });
 
+  test('a bundle whose Info.plist is not text is a miss for that rule, and a later rule still hits', () async {
+    touch('Applications/Binary.app/Contents/MacOS/Binary');
+    // A binary plist (bplist00) does not decode as UTF-8.
+    File(p.join(tmp.path, 'Applications/Binary.app/Contents/Info.plist')).writeAsBytesSync([0x62, 0x70, 0x6c, 0x69, 0x73, 0x74, 0x30, 0x30, 0xff, 0xfe, 0x80]);
+    touch('apps/RetroArch');
+    final finder = DesktopFinder(os: 'macos', runner: FakeRunner(), env: {'ROOT': tmp.path});
+    expect(await finder.find(rules([{'type': 'app', 'paths': ['%ROOT%/Applications/Binary.app']}])), isNull);
+    final hit = await finder.find(rules([
+      {'type': 'app', 'paths': ['%ROOT%/Applications/Binary.app']},
+      {'type': 'static', 'paths': ['%ROOT%/apps/RetroArch']},
+    ]));
+    expect(hit?.exe, p.join(tmp.path, 'apps', 'RetroArch'));
+  });
+
+  test('a glob in a folder that cannot be listed is a miss for that rule', () async {
+    touch('locked/retroarch.AppImage');
+    final locked = Directory(p.join(tmp.path, 'locked'));
+    await Process.run('chmod', ['000', locked.path]);
+    addTearDown(() => Process.run('chmod', ['755', locked.path]));
+    touch('apps/RetroArch');
+    final finder = DesktopFinder(os: 'linux', runner: FakeRunner(), env: {'ROOT': tmp.path});
+    final hit = await finder.find(rules([
+      {'type': 'static', 'paths': ['%ROOT%/locked/retroarch*.AppImage']},
+      {'type': 'static', 'paths': ['%ROOT%/apps/RetroArch']},
+    ]));
+    expect(hit?.exe, p.join(tmp.path, 'apps', 'RetroArch'));
+  });
+
+  group('on windows', () {
+    const ppsspp = {
+      'type': 'registry',
+      'key': r'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PPSSPP_is1',
+      'value': 'InstallLocation',
+      'file': 'PPSSPPWindows64.exe',
+    };
+    const query = r'reg query HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PPSSPP_is1 /v InstallLocation';
+
+    // Inno Setup stores InstallLocation with a trailing separator, which also
+    // lets the windows join land on a real file of this posix test host.
+    String regOutput(String folder) =>
+        '\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\PPSSPP_is1\r\n    InstallLocation    REG_SZ    $folder\r\n\r\n';
+
+    test('a registry rule joins the file to the folder reg query names', () async {
+      touch('PPSSPP/PPSSPPWindows64.exe');
+      final folder = '${p.join(tmp.path, 'PPSSPP')}/';
+      final runner = FakeRunner({query: (0, regOutput(folder))});
+      final hit = await DesktopFinder(os: 'windows', runner: runner, env: const {}).find(rules([ppsspp]));
+      expect(hit?.exe, '${folder}PPSSPPWindows64.exe');
+      expect(runner.ran, [query.split(' ')]);
+    });
+
+    test('a registry rule is a miss off windows, without asking reg', () async {
+      touch('PPSSPP/PPSSPPWindows64.exe');
+      final runner = FakeRunner({query: (0, regOutput('${p.join(tmp.path, 'PPSSPP')}/'))});
+      expect(await DesktopFinder(os: 'linux', runner: runner, env: const {}).find(rules([ppsspp])), isNull);
+      expect(runner.ran, isEmpty);
+    });
+
+    test('a path rule asks where and takes its first line without the CR', () async {
+      final runner = FakeRunner({'where PPSSPPWindows64.exe': (0, 'C:\\PPSSPP\\PPSSPPWindows64.exe\r\nD:\\Old\\PPSSPPWindows64.exe\r\n')});
+      final hit = await DesktopFinder(os: 'windows', runner: runner, env: const {}).find(rules([
+        {'type': 'path', 'names': ['PPSSPPWindows64.exe']},
+      ]));
+      expect(hit?.exe, r'C:\PPSSPP\PPSSPPWindows64.exe');
+    });
+  });
+
   test('the detector turns hits into detected emulators for this OS only', () async {
     final presets = [
       LaunchPreset.fromJson({
@@ -92,15 +159,29 @@ void main() {
         'linux': {'find': [{'type': 'path', 'names': ['retroarch']}], 'args': ['-L', '{retroarch.core}', '{rom}']},
       }),
       LaunchPreset.fromJson({
+        'id': 'ds',
+        'name': 'DuckStation',
+        'systems': {'psx': {'extensions': ['chd']}},
+        'linux': {'find': [{'type': 'flatpak', 'id': 'org.duckstation.DuckStation'}], 'args': ['{rom}']},
+      }),
+      // The runner answers this rule, so only desktopFor keeps it out.
+      LaunchPreset.fromJson({
         'id': 'win',
         'name': 'Windows only',
         'systems': {'psx': {'extensions': ['chd']}},
-        'windows': {'find': [{'type': 'path', 'names': ['x.exe']}], 'args': ['{rom}']},
+        'windows': {'find': [{'type': 'path', 'names': ['winonly']}], 'args': ['{rom}']},
       }),
     ];
-    final finder = DesktopFinder(os: 'linux', runner: FakeRunner({'which retroarch': (0, '/usr/bin/retroarch\n')}), env: const {});
-    final found = await EmulatorDetector(os: 'linux', finder: finder).detect(presets);
-    expect([for (final d in found) (d.presetId, d.variant, d.exe, d.label)], [('ra', '/usr/bin/retroarch', '/usr/bin/retroarch', 'RetroArch')]);
-    expect(found.single.systems, ['snes']);
+    final runner = FakeRunner({
+      'which retroarch': (0, '/usr/bin/retroarch\n'),
+      'flatpak info org.duckstation.DuckStation': (0, 'ID: org.duckstation.DuckStation'),
+      'which winonly': (0, '/usr/bin/winonly\n'),
+    });
+    final found = await EmulatorDetector(os: 'linux', finder: DesktopFinder(os: 'linux', runner: runner, env: const {})).detect(presets);
+    expect([for (final d in found) (d.presetId, d.variant, d.exe, d.prefixArgs.join(' '), d.label)], [
+      ('ra', '/usr/bin/retroarch', '/usr/bin/retroarch', '', 'RetroArch'),
+      ('ds', 'org.duckstation.DuckStation', 'flatpak', 'run org.duckstation.DuckStation', 'DuckStation'),
+    ]);
+    expect(found.first.systems, ['snes']);
   });
 }
