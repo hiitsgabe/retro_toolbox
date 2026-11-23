@@ -4,7 +4,6 @@ import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/game_addon_model.dart';
-import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
@@ -16,17 +15,14 @@ import 'package:retro_toolbox/services/filtering_service.dart';
 import 'package:retro_toolbox/services/game_groups.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_models.dart';
 import 'package:retro_toolbox/services/launchbox/launchbox_service.dart';
-import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
-import 'package:retro_toolbox/services/launcher/launch_result.dart';
-import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/game_details/game_details_view.dart';
-import 'package:retro_toolbox/widgets/game_details/launch_picker.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
 import 'package:retro_toolbox/widgets/game_list/game_boxart.dart';
+import 'package:retro_toolbox/widgets/launcher/launch_flow.dart';
 import 'package:retro_toolbox/utils/formatters.dart';
 
 /// A game's page: its details plus everything the card can do, as buttons.
@@ -113,62 +109,10 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
     if (mounted) Navigator.pop(context);
   }
 
-  /// Launches with the resolved choice; with none (several emulators cover
-  /// the system and no override was kept), asks which.
-  Future<void> _play() async {
-    await ref.read(launcherSessionProvider.future);
-    final choice = ref.read(resolveChoiceProvider(widget.game));
-    if (choice == null) return _openWith();
-    await _launch(choice);
-  }
-
-  Future<void> _openWith() async {
-    final session = await ref.read(launcherSessionProvider.future);
-    if (!mounted) return;
-    final emulators = session.covering(ref.read(gameSystemProvider(widget.game.consoleId)).slug);
-    if (emulators.isEmpty) return;
-    final picked = await showLaunchPicker(context, session, emulators);
-    if (picked == null || !mounted) return;
-    if (picked.always) ref.read(launchOverridesProvider.notifier).set(widget.game.gameId, picked.emulator.choice);
-    await _launch(picked.emulator.choice);
-  }
-
-  Future<void> _launch(LaunchChoice choice) async {
-    final session = await ref.read(launcherSessionProvider.future);
-    final name = session.detectedFor(choice.presetId)?.label ?? session.preset(choice.presetId)?.name ?? choice.presetId;
-    if (!mounted) return;
-    setState(() => _starting = name);
-    LaunchResult result;
-    try {
-      final owned = await ref.read(ownedGameProvider(widget.game).future);
-      final launcher = await ref.read(gameLauncherProvider.future);
-      result = owned == null ? const LaunchResult(LaunchCode.romUnreadable) : await launcher.launch(owned, choice);
-    } finally {
-      if (mounted) setState(() => _starting = null);
-    }
-    if (mounted) _report(result, name);
-  }
-
-  void _report(LaunchResult result, String emulator) {
-    final (:text, :fix) = result.describe(emulator);
-    if (text == null) return;
-    final action = switch (fix) {
-      LaunchFix.none => null,
-      LaunchFix.detectAgain => SnackBarAction(label: 'Detect again', onPressed: () => ref.read(detectEmulatorsProvider)()),
-      LaunchFix.chooseAnother => SnackBarAction(label: 'Choose another', onPressed: _openWith),
-      LaunchFix.chooseFolder => SnackBarAction(label: 'Choose folder', onPressed: _chooseFolder),
-    };
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(text), action: action));
-  }
-
-  /// The library folder, as the setup wizard sets it.
-  Future<void> _chooseFolder() async {
-    final picked = await pickDirectory(context, title: 'Select download folder');
-    if (picked == null) return;
-    final notifier = ref.read(settingsProvider.notifier);
-    await notifier.saveDownloadDirectory(picked);
-    await notifier.setGeneralSetting(AppSettings.downloadDir, picked);
-  }
+  /// Play, Open with and their snackbars; [_starting] follows its launch.
+  late final _flow = LaunchFlow(context, widget.game, onStarting: (name) {
+    if (mounted) setState(() => _starting = name);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +154,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
       primary: launcher
           ? KitAction(
               _starting != null ? 'Starting $_starting' : (noEmulator ? 'No emulator for ${system.name}' : 'Play'),
-              _starting != null || noEmulator ? null : _play,
+              _starting != null || noEmulator ? null : _flow.play,
               icon: Icons.play_arrow_rounded,
             )
           : actions.isEmpty
@@ -224,7 +168,7 @@ class _GameDetailsPageState extends ConsumerState<GameDetailsPage> {
         if (launcher)
           noEmulator
               ? KitAction('Detect again', () => ref.read(detectEmulatorsProvider)(), icon: Icons.refresh_rounded)
-              : KitAction('Open with…', _starting != null ? null : _openWith, icon: Icons.apps_rounded),
+              : KitAction('Open with…', _starting != null ? null : _flow.openWith, icon: Icons.apps_rounded),
         if (safChoice != null) KitAction('Open ${safChoice.label}', () => ref.read(launcherChannelProvider).openApp(safChoice.variant), icon: Icons.open_in_new_rounded),
         for (final a in actions.skip(launcher ? 0 : 1)) KitAction(gameActionLabels[a]!, () => _run(gameState, a), icon: gameActionIcons[a]),
         if (widget.selectable && (gameState.isInteractable || isSelected))
