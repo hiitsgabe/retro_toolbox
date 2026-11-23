@@ -68,7 +68,8 @@ class MemoryOverrides implements LaunchOverridesStore {
 
 const _game = Game(title: 'Mario World', url: 'https://example.com/snes/Mario%20World.sfc', size: 1, consoleId: 'nintendo-snes');
 
-DetectedEmulator emu(String id, String label) => DetectedEmulator(presetId: id, variant: 'org.example.$id', label: label, systems: const ['snes']);
+DetectedEmulator emu(String id, String label, {List<String> systems = const ['snes']}) =>
+    DetectedEmulator(presetId: id, variant: 'org.example.$id', label: label, systems: systems);
 
 void main() {
   late FakeLauncher launcher;
@@ -156,7 +157,8 @@ void main() {
   });
 
   testWidgets('no covering emulator: Play is disabled and says so', (t) async {
-    await pump(t);
+    // Detected, but for another system: the page filters by the game's.
+    await pump(t, detected: [emu('melonds', 'melonDS', systems: const ['nds'])]);
     expect(primary('NO EMULATOR FOR SUPER NINTENDO'), findsOneWidget);
     expect(t.widget<FilledButton>(find.byKey(const ValueKey('kit-primary'))).onPressed, isNull);
   });
@@ -170,9 +172,10 @@ void main() {
   });
 
   testWidgets('Open with: Just this once launches and keeps nothing', (t) async {
-    await pump(t, detected: [emu('ra', 'RetroArch'), emu('ds', 'DuckStation')]);
+    await pump(t, detected: [emu('ra', 'RetroArch'), emu('ds', 'DuckStation'), emu('melonds', 'melonDS', systems: const ['nds'])]);
     await t.tap(find.text('OPEN WITH…'));
     await t.pumpAndSettle();
+    expect(find.byKey(const ValueKey('launch-picker-melonds')), findsNothing, reason: 'melonDS does not open the SNES');
     expect(find.text('not tested'), findsNWidgets(2));
     await t.tap(find.descendant(of: find.byKey(const ValueKey('launch-picker-ds')), matching: find.text('Just this once')));
     await t.pumpAndSettle();
