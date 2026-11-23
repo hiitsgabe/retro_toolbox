@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -85,7 +87,7 @@ void main() {
   setUp(() {
     launched = [];
     catalog = _FakeCatalog();
-    debugLaunchGame = (context, game, choice) async => launched.add((game, choice));
+    debugLaunchGame = (context, game, choice, onStarting) async => launched.add((game, choice));
     GameDetailsPage.debugImageBuilder = (context, url, {fit = BoxFit.cover, alignment = Alignment.center, placeholder, fallback}) => SizedBox(key: ValueKey(url));
   });
   tearDown(() {
@@ -169,6 +171,43 @@ void main() {
     await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
     await t.pumpAndSettle();
     expect(launched, [(_mario, _ra), (_mario, _ra)]);
+  });
+
+  testWidgets('mode on: while a card\'s launch is starting, a second tap, A or Start starts nothing, and after it a tap launches again', (t) async {
+    final pending = Completer<void>();
+    debugLaunchGame = (context, game, choice, onStarting) {
+      launched.add((game, choice));
+      return pending.future;
+    };
+    await pump(t, const GameGridItem(game: _mario), detected: [_emu(_ra)]);
+    await tapCard(t);
+    await t.pump(const Duration(milliseconds: 500));
+    await tapCard(t);
+    await t.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await t.sendKeyEvent(LogicalKeyboardKey.enter);
+    await t.sendKeyEvent(LogicalKeyboardKey.gameButtonStart);
+    await t.pumpAndSettle();
+    expect(launched, hasLength(1));
+    expect(details, findsNothing, reason: 'ignored, not sent to the page');
+    pending.complete();
+    await t.pumpAndSettle();
+    debugLaunchGame = (context, game, choice, onStarting) async => launched.add((game, choice));
+    await tapCard(t);
+    expect(launched, hasLength(2));
+  });
+
+  testWidgets('mode on: a card\'s launch says which emulator is starting until it returned', (t) async {
+    final pending = Completer<void>();
+    debugLaunchGame = (context, game, choice, onStarting) {
+      onStarting('RetroArch');
+      return pending.future;
+    };
+    await pump(t, const GameGridItem(game: _mario), detected: [_emu(_ra)]);
+    await tapCard(t);
+    expect(find.text('Starting RetroArch'), findsOneWidget);
+    pending.complete();
+    await t.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing, reason: 'the launch ended well: nothing left to say');
   });
 
   testWidgets('mode on: a game with only a per-game override launches with it', (t) async {

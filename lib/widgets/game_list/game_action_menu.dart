@@ -166,9 +166,15 @@ void tapGameCard(BuildContext context, WidgetRef ref, Game game, {bool selectabl
   activateGame(context, game, selectable: selectable);
 }
 
-/// Test seam: what a card's launch runs instead of the emulator.
+/// Test seam: what a card's launch runs instead of the emulator, telling
+/// [onStarting] as LaunchFlow does.
 @visibleForTesting
-Future<void> Function(BuildContext context, Game game, LaunchChoice choice)? debugLaunchGame;
+Future<void> Function(BuildContext context, Game game, LaunchChoice choice, void Function(String? emulator) onStarting)? debugLaunchGame;
+
+/// Whether a card's launch is under way: one at a time. On desktop a launch
+/// waits out the emulator's first seconds, and a second A or tap meanwhile
+/// would start a second emulator.
+final cardLaunchingProvider = StateProvider<bool>((ref) => false);
 
 /// A card activated: a tap, A, or Start with nothing selected. In launcher
 /// mode a game on disk launches with the emulator Play would pick (its
@@ -192,19 +198,37 @@ bool _mayLaunch(ProviderContainer c, Game game) {
 }
 
 /// Launches [game] with its resolved choice, or runs [otherwise] when it has
-/// none. The session and the saved overrides come first: the one covering
-/// emulator is only known from the session, and nothing may have read the
-/// overrides yet.
+/// none; nothing while another card's launch is under way. The session and
+/// the saved overrides come first: the one covering emulator is only known
+/// from the session, and nothing may have read the overrides yet.
 Future<void> _launchOr(BuildContext context, Game game, void Function() otherwise) async {
   final c = ProviderScope.containerOf(context, listen: false);
-  await c.read(launcherSessionProvider.future);
-  await c.read(launchOverridesProvider.notifier).loaded;
-  if (!context.mounted) return;
-  final choice = c.read(resolveChoiceProvider(game));
-  if (choice == null) return otherwise();
-  // As the page does on open: the second screen shows the game launched.
-  c.read(focusedGameProvider.notifier).state = game;
-  await (debugLaunchGame ?? (context, game, choice) => LaunchFlow(context, game).launch(choice))(context, game, choice);
+  final launching = c.read(cardLaunchingProvider.notifier);
+  if (launching.state) return;
+  launching.state = true;
+  // A card has no Play button to relabel, as the page does: a snackbar says
+  // it instead. Closed through its controller, so a card rebuilt or gone
+  // meanwhile does not leave it up.
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? starting;
+  void onStarting(String? emulator) {
+    if (messenger?.mounted == true) starting?.close();
+    starting = emulator == null ? null : messenger?.showSnackBar(SnackBar(content: Text('Starting $emulator'), duration: const Duration(minutes: 1)));
+  }
+
+  try {
+    await c.read(launcherSessionProvider.future);
+    await c.read(launchOverridesProvider.notifier).loaded;
+    if (!context.mounted) return;
+    final choice = c.read(resolveChoiceProvider(game));
+    if (choice == null) return otherwise();
+    // As the page does on open: the second screen shows the game launched.
+    c.read(focusedGameProvider.notifier).state = game;
+    await (debugLaunchGame ?? (context, game, choice, onStarting) => LaunchFlow(context, game, onStarting: onStarting).launch(choice))(context, game, choice, onStarting);
+  } finally {
+    onStarting(null);
+    if (launching.mounted) launching.state = false;
+  }
 }
 
 /// X on a card: selects or unselects it, unless it is busy and not selected.
