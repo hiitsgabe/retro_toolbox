@@ -16,9 +16,12 @@ import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
+import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
+import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 
@@ -118,6 +121,23 @@ class FakeChannel implements LauncherChannel {
     viewCalls.add(package);
     return view;
   }
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Keeps overrides in memory; [saved] records what would be written.
+class MemoryOverrides implements LaunchOverridesStore {
+  MemoryOverrides([this.initial = const {}]);
+
+  final Map<String, LaunchChoice> initial;
+  final saved = <Map<String, LaunchChoice>>[];
+
+  @override
+  Future<Map<String, LaunchChoice>> load() async => initial;
+
+  @override
+  void save(Map<String, LaunchChoice> overrides) => saved.add(overrides);
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -406,5 +426,31 @@ void main() {
     await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
     final m = config.saved.last.manual.single;
     expect((m.variant, m.label), (bin.path, 'Duck Fork'));
+  });
+
+  testWidgets('a manual row says added by you, and its menu removes it with its console defaults and game overrides', (t) async {
+    const duo = ManualEmulator(variant: 'dev.igawa6.edenduo', label: 'Eden Duo', recipe: 'eden');
+    const notes = ManualEmulator(variant: 'com.example.notes', label: 'Notes', recipe: ManualEmulator.generic, systems: ['psx'], activity: 'com.example.notes.View');
+    const mine = LaunchChoice(presetId: _duoId, variant: 'dev.igawa6.edenduo');
+    final overrides = MemoryOverrides({'switch/Zelda.nsp': mine});
+    await pump(
+      t,
+      detected: [_ra],
+      saved: const LaunchConfig(manual: [duo, notes], defaults: {'nintendo-switch': mine}),
+      extra: [launchOverridesProvider.overrideWith((ref) => LaunchOverridesNotifier(overrides))],
+    );
+    Finder line(String presetId, String text) => find.descendant(of: find.byKey(ValueKey('launcher-found-$presetId')), matching: find.text(text));
+    expect(line(_duoId, 'added by you'), findsOneWidget, reason: 'Eden is verified, so its copy is too');
+    expect(line(notes.id, 'added by you · not tested'), findsOneWidget);
+    expect(line('ra', '1.0 · not tested'), findsOneWidget);
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-found-ra')));
+    expect(find.byType(RowMenuSheet), findsNothing, reason: 'a detected emulator has no menu');
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-found-$_duoId')));
+    await tapAndSettle(t, inSheet('Remove'));
+    expect([for (final m in config.saved.last.manual) m.id], [notes.id]);
+    expect(config.saved.last.defaults, isEmpty);
+    expect(overrides.saved.last, isEmpty);
+    expect(find.byKey(const ValueKey('launcher-found-$_duoId')), findsNothing);
+    expect(find.byKey(ValueKey('launcher-found-${notes.id}')), findsOneWidget);
   });
 }

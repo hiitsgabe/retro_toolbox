@@ -115,6 +115,22 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     }
   }
 
+  /// An emulator added by hand. Remove also drops the console defaults and
+  /// game choices that name it, and a Systems pick of it, so none points at
+  /// nothing.
+  Future<void> _manualMenu(DetectedEmulator d) => showRowMenu(context, title: d.label, subtitle: 'Added by you', items: [
+        RowMenuItem(
+          'Remove',
+          () {
+            setState(() => _chosen.removeWhere((_, c) => c.presetId == d.presetId));
+            ref.read(removeManualEmulatorProvider)(d.presetId);
+          },
+          icon: Icons.delete_outline,
+          destructive: true,
+          subtitle: 'Consoles and games set to it choose again',
+        ),
+      ]);
+
   Future<ManualEmulator?> _pickAndroid(LauncherSession session) async {
     final app = await Navigator.of(context).push<({String package, AppInfo info})>(
       MaterialPageRoute(builder: (_) => LauncherAppPickerScreen(exclude: {for (final d in session.detected) d.variant})),
@@ -342,7 +358,15 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         Text(names.isEmpty ? 'No emulator found.' : 'No emulator found. Install ${_list(names)}, then Detect again.', style: t.body),
       ]);
     } else {
-      found = OptionList(children: [for (final d in detected) _EmulatorRow(emulator: d, verified: session.preset(d.presetId)?.verified ?? false)]);
+      final manual = {for (final m in ref.watch(launchConfigProvider.select((c) => c.manual))) m.id};
+      found = OptionList(children: [
+        for (final d in detected)
+          _EmulatorRow(
+            emulator: d,
+            verified: session.preset(d.presetId)?.verified ?? false,
+            onMenu: manual.contains(d.presetId) ? () => _manualMenu(d) : null,
+          ),
+      ]);
     }
     return KitColumns(
       start: [
@@ -538,17 +562,21 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
 String _list(List<String> names) => names.length < 2 ? names.join() : '${names.take(names.length - 1).join(', ')} or ${names.last}';
 
 class _EmulatorRow extends StatelessWidget {
-  const _EmulatorRow({required this.emulator, required this.verified});
+  const _EmulatorRow({required this.emulator, required this.verified, this.onMenu});
 
   final DetectedEmulator emulator;
   final bool verified;
 
+  /// An emulator added by hand: tagged so, and A or a tap opens its menu.
+  final VoidCallback? onMenu;
+
   @override
   Widget build(BuildContext context) {
     final icon = emulator.icon;
-    final line = [if (emulator.version != null) emulator.version!, if (!verified) 'not tested'].join(' · ');
+    final line = [if (emulator.version != null) emulator.version!, if (onMenu != null) 'added by you', if (!verified) 'not tested'].join(' · ');
     return KitRow(
       key: ValueKey('launcher-found-${emulator.presetId}'),
+      onTap: onMenu,
       child: Row(children: [
         if (icon != null) Image.memory(icon, width: 32, height: 32) else const Icon(Icons.videogame_asset_outlined, size: 32),
         const SizedBox(width: 12),
