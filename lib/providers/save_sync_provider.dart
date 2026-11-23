@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/save_sync/binding.dart';
 import 'package:retro_toolbox/services/save_sync/catalog_source.dart';
 import 'package:retro_toolbox/services/save_sync/checker.dart';
@@ -28,22 +29,14 @@ import 'package:retro_toolbox/services/save_sync/row_state.dart';
 import 'package:retro_toolbox/services/save_sync/sync_state.dart';
 import 'package:retro_toolbox/services/save_sync/title_catalog.dart';
 
+// Save Sync's screens and tests name AppInfo through this file.
+export 'package:retro_toolbox/services/installed_apps.dart' show AppInfo;
+
 enum SyncAccess { none, shizuku, root }
 
 /// Where the hub lives. [unknown] until the first refresh reads the stored
 /// choice; [none] until the user makes one.
 enum HubKind { unknown, none, folder, drive }
-
-/// What Android itself shows for an installed package.
-class AppInfo {
-  const AppInfo(this.label, this.icon);
-
-  final String label;
-
-  /// PNG bytes, or null when the icon could not be read. The same instance is
-  /// handed out every time so the image decodes once for the whole list.
-  final Uint8List? icon;
-}
 
 class SaveSyncState {
   const SaveSyncState({
@@ -202,12 +195,6 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
 
   static const _native = MethodChannel('retrotoolbox/native');
 
-  /// Icons and labels for this process's life. The same [AppInfo] instance is
-  /// handed back every time, so the list decodes each PNG once instead of once
-  /// per rebuild. Packages that answered with nothing are remembered too, so a
-  /// game the device cannot show is not asked about on every refresh.
-  static final _appInfo = <String, AppInfo?>{};
-
   static const _define = String.fromEnvironment('SAVE_SYNC_CATALOG_URL');
 
   RecipeIndex? _index;
@@ -316,28 +303,8 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
           for (final pkg in recipe.packages) pkg: recipe.id,
       };
 
-  /// Every app with a launcher entry, for the picker. Icons come along, since
-  /// the same call already has the package manager open.
-  Future<List<({String package, AppInfo info})>> launchableApps() async {
-    try {
-      final got = await _native.invokeListMethod<Object?>('launchableApps');
-      final out = <({String package, AppInfo info})>[];
-      for (final e in got ?? const []) {
-        if (e is! Map) continue;
-        final package = e['package'];
-        if (package is! String) continue;
-        final info = AppInfo((e['label'] as String?) ?? package, e['icon'] is Uint8List ? e['icon'] as Uint8List : null);
-        _appInfo[package] = info;
-        out.add((package: package, info: info));
-      }
-      out.sort((a, b) => a.info.label.toLowerCase().compareTo(b.info.label.toLowerCase()));
-      return out;
-    } on MissingPluginException {
-      return const [];
-    } on PlatformException {
-      return const [];
-    }
-  }
+  /// Every app with a launcher entry, for the picker.
+  Future<List<({String package, AppInfo info})>> launchableApps() => const InstalledApps().launchable();
 
   /// Adds apps to the hub's configuration, so the choice reaches every other
   /// device. Writing only the change is what keeps two handhelds from
@@ -390,37 +357,6 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
     final hub = Hub(_backend(choice));
     await hub.open(deviceId: deviceId);
     return (hub: hub, deviceId: deviceId);
-  }
-
-  /// Asks Android for the icon and label of any package not asked about yet.
-  /// One call for the whole list. Silent where there is no platform side, so
-  /// widget tests see an empty map instead of an error.
-  Future<Map<String, AppInfo>> _loadAppInfo(Iterable<String> packages) async {
-    final wanted = {for (final p in packages) p};
-    final missing = [for (final p in wanted) if (!_appInfo.containsKey(p)) p];
-    if (missing.isNotEmpty) {
-      try {
-        final got = await _native.invokeMapMethod<String, dynamic>('appInfo', {'packages': missing});
-        for (final p in missing) {
-          final e = got?[p];
-          _appInfo[p] = e is Map
-              ? AppInfo((e['label'] as String?) ?? '', e['icon'] is Uint8List ? e['icon'] as Uint8List : null)
-              : null;
-        }
-      } on MissingPluginException {
-        for (final p in missing) {
-          _appInfo[p] = null;
-        }
-      } on PlatformException {
-        for (final p in missing) {
-          _appInfo[p] = null;
-        }
-      }
-    }
-    return {
-      for (final p in wanted)
-        if (_appInfo[p] != null) p: _appInfo[p]!,
-    };
   }
 
   Future<SyncState>? _syncState;
@@ -629,7 +565,7 @@ class SaveSyncNotifier extends StateNotifier<SaveSyncState> {
       // The rows go up first; the icons land on the frame after. A list that
       // waits for the package manager is a list that stutters.
       state = state.copyWith(loading: false, games: games, recipeProblems: problems);
-      final info = await _loadAppInfo([for (final g in games) ...g.recipe.packages]);
+      final info = await const InstalledApps().info([for (final g in games) ...g.recipe.packages]);
       if (info.isNotEmpty) state = state.copyWith(appInfo: info);
       // Same again for the ids inside an emulator: the rows are already up, and
       // a list where every recipe holds one save never pays for the catalog.
