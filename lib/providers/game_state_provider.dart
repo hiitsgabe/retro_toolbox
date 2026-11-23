@@ -47,12 +47,64 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
 
   bool isResolving(String gameId) => _resolving[gameId] == true;
 
+  // The loaded console's library, followed so a game settled earlier changes
+  // with it: a resume or launcher mode turning on reads files that came or
+  // went outside the app, and the owned view already lists them.
+  String _libraryDir = '';
+  ProviderSubscription<Map<String, LibrarySnapshot>>? _librarySub;
+
+  void _followLibrary(List<Game> games) {
+    final dir = games.isEmpty ? '' : _ref.read(settingsProvider.notifier).downloadDirFor(games.first);
+    if (dir == _libraryDir) return;
+    _libraryDir = dir;
+    _librarySub?.close();
+    _librarySub = dir.isEmpty
+        ? null
+        : _ref.listen<Map<String, LibrarySnapshot>>(librarySnapshotProvider(dir), (_, snapshots) {
+            final snapshot = snapshots[dir];
+            if (snapshot != null) _settleFrom(dir, snapshot);
+          });
+  }
+
+  /// The games of [dir] that are settled (on disk or not, nothing running
+  /// or resolving) set to what [snapshot] says, where it says otherwise.
+  /// Quietly: a game that did not change shows no loading in between.
+  void _settleFrom(String dir, LibrarySnapshot snapshot) {
+    final settings = _ref.read(settingsProvider.notifier);
+    final updates = <String, GameState>{};
+    for (final MapEntry(key: id, value: s) in state.entries) {
+      final settled = s.status == GameStatus.ready || s.status == GameStatus.downloaded || s.status == GameStatus.extracted;
+      if (!settled || s.isTransfer || isResolving(id) || settings.downloadDirFor(s.game) != dir) continue;
+      final status = _statusOf(s.game, snapshot.statusFor(s.game.filename));
+      if (status == s.status) continue;
+      updates[id] = s.copyWith(
+        status: status,
+        isInteractable: status == GameStatus.ready,
+        availableActions: _getActions(status, s.game),
+        hasJustCompleted: false,
+      );
+    }
+    if (updates.isNotEmpty) state = {...state, ...updates};
+  }
+
+  /// A loose game is on disk by construction, but a real name that
+  /// sanitizeForFat changed is not under its filename: it must never read as
+  /// ready, which offers a download its local:// url cannot do.
+  static GameStatus _statusOf(Game game, LibraryPresence presence) =>
+      game.isLocal && presence == LibraryPresence.none ? GameStatus.downloaded : presence.toGameStatus();
+
   GameStateManager(this._ref) : super({}) {
     _ref.listen(settingWatcherProvider(AppSettings.downloadDir), (prev, next) {
-      if (prev != next) _resetStates();
+      if (prev != next) {
+        _resetStates();
+        _followLibrary(_ref.read(catalogProvider).games);
+      }
     });
     _ref.listen(catalogProvider, (prev, next) {
-      if (prev?.games != next.games) _initGames(next.games);
+      if (prev?.games != next.games) {
+        _initGames(next.games);
+        _followLibrary(next.games);
+      }
     });
     // The catalog puts a game the user has first among its versions.
     var inFlight = <String>{};
@@ -223,10 +275,7 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
       // off `loading` owns it now — overwriting with a disk-derived status here
       // would show the game as done until the next extraction progress tick.
       if (state[gameId]?.status != GameStatus.loading) return;
-      // A loose game is on disk by construction, but a real name that
-      // sanitizeForFat changed is not under its filename: it must never read
-      // as ready, which offers a download its local:// url cannot do.
-      final status = game.isLocal && presence == LibraryPresence.none ? GameStatus.downloaded : presence.toGameStatus();
+      final status = _statusOf(game, presence);
 
       _updateState(
           gameId,
@@ -317,6 +366,12 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
     if (current != null) {
       state = {...state, gameId: updater(current)};
     }
+  }
+
+  @override
+  void dispose() {
+    _librarySub?.close();
+    super.dispose();
   }
 
   void _resetStates() {

@@ -8,10 +8,13 @@ import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
+import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -377,6 +380,46 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     expect(loose(c), isEmpty);
     expect(c.read(catalogProvider).games.map((g) => g.title), ['Super Mario World (USA)']);
+  });
+
+  test('a file that came or went outside the app changes what its game offers at the next rescan, not only the owned view', () async {
+    final (c, catalog) = await setUpCatalog();
+    c.read(gameStateManagerProvider);
+    await catalog.loadCatalog(_psx);
+    catalog.toggleOwnedOnly();
+    final crash = c.read(catalogProvider).games.singleWhere((g) => g.title == _crash.title);
+    final sub = c.listen(gameStateProvider(crash), (_, __) {});
+    addTearDown(sub.close);
+    GameState state() => c.read(gameStateProvider(crash));
+    await until(() => state().status == GameStatus.ready);
+    expect(state().availableActions, {GameAction.download}, reason: 'seen before the file came');
+
+    touch(crash.filename);
+    await catalog.rescanLibrary();
+    await until(() => state().status != GameStatus.ready);
+    expect(state().status, GameStatus.downloaded);
+    expect(state().availableActions, isNot(contains(GameAction.download)));
+
+    File(p.join(tmp.path, crash.filename)).deleteSync();
+    await catalog.rescanLibrary();
+    await until(() => state().status != GameStatus.downloaded);
+    expect(state().status, GameStatus.ready);
+    expect(state().availableActions, {GameAction.download});
+  });
+
+  test('a rescan leaves a game with a task running as the task has it', () async {
+    final (c, catalog) = await setUpCatalog();
+    c.read(gameStateManagerProvider);
+    await catalog.loadCatalog(_psx);
+    final crash = c.read(catalogProvider).games.singleWhere((g) => g.title == _crash.title);
+    final sub = c.listen(gameStateProvider(crash), (_, __) {});
+    addTearDown(sub.close);
+    await until(() => c.read(gameStateProvider(crash)).status == GameStatus.ready);
+    c.read(gameStateManagerProvider.notifier).updateQueueState(crash.gameId, TaskType.download);
+    touch(crash.filename);
+    await catalog.rescanLibrary();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(c.read(gameStateProvider(crash)).status, GameStatus.downloadQueued);
   });
 
   test('rescanLibrary reads the loaded console\'s dir again, and the list follows', () async {
