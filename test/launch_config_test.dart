@@ -62,6 +62,11 @@ void main() {
     expect((back.requestsManage, back.pathAccess, back.manageGrant), (true, true, true));
     expect(back.systems, ['psx', 'snes']);
     expect(back.icon, isNull);
+    // false is neither the constructor default nor what a missing key reads as, so only this entry sees the field dropped.
+    const scoped = DetectedEmulator(presetId: 'duckstation', variant: 'com.github.stenzek.duckstation', label: 'DuckStation', systems: ['psx'], pathAccess: false);
+    final scopedJson = jsonDecode(jsonEncode(scoped.toJson())) as Map;
+    expect(scopedJson['pathAccess'], isFalse, reason: 'the saved detection must carry a false pathAccess');
+    expect(DetectedEmulator.fromJson(scopedJson)!.pathAccess, isFalse, reason: 'a saved false pathAccess must not come back as a path launch');
   });
 
   test('a desktop detection keeps its executable and prefix arguments', () {
