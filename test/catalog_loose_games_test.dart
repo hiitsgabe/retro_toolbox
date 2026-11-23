@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -36,13 +37,15 @@ class _FakeCatalogService extends CatalogService {
 }
 
 /// Records the titles each enrich got, and gives every game a genre so the
-/// list shows it was enriched.
+/// list shows it was enriched. While [hold] is set, an enrich waits for it.
 class _RecordingLaunchbox extends LaunchboxService {
   final enriched = <List<String>>[];
+  Completer<void>? hold;
 
   @override
   Future<List<Game>> enrich(Console console, List<Game> games, {bool useCovers = false}) async {
     enriched.add([for (final g in games) g.title]);
+    await hold?.future;
     return [for (final g in games) g.copyWith(details: const GameDetails(genres: ['Action']))];
   }
 }
@@ -102,6 +105,17 @@ void main() {
     for (var i = 0; i < 100 && !done(); i++) {
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
+  }
+
+  /// Turns launcher mode [on] and returns once its listeners heard it: the
+  /// catalog's included, since they are told together.
+  Future<void> setMode(ProviderContainer c, bool on) async {
+    var heard = false;
+    final sub = c.listen<bool>(launcherModeProvider, (_, now) => heard = now == on);
+    await c.read(launchConfigProvider.notifier).setEnabled(on);
+    await until(() => heard);
+    sub.close();
+    expect(heard, isTrue);
   }
 
   test('in launcher mode the loose games join the list before LaunchBox matching, in one enrich', () async {
@@ -220,6 +234,54 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     expect(catalog.debugLooseScans, scans, reason: 'the listener reads the mode now, not at load');
     expect(loose(c), isEmpty);
+  });
+
+  test('launcher mode turning off while a console loads leaves it with no loose game and no owned view', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog();
+    final hold = launchbox.hold = Completer<void>();
+    final load = catalog.loadCatalog(_psx);
+    await until(() => launchbox.enriched.isNotEmpty);
+    expect(launchbox.enriched.single, contains('Spyro (USA)'), reason: 'the load scanned in launcher mode');
+    await setMode(c, false);
+    hold.complete();
+    await load;
+    expect(loose(c), isEmpty);
+    expect(c.read(catalogProvider).filter.ownedOnly, isFalse);
+    expect(shown(c), ['Crash Bandicoot (USA)']);
+  });
+
+  test('launcher mode turning off while a failed catalog loads on its loose games shows the failure', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog(error: Exception('HTTP 503'));
+    final hold = launchbox.hold = Completer<void>();
+    final load = catalog.loadCatalog(_psx);
+    await until(() => launchbox.enriched.isNotEmpty);
+    await setMode(c, false);
+    hold.complete();
+    await load;
+    expect(c.read(catalogProvider).games, isEmpty);
+    expect(c.read(catalogProvider).errorMessage, 'Failed to load catalog: Exception: HTTP 503');
+    expect(c.read(catalogProvider).loading, isFalse);
+  });
+
+  test('launcher mode turning on while a console loads opens it on the owned view, with its loose games', () async {
+    touch('Spyro (USA).chd');
+    final (c, catalog) = await setUpCatalog(launcher: false);
+    // Read before the load, as the app has it: the first read is a library
+    // change the list would follow anyway.
+    await c.read(librarySnapshotProvider(tmp.path).notifier).refresh();
+    final hold = launchbox.hold = Completer<void>();
+    final load = catalog.loadCatalog(_psx);
+    await until(() => launchbox.enriched.isNotEmpty);
+    expect(launchbox.enriched.single, ['Crash Bandicoot (USA)'], reason: 'the load scanned nothing, the mode was off');
+    await setMode(c, true);
+    hold.complete();
+    await load;
+    expect(c.read(catalogProvider).filter.ownedOnly, isTrue);
+    await until(() => shown(c).isNotEmpty);
+    expect(loose(c), ['Spyro (USA)']);
+    expect(shown(c), ['Spyro (USA)']);
   });
 
   test('launcher mode turning off while a library change is being scanned keeps what that scan finds away', () async {

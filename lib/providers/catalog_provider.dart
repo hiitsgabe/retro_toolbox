@@ -207,6 +207,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         enriched = await _ref.read(launchboxServiceProvider).enrich(console, games, useCovers: await launchboxUseCovers());
         if (gen != _loadGeneration || !mounted) return;
       } while (launchboxGen != _launchboxGen);
+      // The mode may have turned while the dir was scanned or the games were
+      // matched, and its listener found no list to change: the list follows
+      // the mode now. Turned off, the loose games go; turned on, they are
+      // scanned once the list is in.
+      final launcherNow = _ref.read(launcherModeProvider);
+      if (launcher && !launcherNow) {
+        enriched = [for (final g in enriched) if (!g.isLocal) g];
+        if (enriched.isEmpty) {
+          state = state.copyWith(loading: false, loadingStatus: '', errorMessage: _catalogFailure ?? _emptyMessage(console));
+          return;
+        }
+      }
       _console = console;
 
       Set<String> regions = <String>{};
@@ -251,7 +263,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       );
       // Launcher mode opens a console on what is on disk. Off, the owned view
       // is off too: only launcher mode shows its button.
-      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcher));
+      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcherNow));
 
       await updateFilteredGames(immediate: true);
       _refocus(enriched);
@@ -284,6 +296,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
       if (gen != _loadGeneration || !mounted) return;
       state = state.copyWith(loading: false, loadingStatus: '');
+      // Not awaited inside the load: a scan that fails is no failed catalog.
+      if (launcherNow && !launcher) unawaited(_relistLoose().catchError((Object e) => debugPrint('Error listing loose games: $e')));
     } catch (e) {
       debugPrint('Error loading catalog: $e');
       if (gen != _loadGeneration || !mounted) return;
