@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
@@ -355,5 +357,54 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Tick the ones Eden Duo opens'), findsNothing);
     expect(config.saved.where((c) => c.manual.isNotEmpty), isEmpty);
+  });
+
+  testWidgets('desktop: the picked file gets the recipes for this OS, the ones its find rules name first, then Just open the file', (t) async {
+    await pump(t, os: 'linux', extra: [pickExecutableProvider.overrideWithValue((_) async => '/opt/emus/duckstation-qt')]);
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-add')));
+    final ds = t.getTopLeft(inSheet('Opens like DuckStation')).dy;
+    expect(ds, lessThan(t.getTopLeft(inSheet('Opens like RetroArch')).dy));
+    expect(t.getTopLeft(inSheet('Opens like RetroArch')).dy, lessThan(t.getTopLeft(inSheet('Just open the file')).dy));
+    expect(inSheet('Opens like Eden'), findsNothing, reason: 'Eden has no Linux block');
+    expect(channel.detectCalls, isEmpty, reason: 'no recipe test on the desktop');
+    await tapAndSettle(t, inSheet('Opens like DuckStation'));
+    final m = config.saved.last.manual.single;
+    expect((m.variant, m.label, m.recipe), ('/opt/emus/duckstation-qt', 'duckstation-qt', 'ds'));
+    expect(find.byKey(ValueKey('launcher-found-${m.id}')), findsOneWidget);
+  });
+
+  testWidgets('desktop: Just open the file, then the ticked consoles', (t) async {
+    await pump(t, os: 'linux', extra: [pickExecutableProvider.overrideWithValue((_) async => '/opt/emus/viewer')]);
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-add')));
+    await tapAndSettle(t, inSheet('Just open the file'));
+    await tapAndSettle(t, find.text('PlayStation'));
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
+    final m = config.saved.last.manual.single;
+    expect((m.variant, m.recipe, m.activity), ('/opt/emus/viewer', 'generic', null));
+    expect(m.systems, ['psx']);
+  });
+
+  testWidgets('desktop: the file picker left changes nothing', (t) async {
+    await pump(t, os: 'linux', extra: [pickExecutableProvider.overrideWithValue((_) async => null)]);
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-add')));
+    expect(find.byType(RowMenuSheet), findsNothing);
+    expect(config.saved.where((c) => c.manual.isNotEmpty), isEmpty);
+  });
+
+  testWidgets('macOS: a picked .app is saved as the binary inside it, under the bundle name', (t) async {
+    final tmp = Directory.systemTemp.createTempSync('rt-manual-wizard-app-');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final app = p.join(tmp.path, 'Duck Fork.app');
+    File(p.join(app, 'Contents', 'Info.plist'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('<key>CFBundleExecutable</key>\n<string>DuckFork</string>');
+    final bin = File(p.join(app, 'Contents', 'MacOS', 'DuckFork'))..createSync(recursive: true);
+    await pump(t, os: 'macos', extra: [pickExecutableProvider.overrideWithValue((_) async => app)]);
+    await tapAndSettle(t, find.byKey(const ValueKey('launcher-add')));
+    await tapAndSettle(t, inSheet('Just open the file'));
+    await tapAndSettle(t, find.text('PlayStation'));
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
+    final m = config.saved.last.manual.single;
+    expect((m.variant, m.label), (bin.path, 'Duck Fork'));
   });
 }

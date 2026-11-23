@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
@@ -17,12 +18,16 @@ import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/launcher_wizard_plan.dart';
 import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/services/launcher/manual_recipes.dart';
+import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
 enum _Step { emulators, systems, folders, home, done }
+
+/// The desktop file picker of "Add an emulator", as a provider tests can set.
+final pickExecutableProvider = Provider<Future<String?> Function(BuildContext context)>((ref) => (context) => pickFile(context, title: 'Choose the emulator'));
 
 /// Launcher mode's setup: which emulators are installed, which one opens
 /// each console with games on disk, the folder grants a `saf` emulator needs
@@ -94,12 +99,13 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     }
   }
 
-  /// "Add an emulator": an app the user says is an emulator, paired with a
-  /// recipe. Saved, then detected like the rest, so its row comes with what
-  /// a detection brings. Left anywhere on the way, nothing changes.
+  /// "Add an emulator": an app (Android) or an executable (desktop) the user
+  /// says is an emulator, paired with a recipe or with none. Saved, then
+  /// detected like the rest, so its row comes with what a detection brings.
+  /// Left anywhere on the way, nothing changes.
   Future<void> _addEmulator(LauncherSession session) async {
     setState(() => _addProblem = null);
-    final manual = await _pickAndroid(session);
+    final manual = _android ? await _pickAndroid(session) : await _pickDesktop();
     if (manual == null || !mounted) return;
     setState(() => _detecting = true);
     try {
@@ -127,6 +133,22 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     final recipe = await _chooseRecipe(label, recipes, generic: activity != null);
     if (recipe == null || !mounted) return null;
     return _withSystems(ManualEmulator(variant: app.package, label: label, recipe: recipe, activity: recipe == ManualEmulator.generic ? activity : null));
+  }
+
+  /// The recipes come with the ones whose find rules name the picked file
+  /// first; "Just open the file" is always there, since any executable can
+  /// be handed the path.
+  Future<ManualEmulator?> _pickDesktop() async {
+    final os = ref.read(launcherOsProvider);
+    final picked = await ref.read(pickExecutableProvider)(context);
+    if (picked == null || !mounted) return null;
+    final exe = await executableFor(picked, os);
+    final file = await ref.read(launchPresetsProvider.future);
+    if (!mounted) return null;
+    final label = p.basenameWithoutExtension(picked);
+    final recipe = await _chooseRecipe(label, desktopRecipesFor(file.presets, os, picked), generic: true);
+    if (recipe == null || !mounted) return null;
+    return _withSystems(ManualEmulator(variant: exe, label: label, recipe: recipe));
   }
 
   /// A generic [m] with the consoles the user ticks for it; one with a recipe
@@ -329,13 +351,12 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         if (_addProblem != null) KitPanel(padding: const EdgeInsets.all(12), children: [Text(_addProblem!, style: t.body)]),
         OptionList(children: [
           OptionAction(title: 'Detect again', subtitle: 'After installing or removing an emulator', autofocus: true, onTap: busy ? null : _detect),
-          if (_android)
-            OptionAction(
-              key: const ValueKey('launcher-add'),
-              title: 'Add an emulator',
-              subtitle: 'For one that was not found',
-              onTap: busy || session == null ? null : () => _addEmulator(session),
-            ),
+          OptionAction(
+            key: const ValueKey('launcher-add'),
+            title: 'Add an emulator',
+            subtitle: 'For one that was not found',
+            onTap: busy || session == null ? null : () => _addEmulator(session),
+          ),
         ]),
       ],
       end: [
