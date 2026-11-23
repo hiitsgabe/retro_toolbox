@@ -325,6 +325,15 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     await reapplyLaunchbox();
   }
 
+  /// Scans the loaded console's library dir again: the snapshot's listener
+  /// then brings the list up to date. Nothing when no console is loaded.
+  Future<void> rescanLibrary() async {
+    final consoleId = _console?.id;
+    if (consoleId == null) return;
+    final dir = _ref.read(settingsProvider.notifier).getDownloadDir(consoleId);
+    if (dir.isNotEmpty) await _ref.read(librarySnapshotProvider(dir).notifier).refresh();
+  }
+
   /// Whether launcher mode is on, once its saved config is in.
   Future<bool> _launcherMode() async {
     if (!_ref.read(launcherAvailableProvider)) return false;

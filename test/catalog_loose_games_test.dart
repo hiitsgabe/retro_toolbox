@@ -239,4 +239,17 @@ void main() {
     expect(shown(c), ['Spyro (USA)', 'Tekken 3 (USA)']);
     expect(launchbox.enriched.last, ['Crash Bandicoot (USA)', 'Spyro (USA)', 'Tekken 3 (USA)']);
   });
+
+  test('rescanLibrary reads the loaded console\'s dir again, and the list follows', () async {
+    final (c, catalog) = await setUpCatalog();
+    await catalog.rescanLibrary();
+    await catalog.loadCatalog(_psx);
+    expect(shown(c), isEmpty);
+    touch('Spyro (USA).chd');
+    await catalog.rescanLibrary();
+    for (var i = 0; i < 100 && shown(c).isEmpty; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    expect(shown(c), ['Spyro (USA)']);
+  });
 }
