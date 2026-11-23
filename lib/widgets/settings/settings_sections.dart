@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/favorites_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/save_sync_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
@@ -27,6 +28,7 @@ import 'package:retro_toolbox/widgets/settings/favorites_settings.dart';
 import 'package:retro_toolbox/widgets/settings/handler_setting.dart';
 import 'package:retro_toolbox/widgets/settings/keys_setting.dart';
 import 'package:retro_toolbox/widgets/settings/launchbox_setting.dart';
+import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
 import 'package:retro_toolbox/widgets/settings/library_setting.dart';
 import 'package:retro_toolbox/widgets/settings/network_address_setting.dart';
 import 'package:retro_toolbox/widgets/settings/on_screen_keyboard_setting.dart';
@@ -150,6 +152,7 @@ List<Widget> settingsSectionRows(SettingsSection section, WidgetRef ref, {requir
           const LaunchboxSetting(),
           const SettingsHeader('Favorites'),
           const FavoritesRows(),
+          if (ref.watch(launcherCardProvider)) ...[const SettingsHeader('Launcher mode'), const LauncherSetting()],
         ],
       ];
     case SettingsSection.style:
@@ -390,6 +393,10 @@ List<Widget> consoleSettingsRows(Console console, WidgetRef ref, {VoidCallback? 
     if (console.hasUpdates) ...[
       const SettingsHeader('Updates', top: 14),
       UpdatesSetting(console: console),
+    ],
+    if (ref.watch(launcherCardProvider) && ref.watch(launchConfigProvider.select((c) => c.enabled))) ...[
+      const SettingsHeader('Launcher', top: 14),
+      DefaultEmulatorRow(console: console),
     ],
     const SettingsHeader('Storage', top: 14),
     _ConsoleCacheRow(console: console),
