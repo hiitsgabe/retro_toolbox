@@ -387,7 +387,21 @@ Future<void> enterGamesLibrary(
       if (!nav.mounted) return;
     }
   }
-  nav.push<void>(MaterialPageRoute(builder: grid));
+  nav.push<void>(MaterialPageRoute(settings: const RouteSettings(name: ConsoleGridScreen.routeName), builder: grid));
+}
+
+/// A Home press with Retro Toolbox as the home app: back to the console
+/// list, the library's root. Every route above it closes; with none open,
+/// what is open closes and the list opens over the menu.
+void goToLibraryRoot(NavigatorState nav, {WidgetBuilder grid = _grid}) {
+  Route<dynamic>? top;
+  nav.popUntil((route) {
+    top = route;
+    return route.settings.name == ConsoleGridScreen.routeName || route.isFirst;
+  });
+  if (top?.settings.name != ConsoleGridScreen.routeName) {
+    nav.push<void>(MaterialPageRoute(settings: const RouteSettings(name: ConsoleGridScreen.routeName), builder: grid));
+  }
 }
 
 Widget _setup(BuildContext _) => const SetupWizardScreen();

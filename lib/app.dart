@@ -313,6 +313,12 @@ ColorScheme _scheme(StyleTokens k) {
   );
 }
 
+/// A Home press with Retro Toolbox as the home app.
+void _goHome() {
+  final nav = navigatorKey.currentState;
+  if (nav != null) goToLibraryRoot(nav);
+}
+
 class RetroToolboxApp extends ConsumerWidget {
   const RetroToolboxApp({super.key});
 
@@ -344,7 +350,7 @@ class RetroToolboxApp extends ConsumerWidget {
       ),
       home: const MenuScreen(),
     );
-    final launcher = ref.watch(launcherAvailableProvider) ? LauncherLifecycle(child: app) : app;
+    final launcher = ref.watch(launcherAvailableProvider) ? LauncherLifecycle(onHome: _goHome, child: app) : app;
     return Platform.isAndroid ? _DualScreenLifecycle(child: launcher) : launcher;
   }
 }

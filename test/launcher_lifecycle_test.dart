@@ -6,9 +6,11 @@ import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/sports_provider.dart';
+import 'package:retro_toolbox/screens/console_grid_screen.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset_store.dart';
+import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/widgets/launcher/launcher_lifecycle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,12 +18,13 @@ class MemoryConfig implements LaunchConfigStore {
   MemoryConfig(this.initial);
 
   final LaunchConfig initial;
+  LaunchConfig? last;
 
   @override
   Future<LaunchConfig> load() async => initial;
 
   @override
-  Future<void> save(LaunchConfig config) async {}
+  Future<void> save(LaunchConfig config) async => last = config;
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -34,6 +37,33 @@ class RescanCatalog extends StateNotifier<CatalogState> implements CatalogNotifi
 
   @override
   Future<void> rescanLibrary() async => rescans++;
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// Says Retro Toolbox is the home app when [held], records each setHome,
+/// and keeps the Home press handler it was given.
+class FakeHomeChannel implements LauncherChannel {
+  bool held = false;
+  final setHomeCalls = <bool>[];
+  int heldChecks = 0;
+  void Function()? onHome;
+
+  @override
+  Future<bool> isHomeHeld() async {
+    heldChecks++;
+    return held;
+  }
+
+  @override
+  Future<bool> setHome(bool on) async {
+    setHomeCalls.add(on);
+    return on && held;
+  }
+
+  @override
+  void setHomeHandler(void Function()? onHome) => this.onHome = onHome;
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -54,15 +84,23 @@ void main() {
   late int detections;
   late RescanCatalog catalog;
   late int onDiskBuilds;
+  late FakeHomeChannel channel;
+  late MemoryConfig config;
+  late int homePresses;
 
-  Future<void> pump(WidgetTester t, {required bool enabled}) async {
+  Future<void> pump(WidgetTester t, {required bool enabled, bool home = false, bool homeRole = false}) async {
     presets = CountingStore();
     detections = 0;
     catalog = RescanCatalog();
     onDiskBuilds = 0;
+    channel = FakeHomeChannel();
+    config = MemoryConfig(LaunchConfig(enabled: enabled, home: home));
+    homePresses = 0;
     await t.pumpWidget(ProviderScope(
       overrides: [
-        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(LaunchConfig(enabled: enabled)))),
+        homeRoleAvailableProvider.overrideWithValue(homeRole),
+        launcherChannelProvider.overrideWithValue(channel),
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(config)),
         launchPresetStoreProvider.overrideWithValue(presets),
         detectEmulatorsProvider.overrideWithValue(() async {
           detections++;
@@ -74,7 +112,7 @@ void main() {
           return true;
         }),
       ],
-      child: const LauncherLifecycle(child: SizedBox()),
+      child: LauncherLifecycle(onHome: () => homePresses++, child: const SizedBox()),
     ));
     await t.pump();
   }
@@ -130,6 +168,76 @@ void main() {
     await container(t).read(launchConfigProvider.notifier).setEnabled(false);
     await t.pump();
     expect(catalog.rescans, 1);
+  });
+
+  testWidgets('as a possible home app, the start and each resume take home from what Android says', (t) async {
+    await pump(t, enabled: true, home: true, homeRole: true);
+    expect(channel.heldChecks, 1);
+    expect(config.last?.home, isFalse, reason: 'another home app was picked while the app was closed');
+    channel.held = true;
+    resume(t);
+    await t.pump();
+    expect(channel.heldChecks, 2);
+    expect(config.last?.home, isTrue);
+  });
+
+  testWidgets('with launcher mode off a resume still takes home from Android', (t) async {
+    await pump(t, enabled: false, homeRole: true);
+    resume(t);
+    await t.pump();
+    expect(channel.heldChecks, 2);
+  });
+
+  testWidgets('launcher mode turning off gives the home role up', (t) async {
+    await pump(t, enabled: true, homeRole: true);
+    channel.held = true;
+    await container(t).read(launchConfigProvider.notifier).setHome(true);
+    await container(t).read(launchConfigProvider.notifier).setEnabled(false);
+    await t.pump();
+    expect(channel.setHomeCalls, [false]);
+    expect(config.last?.home, isFalse);
+  });
+
+  testWidgets('a Home press runs onHome; once the lifecycle is gone, nothing listens', (t) async {
+    await pump(t, enabled: true, homeRole: true);
+    expect(channel.onHome, isNotNull);
+    channel.onHome!();
+    expect(homePresses, 1);
+    await t.pumpWidget(const SizedBox());
+    expect(channel.onHome, isNull);
+  });
+
+  testWidgets('where the app cannot be the home app, Android is never asked', (t) async {
+    await pump(t, enabled: true);
+    resume(t);
+    await t.pump();
+    await container(t).read(launchConfigProvider.notifier).setEnabled(false);
+    await t.pump();
+    expect(channel.heldChecks, 0);
+    expect(channel.setHomeCalls, isEmpty);
+    expect(channel.onHome, isNull);
+  });
+
+  testWidgets('in the app, a Home press opens the console list', (t) async {
+    SharedPreferences.setMockInitialValues({'setup_wizard_seen': true});
+    final channel = FakeHomeChannel();
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        patchersProvider.overrideWith((ref) async => []),
+        launcherAvailableProvider.overrideWithValue(true),
+        homeRoleAvailableProvider.overrideWithValue(true),
+        launcherChannelProvider.overrideWithValue(channel),
+        launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(const LaunchConfig(enabled: true, home: true)))),
+      ],
+      child: const RetroToolboxApp(),
+    ));
+    await t.pump();
+    expect(find.byType(ConsoleGridScreen), findsNothing);
+    expect(channel.onHome, isNotNull);
+    channel.onHome!();
+    await t.pump();
+    await t.pump(const Duration(seconds: 1));
+    expect(find.byType(ConsoleGridScreen), findsOneWidget);
   });
 
   for (final available in [true, false]) {

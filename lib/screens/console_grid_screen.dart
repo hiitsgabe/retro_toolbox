@@ -26,6 +26,9 @@ final consoleGridOwnedOnlyProvider = StateProvider<bool>((ref) => true);
 class ConsoleGridScreen extends ConsumerWidget {
   const ConsoleGridScreen({super.key});
 
+  /// Its route's name: a Home press finds the library's root by it.
+  static const routeName = 'console-grid';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
