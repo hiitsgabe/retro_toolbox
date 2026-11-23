@@ -121,6 +121,7 @@ class LibrarySnapshot {
     Set<String>? exactFiles,
     Set<String>? baseNames,
     Map<String, List<String>>? relatedFiles,
+    Map<String, String>? aliases,
     DateTime? timestamp,
   }) {
     return LibrarySnapshot(
@@ -128,7 +129,7 @@ class LibrarySnapshot {
       exactFiles: exactFiles ?? this.exactFiles,
       baseNames: baseNames ?? this.baseNames,
       relatedFiles: relatedFiles ?? this.relatedFiles,
-      aliases: aliases,
+      aliases: aliases ?? this.aliases,
       timestamp: timestamp ?? DateTime.now(),
     );
   }

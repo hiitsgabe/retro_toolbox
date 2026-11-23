@@ -112,6 +112,10 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     return snap.allStatuses();
   }
 
+  /// Where the root file [filename] is on disk, by the snapshot there is:
+  /// itself, or the file whose real name `Game.sanitizeForFat` turns into it.
+  String pathFor(String filename) => state[_libraryDir]?.pathFor(filename) ?? p.join(_libraryDir, p.basename(filename));
+
   Future<List<String>> getRelatedFiles(String filename) async {
     final snap = await _ensure();
     return snap.relatedFilesFor(filename);
@@ -145,11 +149,15 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
     };
   }
 
+  /// [filename] may be a catalog name only an alias has: the file under its
+  /// real name is the one that went.
   void markFileRemoved(String filename) {
     final base = p.basename(filename);
     final baseNoExt = p.basenameWithoutExtension(base);
     final snap = state[_libraryDir];
     if (snap == null) return;
+    final real = snap.exactFiles.contains(base) ? null : snap.aliases[base];
+    if (real != null) return markFileRemoved(real);
 
     final exact = {...snap.exactFiles}..remove(base);
     final bases = {...snap.baseNames};
@@ -179,7 +187,12 @@ class LibrarySnapshotNotifier extends StateNotifier<Map<String, LibrarySnapshot>
 
     state = {
       ...state,
-      _libraryDir: snap.copyWith(exactFiles: exact, baseNames: bases, relatedFiles: related),
+      _libraryDir: snap.copyWith(
+        exactFiles: exact,
+        baseNames: bases,
+        relatedFiles: related,
+        aliases: {...snap.aliases}..removeWhere((_, file) => file == base),
+      ),
     };
   }
 

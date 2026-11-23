@@ -59,10 +59,13 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
     final downloadDir = settingsNotifier.downloadDirFor(game);
-    final filePath = path.join(downloadDir, game.filename);
+    // The archive may be under a real name a FAT card could not hold; what it
+    // unpacks to is the catalog game's, as a download would have made it.
+    final catalogPath = path.join(downloadDir, game.filename);
+    final filePath = _ref.read(librarySnapshotProvider(downloadDir).notifier).pathFor(game.filename);
     final extractionDir = settingsNotifier.getExtractToFolder(game.consoleId)
-        ? path.join(path.dirname(filePath), path.basenameWithoutExtension(filePath))
-        : path.dirname(filePath);
+        ? path.join(path.dirname(catalogPath), path.basenameWithoutExtension(catalogPath))
+        : path.dirname(catalogPath);
 
     if (!DirectoryService.isCompressedFile(filePath) && ArchiveExtractService.archiveKind(filePath) != ArchiveKind.rar) {
       debugPrint('File is not compressed: $filePath');
@@ -601,7 +604,7 @@ class ExtractionNotifier extends StateNotifier<ExtractionState> {
     final game = gameState.game;
     final settingsNotifier = _ref.read(settingsProvider.notifier);
     final downloadDir = settingsNotifier.downloadDirFor(game);
-    final filePath = path.join(downloadDir, game.filename);
+    final filePath = _ref.read(librarySnapshotProvider(downloadDir).notifier).pathFor(game.filename);
 
     if (await DirectoryService.deleteFile(filePath)) {
       debugPrint('Deleted original file: $filePath');
