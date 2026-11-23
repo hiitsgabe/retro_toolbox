@@ -118,7 +118,9 @@ class GameLauncher {
   /// Starts [exe] and watches it for [window]. Exit codes come only from a
   /// process that is not detached, so both pipes are drained for its whole
   /// life (a full pipe would block the emulator) and stderr keeps its last
-  /// 20 lines.
+  /// 20 lines. Emulators print paths in the local code page and binary
+  /// noise, so stderr decodes leniently, and the end of stderr comes from
+  /// onDone because asFuture cancels the drain on the first error.
   Future<LaunchResult> _watch(String exe, List<String> args) async {
     final Process process;
     try {
@@ -128,18 +130,18 @@ class GameLauncher {
     }
     final tail = <String>[];
     process.stdout.listen((_) {}, onError: (_) {});
-    final stderrDone = process.stderr
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-          tail.add(line);
-          if (tail.length > 20) tail.removeAt(0);
-        }, onError: (_) {})
-        .asFuture<void>()
-        .catchError((_) {});
+    final stderrDone = Completer<void>();
+    process.stderr.transform(const Utf8Decoder(allowMalformed: true)).transform(const LineSplitter()).listen(
+      (line) {
+        tail.add(line);
+        if (tail.length > 20) tail.removeAt(0);
+      },
+      onError: (_) {},
+      onDone: stderrDone.complete,
+    );
     final code = await process.exitCode.then<int?>((c) => c).timeout(window, onTimeout: () => null);
     if (code == null || code == 0) return LaunchResult.ok;
-    await stderrDone.timeout(const Duration(seconds: 1), onTimeout: () {});
+    await stderrDone.future.timeout(const Duration(seconds: 1), onTimeout: () {});
     return LaunchResult(LaunchCode.crashed, message: tail.join('\n'));
   }
 }

@@ -22,6 +22,13 @@ class FakeProcess implements Process {
 
   void err(String lines) => _err.add(utf8.encode(lines));
 
+  /// Raw stderr bytes, for output that is not UTF-8 (a path in a Windows
+  /// ANSI code page, binary noise).
+  void errBytes(List<int> bytes) => _err.add(bytes);
+
+  /// A read error on the stderr pipe itself.
+  void errFails() => _err.addError(const OSError('Broken pipe', 32));
+
   /// A real pipe fills and blocks the emulator on its next write unless a
   /// listener keeps reading it. isPaused alone is not enough: a controller
   /// whose listener cancelled reports not paused.
@@ -151,6 +158,43 @@ void main() {
     expect(runner.process.exit.isCompleted, isFalse);
     expect(runner.process.stdoutDrained, isTrue, reason: 'stdout is drained for the whole life, not only the window');
     expect(runner.process.stderrDrained, isTrue, reason: 'stderr is drained for the whole life, not only the window');
+  });
+
+  test('stderr that is not UTF-8 keeps stderr drained and still launches ok', () async {
+    final rom = touch('roms/psx/Crash.chd');
+    final pending = launch(duckstation, found(duckstation, '/usr/bin/duckstation-qt'), owned('psx', rom));
+    await Future<void>.delayed(Duration.zero);
+    runner.process.errBytes([0x41, 0xE7, 0xE3, 0x6F, 0x0A]);
+    final r = await pending;
+    expect(r.code, LaunchCode.ok);
+    expect(runner.process.stderrDrained, isTrue, reason: 'a malformed byte must not stop the drain, or the pipe fills and blocks the emulator');
+  });
+
+  test('a crash after a line that is not UTF-8 still reports that line and the ones after it', () async {
+    final rom = touch('roms/psx/Crash.chd');
+    final pending = launch(duckstation, found(duckstation, '/usr/bin/duckstation-qt'), owned('psx', rom));
+    await Future<void>.delayed(Duration.zero);
+    runner.process.err('before\n');
+    runner.process.errBytes([0x41, 0xE7, 0xE3, 0x6F, 0x0A]);
+    runner.process.err('after 1\nafter 2');
+    runner.process.finish(1);
+    final r = await pending;
+    expect(r.code, LaunchCode.crashed);
+    expect(r.message, 'before\nA\u{FFFD}\u{FFFD}o\nafter 1\nafter 2');
+  });
+
+  test('a read error on stderr keeps stderr drained and the tail growing', () async {
+    final rom = touch('roms/psx/Crash.chd');
+    final pending = launch(duckstation, found(duckstation, '/usr/bin/duckstation-qt'), owned('psx', rom));
+    await Future<void>.delayed(Duration.zero);
+    runner.process.err('before\n');
+    runner.process.errFails();
+    runner.process.err('after\n');
+    await Future<void>.delayed(Duration.zero);
+    expect(runner.process.stderrDrained, isTrue, reason: 'one pipe error must not cancel the drain');
+    runner.process.finish(1);
+    final r = await pending;
+    expect(r.message, 'before\nafter');
   });
 
   test('exit 0 inside the window is ok', () async {
