@@ -206,6 +206,17 @@ void main() {
     expect(find.text('OPEN RETROARCH'), findsOneWidget);
   });
 
+  // Null is desktop, where Open <emulator> would call the Android-only openApp.
+  for (final mode in [null, RomMode.path, RomMode.provider]) {
+    testWidgets('a ${mode?.name ?? 'desktop'} choice has no folder-access hint and no Open <emulator>', (t) async {
+      launcher.mode = mode;
+      await pump(t, detected: [emu('ra', 'RetroArch')]);
+      expect(primary('PLAY'), findsOneWidget);
+      expect(find.textContaining('says it cannot open the file'), findsNothing);
+      expect(find.text('OPEN RETROARCH'), findsNothing);
+    });
+  }
+
   testWidgets('the first details page of a session starts the preset refresh, and only that one', (t) async {
     final store = CountingStore();
     await t.pumpWidget(ProviderScope(
