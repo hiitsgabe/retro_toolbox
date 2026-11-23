@@ -10,7 +10,8 @@ const _segmentText = TextStyle(fontSize: 14, fontWeight: FontWeight.w600);
 /// One of a few choices: left/right on the focused row picks the one before
 /// or after (no wrap), a tap picks any. The choices sit right of the title,
 /// or under it when they would leave the title too little room. A console's
-/// [changed] choice carries the chip; X resets it ([onReset]).
+/// [changed] choice carries the chip; X resets it ([onReset]). A [disabled]
+/// choice shows dimmed and cannot be picked.
 class SettingsSegmentedRow<T> extends StatelessWidget {
   const SettingsSegmentedRow({
     super.key,
@@ -22,6 +23,7 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
     this.indent = false,
     this.changed = false,
     this.onReset,
+    this.disabled = const {},
   });
 
   final String title;
@@ -32,6 +34,7 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
   final bool indent;
   final bool changed;
   final VoidCallback? onReset;
+  final Set<T> disabled;
 
   /// The choices' width on one line.
   double _choicesWidth(BuildContext context) {
@@ -57,18 +60,20 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
 
     Widget segment((T, String) o) {
       final picked = o.$1 == selected;
+      final off = disabled.contains(o.$1);
+      final textColor = picked ? k.onAccent : (off ? scheme.onSurface.withValues(alpha: 0.38) : scheme.onSurfaceVariant);
       return Material(
         color: picked ? k.accent : Colors.transparent,
         child: InkWell(
           canRequestFocus: false,
-          onTap: onChanged == null || picked ? null : () => onChanged!(o.$1),
+          onTap: onChanged == null || picked || off ? null : () => onChanged!(o.$1),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Center(
                 widthFactor: 1,
-                child: Text(o.$2, style: _segmentText.copyWith(color: picked ? k.onAccent : scheme.onSurfaceVariant)),
+                child: Text(o.$2, style: _segmentText.copyWith(color: textColor)),
               ),
             ),
           ),
@@ -98,7 +103,7 @@ class SettingsSegmentedRow<T> extends StatelessWidget {
         final by = sideStep(e);
         if (by == null || onChanged == null) return KeyEventResult.ignored;
         final next = (index < 0 ? 0 : index + by).clamp(0, options.length - 1);
-        if (next != index) onChanged!(options[next].$1);
+        if (next != index && !disabled.contains(options[next].$1)) onChanged!(options[next].$1);
         return KeyEventResult.handled;
       },
       child: LayoutBuilder(builder: (context, box) {
