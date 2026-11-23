@@ -4,6 +4,8 @@
 /// would). Pure Dart, like launch_preset.dart.
 library;
 
+import 'package:retro_toolbox/services/launcher/launch_preset.dart';
+
 class ManualEmulator {
   const ManualEmulator({required this.variant, required this.label, required this.recipe, this.systems = const [], this.activity});
 
@@ -57,3 +59,88 @@ class ManualEmulator {
 /// `manual-` and [variant] lowercased, every character outside
 /// `[a-z0-9._-]` made a `-`: a preset id is a plain word wherever it goes.
 String manualId(String variant) => 'manual-${variant.toLowerCase().replaceAll(RegExp(r'[^a-z0-9._-]'), '-')}';
+
+/// [file]'s presets, then one per entry of [manual] built for [os], so
+/// everything that reads presets sees a manual emulator as any other. A
+/// recipe entry is its preset under the entry's id and label, with the
+/// picked package or a find rule on the picked executable; a generic one
+/// opens the file as a viewer does. An entry whose recipe left the file, or
+/// has no block for [os], is left out: it stays saved and comes back with
+/// the file. [extensions], by console art slug, is what a generic entry
+/// opens; a slug not in it opens any file.
+List<LaunchPreset> presetsWithManual(List<LaunchPreset> file, List<ManualEmulator> manual, {required String os, Map<String, List<String>> extensions = const {}}) {
+  final byId = {for (final p in file) p.id: p};
+  final out = [...file];
+  for (final m in manual) {
+    final preset = m.isGeneric ? _generic(m, os, extensions) : _recipe(m, byId[m.recipe], os);
+    if (preset != null) out.add(preset);
+  }
+  return out;
+}
+
+LaunchPreset? _recipe(ManualEmulator m, LaunchPreset? recipe, String os) {
+  if (recipe == null) return null;
+  final systems = m.systems.isEmpty
+      ? recipe.systems
+      : {
+          for (final e in recipe.systems.entries)
+            if (m.systems.contains(e.key)) e.key: e.value,
+        };
+  if (os != 'android') {
+    final desktop = recipe.desktopFor(os);
+    return desktop == null ? null : _desktop(m, os, verified: recipe.verified, systems: systems, args: desktop.args);
+  }
+  final a = recipe.android;
+  if (a == null) return null;
+  return LaunchPreset(
+    id: m.id,
+    name: m.label,
+    verified: recipe.verified,
+    systems: systems,
+    android: AndroidBlock(
+      packages: [m.variant],
+      activity: a.activity,
+      action: a.action,
+      categories: a.categories,
+      mimeType: a.mimeType,
+      flags: a.flags,
+      rom: a.rom,
+      extras: a.extras,
+    ),
+  );
+}
+
+LaunchPreset? _generic(ManualEmulator m, String os, Map<String, List<String>> extensions) {
+  final systems = {for (final s in m.systems) s: PresetSystem(slug: s, extensions: extensions[s] ?? const [])};
+  if (os != 'android') return _desktop(m, os, verified: false, systems: systems, args: const ['{rom}']);
+  final activity = m.activity;
+  if (activity == null) return null;
+  return LaunchPreset(
+    id: m.id,
+    name: m.label,
+    systems: systems,
+    // Our own FileProvider with a read grant reaches the file wherever the
+    // library is, with no folder for the user to set up in the app. A cue or
+    // an m3u goes the same way: saf would need a folder grant a viewer has no
+    // setting for, so the app gets that one file and not the bins beside it.
+    android: AndroidBlock(
+      packages: [m.variant],
+      activity: activity,
+      action: 'android.intent.action.VIEW',
+      rom: const RomSpec(mode: RomMode.provider, multiFileMode: RomMode.provider),
+    ),
+  );
+}
+
+/// The block finds the picked executable by its path, so the emulator is
+/// detected exactly while that file is there, with no rule of its own in
+/// the detector.
+LaunchPreset? _desktop(ManualEmulator m, String os, {required bool verified, required Map<String, PresetSystem> systems, required List<String> args}) {
+  final block = DesktopBlock(find: [FindRule(type: FindType.staticPaths, paths: [m.variant])], args: args);
+  return switch (os) {
+    'linux' => LaunchPreset(id: m.id, name: m.label, verified: verified, systems: systems, linux: block),
+    'windows' => LaunchPreset(id: m.id, name: m.label, verified: verified, systems: systems, windows: block),
+    'macos' => LaunchPreset(id: m.id, name: m.label, verified: verified, systems: systems, macos: block),
+    _ => null,
+  };
+}

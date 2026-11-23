@@ -62,6 +62,10 @@ void main() {
       expectDropped(good('dot')..['systems'] = {'psx': {'extensions': ['.chd']}}, 'extension ".chd" must be lowercase with no dot');
     });
 
+    test('a system has at least one extension: an empty list would open any file', () {
+      expectDropped(good('none')..['systems'] = {'psx': {'extensions': <String>[]}}, 'systems.psx needs at least one extension');
+    });
+
     test('an Android package is claimed by at most one preset', () {
       final check = checkPresetFile(file([good('a'), good('b')]));
       expect(check.file!.presets.map((p) => p.id), ['a']);

@@ -27,7 +27,8 @@ class PresetSystem {
 
   final String slug;
 
-  /// Lowercase, no dot.
+  /// Lowercase, no dot. Empty opens any file: only a generic manual emulator
+  /// has none, and launch_preset_check refuses that in the file.
   final List<String> extensions;
 
   /// Libretro core base names, the first being the default. RetroArch only.

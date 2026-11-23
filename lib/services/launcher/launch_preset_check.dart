@@ -87,6 +87,9 @@ List<String> _presetProblems(LaunchPreset p, Set<String> ids, Map<String, String
   if (ids.contains(p.id)) out.add('id "${p.id}" is used by an earlier preset');
   for (final s in p.systems.values) {
     if (!knownConsoleSlugs.contains(s.slug)) out.add('system "${s.slug}" is not a known console slug');
+    // Empty means any file, for a generic manual emulator; a preset of the
+    // file always says what it opens.
+    if (s.extensions.isEmpty) out.add('systems.${s.slug} needs at least one extension');
     for (final e in s.extensions) {
       if (e != e.toLowerCase() || e.startsWith('.')) out.add('systems.${s.slug} extension "$e" must be lowercase with no dot');
     }
