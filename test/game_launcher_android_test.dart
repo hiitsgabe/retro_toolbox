@@ -269,4 +269,27 @@ void main() {
       expect((plan('/storage/emulated/0/ROMs/psx/Crash.chd').args!['rom'] as Map)['uri'], isNull);
     });
   });
+
+  // The details page shows the folder-access hint and Open <emulator> from this.
+  group('modeFor', () {
+    RomMode? modeFor(LaunchPreset preset, DetectedEmulator d, OwnedGame game, {String os = 'android'}) =>
+        GameLauncher(session: LauncherSession(presets: [preset], detected: [d]), systemSlugFor: (id) => id, os: os, primaryRoot: () async => primary)
+            .modeFor(game, LaunchChoice(presetId: preset.id, variant: d.variant));
+
+    test('RetroArch without path access is saf (Play RetroArch), with it path', () {
+      final game = owned('snes', [touch('ROMs/snes/Mario World.sfc')]);
+      expect(modeFor(retroarch, detected(retroarch, pathAccess: false), game), RomMode.saf);
+      expect(modeFor(retroarch, detected(retroarch), game), RomMode.path);
+    });
+
+    test('a multi-file target of a provider preset with no multiFileMode is saf', () {
+      final game = owned('psx', [touch('ROMs/psx/Spyro.bin'), touch('ROMs/psx/Spyro.cue')]);
+      expect(modeFor(azahar, detected(azahar), game), RomMode.saf);
+    });
+
+    test('desktop has no mode, and neither has a file the preset does not open', () {
+      expect(modeFor(retroarch, detected(retroarch, pathAccess: false), owned('snes', [touch('ROMs/snes/Mario World.sfc')]), os: 'linux'), isNull);
+      expect(modeFor(retroarch, detected(retroarch, pathAccess: false), owned('snes', [touch('ROMs/snes/Mario World.zip')])), isNull);
+    });
+  });
 }
