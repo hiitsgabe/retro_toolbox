@@ -2,18 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/theme/style_tokens.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/header/header.dart' show ownedViewLabel;
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_grid.dart';
 import 'package:retro_toolbox/widgets/menu_grid/cover_flow.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
 import 'package:retro_toolbox/widgets/menu_grid/console_slug.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
+
+/// In launcher mode, whether the console list shows only the consoles with
+/// games on disk (its Owned toggle). Off shows them all again.
+final consoleGridOwnedOnlyProvider = StateProvider<bool>((ref) => true);
 
 /// Grid of consoles. Tapping a console selects it (which starts its catalog
 /// load) and opens the game list (HomeScreen).
@@ -25,6 +31,15 @@ class ConsoleGridScreen extends ConsumerWidget {
     final appState = ref.watch(appStateProvider);
     // A card style other than Classic has its own layout: no view modes.
     final kit = cardStyleKit(ref.watch(styleProvider.select((s) => s.cards)));
+    final launcherMode = ref.watch(launcherModeProvider);
+    final ownedOnly = launcherMode && ref.watch(consoleGridOwnedOnlyProvider);
+    void toggleOwned() => ref.read(consoleGridOwnedOnlyProvider.notifier).update((on) => !on);
+    // The check wizard step 2 makes. A console still being checked shows, so
+    // the list only ever shrinks while it settles.
+    final consoles = [
+      for (final c in appState.consolesList)
+        if (!ownedOnly || ref.watch(gamesOnDiskProvider(c.id)).valueOrNull != false) c,
+    ];
 
     // Always the console list: a catalog loads (and can fail) on the games
     // screen, never here.
@@ -40,10 +55,17 @@ class ConsoleGridScreen extends ConsumerWidget {
           icon: Icons.settings,
         ),
       );
+    } else if (consoles.isEmpty) {
+      body = EmptyState(
+        icon: Icons.folder_off_outlined,
+        glyph: PixelIcons.games,
+        line: 'No console has games on disk yet',
+        action: KitAction('Show all', toggleOwned),
+      );
     } else {
       final k = StyleTokens.of(context);
       final tiles = [
-        for (final (i, console) in appState.consolesList.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
+        for (final (i, console) in consoles.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
       ];
       body = ReorderableMenu(
         menuId: 'consoles',
@@ -52,7 +74,7 @@ class ConsoleGridScreen extends ConsumerWidget {
       );
     }
 
-    final count = appState.consolesList.length;
+    final count = consoles.length;
     final showToggle = count > 0 && kit == null;
     return KitScaffold(
       title: 'Games Library',
@@ -62,6 +84,13 @@ class ConsoleGridScreen extends ConsumerWidget {
       area: AppArea.games,
       padding: EdgeInsets.zero,
       actions: [
+        if (launcherMode && appState.consolesList.isNotEmpty)
+          IconButton(
+            icon: Icon(Icons.sports_esports_rounded, color: ownedOnly ? StyleTokens.of(context).accent : null),
+            tooltip: ownedViewLabel,
+            isSelected: ownedOnly,
+            onPressed: toggleOwned,
+          ),
         if (showToggle)
           IconButton(
             icon: Icon(_viewIcon(appState.consoleViewMode)),
