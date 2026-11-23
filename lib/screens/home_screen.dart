@@ -4,9 +4,12 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/services/dual_screen/companion_sync.dart';
 import 'package:retro_toolbox/widgets/card_styles/card_style_registry.dart';
+import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_menu.dart';
@@ -112,6 +115,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     // the way back (the layouts have no empty look of their own).
     final noMatch = ref.watch(catalogProvider.select((s) => s.games.isNotEmpty && s.filteredGamesCount == 0));
     final view = ref.watch(styleProvider.select((s) => s.gameView(appState.viewMode)));
+    final launcherMode = ref.watch(launcherModeProvider);
+    // The owned view with nothing but itself on: the folder holds no game.
+    // A search or a filter it keeps (favourites, LaunchBox's) is a no match.
+    final ownedNone = noMatch &&
+        filter.ownedOnly &&
+        query.isEmpty &&
+        !filter.showFavoritesOnly &&
+        filter.genres.isEmpty &&
+        filter.players.isEmpty &&
+        filter.minRating == 0;
 
     return Scaffold(
       body: GamesButtons(
@@ -180,23 +193,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                                 ),
                               ),
                             )
-                          : noMatch
+                          : ownedNone
+                              ? EmptyState(
+                                  icon: Icons.folder_off_outlined,
+                                  line: 'No games in ${ref.read(settingsProvider.notifier).getDownloadDir(appState.selectedConsole?.id)}',
+                                  action: KitAction('Show all', catalog.toggleOwnedOnly),
+                                )
+                              : noMatch
                               ? EmptyState(
                                   icon: Icons.search_off_rounded,
                                   line: 'No games match',
                                   action: filter.differsFromDefault ? KitAction('Reset filters', catalog.defaultFilters) : null,
                                   secondAction: query.isNotEmpty ? KitAction('Clear search', () => catalog.updateFilterText('')) : null,
                                 )
-                              : LetterJump(
-                              // The card style's own layout, unless a Classic view is picked
-                              // (AppStyle.gameView): those draw from the style's tokens.
-                              child: (view == null ? cardStyleKit(cards)?.gameList(context) : null) ??
-                                  switch (view ?? appState.viewMode) {
-                                    ViewMode.grid => GameGrid(),
-                                    ViewMode.coverflow => const GameCoverFlow(),
-                                    ViewMode.list => GameList(),
-                                  },
-                            ),
+                              : PlayBadges(
+                                  on: launcherMode,
+                                  child: LetterJump(
+                                    // The card style's own layout, unless a Classic view is picked
+                                    // (AppStyle.gameView): those draw from the style's tokens.
+                                    child: (view == null ? cardStyleKit(cards)?.gameList(context) : null) ??
+                                        switch (view ?? appState.viewMode) {
+                                          ViewMode.grid => GameGrid(),
+                                          ViewMode.coverflow => const GameCoverFlow(),
+                                          ViewMode.list => GameList(),
+                                        },
+                                  ),
+                                ),
             ),
             Footer(),
           ],

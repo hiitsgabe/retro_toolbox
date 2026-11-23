@@ -82,6 +82,20 @@ class _StyledGameCardState extends ConsumerState<StyledGameCard> with JumpTarget
   }
 }
 
+/// Launcher mode over a games list: a game on disk wears a play badge where
+/// the check would be, since A launches it. HomeScreen sets it.
+class PlayBadges extends InheritedWidget {
+  const PlayBadges({super.key, required this.on, required super.child});
+
+  final bool on;
+
+  /// False with no PlayBadges above: the second screen, a test.
+  static bool of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<PlayBadges>()?.on ?? false;
+
+  @override
+  bool updateShouldNotify(PlayBadges oldWidget) => oldWidget.on != on;
+}
+
 /// The game's state as small badges, for the styles' faces: downloading/
 /// extracting (progress ring), downloaded/extracted (check icon in the classic
 /// card's border colour), failed (warning). Selection is not here: the style
@@ -109,7 +123,9 @@ class GameStateBadges extends StatelessWidget {
             ),
           ),
         ),
-      if (status == GameStatus.downloaded || status == GameStatus.extracted)
+      if ((status == GameStatus.downloaded || status == GameStatus.extracted) && PlayBadges.of(context))
+        _badge(const ValueKey('badge-play'), Icon(Icons.play_arrow_rounded, size: size * 0.75, color: scheme.primary))
+      else if (status == GameStatus.downloaded || status == GameStatus.extracted)
         _badge(
           const ValueKey('badge-done'),
           Icon(Icons.check, size: size * 0.75, color: status == GameStatus.downloaded ? scheme.secondaryContainer : scheme.inversePrimary),

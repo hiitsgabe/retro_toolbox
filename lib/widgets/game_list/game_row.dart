@@ -9,6 +9,7 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/game_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/widgets/card_styles/selected_mark.dart';
+import 'package:retro_toolbox/widgets/card_styles/styled_game_card.dart';
 import 'package:retro_toolbox/widgets/game_list/game_title.dart';
 import 'package:retro_toolbox/widgets/game_list/game_tags.dart';
 import 'package:retro_toolbox/widgets/game_list/game_action_buttons.dart';
@@ -152,6 +153,10 @@ class GameRowBody extends StatelessWidget {
               ),
             ),
             SizedBox(width: 6),
+          ],
+          if (PlayBadges.of(context) && (gameState.status == GameStatus.downloaded || gameState.status == GameStatus.extracted)) ...[
+            Icon(Icons.play_arrow_rounded, key: const ValueKey('row-play'), size: 18, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 4),
           ],
           // The style's mark too, as its grid cards wear it: the checkbox
           // alone says nothing of the style.

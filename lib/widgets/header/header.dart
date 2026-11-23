@@ -8,6 +8,7 @@ import 'package:retro_toolbox/models/app_style.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/download_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
+import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
 import 'package:retro_toolbox/providers/task_queue_provider.dart';
 import 'package:retro_toolbox/services/task_queue_service.dart';
@@ -73,6 +74,9 @@ Future<void> downloadSelected(WidgetRef ref, BuildContext context, String? conso
   if (ok != true || !context.mounted) return;
   await (debugStartDownloads ?? TaskQueueService.startDownloads)(ref, context, selectedGames, consoleId);
 }
+
+/// The owned view's name: its header button's tooltip.
+const ownedViewLabel = 'Owned';
 
 class Header extends ConsumerStatefulWidget {
   final List<Console> consoles;
@@ -200,6 +204,14 @@ class _HeaderState extends ConsumerState<Header> {
     final changed = catalogState.filter.changesFromDefault;
 
     return [
+      // Launcher mode's owned view: the games on disk, or the whole catalog.
+      if (ref.watch(launcherModeProvider))
+        _HeaderButton(
+          icon: Icons.sports_esports_rounded,
+          isActive: catalogState.filter.ownedOnly,
+          onPressed: () => ref.read(catalogProvider.notifier).toggleOwnedOnly(),
+          tooltip: ownedViewLabel,
+        ),
       // The badge only when the filter is off its defaults: the defaults hide
       // bad dumps and other regions, which is not something the user set.
       _HeaderButton(
