@@ -4,13 +4,17 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
+import 'package:retro_toolbox/services/launcher/owned_game.dart';
 
 /// Keeps overrides in memory; [saved] records what would be written.
 class MemoryOverrides implements LaunchOverridesStore {
@@ -24,6 +28,19 @@ class MemoryOverrides implements LaunchOverridesStore {
 
   @override
   void save(Map<String, LaunchChoice> overrides) => saved.add(overrides);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+/// The PlayStation's download dir is [dir]; no other console has one.
+class DirSettings extends StateNotifier<AppSettings> implements SettingsNotifier {
+  DirSettings(this.dir) : super(const AppSettings());
+
+  final String dir;
+
+  @override
+  String getDownloadDir(String? consoleId) => consoleId == 'sony-psx' ? dir : '';
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -139,6 +156,39 @@ void main() {
     test('none covering is no choice', () async {
       final c = container(detected: [emu('melonds', ['nds'])]);
       expect(await resolve(c), isNull);
+    });
+  });
+
+  group('ownedGameProvider', () {
+    late Directory tmp;
+    setUp(() async => tmp = await Directory.systemTemp.createTemp('rt-owned-'));
+    tearDown(() => tmp.delete(recursive: true));
+
+    Future<OwnedGame?> owned(Game game) {
+      final c = ProviderContainer(overrides: [settingsProvider.overrideWith((ref) => DirSettings(tmp.path))]);
+      addTearDown(c.dispose);
+      return c.read(ownedGameProvider(game).future);
+    }
+
+    void touch(String rel) => File(p.join(tmp.path, rel)).createSync(recursive: true);
+
+    test('a downloaded file is its absolute path in the console dir', () async {
+      touch('Crash.chd');
+      final game = await owned(_game);
+      expect(game?.dir, tmp.path);
+      expect(game?.paths, [p.join(tmp.path, 'Crash.chd')]);
+    });
+
+    test('an extracted archive is the files of its folder, by path', () async {
+      touch('Spyro/Spyro.cue');
+      touch('Spyro/Spyro.bin');
+      const zip = Game(title: 'Spyro', url: 'https://example.com/psx/Spyro.zip', size: 1, consoleId: 'sony-psx');
+      expect((await owned(zip))?.paths, [p.join(tmp.path, 'Spyro', 'Spyro.bin'), p.join(tmp.path, 'Spyro', 'Spyro.cue')]);
+    });
+
+    test('a game not on disk has none', () async {
+      touch('Other.chd');
+      expect(await owned(_game), isNull);
     });
   });
 }

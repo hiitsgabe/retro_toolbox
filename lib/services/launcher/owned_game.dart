@@ -22,8 +22,9 @@ class OwnedGame {
     final file = p.join(dir, game.filename);
     String abs(String path) => p.isAbsolute(path) ? path : p.join(dir, path);
     // Sorted because the snapshot keeps the directory's listing order, which differs between devices and
-    // would make a tie in resolveLaunchTarget pick a different file on each.
-    List<String> extracted() => [for (final f in snapshot.relatedFilesFor(game.filename)) abs(f)]..sort();
+    // would make a tie in resolveLaunchTarget pick a different file on each. A set because the scan files a
+    // folder with no extension under its name and its base name, which are the same key, so each file twice.
+    List<String> extracted() => {for (final f in snapshot.relatedFilesFor(game.filename)) abs(f)}.toList()..sort();
     final paths = switch (presence) {
       LibraryPresence.none => null,
       LibraryPresence.file => [file],
