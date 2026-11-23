@@ -89,4 +89,44 @@ class DetectedEmulator {
   final List<String> prefixArgs;
 
   LaunchChoice get choice => LaunchChoice(presetId: presetId, variant: variant);
+
+  /// Everything but [icon], which only a fresh detection brings back: the
+  /// saved list stays small.
+  Map<String, Object?> toJson() => {
+        'presetId': presetId,
+        'variant': variant,
+        'label': label,
+        'systems': systems,
+        if (version != null) 'version': version,
+        if (dataDir != null) 'dataDir': dataDir,
+        'requestsManage': requestsManage,
+        'pathAccess': pathAccess,
+        'manageGrant': manageGrant,
+        if (exe != null) 'exe': exe,
+        'prefixArgs': prefixArgs,
+      };
+
+  /// Null for anything that is not a saved detection, so one bad entry never
+  /// costs the others.
+  static DetectedEmulator? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final presetId = j['presetId'], variant = j['variant'], label = j['label'], systems = j['systems'];
+    if (presetId is! String || variant is! String || label is! String || systems is! List) return null;
+    String? string(String key) => j[key] is String ? j[key] as String : null;
+    List<String> strings(Object? list) => [if (list is List) for (final e in list) if (e is String) e];
+    return DetectedEmulator(
+      presetId: presetId,
+      variant: variant,
+      label: label,
+      systems: strings(systems),
+      version: string('version'),
+      dataDir: string('dataDir'),
+      requestsManage: j['requestsManage'] == true,
+      // Missing reads as true, the constructor's default: a desktop entry.
+      pathAccess: j['pathAccess'] != false,
+      manageGrant: j['manageGrant'] == true,
+      exe: string('exe'),
+      prefixArgs: strings(j['prefixArgs']),
+    );
+  }
 }

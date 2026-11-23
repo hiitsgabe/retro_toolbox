@@ -11,6 +11,7 @@ import 'package:retro_toolbox/services/catalog_service.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
 import 'package:retro_toolbox/services/launcher/game_launcher.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_overrides.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset_store.dart';
@@ -61,6 +62,10 @@ final gameSystemProvider = Provider.family<GameSystem, String>((ref, consoleId) 
   final console = CatalogService.consoleByIdSync(consoleId);
   return (slug: console == null ? null : consoleArtSlug(console), name: console?.name ?? consoleId);
 });
+
+/// Launcher mode's settings: on or off, the console defaults, the last
+/// detection.
+final launchConfigProvider = StateNotifierProvider<LaunchConfigNotifier, LaunchConfig>((ref) => LaunchConfigNotifier(LaunchConfigStore()));
 
 final launchOverridesProvider = StateNotifierProvider<LaunchOverridesNotifier, Map<String, LaunchChoice>>(
   (ref) => LaunchOverridesNotifier(LaunchOverridesStore(supportDir: getApplicationSupportDirectory)),
