@@ -114,4 +114,12 @@ void main() {
     await t.pumpAndSettle();
     expect(find.byType(AppDrawerScreen), findsOneWidget);
   });
+
+  testWidgets('as the home app with no catalog, Apps is still in reach', (t) async {
+    await pump(t, on: true, noCatalog: true, home: true);
+    expect(find.text('No catalog configured. Add one in Settings.'), findsOneWidget);
+    await t.tap(find.text('Apps'));
+    await t.pumpAndSettle();
+    expect(find.byType(AppDrawerScreen), findsOneWidget);
+  });
 }
