@@ -137,6 +137,16 @@ void main() {
     expect(c.read(launchConfigProvider).enabled, isFalse);
   });
 
+  // Finish turns the mode on with no defaults when no console has games on
+  // disk, so off from that state must not detour through the wizard.
+  testWidgets('turning the mode off with no console set up turns it off and opens no wizard', (t) async {
+    await pump(t, const LaunchConfig(enabled: true));
+    await t.tap(find.text('Launcher mode'));
+    await t.pumpAndSettle();
+    expect(find.byType(LauncherWizardScreen), findsNothing);
+    expect(c.read(launchConfigProvider).enabled, isFalse);
+  });
+
   testWidgets('Set up opens the wizard', (t) async {
     await pump(t, const LaunchConfig(enabled: true, defaults: {'sony-psx': LaunchChoice(presetId: 'ds', variant: '/usr/bin/duckstation')}));
     await t.tap(find.text('Set up'));
