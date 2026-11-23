@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/extraction_model.dart';
+import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/models/task_queue_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
@@ -222,7 +223,10 @@ class GameStateManager extends StateNotifier<Map<String, GameState>> {
       // off `loading` owns it now — overwriting with a disk-derived status here
       // would show the game as done until the next extraction progress tick.
       if (state[gameId]?.status != GameStatus.loading) return;
-      final status = presence.toGameStatus();
+      // A loose game is on disk by construction, but a real name that
+      // sanitizeForFat changed is not under its filename: it must never read
+      // as ready, which offers a download its local:// url cannot do.
+      final status = game.isLocal && presence == LibraryPresence.none ? GameStatus.downloaded : presence.toGameStatus();
 
       _updateState(
           gameId,

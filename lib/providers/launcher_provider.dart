@@ -23,6 +23,7 @@ import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/owned_game.dart';
+import 'package:retro_toolbox/services/launcher/owned_library.dart';
 import 'package:retro_toolbox/services/pick.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
@@ -153,10 +154,18 @@ final resolveChoiceProvider = Provider.family<LaunchChoice?, Game>((ref, game) {
   return covering.length == 1 ? covering.single.choice : null;
 });
 
+/// The loose games of a console's library dir, by console id, as its last
+/// catalog load in launcher mode found them: the catalog writes it, and a
+/// launch of a loose game reads its files from it.
+final ownedLibraryProvider = StateProvider.family<OwnedLibrary, String>((ref, consoleId) => OwnedLibrary.empty);
+
 /// [game]'s files on disk, or null when it has none.
 final ownedGameProvider = FutureProvider.autoDispose.family<OwnedGame?, Game>((ref, game) async {
   final dir = ref.read(settingsProvider.notifier).getDownloadDir(game.consoleId);
   if (dir.isEmpty) return null;
+  // A loose game's real names are in the side map: sanitizeForFat may have
+  // changed the one its gameId carries.
+  if (game.isLocal) return OwnedGame.fromLoose(game, dir, ref.read(ownedLibraryProvider(game.consoleId)).paths);
   final presence = await ref.read(librarySnapshotProvider(dir).notifier).getStatus(game.filename);
   final snapshot = ref.read(librarySnapshotProvider(dir))[dir];
   return snapshot == null ? null : OwnedGame.fromPresence(game, dir, presence, snapshot);
