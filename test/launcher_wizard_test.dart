@@ -6,11 +6,14 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
+import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
 import 'package:retro_toolbox/services/launcher/emulator_detector.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
@@ -54,6 +57,13 @@ class MemoryConfig implements LaunchConfigStore {
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
+class FakeDualScreen extends StateNotifier<DualScreenState> implements DualScreenNotifier {
+  FakeDualScreen(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 class CountingDetector implements EmulatorDetector {
   CountingDetector(this.next);
 
@@ -73,6 +83,17 @@ class CountingDetector implements EmulatorDetector {
 class FakeChannel implements LauncherChannel {
   final opened = <String>[];
   final allFiles = <String>[];
+
+  /// setHome's answers: on is held. Each call, with whether the mode was
+  /// already saved on when it came.
+  final setHomeCalls = <(bool, bool)>[];
+  bool Function() savedOn = () => false;
+
+  @override
+  Future<bool> setHome(bool on) async {
+    setHomeCalls.add((on, savedOn()));
+    return on;
+  }
 
   @override
   Future<bool> openApp(String package) async {
@@ -147,10 +168,12 @@ void main() {
     String os = 'linux',
     String root = '/storage/emulated/0/ROMs',
     LaunchConfig saved = const LaunchConfig(),
+    bool homeRole = false,
+    DualScreenMode dual = DualScreenMode.off,
   }) async {
     detector = CountingDetector(detected ?? [_ra, _ds]);
     config = MemoryConfig(saved);
-    channel = FakeChannel();
+    channel = FakeChannel()..savedOn = () => config.saved.any((c) => c.enabled);
     popped = [];
     t.view.physicalSize = const Size(1280, 720);
     t.view.devicePixelRatio = 1;
@@ -168,6 +191,8 @@ void main() {
         launcherOsProvider.overrideWithValue(os),
         primaryStorageRootProvider.overrideWith((ref) async => '/storage/emulated/0'),
         launcherChannelProvider.overrideWithValue(channel),
+        homeRoleAvailableProvider.overrideWithValue(homeRole),
+        dualScreenProvider.overrideWith((ref) => FakeDualScreen(DualScreenState(mode: dual))),
       ],
       child: MaterialApp(
         navigatorKey: nav,
@@ -369,5 +394,65 @@ void main() {
     await next(t);
     expect(find.text('Step 3 of 3 · Done'), findsOneWidget);
     expect(find.byKey(const ValueKey('launcher-folder-ppsspp')), findsNothing);
+  });
+
+  OptionToggle homeSwitch(WidgetTester t) => t.widget<OptionToggle>(find.byKey(const ValueKey('launcher-home')));
+
+  testWidgets('as a possible home app: a Home screen step before Done, and Finish with it on asks Android after saving the defaults', (t) async {
+    await pump(t, os: 'android', homeRole: true, onDisk: {'sony-psx'});
+    await next(t);
+    expect(find.text('Step 2 of 4 · Systems'), findsOneWidget);
+    await next(t);
+    expect(find.text('Step 3 of 4 · Home screen'), findsOneWidget);
+    expect(homeSwitch(t).value, isFalse);
+    await t.tap(find.text(homeSwitchTitle));
+    await t.pumpAndSettle();
+    expect(homeSwitch(t).value, isTrue);
+    expect(channel.setHomeCalls, isEmpty, reason: 'nothing is asked before Finish');
+    await next(t);
+    expect(find.text('Step 4 of 4 · Done'), findsOneWidget);
+    expect(find.widgetWithText(OptionAction, 'Home screen'), findsOneWidget);
+    await next(t);
+    expect(popped, [true]);
+    expect(channel.setHomeCalls, [(true, true)], reason: 'asked once, after the mode and the defaults were saved');
+    expect(config.saved.last.home, isTrue);
+  });
+
+  testWidgets('the Home screen switch left off asks Android nothing', (t) async {
+    await pump(t, os: 'android', homeRole: true, onDisk: {'sony-psx'});
+    await next(t);
+    await next(t);
+    await next(t);
+    expect(find.widgetWithText(OptionAction, 'Home screen'), findsNothing);
+    await next(t);
+    expect(popped, [true]);
+    expect(channel.setHomeCalls, isEmpty);
+  });
+
+  testWidgets('the switch starts on the saved home, and turned off Finish gives the role up', (t) async {
+    await pump(t, os: 'android', homeRole: true, onDisk: {'sony-psx'}, saved: const LaunchConfig(home: true));
+    await next(t);
+    await next(t);
+    expect(homeSwitch(t).value, isTrue);
+    await t.tap(find.text(homeSwitchTitle));
+    await t.pumpAndSettle();
+    await next(t);
+    await next(t);
+    expect(channel.setHomeCalls, [(false, true)]);
+    expect(config.saved.last.home, isFalse);
+  });
+
+  testWidgets('with dual screen on Main on bottom the Home screen switch is off whatever was saved, locked, and says why', (t) async {
+    await pump(t, os: 'android', homeRole: true, onDisk: {'sony-psx'}, dual: DualScreenMode.mainOnBottom, saved: const LaunchConfig(home: true));
+    await next(t);
+    await next(t);
+    expect(homeSwitch(t).value, isFalse);
+    expect(homeSwitch(t).lockedReason, homeLockedReason);
+    await t.tap(find.text(homeSwitchTitle));
+    await t.pumpAndSettle();
+    expect(homeSwitch(t).value, isFalse);
+    await next(t);
+    await next(t);
+    expect(channel.setHomeCalls, [(false, true)], reason: 'the home app cannot stay with Main on bottom');
   });
 }

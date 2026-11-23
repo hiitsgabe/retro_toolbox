@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
@@ -14,12 +17,13 @@ import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/pixel_icon/pixel_icons.dart';
 import 'package:retro_toolbox/widgets/tool_description.dart';
 
-enum _Step { emulators, systems, folders, done }
+enum _Step { emulators, systems, folders, home, done }
 
 /// Launcher mode's setup: which emulators are installed, which one opens
 /// each console with games on disk, the folder grants a `saf` emulator needs
-/// (Android), then a summary. Only Finish saves a choice; the detection step
-/// 1 runs is a cache, kept even when the wizard is left.
+/// (Android), whether Retro Toolbox is the home screen (Android), then a
+/// summary. Only Finish saves a choice; the detection step 1 runs is a
+/// cache, kept even when the wizard is left.
 class LauncherWizardScreen extends ConsumerStatefulWidget {
   const LauncherWizardScreen({super.key});
 
@@ -42,6 +46,10 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   /// The folder-access rows the user ticked. Never ticked for them: another
   /// app's grants cannot be read.
   final _done = <String>{};
+
+  /// The Home screen switch, once flipped; until then it shows the saved
+  /// `home`.
+  bool? _homePick;
 
   final _stepFocus = FocusNode(debugLabel: 'launcher-step');
 
@@ -119,6 +127,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         _Step.emulators,
         _Step.systems,
         if (session != null && rows != null && _folderGrants(session, rows).isNotEmpty) _Step.folders,
+        if (ref.watch(homeRoleAvailableProvider)) _Step.home,
         _Step.done,
       ];
 
@@ -127,7 +136,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         // No console with games yet still lets the mode on: a game downloaded
         // later opens in the one emulator that covers it, or asks which.
         _Step.systems => session != null && rows != null && (rows.isEmpty || _picks(session, rows).isNotEmpty),
-        _Step.folders => true,
+        _Step.folders || _Step.home => true,
         _Step.done => session != null && rows != null,
       };
 
@@ -143,8 +152,16 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     _focusStep();
   }
 
-  Future<void> _finish(LauncherSession session, List<_Row> rows) async {
+  Future<void> _finish(LauncherSession session, List<_Row> rows, List<_Step> steps, {required bool wantHome}) async {
     await ref.read(launchConfigProvider.notifier).finishSetup(_picks(session, rows));
+    // After the defaults: the home screen opens the games they launch. Android
+    // is asked only when the switch changed what it was.
+    if (steps.contains(_Step.home) && mounted) {
+      final role = ref.read(homeRoleProvider);
+      final now = ref.read(launchConfigProvider).home;
+      if (wantHome && !now) await role.turnOn();
+      if (!wantHome && now) await role.turnOff();
+    }
     if (mounted) Navigator.of(context).pop(true);
   }
 
@@ -160,6 +177,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
         _Step.emulators => 'Emulators',
         _Step.systems => 'Systems',
         _Step.folders => 'Folder access',
+        _Step.home => 'Home screen',
         _Step.done => 'Done',
       };
 
@@ -173,6 +191,10 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     final step = steps[_index];
     final last = step == _Step.done;
     final advance = _canAdvance(step, session, rows);
+    // The home app cannot move to the bottom display (spec, Dual screen), so
+    // under Main on bottom the switch is off whatever it was.
+    final mainOnBottom = ref.watch(dualScreenProvider.select((s) => s.mode)) == DualScreenMode.mainOnBottom;
+    final wantHome = !mainOnBottom && (_homePick ?? ref.watch(launchConfigProvider.select((c) => c.home)));
     return WizardShell(
       name: 'Launcher mode',
       step: _index,
@@ -195,10 +217,11 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
           _Step.emulators => _emulatorsStep(context, session),
           _Step.systems => _systemsStep(context, session, rows),
           _Step.folders => _foldersStep(context, session!, rows!),
-          _Step.done => _doneStep(context, session, rows),
+          _Step.home => _homeStep(context, on: wantHome, locked: mainOnBottom),
+          _Step.done => _doneStep(context, session, rows, home: steps.contains(_Step.home) && wantHome),
         },
       ),
-      onNext: !advance ? null : (last ? () => _finish(session!, rows!) : () => _next(steps)),
+      onNext: !advance ? null : (last ? () => _finish(session!, rows!, steps, wantHome: wantHome) : () => _next(steps)),
       nextLabel: last ? 'Finish' : 'Next',
       // B steps back; on the first step it leaves, with nothing saved.
       onBack: _index > 0 ? _back : null,
@@ -359,7 +382,31 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
     );
   }
 
-  Widget _doneStep(BuildContext context, LauncherSession? session, List<_Row>? rows) {
+  Widget _homeStep(BuildContext context, {required bool on, required bool locked}) {
+    final t = KitType.of(context);
+    return KitColumns(
+      start: [
+        const KitLabel('Home screen'),
+        OptionList(children: [
+          OptionToggle(
+            key: const ValueKey('launcher-home'),
+            autofocus: true,
+            title: homeSwitchTitle,
+            subtitle: 'The Home button opens your games',
+            value: on,
+            lockedReason: locked ? homeLockedReason : null,
+            onChanged: (v) => setState(() => _homePick = v),
+          ),
+        ]),
+      ],
+      end: [
+        const KitLabel('After Finish'),
+        Text('Android asks which app is the home screen. Change it later in Settings > Launcher mode.', style: t.subtitle),
+      ],
+    );
+  }
+
+  Widget _doneStep(BuildContext context, LauncherSession? session, List<_Row>? rows, {required bool home}) {
     final t = KitType.of(context);
     if (session == null || rows == null) return const KitColumns(start: [StatusPanel.working(items: [WorkItem('Looking for games')])]);
     final picks = _picks(session, rows);
@@ -373,6 +420,7 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
             for (final r in rows)
               if (picks[r.console.id] != null) OptionAction(title: r.console.name, value: choiceName(session, picks[r.console.id]!), chevron: false, onTap: null),
           ]),
+        if (home) const OptionList(children: [OptionAction(title: 'Home screen', value: 'Retro Toolbox', chevron: false, onTap: null)]),
       ],
       end: [
         const KitLabel('After Finish'),

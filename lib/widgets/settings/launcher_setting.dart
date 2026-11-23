@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
+import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
@@ -34,8 +37,8 @@ final launcherCardProvider = Provider<bool>((ref) => showLauncherCard(
 Future<bool?> openLauncherWizard(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<bool>(fullscreenDialog: true, builder: (_) => const LauncherWizardScreen()));
 
-/// Settings > Library: the mode switch, Set up, and a line per console with
-/// a default emulator.
+/// Settings > Library: the mode switch, on Android the home screen switch,
+/// Set up, and a line per console with a default emulator.
 class LauncherSetting extends ConsumerWidget {
   const LauncherSetting({super.key});
 
@@ -43,6 +46,7 @@ class LauncherSetting extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final config = ref.watch(launchConfigProvider);
     final consoles = ref.watch(appStateProvider.select((s) => s.consoles));
+    final mainOnBottom = ref.watch(dualScreenProvider.select((s) => s.mode)) == DualScreenMode.mainOnBottom;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
       SettingsSwitchRow(
         title: 'Launcher mode',
@@ -58,6 +62,22 @@ class LauncherSetting extends ConsumerWidget {
           await ref.read(launchConfigProvider.notifier).setEnabled(on);
         },
       ),
+      if (config.enabled && ref.watch(homeRoleAvailableProvider))
+        SettingsSwitchRow(
+          title: homeSwitchTitle,
+          subtitle: mainOnBottom ? homeLockedReason : 'The Home button opens your games',
+          value: config.home,
+          onChanged: mainOnBottom
+              ? null
+              : (on) {
+                  final role = ref.read(homeRoleProvider);
+                  if (on) {
+                    role.turnOn();
+                  } else {
+                    role.turnOff();
+                  }
+                },
+        ),
       SettingsActionRow(
         title: 'Emulators',
         subtitle: 'Find the installed ones and pick one per console',

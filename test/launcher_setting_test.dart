@@ -5,18 +5,45 @@ import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
+import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
+import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
+import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
+import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
+import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
+
+/// Answers setHome(true) with [held] and records each call.
+class FakeHomeChannel implements LauncherChannel {
+  bool held = true;
+  final setHomeCalls = <bool>[];
+
+  @override
+  Future<bool> setHome(bool on) async {
+    setHomeCalls.add(on);
+    return on && held;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class FakeDualScreen extends StateNotifier<DualScreenState> implements DualScreenNotifier {
+  FakeDualScreen(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
 
 class FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
   FakeApp(super.state);
@@ -92,7 +119,7 @@ void main() {
 
   late ProviderContainer c;
 
-  Future<void> pump(WidgetTester t, LaunchConfig saved, {Widget? child}) async {
+  Future<void> pump(WidgetTester t, LaunchConfig saved, {Widget? child, List<Override> overrides = const []}) async {
     t.view.physicalSize = const Size(1280, 900);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
@@ -104,6 +131,7 @@ void main() {
       settingsProvider.overrideWith((ref) => NoDirSettings()),
       gamesOnDiskProvider.overrideWith((ref, id) async => false),
       gameSystemProvider.overrideWith((ref, id) => (slug: 'psx', name: 'PlayStation')),
+      ...overrides,
     ]);
     addTearDown(c.dispose);
     final nav = GlobalKey<NavigatorState>();
@@ -185,5 +213,57 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Not found on this device: Play uses another one'), findsOneWidget);
     expect(t.widget<SettingsValueRow>(find.byType(SettingsValueRow)).value, 'mednafen');
+  });
+
+  group('the home screen switch', () {
+    late FakeHomeChannel channel;
+    List<Override> homeOverrides({bool available = true, DualScreenMode dual = DualScreenMode.off}) {
+      channel = FakeHomeChannel();
+      return [
+        homeRoleAvailableProvider.overrideWithValue(available),
+        launcherChannelProvider.overrideWithValue(channel),
+        dualScreenProvider.overrideWith((ref) => FakeDualScreen(DualScreenState(mode: dual))),
+      ];
+    }
+
+    Finder homeRow() => find.widgetWithText(SettingsSwitchRow, homeSwitchTitle);
+
+    testWidgets('with the mode on, it asks Android to make the app the home screen, and gives the role up', (t) async {
+      await pump(t, const LaunchConfig(enabled: true), overrides: homeOverrides());
+      expect(t.widget<SettingsSwitchRow>(homeRow()).value, isFalse);
+      await t.tap(homeRow());
+      await t.pumpAndSettle();
+      expect(channel.setHomeCalls, [true]);
+      expect(c.read(launchConfigProvider).home, isTrue);
+      expect(t.widget<SettingsSwitchRow>(homeRow()).value, isTrue);
+      await t.tap(homeRow());
+      await t.pumpAndSettle();
+      expect(channel.setHomeCalls, [true, false]);
+      expect(c.read(launchConfigProvider).home, isFalse);
+    });
+
+    testWidgets('a user who says no leaves it off', (t) async {
+      await pump(t, const LaunchConfig(enabled: true), overrides: homeOverrides());
+      channel.held = false;
+      await t.tap(homeRow());
+      await t.pumpAndSettle();
+      expect(t.widget<SettingsSwitchRow>(homeRow()).value, isFalse);
+    });
+
+    testWidgets('under dual screen Main on bottom it is shown, locked, with the reason', (t) async {
+      await pump(t, const LaunchConfig(enabled: true), overrides: homeOverrides(dual: DualScreenMode.mainOnBottom));
+      expect(t.widget<SettingsSwitchRow>(homeRow()).onChanged, isNull);
+      expect(find.text(homeLockedReason), findsOneWidget);
+      await t.tap(homeRow());
+      await t.pumpAndSettle();
+      expect(channel.setHomeCalls, isEmpty);
+    });
+
+    testWidgets('not with the mode off, nor where the app cannot be the home app', (t) async {
+      await pump(t, const LaunchConfig(), overrides: homeOverrides());
+      expect(homeRow(), findsNothing);
+      await pump(t, const LaunchConfig(enabled: true), overrides: homeOverrides(available: false));
+      expect(homeRow(), findsNothing);
+    });
   });
 }
