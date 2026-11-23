@@ -159,6 +159,15 @@ void main() {
       expect(initialDocId('/storage/emulated/10/x', root), 'primary:');
     });
 
+    test('a file handed to another app gets its own document id or none', () {
+      expect(strictDocId('$root/ROMs/psx/Crash.chd', root), 'primary:ROMs/psx/Crash.chd');
+      expect(strictDocId('/storage/1A2B-3C4D/ROMs/psx/Crash.chd', root), '1A2B-3C4D:ROMs/psx/Crash.chd');
+      expect(strictDocId('$root/Android/data/pkg/files/Crash.chd', root), 'primary:Android/data/pkg/files/Crash.chd');
+      expect(strictDocId('/data/user/0/pkg/files/Crash.chd', root), isNull);
+      expect(strictDocId('/storage/emulated/10/Crash.chd', root), isNull);
+      expect(strictDocId('/storage/1A2B-3C4D', root), isNull);
+    });
+
     test('picked documents map back to real paths', () {
       const ext = 'com.android.externalstorage.documents';
       expect(docPath(ext, 'primary:ROMs/a.iso', root), '$root/ROMs/a.iso');

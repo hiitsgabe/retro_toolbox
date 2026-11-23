@@ -131,6 +131,10 @@ Future<String?> _androidPick({required bool dir, String? initialDir}) => _native
   return _pickChannel.invokeMethod<String>('copy', {'uri': r['uri']});
 });
 
+/// Internal storage root (`/storage/emulated/<user>`), for the launcher's
+/// document URIs and its Android/data check.
+Future<String> primaryStorageRoot() => _primaryRoot();
+
 /// Internal storage root (`/storage/emulated/<user>`), from the app's own
 /// external folder (`<root>/Android/data/<package>/files`).
 Future<String> _primaryRoot() async {
@@ -157,6 +161,17 @@ String initialDocId(String? path, String primary) {
   return 'primary:';
 }
 
+/// SAF document id of the file at [path], for handing it to another app:
+/// `primary:<rel>` under internal storage, `<uuid>:<rel>` on an SD card or
+/// USB volume. Unlike [initialDocId] it never falls back to internal storage:
+/// a path on no such volume is null, because the id would name another file.
+String? strictDocId(String path, String primary) {
+  final n = p.posix.normalize(path);
+  if (p.posix.isWithin(primary, n)) return 'primary:${p.posix.relative(n, from: primary)}';
+  final m = RegExp(r'^/storage/([^/]+)/(.+)$').firstMatch(n);
+  if (m != null && m[1] != 'emulated' && m[1] != 'self') return '${m[1]}:${m[2]}';
+  return null;
+}
 /// Real path of a picked document; null when it has none (Drive, media...).
 @visibleForTesting
 String? docPath(String? authority, String? docId, String primary) {
