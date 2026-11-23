@@ -13,6 +13,7 @@ import 'package:retro_toolbox/models/game_group_model.dart';
 import 'package:retro_toolbox/models/game_state_model.dart';
 import 'package:retro_toolbox/models/library_snapshot_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launchbox_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
@@ -334,13 +335,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   /// [console]'s loose games, apart from [catalog]'s. In an isolate: the
   /// catalog's file names are the costly part. Consoles sharing the dir split
-  /// it as [ownFormats] does.
+  /// it as [ownFormats] does, from the console list gamesOnDiskProvider reads,
+  /// so the console grid and the list never disagree.
   Future<OwnedLibrary> _scanOwned(Console console, List<Game> catalog) async {
     debugLooseScans++;
     final settings = _ref.read(settingsProvider.notifier);
     final dir = settings.getDownloadDir(console.id);
     if (dir.isEmpty) return OwnedLibrary.empty;
-    final sharing = {...CatalogService.consolesSync(), console.id: console}.values.where((c) => p.equals(settings.getDownloadDir(c.id), dir));
+    final sharing = {..._ref.read(appStateProvider).consoles, console.id: console}.values.where((c) => p.equals(settings.getDownloadDir(c.id), dir));
     final snapshot = await _ref.read(librarySnapshotProvider(dir).notifier).current();
     return compute(OwnedLibrary.scan, (consoleId: console.id, dir: dir, formats: ownFormats(console, sharing), snapshot: snapshot, catalog: catalog));
   }

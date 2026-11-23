@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
@@ -29,6 +31,14 @@ class _FakeCatalogService extends CatalogService {
           void Function(int done, int total)? onProgress,
           void Function(String status)? onStatus}) async =>
       games;
+}
+
+/// The app's console list, as the console grid reads it.
+class _FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
+  _FakeApp(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
 
 /// The config, in memory; [enabled] is launcher mode.
@@ -65,6 +75,7 @@ void main() {
   Future<(ProviderContainer, CatalogNotifier)> setUpCatalog({required bool launcher, List<Game>? games}) async {
     SharedPreferences.setMockInitialValues({});
     final c = ProviderContainer(overrides: [
+      appStateProvider.overrideWith((ref) => _FakeApp(const AppState(consoles: {'psx': _psx}))),
       catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService(games ?? [usa, eu, crash]))),
       launcherAvailableProvider.overrideWithValue(true),
       launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(launcher))),

@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/models/game_details_model.dart';
 import 'package:retro_toolbox/models/game_model.dart';
 import 'package:retro_toolbox/models/settings_model.dart';
+import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/catalog_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
@@ -52,6 +54,14 @@ class _RecordingLaunchbox extends LaunchboxService {
   }
 }
 
+/// The app's console list, as the console grid reads it.
+class _FakeApp extends StateNotifier<AppState> implements AppStateNotifier {
+  _FakeApp(super.state);
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 class MemoryConfig implements LaunchConfigStore {
   MemoryConfig(this.enabled);
   final bool enabled;
@@ -87,9 +97,11 @@ void main() {
 
   void touch(String name) => File(p.join(tmp.path, name)).writeAsStringSync('x');
 
-  Future<(ProviderContainer, CatalogNotifier)> setUpCatalog({bool launcher = true, List<Game> games = const [_crash], Object? error, String? dir}) async {
+  Future<(ProviderContainer, CatalogNotifier)> setUpCatalog(
+      {bool launcher = true, List<Game> games = const [_crash], Object? error, String? dir, List<Console> consoles = const [_psx, _snes]}) async {
     SharedPreferences.setMockInitialValues({});
     final c = ProviderContainer(overrides: [
+      appStateProvider.overrideWith((ref) => _FakeApp(AppState(consoles: {for (final c in consoles) c.id: c}))),
       catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService(games, error: error, others: const {'snes': [_mario]}))),
       launcherAvailableProvider.overrideWithValue(true),
       launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(launcher))),
@@ -133,6 +145,18 @@ void main() {
     expect(spyro.details?.genres, ['Action']);
     expect(shown(c), ['Spyro (USA)'], reason: 'the owned view');
     expect(c.read(ownedLibraryProvider('psx')).paths[spyro.gameId], [p.join(tmp.path, 'Spyro (USA).chd')]);
+  });
+
+  test('in a dir another console shares, a file of an extension both list is no loose game, as on the console grid', () async {
+    const psx = Console(id: 'psx', name: 'PlayStation', urls: [], originalFormat: ['.chd', '.cue']);
+    const ps2 = Console(id: 'ps2', name: 'PlayStation 2', urls: [], gameFilesFormat: ['.iso', '.chd']);
+    touch('Spyro (USA).chd');
+    touch('Tekken 3 (USA).cue');
+    final (c, catalog) = await setUpCatalog(consoles: const [psx, ps2]);
+    await c.read(settingsProvider.notifier).setSetting<String>(AppSettings.downloadDir, tmp.path, 'ps2');
+    await catalog.loadCatalog(psx);
+    expect(loose(c), ['Tekken 3 (USA)']);
+    expect(await c.read(gamesOnDiskProvider('ps2').future), isFalse, reason: 'the grid agrees: the .chd is no one\'s');
   });
 
   test('a LaunchBox reapply matches the loose games again with the rest', () async {
