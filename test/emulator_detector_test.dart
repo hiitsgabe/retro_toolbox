@@ -54,7 +54,7 @@ void main() {
         sent = call.arguments;
         return [
           {'id': 'ra', 'package': 'com.retroarch', 'label': 'RetroArch', 'versionName': '1.20', 'dataDir': '/data/user/0/com.retroarch', 'targetSdk': 34, 'sdkInt': 34},
-          {'id': 'ra', 'package': 'com.retroarch.aarch64', 'label': 'RetroArch Plus', 'targetSdk': 28, 'sdkInt': 34, 'requestsRead': true, 'icon': Uint8List.fromList([1, 2])},
+          {'id': 'ra', 'package': 'com.retroarch.aarch64', 'label': 'RetroArch Plus', 'versionName': '1.19.1', 'targetSdk': 28, 'sdkInt': 34, 'requestsRead': true, 'icon': Uint8List.fromList([1, 2])},
         ];
       });
       final found = await EmulatorDetector(os: 'android').detect([
@@ -72,6 +72,7 @@ void main() {
       expect(ra.variant, 'com.retroarch.aarch64');
       expect(ra.label, 'RetroArch Plus');
       expect(ra.icon, [1, 2]);
+      expect(ra.version, '1.19.1');
       expect(ra.dataDir, isNull);
       expect(ra.pathAccess, isTrue);
       expect(ra.systems, ['psx', 'snes']);
@@ -82,9 +83,11 @@ void main() {
       messenger.setMockMethodCallHandler(_channel, (call) async => [
             {'id': 'a', 'package': 'org.example.a', 'targetSdk': 35, 'sdkInt': 35, 'requestsManage': true, 'dataDir': '/data/user/0/org.example.a'},
             {'id': 'b', 'package': 'org.example.b', 'targetSdk': 35, 'sdkInt': 35, 'requestsRead': true},
+            // Only the legacy flag gives this one path access, so it pins the wire key the native side sends.
+            {'id': 'c', 'package': 'org.example.c', 'targetSdk': 29, 'sdkInt': 34, 'requestsRead': true, 'legacyStorage': true},
           ]);
-      final found = await EmulatorDetector(os: 'android').detect([preset('a', ['org.example.a']), preset('b', ['org.example.b'])]);
-      expect([for (final d in found) (d.presetId, d.pathAccess, d.requestsManage)], [('a', true, true), ('b', false, false)]);
+      final found = await EmulatorDetector(os: 'android').detect([preset('a', ['org.example.a']), preset('b', ['org.example.b']), preset('c', ['org.example.c'])]);
+      expect([for (final d in found) (d.presetId, d.pathAccess, d.requestsManage)], [('a', true, true), ('b', false, false), ('c', true, false)]);
       expect(found.first.dataDir, '/data/user/0/org.example.a');
     });
 
