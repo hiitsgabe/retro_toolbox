@@ -12,6 +12,7 @@ import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
+import 'package:retro_toolbox/screens/launcher_command_screen.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
 import 'package:retro_toolbox/services/launcher/detected_emulator.dart';
@@ -352,6 +353,9 @@ void main() {
     await tapAndSettle(t, find.text('PlayStation'));
     await tapAndSettle(t, find.text('Saturn'));
     await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
+    // The command it opens with, shown before it is added.
+    expect(find.byType(LauncherCommandScreen), findsOneWidget);
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
     final m = config.saved.last.manual.single;
     expect((m.variant, m.recipe, m.activity), ('dev.igawa6.edenduo', 'generic', 'dev.igawa6.edenduo.Open'));
     expect(m.systems, ['saturn', 'psx'], reason: 'in the order shown');
@@ -399,6 +403,9 @@ void main() {
     await tapAndSettle(t, inSheet('Just open the file'));
     await tapAndSettle(t, find.text('PlayStation'));
     await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
+    // The command it opens with, shown before it is added.
+    expect(find.byType(LauncherCommandScreen), findsOneWidget);
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
     final m = config.saved.last.manual.single;
     expect((m.variant, m.recipe, m.activity), ('/opt/emus/viewer', 'generic', null));
     expect(m.systems, ['psx']);
@@ -423,6 +430,7 @@ void main() {
     await tapAndSettle(t, find.byKey(const ValueKey('launcher-add')));
     await tapAndSettle(t, inSheet('Just open the file'));
     await tapAndSettle(t, find.text('PlayStation'));
+    await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
     await tapAndSettle(t, find.byKey(const ValueKey('kit-primary')));
     final m = config.saved.last.manual.single;
     expect((m.variant, m.label), (bin.path, 'Duck Fork'));

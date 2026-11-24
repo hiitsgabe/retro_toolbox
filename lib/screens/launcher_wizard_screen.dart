@@ -7,6 +7,7 @@ import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
 import 'package:retro_toolbox/screens/launcher_app_picker_screen.dart';
+import 'package:retro_toolbox/screens/launcher_command_screen.dart';
 import 'package:retro_toolbox/screens/launcher_console_picker_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
@@ -118,18 +119,23 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   /// An emulator added by hand. Remove also drops the console defaults and
   /// game choices that name it, and a Systems pick of it, so none points at
   /// nothing.
-  Future<void> _manualMenu(DetectedEmulator d) => showRowMenu(context, title: d.label, subtitle: 'Added by you', items: [
-        RowMenuItem(
-          'Remove',
-          () {
-            setState(() => _chosen.removeWhere((_, c) => c.presetId == d.presetId));
-            ref.read(removeManualEmulatorProvider)(d.presetId);
-          },
-          icon: Icons.delete_outline,
-          destructive: true,
-          subtitle: 'Consoles and games set to it choose again',
-        ),
-      ]);
+  Future<void> _manualMenu(DetectedEmulator d) {
+    final manual = ref.read(launchConfigProvider).manual.where((m) => m.id == d.presetId).firstOrNull;
+    return showRowMenu(context, title: d.label, subtitle: 'Added by you', items: [
+      if (manual != null && manual.isGeneric)
+        RowMenuItem('Edit command', () => editManualCommand(context, ref, manual), icon: Icons.terminal, subtitle: 'How the game is handed to it'),
+      RowMenuItem(
+        'Remove',
+        () {
+          setState(() => _chosen.removeWhere((_, c) => c.presetId == d.presetId));
+          ref.read(removeManualEmulatorProvider)(d.presetId);
+        },
+        icon: Icons.delete_outline,
+        destructive: true,
+        subtitle: 'Consoles and games set to it choose again',
+      ),
+    ]);
+  }
 
   Future<ManualEmulator?> _pickAndroid(LauncherSession session) async {
     final app = await Navigator.of(context).push<({String package, AppInfo info})>(
@@ -172,8 +178,13 @@ class _LauncherWizardState extends ConsumerState<LauncherWizardScreen> {
   Future<ManualEmulator?> _withSystems(ManualEmulator m) async {
     if (!m.isGeneric) return m;
     final ticked = await Navigator.of(context).push<List<String>>(MaterialPageRoute(builder: (_) => LauncherConsolePickerScreen(label: m.label)));
-    if (ticked == null || ticked.isEmpty) return null;
-    return ManualEmulator(variant: m.variant, label: m.label, recipe: m.recipe, systems: ticked, activity: m.activity);
+    if (ticked == null || ticked.isEmpty || !mounted) return null;
+    final withSystems = ManualEmulator(variant: m.variant, label: m.label, recipe: m.recipe, systems: ticked, activity: m.activity);
+    // The command it starts with, shown to change before it is added.
+    final r = await Navigator.of(context).push<({String? command})>(
+      MaterialPageRoute(builder: (_) => LauncherCommandScreen(manual: withSystems, saveLabel: 'Add')),
+    );
+    return r == null ? null : withSystems.withCommand(r.command);
   }
 
   /// The ways to open an app being added: each recipe that fits it, then
