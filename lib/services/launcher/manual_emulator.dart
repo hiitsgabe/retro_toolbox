@@ -4,10 +4,11 @@
 /// would). Pure Dart, like launch_preset.dart.
 library;
 
+import 'package:retro_toolbox/services/launcher/launch_command.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 
 class ManualEmulator {
-  const ManualEmulator({required this.variant, required this.label, required this.recipe, this.systems = const [], this.activity});
+  const ManualEmulator({required this.variant, required this.label, required this.recipe, this.systems = const [], this.activity, this.command});
 
   /// No recipe: on Android ACTION_VIEW on our provider URI, on desktop the
   /// file's path as the only argument.
@@ -29,6 +30,19 @@ class ManualEmulator {
   /// Android generic only: the activity viewActivity found when it was added.
   final String? activity;
 
+  /// Generic only: the launch command the user edited (launch_command.dart);
+  /// null is the default one.
+  final String? command;
+
+  /// This entry opening the way [command] says; null goes back to the
+  /// default.
+  ManualEmulator withCommand(String? command) =>
+      ManualEmulator(variant: variant, label: label, recipe: recipe, systems: systems, activity: activity, command: command);
+
+  /// The command shown for editing: the saved one, else the default.
+  String commandFor(String os) =>
+      command ?? (os == 'android' ? defaultAndroidCommand(variant, activity ?? '<activity>') : defaultDesktopCommand);
+
   bool get isGeneric => recipe == generic;
 
   /// The preset id it goes by. Derived from the variant, so adding the same
@@ -36,23 +50,31 @@ class ManualEmulator {
   /// restart.
   String get id => manualId(variant);
 
-  Map<String, Object?> toJson() => {'variant': variant, 'label': label, 'recipe': recipe, 'systems': systems, if (activity != null) 'activity': activity};
+  Map<String, Object?> toJson() => {
+        'variant': variant,
+        'label': label,
+        'recipe': recipe,
+        'systems': systems,
+        if (activity != null) 'activity': activity,
+        if (command != null) 'command': command,
+      };
 
   /// Null for anything that is not a saved manual emulator, so one bad entry
   /// never costs the others.
   static ManualEmulator? fromJson(Object? j) {
     if (j is! Map) return null;
-    final variant = j['variant'], label = j['label'], recipe = j['recipe'], systems = j['systems'], activity = j['activity'];
+    final variant = j['variant'], label = j['label'], recipe = j['recipe'], systems = j['systems'], activity = j['activity'], command = j['command'];
     if (variant is! String || variant.isEmpty || label is! String || recipe is! String || recipe.isEmpty) return null;
     if (systems != null && systems is! List) return null;
     if (activity != null && activity is! String) return null;
+    if (command != null && command is! String) return null;
     final slugs = [
       if (systems is List)
         for (final s in systems)
           if (s is String) s,
     ];
     if (recipe == generic && slugs.isEmpty) return null;
-    return ManualEmulator(variant: variant, label: label, recipe: recipe, systems: slugs, activity: activity as String?);
+    return ManualEmulator(variant: variant, label: label, recipe: recipe, systems: slugs, activity: activity as String?, command: command as String?);
   }
 }
 
@@ -112,7 +134,14 @@ LaunchPreset? _recipe(ManualEmulator m, LaunchPreset? recipe, String os) {
 
 LaunchPreset? _generic(ManualEmulator m, String os, Map<String, List<String>> extensions) {
   final systems = {for (final s in m.systems) s: PresetSystem(slug: s, extensions: extensions[s] ?? const [])};
-  if (os != 'android') return _desktop(m, os, verified: false, systems: systems, args: const ['{rom}']);
+  // A command that no longer reads (saved by an older build) falls back to
+  // the default, as the editor never saves one that does not.
+  if (os != 'android') {
+    final args = m.command == null ? null : parseDesktopCommand(m.command!).args;
+    return _desktop(m, os, verified: false, systems: systems, args: args ?? const ['{rom}']);
+  }
+  final edited = m.command == null ? null : parseAndroidCommand(m.command!, package: m.variant).block;
+  if (edited != null) return LaunchPreset(id: m.id, name: m.label, systems: systems, android: edited);
   final activity = m.activity;
   if (activity == null) return null;
   return LaunchPreset(

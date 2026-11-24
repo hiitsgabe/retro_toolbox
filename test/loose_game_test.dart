@@ -45,7 +45,7 @@ void main() {
     await settings.loaded;
     await settings.setSetting<String>(AppSettings.downloadDir, tmp.path, 'psx');
     final snapshot = await LibrarySnapshotNotifier(tmp.path).current();
-    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: _psx.onDiskFormats, snapshot: snapshot, catalog: const []));
+    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: _psx.onDiskFormats, snapshot: snapshot, catalog: const [], folders: true, skip: const {}));
     c.read(ownedLibraryProvider('psx').notifier).state = lib;
     return (c, lib);
   }
@@ -54,7 +54,7 @@ void main() {
     touch('Metroid Prime 4: Beyond (Disc 1).chd');
     touch('Metroid Prime 4: Beyond (Disc 2).chd');
     final snapshot = await LibrarySnapshotNotifier(tmp.path).current();
-    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: _psx.onDiskFormats, snapshot: snapshot, catalog: const []));
+    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: _psx.onDiskFormats, snapshot: snapshot, catalog: const [], folders: true, skip: const {}));
     final owned = OwnedGame.fromLoose(lib.games.single, tmp.path, lib.paths)!;
     final target = resolveLaunchTarget(owned, const PresetSystem(slug: 'psx', extensions: ['chd']));
     expect(target.path, p.join(tmp.path, 'Metroid Prime 4: Beyond (Disc 1).chd'));

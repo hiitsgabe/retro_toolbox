@@ -397,6 +397,7 @@ List<Widget> consoleSettingsRows(Console console, WidgetRef ref, {VoidCallback? 
     if (ref.watch(launcherCardProvider) && ref.watch(launchConfigProvider.select((c) => c.enabled))) ...[
       const SettingsHeader('Launcher', top: 14),
       DefaultEmulatorRow(console: console),
+      FolderGamesRow(console: console),
     ],
     const SettingsHeader('Storage', top: 14),
     _ConsoleCacheRow(console: console),

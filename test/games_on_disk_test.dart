@@ -66,6 +66,13 @@ void main() {
     expect(await hasGamesOnDisk(tmp.path, _snes.onDiskFormats), isTrue);
   });
 
+  test('a folder counts only while folders are on and it is not skipped', () async {
+    touch('updates/Patch.cue');
+    expect(await hasGamesOnDisk(tmp.path, _psx.onDiskFormats), isTrue);
+    expect(await hasGamesOnDisk(tmp.path, _psx.onDiskFormats, folders: false), isFalse);
+    expect(await hasGamesOnDisk(tmp.path, _psx.onDiskFormats, skip: {p.join(tmp.path, 'updates')}), isFalse);
+  });
+
   test('a folder with a game directly inside counts, one nested deeper does not', () async {
     touch('Spyro/Spyro.cue');
     expect(await hasGamesOnDisk(tmp.path, _psx.onDiskFormats), isTrue);
