@@ -28,10 +28,11 @@ void main() {
     ..createSync(recursive: true)
     ..writeAsStringSync(text);
 
-  Future<OwnedLibrary> scan(Console console, {List<Game> catalog = const [], List<Console> sharing = const [], String? dir}) async {
+  Future<OwnedLibrary> scan(Console console,
+      {List<Game> catalog = const [], List<Console> sharing = const [], String? dir, bool folders = true, Set<String> skip = const {}}) async {
     final d = dir ?? tmp.path;
     final snapshot = await LibrarySnapshotNotifier(d).current();
-    return OwnedLibrary.scan((consoleId: console.id, dir: d, formats: ownFormats(console, [console, ...sharing]), snapshot: snapshot, catalog: catalog));
+    return OwnedLibrary.scan((consoleId: console.id, dir: d, formats: ownFormats(console, [console, ...sharing]), snapshot: snapshot, catalog: catalog, folders: folders, skip: skip));
   }
 
   List<String> titles(OwnedLibrary lib) => [for (final g in lib.games) g.title];
@@ -68,6 +69,15 @@ void main() {
     expect(titles(lib), ['Vagrant Story']);
     expect(lib.games.single.filename, 'Vagrant Story');
     expect(files(lib, 'Vagrant Story'), [abs('Vagrant Story/Vagrant Story.bin'), abs('Vagrant Story/Vagrant Story.cue'), abs('Vagrant Story/readme.txt')]);
+  });
+
+  test('with folders off a folder is no game, and a skipped folder never is one', () async {
+    touch('Vagrant Story/Vagrant Story.cue');
+    touch('updates/Patch.cue');
+    touch('Crash.chd');
+    expect(titles(await scan(_psx)), ['Crash', 'Vagrant Story', 'updates']);
+    expect(titles(await scan(_psx, skip: {p.join(tmp.path, 'updates')})), ['Crash', 'Vagrant Story']);
+    expect(titles(await scan(_psx, folders: false)), ['Crash']);
   });
 
   test('a cue and the tracks it names are one game, named by the cue', () async {
@@ -171,7 +181,7 @@ void main() {
     final metroid = _catalog('Metroid Prime 4 Beyond.chd');
     // A snapshot taken before the file came.
     final stale = LibrarySnapshot(libraryDir: tmp.path, exactFiles: const {}, baseNames: const {}, relatedFiles: const {}, timestamp: DateTime(2026));
-    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: ownFormats(_psx, [_psx]), snapshot: stale, catalog: [metroid]));
+    final lib = await OwnedLibrary.scan((consoleId: 'psx', dir: tmp.path, formats: ownFormats(_psx, [_psx]), snapshot: stale, catalog: [metroid], folders: true, skip: const {}));
     final game = lib.games.single;
     expect(game.gameId, metroid.gameId);
     expect(OwnedGame.fromLoose(game, tmp.path, lib.paths)?.paths, [abs('Metroid Prime 4: Beyond.chd')]);

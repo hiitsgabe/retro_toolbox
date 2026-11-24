@@ -16,14 +16,16 @@ Set<String> ownFormats(Console console, Iterable<Console> sharing) {
 
 /// Whether [dir] holds a game in one of [formats]: a file at its root, or a
 /// root folder with such a file directly inside (an extracted game). Nothing
-/// deeper counts. False when [dir] cannot be read. Loads no catalog.
-Future<bool> hasGamesOnDisk(String dir, Set<String> formats) async {
+/// deeper counts, and no folder when [folders] is false or the folder is in
+/// [skip] (OwnedScan reads them the same way). False when [dir] cannot be
+/// read. Loads no catalog.
+Future<bool> hasGamesOnDisk(String dir, Set<String> formats, {bool folders = true, Set<String> skip = const {}}) async {
   if (dir.isEmpty || formats.isEmpty) return false;
   bool game(FileSystemEntity e) => e is File && formats.contains(p.extension(e.path).toLowerCase());
   try {
     await for (final e in Directory(dir).list(followLinks: false)) {
       if (game(e)) return true;
-      if (e is Directory) {
+      if (e is Directory && folders && !skip.contains(p.normalize(e.path))) {
         try {
           if (await e.list(followLinks: false).any(game)) return true;
         } on FileSystemException {

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:retro_toolbox/models/game_model.dart';
+import 'package:retro_toolbox/models/settings_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/library_snapshot_provider.dart';
 import 'package:retro_toolbox/providers/settings_provider.dart';
@@ -259,12 +260,30 @@ final ownedGameProvider = FutureProvider.autoDispose.family<OwnedGame?, Game>((r
   return snapshot == null ? null : OwnedGame.fromPresence(game, dir, presence, snapshot);
 });
 
+/// What a scan of [consoleId]'s library reads as a game folder: none when the
+/// user said its folders are not games, and never this app's own updates and
+/// mods folders, which default to inside the library.
+/// Read from the download dir and the saved state, the parts every
+/// SettingsNotifier answers.
+({bool folders, Set<String> skip}) folderRules(SettingsNotifier settings, AppSettings saved, LaunchConfig config, String consoleId) {
+  final dir = settings.getDownloadDir(consoleId);
+  final ownUpdates = saved.consoleSettings[consoleId]?.updatesDir;
+  return (
+    folders: config.folderGames(consoleId),
+    skip: {
+      if (dir.isNotEmpty) ...[p.normalize(p.join(dir, 'updates')), p.normalize(p.join(dir, 'mods'))],
+      if (ownUpdates != null && ownUpdates.isNotEmpty) p.normalize(ownUpdates),
+    },
+  );
+}
+
 /// Whether [consoleId]'s library dir holds any of its games, as
 /// [hasGamesOnDisk] counts them; consoles sharing the dir split it by
 /// [ownFormats]. Wizard step 2 lists the consoles it holds for.
 final gamesOnDiskProvider = FutureProvider.autoDispose.family<bool, String>((ref, consoleId) async {
   final consoles = ref.watch(appStateProvider.select((s) => s.consoles));
-  ref.watch(settingsProvider);
+  final saved = ref.watch(settingsProvider);
+  ref.watch(launchConfigProvider.select((c) => c.noFolders));
   final settings = ref.read(settingsProvider.notifier);
   final console = consoles[consoleId];
   if (console == null) return false;
@@ -274,7 +293,8 @@ final gamesOnDiskProvider = FutureProvider.autoDispose.family<bool, String>((ref
     for (final c in consoles.values)
       if (p.equals(settings.getDownloadDir(c.id), dir)) c,
   ];
-  return hasGamesOnDisk(dir, ownFormats(console, sharing));
+  final rules = folderRules(settings, saved, ref.read(launchConfigProvider), consoleId);
+  return hasGamesOnDisk(dir, ownFormats(console, sharing), folders: rules.folders, skip: rules.skip);
 });
 
 final gameLauncherProvider = FutureProvider<GameLauncher>((ref) async {

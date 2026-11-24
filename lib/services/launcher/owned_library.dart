@@ -9,8 +9,10 @@ import 'package:retro_toolbox/utils/title_metadata_parser.dart';
 
 /// What [OwnedLibrary.scan] reads: a console, its library dir, the formats
 /// that are its own there (see `ownFormats`), the dir's snapshot and the
-/// console's catalog games.
-typedef OwnedScan = ({String consoleId, String dir, Set<String> formats, LibrarySnapshot snapshot, List<Game> catalog});
+/// console's catalog games. [OwnedScan.folders] false: a folder is never a
+/// game (Switch keeps updates and DLC in folders). [OwnedScan.skip]: folders
+/// that are never a game whatever it says, this app's own updates and mods.
+typedef OwnedScan = ({String consoleId, String dir, Set<String> formats, LibrarySnapshot snapshot, List<Game> catalog, bool folders, Set<String> skip});
 
 /// The url of a game built from a loose file: the console and the real name
 /// of its lead file or folder, so its filename and gameId stay the same on
@@ -42,7 +44,7 @@ class OwnedLibrary {
   /// or a root folder with one directly inside), less every file a present
   /// catalog game has. An entry with any such file is the catalog game's.
   static Future<OwnedLibrary> scan(OwnedScan s) async {
-    final (:consoleId, :dir, :formats, :snapshot, :catalog) = s;
+    final (:consoleId, :dir, :formats, :snapshot, :catalog, :folders, :skip) = s;
     if (dir.isEmpty || formats.isEmpty) return empty;
     final List<FileSystemEntity> entries;
     try {
@@ -54,11 +56,12 @@ class OwnedLibrary {
     bool game(String path) => formats.contains(p.extension(path).toLowerCase());
 
     final rootFiles = <String>{for (final e in entries) if (e is File) e.path};
-    final folders = <String, List<String>>{};
+    final gameFolders = <String, List<String>>{};
     for (final d in entries.whereType<Directory>()) {
+      if (!folders || skip.contains(p.normalize(d.path))) continue;
       try {
         final files = [for (final f in await d.list(followLinks: false).toList()) if (f is File) f.path]..sort();
-        if (files.any(game)) folders[d.path] = files;
+        if (files.any(game)) gameFolders[d.path] = files;
       } on FileSystemException {
         // One unreadable folder does not hide the rest, as in hasGamesOnDisk.
       }
@@ -111,7 +114,7 @@ class OwnedLibrary {
     }
     // A folder named as a group's base is that game extracted beside it.
     final looseFolders = <String, List<String>>{};
-    for (final e in folders.entries) {
+    for (final e in gameFolders.entries) {
       final key = p.basename(e.key);
       if (members.containsKey(key)) {
         members[key]!.addAll(e.value);

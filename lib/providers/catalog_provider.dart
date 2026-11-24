@@ -79,6 +79,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   ProviderSubscription<Map<String, LibrarySnapshot>>? _librarySub;
   // Launcher mode turning off, listened to from the first load that reads it.
   ProviderSubscription<bool>? _modeSub;
+  ProviderSubscription<Set<String>>? _foldersSub;
   // What the load would have said had launcher mode's loose games not stood
   // in for a failed or empty catalog: said again once none of them is left.
   String? _catalogFailure;
@@ -344,7 +345,11 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (dir.isEmpty) return OwnedLibrary.empty;
     final sharing = {..._ref.read(appStateProvider).consoles, console.id: console}.values.where((c) => p.equals(settings.getDownloadDir(c.id), dir));
     final snapshot = await _ref.read(librarySnapshotProvider(dir).notifier).current();
-    return compute(OwnedLibrary.scan, (consoleId: console.id, dir: dir, formats: ownFormats(console, sharing), snapshot: snapshot, catalog: catalog));
+    final rules = folderRules(settings, _ref.read(settingsProvider), _ref.read(launchConfigProvider), console.id);
+    return compute(
+      OwnedLibrary.scan,
+      (consoleId: console.id, dir: dir, formats: ownFormats(console, sharing), snapshot: snapshot, catalog: catalog, folders: rules.folders, skip: rules.skip),
+    );
   }
 
   /// Launcher mode, after the library changed: the loose games found now. A
@@ -378,6 +383,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (!mounted) return false;
     _modeSub ??= _ref.listen<bool>(launcherModeProvider, (was, on) {
       if (was == true && !on) _leaveLauncherMode();
+    });
+    // "Folders are games" changed for a console: the loose list follows.
+    _foldersSub ??= _ref.listen<Set<String>>(launchConfigProvider.select((c) => c.noFolders), (_, __) {
+      if (_ref.read(launcherModeProvider)) unawaited(_relistLoose().catchError((Object e) => debugPrint('Error listing loose games: $e')));
     });
     return _ref.read(launcherModeProvider);
   }
