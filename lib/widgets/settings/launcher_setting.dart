@@ -6,17 +6,21 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/screens/launcher_command_screen.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
+import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/launcher_wizard_plan.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/utils/handheld.dart';
 import 'package:retro_toolbox/utils/server_mode.dart';
 import 'package:retro_toolbox/widgets/kit/row_menu_sheet.dart';
 import 'package:retro_toolbox/widgets/settings/rows/action_row.dart';
+import 'package:retro_toolbox/widgets/settings/rows/settings_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/switch_row.dart';
 import 'package:retro_toolbox/widgets/settings/rows/value_row.dart';
 
@@ -38,7 +42,8 @@ Future<bool?> openLauncherWizard(BuildContext context) =>
     Navigator.of(context).push(MaterialPageRoute<bool>(fullscreenDialog: true, builder: (_) => const LauncherWizardScreen()));
 
 /// Settings > Library: the mode switch, on Android the home screen switch,
-/// Set up, and a line per console with a default emulator.
+/// Set up, and Consoles, a page of its own with each console's emulator and
+/// folder choice and the emulators added by hand.
 class LauncherSetting extends ConsumerWidget {
   const LauncherSetting({super.key});
 
@@ -84,10 +89,92 @@ class LauncherSetting extends ConsumerWidget {
         action: 'Set up',
         onPressed: () => openLauncherWizard(context),
       ),
-      for (final id in config.defaults.keys)
-        if (consoles[id] != null) DefaultEmulatorRow(console: consoles[id]!, title: consoles[id]!.name),
+      SettingsValueRow(
+        key: const ValueKey('launcher-consoles'),
+        title: 'Consoles',
+        subtitle: 'The emulator of each console, its folders, the emulators you added',
+        value: '${[for (final id in config.defaults.keys) if (consoles[id] != null) id].length} set',
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const LauncherConsolesPage())),
+      ),
     ]);
   }
+}
+
+/// Launcher mode's page under Settings: a console with a default emulator or
+/// games on disk gets its emulator and its folder choice, then the emulators
+/// added by hand, each with its menu.
+class LauncherConsolesPage extends ConsumerWidget {
+  const LauncherConsolesPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final config = ref.watch(launchConfigProvider);
+    final shown = [
+      for (final c in ref.watch(appStateProvider.select((s) => s.consolesList)))
+        if (config.defaults.containsKey(c.id) || ref.watch(gamesOnDiskProvider(c.id)).valueOrNull == true) c,
+    ];
+    final session = ref.watch(launcherSessionProvider).valueOrNull;
+    return Scaffold(
+      body: SafeArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const SettingsTopBar(crumbs: ['Launcher mode', 'Consoles'], back: true, page: true),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                if (shown.isEmpty) const SettingsHeader('No console with games or an emulator yet', top: 4),
+                for (final c in shown) ...[
+                  SettingsHeader(c.name, top: c == shown.first ? 4 : 14),
+                  DefaultEmulatorRow(console: c, title: 'Emulator'),
+                  FolderGamesRow(console: c),
+                ],
+                if (config.manual.isNotEmpty) ...[
+                  const SettingsHeader('Added by you', top: 14),
+                  for (final m in config.manual)
+                    SettingsValueRow(
+                      key: ValueKey('launcher-manual ${m.id}'),
+                      title: m.label,
+                      subtitle: session != null && session.detectedFor(m.id) == null ? 'Not found on this device' : null,
+                      value: m.isGeneric ? 'Just open the file' : (session?.preset(m.recipe)?.name ?? m.recipe),
+                      onTap: () => _manualMenu(context, ref, m),
+                    ),
+                ],
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _manualMenu(BuildContext context, WidgetRef ref, ManualEmulator m) => showRowMenu(context, title: m.label, subtitle: 'Added by you', items: [
+        if (m.isGeneric) RowMenuItem('Edit command', () => editManualCommand(context, ref, m), icon: Icons.terminal, subtitle: 'How the game is handed to it'),
+        RowMenuItem(
+          'Remove',
+          () => ref.read(removeManualEmulatorProvider)(m.id),
+          icon: Icons.delete_outline,
+          destructive: true,
+          subtitle: 'Consoles and games set to it choose again',
+        ),
+      ]);
+}
+
+/// Whether a folder in [console]'s library can be a game. Off for a console
+/// that keeps add-ons in folders (Switch updates and DLC), so no folder shows
+/// as a game of its own.
+class FolderGamesRow extends ConsumerWidget {
+  const FolderGamesRow({super.key, required this.console});
+
+  final Console console;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => SettingsSwitchRow(
+        key: ValueKey('folder-games ${console.id}'),
+        title: 'Folders are games',
+        subtitle: 'Off: a folder in its library is never a game, as for Switch updates and DLC',
+        value: ref.watch(launchConfigProvider.select((c) => c.folderGames(console.id))),
+        onChanged: (on) => ref.read(launchConfigProvider.notifier).setFolderGames(console.id, on),
+      );
 }
 
 /// A console's default emulator, which a menu of the detected ones that open

@@ -17,6 +17,7 @@ import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launch_preset.dart';
 import 'package:retro_toolbox/services/launcher/launcher_channel.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
+import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:retro_toolbox/widgets/common/dpad_scope.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/settings/launcher_setting.dart';
@@ -182,10 +183,45 @@ void main() {
     expect(find.byType(LauncherWizardScreen), findsOneWidget);
   });
 
-  testWidgets('a line per console with a default, naming its emulator', (t) async {
+  testWidgets('the card lists no console; Consoles opens a page with each one\'s emulator and folder switch', (t) async {
     await pump(t, const LaunchConfig(enabled: true, defaults: {'sony-psx': LaunchChoice(presetId: 'ra', variant: '/usr/bin/retroarch', core: 'swanstation')}));
+    expect(find.byKey(const ValueKey('default-emulator sony-psx')), findsNothing);
+    expect(t.widget<SettingsValueRow>(find.byKey(const ValueKey('launcher-consoles'))).value, '1 set');
+    await t.tap(find.text('Consoles'));
+    await t.pumpAndSettle();
+    expect(find.byType(LauncherConsolesPage), findsOneWidget);
     final row = t.widget<SettingsValueRow>(find.byKey(const ValueKey('default-emulator sony-psx')));
-    expect((row.title, row.value), ('PlayStation', 'RetroArch (swanstation)'));
+    expect((row.title, row.value), ('Emulator', 'RetroArch (swanstation)'));
+    expect(t.widget<SettingsSwitchRow>(find.byKey(const ValueKey('folder-games sony-psx'))).value, isTrue);
+    await t.tap(find.text('Folders are games'));
+    await t.pumpAndSettle();
+    expect(c.read(launchConfigProvider).noFolders, {'sony-psx'});
+    expect(t.widget<SettingsSwitchRow>(find.byKey(const ValueKey('folder-games sony-psx'))).value, isFalse);
+  });
+
+  testWidgets('an emulator added by hand is listed on the page; a generic one offers Edit command, which saves the new one', (t) async {
+    const viewer = ManualEmulator(variant: 'org.fork', label: 'Fork', recipe: ManualEmulator.generic, systems: ['psx'], activity: 'org.fork.Main');
+    final added = <ManualEmulator>[];
+    await pump(t, const LaunchConfig(enabled: true, manual: [viewer]), overrides: [
+      addManualEmulatorProvider.overrideWithValue((m) async => added.add(m)),
+      launcherOsProvider.overrideWithValue('android'),
+    ]);
+    await t.tap(find.text('Consoles'));
+    await t.pumpAndSettle();
+    expect(t.widget<SettingsValueRow>(find.byKey(ValueKey('launcher-manual ${viewer.id}'))).value, 'Just open the file');
+    await t.tap(find.text('Fork'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('Edit command'));
+    await t.pumpAndSettle();
+    expect(find.text('-n org.fork/org.fork.Main -a android.intent.action.VIEW -d {rom.uri}'), findsOneWidget);
+    await t.enterText(find.byType(TextField), '-n org.fork/.Play -x');
+    await t.pump();
+    expect(find.text('Unknown option -x'), findsOneWidget);
+    await t.enterText(find.byType(TextField), '-n org.fork/.Play -e path {rom.path}');
+    await t.pump();
+    await t.tap(find.byKey(const ValueKey('kit-primary')));
+    await t.pumpAndSettle();
+    expect(added.single.command, '-n org.fork/.Play -e path {rom.path}');
   });
 
   testWidgets('the default row offers each emulator, RetroArch once per core, and None', (t) async {
