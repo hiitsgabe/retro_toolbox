@@ -7,12 +7,23 @@ import 'package:retro_toolbox/services/launcher/launch_choice.dart';
 import 'package:retro_toolbox/services/launcher/manual_emulator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Launcher mode's two Android shelves on the console list, each the apps
+/// the user put in it.
+enum AndroidCollection {
+  games('Android'),
+  apps('Android Apps');
+
+  const AndroidCollection(this.label);
+
+  final String label;
+}
+
 /// Launcher mode's own settings, apart from AppSettings as dual screen keeps
 /// its own: whether the mode is on, the emulator of each console, and what
 /// the last detection found.
 @immutable
 class LaunchConfig {
-  const LaunchConfig({this.enabled = false, this.home = false, this.defaults = const {}, this.lastDetected, this.manual = const [], this.noFolders = const {}});
+  const LaunchConfig({this.enabled = false, this.home = false, this.defaults = const {}, this.lastDetected, this.manual = const [], this.noFolders = const {}, this.androidGames = const [], this.androidApps = const []});
 
   final bool enabled;
 
@@ -34,6 +45,12 @@ class LaunchConfig {
   /// holds updates or DLC, not one more game.
   final Set<String> noFolders;
 
+  /// Android: the packages of each shelf, in the order the user keeps them.
+  final List<String> androidGames;
+  final List<String> androidApps;
+
+  List<String> collection(AndroidCollection kind) => kind == AndroidCollection.games ? androidGames : androidApps;
+
   /// Whether a folder in [consoleId]'s library can be a game.
   bool folderGames(String consoleId) => !noFolders.contains(consoleId);
 
@@ -44,6 +61,8 @@ class LaunchConfig {
     List<DetectedEmulator>? lastDetected,
     List<ManualEmulator>? manual,
     Set<String>? noFolders,
+    List<String>? androidGames,
+    List<String>? androidApps,
   }) =>
       LaunchConfig(
         enabled: enabled ?? this.enabled,
@@ -52,6 +71,8 @@ class LaunchConfig {
         lastDetected: lastDetected ?? this.lastDetected,
         manual: manual ?? this.manual,
         noFolders: noFolders ?? this.noFolders,
+        androidGames: androidGames ?? this.androidGames,
+        androidApps: androidApps ?? this.androidApps,
       );
 
   Map<String, Object?> toJson() => {
@@ -61,6 +82,8 @@ class LaunchConfig {
         if (lastDetected != null) 'lastDetected': [for (final d in lastDetected!) d.toJson()],
         'manual': [for (final m in manual) m.toJson()],
         if (noFolders.isNotEmpty) 'noFolders': noFolders.toList()..sort(),
+        if (androidGames.isNotEmpty) 'androidGames': androidGames,
+        if (androidApps.isNotEmpty) 'androidApps': androidApps,
       };
 
   /// What [j] holds, a bad default or detection left out; anything that is
@@ -68,6 +91,11 @@ class LaunchConfig {
   static LaunchConfig fromJson(Object? j) {
     if (j is! Map) return const LaunchConfig();
     final defaults = j['defaults'], detected = j['lastDetected'], manual = j['manual'], noFolders = j['noFolders'];
+    List<String> strings(Object? list) => [
+          if (list is List)
+            for (final e in list)
+              if (e is String) e,
+        ];
     return LaunchConfig(
       enabled: j['enabled'] == true,
       home: j['home'] == true,
@@ -87,11 +115,9 @@ class LaunchConfig {
           for (final m in manual)
             if (ManualEmulator.fromJson(m) != null) ManualEmulator.fromJson(m)!,
       ],
-      noFolders: {
-        if (noFolders is List)
-          for (final id in noFolders)
-            if (id is String) id,
-      },
+      noFolders: strings(noFolders).toSet(),
+      androidGames: strings(j['androidGames']),
+      androidApps: strings(j['androidApps']),
     );
   }
 }
@@ -170,6 +196,11 @@ class LaunchConfigNotifier extends StateNotifier<LaunchConfig> {
           if (id != consoleId) id,
         if (!on) consoleId,
       }));
+
+  /// What the Android shelf [kind] shows, in this order.
+  Future<void> setCollection(AndroidCollection kind, List<String> packages) => _update(
+        (c) => kind == AndroidCollection.games ? c.copyWith(androidGames: [...packages]) : c.copyWith(androidApps: [...packages]),
+      );
 
   /// [m] after the others, or in the place of the one with its id: adding
   /// the same app again changes how it opens, and never lists it twice.

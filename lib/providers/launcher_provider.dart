@@ -59,6 +59,10 @@ final homeModeProvider = Provider<bool>(
   (ref) => ref.watch(homeRoleAvailableProvider) && ref.watch(launcherModeProvider) && ref.watch(launchConfigProvider.select((c) => c.home)),
 );
 
+/// Android in launcher mode: the console list has the Android and Android
+/// Apps shelves.
+final androidShelvesProvider = Provider<bool>((ref) => ref.watch(homeRoleAvailableProvider) && ref.watch(launcherModeProvider));
+
 /// `Platform.operatingSystem`, as a provider tests can set: the wizard's
 /// Android-only rows and step follow it.
 final launcherOsProvider = Provider<String>((ref) => Platform.operatingSystem);

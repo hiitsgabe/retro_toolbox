@@ -38,7 +38,7 @@ class _AppDrawerScreenState extends ConsumerState<AppDrawerScreen> {
             crossAxisSpacing: 8,
             children: [
               for (final (i, app) in apps.indexed)
-                _AppTile(app: app, autofocus: i == 0, onOpen: () => ref.read(launcherChannelProvider).openApp(app.package)),
+                AppTile(app: app, autofocus: i == 0, onOpen: () => ref.read(launcherChannelProvider).openApp(app.package)),
             ],
           );
         },
@@ -47,8 +47,9 @@ class _AppDrawerScreenState extends ConsumerState<AppDrawerScreen> {
   }
 }
 
-class _AppTile extends StatelessWidget {
-  const _AppTile({required this.app, required this.autofocus, required this.onOpen});
+/// One app: its icon over its name; choosing it runs [onOpen].
+class AppTile extends StatelessWidget {
+  const AppTile({super.key, required this.app, required this.autofocus, required this.onOpen});
 
   final ({String package, AppInfo info}) app;
   final bool autofocus;

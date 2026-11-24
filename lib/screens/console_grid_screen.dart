@@ -4,6 +4,8 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
 import 'package:retro_toolbox/providers/style_provider.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
+import 'package:retro_toolbox/screens/android_collection_screen.dart';
 import 'package:retro_toolbox/screens/app_drawer_screen.dart';
 import 'package:retro_toolbox/screens/home_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
@@ -34,6 +36,9 @@ class ConsoleGridScreen extends ConsumerWidget {
   /// The Apps tile's id, apart from every console id.
   static const appsTileId = 'launcher-apps';
 
+  /// The Android shelves' tile ids, apart from every console id.
+  static String shelfTileId(AndroidCollection kind) => 'launcher-shelf-${kind.name}';
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appState = ref.watch(appStateProvider);
@@ -47,6 +52,13 @@ class ConsoleGridScreen extends ConsumerWidget {
     final homeMode = ref.watch(homeModeProvider);
     void openApps() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AppDrawerScreen()));
     final apps = homeMode ? KitAction('Apps', openApps, icon: Icons.apps) : null;
+    // A shelf shows once it has an app, or with every console shown, where it
+    // is found to fill it.
+    final shelves = [
+      if (ref.watch(androidShelvesProvider))
+        for (final kind in AndroidCollection.values)
+          if (!ownedOnly || ref.watch(launchConfigProvider.select((c) => c.collection(kind).isNotEmpty))) kind,
+    ];
     // The check wizard step 2 makes. A console still being checked shows, so
     // the list only ever shrinks while it settles.
     final consoles = [
@@ -69,7 +81,7 @@ class ConsoleGridScreen extends ConsumerWidget {
         ),
         secondAction: apps,
       );
-    } else if (consoles.isEmpty) {
+    } else if (consoles.isEmpty && shelves.isEmpty) {
       body = EmptyState(
         icon: Icons.folder_off_outlined,
         glyph: PixelIcons.games,
@@ -81,6 +93,15 @@ class ConsoleGridScreen extends ConsumerWidget {
       final k = StyleTokens.of(context);
       final tiles = [
         for (final (i, console) in consoles.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
+        for (final kind in shelves)
+          MenuTile(
+            id: shelfTileId(kind),
+            label: kind.label,
+            area: AppArea.games,
+            pixelIcon: kind == AndroidCollection.games ? PixelIcons.games : PixelIcons.tools,
+            icon: kind == AndroidCollection.games ? Icons.android : Icons.apps_outlined,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AndroidCollectionScreen(kind: kind))),
+          ),
         if (homeMode) MenuTile(id: appsTileId, label: 'Apps', area: AppArea.games, pixelIcon: PixelIcons.tools, icon: Icons.apps, onTap: openApps),
       ];
       body = ReorderableMenu(

@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:retro_toolbox/models/app_state_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/screens/android_collection_screen.dart';
 import 'package:retro_toolbox/screens/app_drawer_screen.dart';
 import 'package:retro_toolbox/screens/console_grid_screen.dart';
 import 'package:retro_toolbox/services/installed_apps.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/widgets/header/header.dart';
 import 'package:retro_toolbox/widgets/kit/kit.dart';
 import 'package:retro_toolbox/widgets/menu_grid/menu_reorder.dart';
@@ -15,12 +17,30 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'kit/kit_support.dart';
 import 'screenshots/fakes.dart';
 
+class MemoryConfig implements LaunchConfigStore {
+  MemoryConfig(this.initial);
+
+  final LaunchConfig initial;
+
+  @override
+  Future<LaunchConfig> load() async => initial;
+
+  @override
+  Future<void> save(LaunchConfig config) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
 /// The drawer's apps: none, so it opens on its empty line.
 class NoApps implements InstalledApps {
   const NoApps();
 
   @override
   Future<List<({String package, AppInfo info})>> launchable() async => const [];
+
+  @override
+  Future<Map<String, AppInfo>> info(Iterable<String> packages) async => const {};
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
@@ -33,11 +53,19 @@ void main() {
   /// have games on disk, and [checking] are still being checked. With
   /// [noCatalog] there is no console at all.
   Future<void> pump(WidgetTester t,
-      {required bool on, Set<String> withGames = const {'snes', 'psx'}, Set<String> checking = const {}, bool home = false, bool noCatalog = false}) async {
+      {required bool on,
+      Set<String> withGames = const {'snes', 'psx'},
+      Set<String> checking = const {},
+      bool home = false,
+      bool noCatalog = false,
+      bool shelves = false,
+      LaunchConfig config = const LaunchConfig()}) async {
     await pumpKit(t, const ConsoleGridScreen(), overrides: [
       if (noCatalog) appStateProvider.overrideWith((ref) => FakeApp(const AppState())) else ...consolesOverrides(),
       launcherModeProvider.overrideWithValue(on),
       homeModeProvider.overrideWithValue(home),
+      androidShelvesProvider.overrideWithValue(shelves),
+      launchConfigProvider.overrideWith((ref) => LaunchConfigNotifier(MemoryConfig(config))),
       installedAppsProvider.overrideWithValue(const NoApps()),
       gamesOnDiskProvider.overrideWith((ref, id) => checking.contains(id) ? Completer<bool>().future : Future.value(withGames.contains(id))),
     ]);
@@ -91,6 +119,26 @@ void main() {
     await t.tap(find.text('APPS'));
     await t.pumpAndSettle();
     expect(find.byType(AppDrawerScreen), findsOneWidget);
+  });
+
+  testWidgets('Android: a shelf with apps is a tile after the consoles; with every console shown both are', (t) async {
+    await pump(t, on: true, shelves: true, config: const LaunchConfig(androidGames: ['org.a']));
+    await t.pumpAndSettle();
+    List<String> ids() => [for (final tile in t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles) tile.id];
+    expect(ids().last, ConsoleGridScreen.shelfTileId(AndroidCollection.games));
+    expect(ids(), isNot(contains(ConsoleGridScreen.shelfTileId(AndroidCollection.apps))), reason: 'an empty shelf hides under Owned');
+    await t.tap(find.byTooltip(ownedViewLabel));
+    await t.pumpAndSettle();
+    expect(ids().sublist(ids().length - 2), [ConsoleGridScreen.shelfTileId(AndroidCollection.games), ConsoleGridScreen.shelfTileId(AndroidCollection.apps)]);
+    t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles.last.onTap();
+    await t.pumpAndSettle();
+    expect(find.byType(AndroidCollectionScreen), findsOneWidget);
+  });
+
+  testWidgets('not on Android: no shelf', (t) async {
+    await pump(t, on: true, config: const LaunchConfig(androidGames: ['org.a']));
+    final ids = [for (final tile in t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles) tile.id];
+    expect(ids, unorderedEquals(['snes', 'psx']));
   });
 
   testWidgets('not the home app: no Apps tile', (t) async {

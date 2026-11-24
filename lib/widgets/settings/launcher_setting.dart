@@ -6,12 +6,14 @@ import 'package:retro_toolbox/models/console_model.dart';
 import 'package:retro_toolbox/providers/app_state_provider.dart';
 import 'package:retro_toolbox/providers/dual_screen_provider.dart';
 import 'package:retro_toolbox/providers/launcher_provider.dart';
+import 'package:retro_toolbox/screens/android_collection_screen.dart';
 import 'package:retro_toolbox/screens/launcher_command_screen.dart';
 import 'package:retro_toolbox/screens/launcher_wizard_screen.dart';
 import 'package:retro_toolbox/screens/settings_screen.dart';
 import 'package:retro_toolbox/services/dual_screen/dual_screen_plan.dart';
 import 'package:retro_toolbox/services/launcher/home_role.dart';
 import 'package:retro_toolbox/services/launcher/launch_choice.dart';
+import 'package:retro_toolbox/services/launcher/launch_config.dart';
 import 'package:retro_toolbox/services/launcher/launcher_gate.dart';
 import 'package:retro_toolbox/services/launcher/launcher_session.dart';
 import 'package:retro_toolbox/services/launcher/launcher_wizard_plan.dart';
@@ -127,6 +129,17 @@ class LauncherConsolesPage extends ConsumerWidget {
                   SettingsHeader(c.name, top: c == shown.first ? 4 : 14),
                   DefaultEmulatorRow(console: c, title: 'Emulator'),
                   FolderGamesRow(console: c),
+                ],
+                if (ref.watch(androidShelvesProvider)) ...[
+                  const SettingsHeader('Android', top: 14),
+                  for (final kind in AndroidCollection.values)
+                    SettingsValueRow(
+                      key: ValueKey('launcher-shelf ${kind.name}'),
+                      title: kind.label,
+                      subtitle: kind == AndroidCollection.games ? 'The Android games on the console list' : 'The apps on the console list',
+                      value: '${config.collection(kind).length} apps',
+                      onTap: () => chooseCollectionApps(context, ref, kind),
+                    ),
                 ],
                 if (config.manual.isNotEmpty) ...[
                   const SettingsHeader('Added by you', top: 14),
