@@ -163,6 +163,12 @@ String logosNote(String gameId) => '${switch (gameId) {
       'head_fix' => ('Head fix', 'Two animation frames draw the head on the right body.'),
       'y_button_fix' => ('Y button fix', 'A player knocked down no longer stands up at once when Y is pressed.'),
       'extra_attacker_fix' => ('Extra attacker fix', 'An extra attacker who is also in the lines comes on when the goalie is pulled or on a power play.'),
+      'manual_pull_goalie' => ('Pull the goalie with L+R', 'Press L and R together to pull your goalie for an extra attacker, and again to put him back.'),
+      'defense_control' => ('Defense control on', 'You control your defencemen from the first face-off, without turning it on in the pause menu.'),
+      'lines_any_position' => ('Any position in Edit Lines', 'Edit Lines lets a forward play defence and a defenceman play forward.'),
+      'one_minute_penalties' => ('One-minute penalties', 'Minor penalties last one minute instead of two.'),
+      'real_time_clock' => ('Real-time clock', 'The game and penalty clocks run in real seconds.'),
+      'thirty_second_periods' => ('30-second periods', 'Game Setup offers the hidden 30-second period length.'),
       _ => (name, ''),
     };
 
