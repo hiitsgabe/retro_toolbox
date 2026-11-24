@@ -161,6 +161,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
   bool _useLogos = true;
   bool _blankUnused = false;
   bool _matchLooks = true;
+  final Set<String> _fixes = {};
 
   /// The ROM's current art per slot, exported for [_romImagesFor].
   late Map<String, String> _romImages = widget.initialImages ?? const {};
@@ -765,6 +766,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         language: _language,
         logos: info.supportsLogos ? _useLogos : null,
         looks: info.supportsLooks ? _matchLooks : null,
+        fixes: [for (final f in info.fixes) if (_fixes.contains(f)) f],
         leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals, fillNations: _fillNations),
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
@@ -1855,6 +1857,27 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                     subtitle: const Text('Teams the league does not fill get an empty name and flag instead of the game\'s originals.'),
                     value: _blankUnused,
                     onChanged: (v) => setState(() => _blankUnused = v),
+                  ),
+              ],
+            ),
+          ),
+        if (info.fixes.isNotEmpty)
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text('Gameplay fixes', style: theme.textTheme.titleSmall),
+                ),
+                for (final name in info.fixes)
+                  SwitchListTile(
+                    secondary: const Icon(Icons.build_outlined),
+                    title: Text(fixNote(name).$1),
+                    subtitle: fixNote(name).$2.isEmpty ? null : Text(fixNote(name).$2),
+                    value: _fixes.contains(name),
+                    onChanged: (v) => setState(() => v ? _fixes.add(name) : _fixes.remove(name)),
                   ),
               ],
             ),

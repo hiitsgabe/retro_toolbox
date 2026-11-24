@@ -25,6 +25,9 @@ class PatcherInfo {
   /// Screen art slots (`title`, `menu`, ...) whose image the patch can replace.
   final List<String> imageSlots;
 
+  /// The game's optional fixes (`weight_fix`, ...), each off unless asked for.
+  final List<String> fixes;
+
   /// The patch draws each team's home and away kit (from its colours, a
   /// pattern, one of the game's designs or a PNG).
   final bool supportsKits;
@@ -79,6 +82,7 @@ class PatcherInfo {
     this.supportsBlankUnused = false,
     this.supportsLooks = false,
     this.imageSlots = const [],
+    this.fixes = const [],
     this.supportsKits = false,
     this.kitTemplates = false,
     this.supportsNationals = false,
@@ -101,7 +105,7 @@ class PatcherInfo {
 
   /// Whether the wizard has a visuals step to show for this game.
   /// (Where the fill is offered, clearing the slots is a Rosters step choice.)
-  bool get hasVisuals => supportsLogos || (supportsBlankUnused && !supportsNationFill) || supportsLooks || imageSlots.isNotEmpty;
+  bool get hasVisuals => supportsLogos || (supportsBlankUnused && !supportsNationFill) || supportsLooks || imageSlots.isNotEmpty || fixes.isNotEmpty;
 
   /// The sports_patch job keys for the slots a league leaves: [left] where the
   /// fill is offered, else the Look step's [blankUnused] and the [nationals]
@@ -142,6 +146,7 @@ class PatcherInfo {
         supportsBlankUnused: (j['supports_blank_unused'] ?? false) as bool,
         supportsLooks: (j['supports_looks'] ?? false) as bool,
         imageSlots: ((j['image_slots'] as List?) ?? const []).map((e) => '$e').toList(),
+        fixes: ((j['fixes'] as List?) ?? const []).map((e) => '$e').toList(),
         supportsKits: (j['supports_kits'] ?? false) as bool,
         kitTemplates: (j['kit_templates'] ?? false) as bool,
         supportsNationals: (j['supports_nationals'] ?? false) as bool,

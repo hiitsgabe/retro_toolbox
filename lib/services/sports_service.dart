@@ -350,6 +350,7 @@ class SportsService {
     String? language,
     bool? logos,
     bool? looks,
+    List<String> fixes = const [],
     Map<String, Object> leftSlots = const {},
     Map<String, String> images = const {},
     Map<int, String> teamLogos = const {},
@@ -376,6 +377,7 @@ class SportsService {
           if (language != null) 'language': language,
           if (logos != null) 'logos': logos,
           if (looks != null) 'looks': looks,
+          if (fixes.isNotEmpty) 'fixes': fixes,
           // fill_clubs, fill_nations, blank_unused or nationals (PatcherInfo.leftSlotsJob).
           ...leftSlots,
           if (images.isNotEmpty) 'images': images,

@@ -150,9 +150,21 @@ List<String> lineupNotes(String gameId) => [
 /// What the Look step's Team logos switch draws, in [gameId]'s own terms.
 String logosNote(String gameId) => '${switch (gameId) {
       'nhl94-snes' => "Draw each team's logo in the menus and at center ice, and on the title pucks while the cartridge's title stays.",
+      'nhl94-genesis' => "Draw each team's logo on Game Setup and the team screens, and at center ice.",
       'kgj-mlb-snes' => "Draw each club's logo on team select, Today's Game and the season screens.",
       _ => "Draw each team's logo as its in-game flag.",
     }} Tap a crest on the Teams step to use your own PNG.';
+
+/// A game's optional fix as the Look step lists it: (title, what it changes).
+/// A fix the app does not know yet shows under its own name.
+(String, String) fixNote(String name) => switch (name) {
+      'weight_fix' => ('Weight bug fix', 'Heavier players win body checks, as intended: the cartridge counts the checker\'s weight against him.'),
+      'sock_fix' => ('Sock fix', 'Skaters\' socks are drawn whole instead of covered by sprite pieces.'),
+      'head_fix' => ('Head fix', 'Two animation frames draw the head on the right body.'),
+      'y_button_fix' => ('Y button fix', 'A player knocked down no longer stands up at once when Y is pressed.'),
+      'extra_attacker_fix' => ('Extra attacker fix', 'An extra attacker who is also in the lines comes on when the goalie is pulled or on a power play.'),
+      _ => (name, ''),
+    };
 
 /// What the editor calls the players who start: baseball's lineup is also the
 /// order they bat in.
