@@ -150,9 +150,27 @@ List<String> lineupNotes(String gameId) => [
 /// What the Look step's Team logos switch draws, in [gameId]'s own terms.
 String logosNote(String gameId) => '${switch (gameId) {
       'nhl94-snes' => "Draw each team's logo in the menus and at center ice, and on the title pucks while the cartridge's title stays.",
+      'nhl94-genesis' => "Draw each team's logo on Game Setup and the team screens, and at center ice.",
       'kgj-mlb-snes' => "Draw each club's logo on team select, Today's Game and the season screens.",
       _ => "Draw each team's logo as its in-game flag.",
     }} Tap a crest on the Teams step to use your own PNG.';
+
+/// A game's optional fix as the Look step lists it: (title, what it changes).
+/// A fix the app does not know yet shows under its own name.
+(String, String) fixNote(String name) => switch (name) {
+      'weight_fix' => ('Weight bug fix', 'Heavier players win body checks, as intended: the cartridge counts the checker\'s weight against him.'),
+      'sock_fix' => ('Sock fix', 'Skaters\' socks are drawn whole instead of covered by sprite pieces.'),
+      'head_fix' => ('Head fix', 'Two animation frames draw the head on the right body.'),
+      'y_button_fix' => ('Y button fix', 'A player knocked down no longer stands up at once when Y is pressed.'),
+      'extra_attacker_fix' => ('Extra attacker fix', 'An extra attacker who is also in the lines comes on when the goalie is pulled or on a power play.'),
+      'manual_pull_goalie' => ('Pull the goalie with L+R', 'Press L and R together to pull your goalie for an extra attacker, and again to put him back.'),
+      'defense_control' => ('Defense control on', 'You control your defencemen from the first face-off, without turning it on in the pause menu.'),
+      'lines_any_position' => ('Any position in Edit Lines', 'Edit Lines lets a forward play defence and a defenceman play forward.'),
+      'one_minute_penalties' => ('One-minute penalties', 'Minor penalties last one minute instead of two.'),
+      'real_time_clock' => ('Real-time clock', 'The game and penalty clocks run in real seconds.'),
+      'thirty_second_periods' => ('30-second periods', 'Game Setup offers the hidden 30-second period length.'),
+      _ => (name, ''),
+    };
 
 /// What the editor calls the players who start: baseball's lineup is also the
 /// order they bat in.

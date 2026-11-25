@@ -153,4 +153,25 @@ void main() {
     await pump(t, plain, step: 2);
     expect(find.byTooltip('Replace logo'), findsNothing);
   });
+
+  testWidgets('a game with fixes lists one switch per fix, all off', (t) async {
+    const fixable = PatcherInfo(
+      gameId: 'nhl94-genesis',
+      platform: 'genesis',
+      sport: 'hockey',
+      requiresSlotMapping: false,
+      providers: ['espn'],
+      fixes: ['weight_fix', 'new_fix'],
+    );
+    expect(fixable.hasVisuals, isTrue);
+    await pump(t, fixable);
+    expect(find.text('Gameplay fixes'), findsOneWidget);
+    expect(find.text('Weight bug fix'), findsOneWidget);
+    expect(find.text('new_fix'), findsOneWidget);
+    final switches = t.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
+    expect(switches.every((s) => !s.value), isTrue);
+    await t.tap(find.text('Weight bug fix'));
+    await t.pumpAndSettle();
+    expect(t.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Weight bug fix')).value, isTrue);
+  });
 }

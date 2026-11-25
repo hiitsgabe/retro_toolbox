@@ -318,6 +318,11 @@ def _patch_options(job, patcher, team_kits=None):
         options['blank_unused'] = kind if kind in ('clubs', 'nations') and getattr(patcher, 'supports_club_fill', False) else True
     if getattr(patcher, 'supports_looks', False) and 'looks' in job:
         options['looks'] = bool(job['looks'])
+    # The game's optional fixes (nhl94.com's, McMarkis's): each one asked for and
+    # known to this patcher is turned on; the rest stay the cartridge's code.
+    for name in job.get('fixes') or ():
+        if name in (getattr(patcher, 'fixes', None) or ()):
+            options[name] = True
     images = job.get('images') or {}
     if getattr(patcher, 'image_slots', ()) and images:
         options['images'] = {slot: path for slot, path in images.items() if path}
@@ -339,6 +344,7 @@ def _capabilities(cls, base):
         'supports_logos': bool(getattr(cls, 'supports_logos', False)),
         'supports_blank_unused': bool(getattr(cls, 'supports_blank_unused', False)),
         'supports_looks': bool(getattr(cls, 'supports_looks', False)),
+        'fixes': list(getattr(cls, 'fixes', None) or ()),
         'image_slots': list(getattr(cls, 'image_slots', None) or ()),
         'supports_kits': bool(getattr(cls, 'supports_kits', False)),
         'kit_templates': _overrides(cls, 'kit_templates', base),
