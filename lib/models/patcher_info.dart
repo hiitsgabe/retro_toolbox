@@ -48,6 +48,14 @@ class PatcherInfo {
   /// library older than the club fill.
   final bool supportsClubFill;
 
+  /// PES 2013: the club fill can put this season's Champions League clubs
+  /// first and have the mode draw them. False from a library older than it.
+  final bool supportsChampions;
+
+  /// PES 2013: this season's Copa Libertadores clubs can take the Copa
+  /// mode's own. False from a library older than it.
+  final bool supportsLibertadores;
+
   /// Team-slot groups the game splits its clubs into; empty when it has none.
   final List<SlotGroup> slotGroups;
 
@@ -89,6 +97,8 @@ class PatcherInfo {
     this.nationalSlotBase,
     this.supportsNationFill = false,
     this.supportsClubFill = false,
+    this.supportsChampions = false,
+    this.supportsLibertadores = false,
     this.slotGroups = const [],
     this.slotOrder = const [],
     this.teamSlots,
@@ -112,9 +122,18 @@ class PatcherInfo {
   /// switches. The fill never travels with blank_unused or nationals.
   /// With the club fill, [left] is about the club slots and [fillNations] (the
   /// nations box) updates the national teams; clearing then empties the clubs only.
-  Map<String, Object> leftSlotsJob(LeftSlots left, {bool blankUnused = false, bool nationals = false, bool fillNations = false}) => supportsClubFill
+  /// [libertadores] (the Copa box) travels on its own where the game has it.
+  Map<String, Object> leftSlotsJob(LeftSlots left,
+          {bool blankUnused = false, bool nationals = false, bool fillNations = false, bool libertadores = false}) =>
+      {
+        ..._leftSlotsJob(left, blankUnused, nationals, fillNations),
+        if (libertadores && supportsLibertadores) 'libertadores': true,
+      };
+
+  Map<String, Object> _leftSlotsJob(LeftSlots left, bool blankUnused, bool nationals, bool fillNations) => supportsClubFill
       ? {
           if (left == LeftSlots.fill) 'fill_clubs': true,
+          if (left == LeftSlots.champions && supportsChampions) 'fill_clubs': 'champions',
           if (left == LeftSlots.clear && supportsBlankUnused) 'blank_unused': fillNations ? 'clubs' : true,
           if (fillNations) 'fill_nations': true,
         }
@@ -153,6 +172,8 @@ class PatcherInfo {
         nationalSlotBase: (j['national_slot_base'] as num?)?.toInt(),
         supportsNationFill: (j['supports_nation_fill'] ?? false) as bool,
         supportsClubFill: (j['supports_club_fill'] ?? false) as bool,
+        supportsChampions: (j['supports_champions'] ?? false) as bool,
+        supportsLibertadores: (j['supports_libertadores'] ?? false) as bool,
         slotGroups: [
           for (final g in ((j['slot_groups'] as List?) ?? const [])) SlotGroup.fromJson(Map<String, dynamic>.from(g as Map)),
         ],
@@ -166,8 +187,9 @@ class PatcherInfo {
   String get defaultProvider => providers.isNotEmpty ? providers.first : '';
 }
 
-/// What the patch does with the slots a league leaves.
-enum LeftSlots { keep, clear, fill }
+/// What the patch does with the slots a league leaves. [champions]: the club
+/// fill with this season's Champions League clubs first.
+enum LeftSlots { keep, clear, fill, champions }
 
 /// A run of team slots one league fills: [count] slots from [first].
 class SlotGroup {
