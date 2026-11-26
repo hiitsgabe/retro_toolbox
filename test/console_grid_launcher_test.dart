@@ -121,15 +121,16 @@ void main() {
     expect(find.byType(AppDrawerScreen), findsOneWidget);
   });
 
-  testWidgets('Android: a shelf with apps is a tile after the consoles; with every console shown both are', (t) async {
+  testWidgets('Android: a shelf with apps is a tile after the consoles; an empty one never shows', (t) async {
     await pump(t, on: true, shelves: true, config: const LaunchConfig(androidGames: ['org.a']));
     await t.pumpAndSettle();
     List<String> ids() => [for (final tile in t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles) tile.id];
     expect(ids().last, ConsoleGridScreen.shelfTileId(AndroidCollection.games));
-    expect(ids(), isNot(contains(ConsoleGridScreen.shelfTileId(AndroidCollection.apps))), reason: 'an empty shelf hides under Owned');
+    expect(ids(), isNot(contains(ConsoleGridScreen.shelfTileId(AndroidCollection.apps))));
     await t.tap(find.byTooltip(ownedViewLabel));
     await t.pumpAndSettle();
-    expect(ids().sublist(ids().length - 2), [ConsoleGridScreen.shelfTileId(AndroidCollection.games), ConsoleGridScreen.shelfTileId(AndroidCollection.apps)]);
+    expect(ids().last, ConsoleGridScreen.shelfTileId(AndroidCollection.games));
+    expect(ids(), isNot(contains(ConsoleGridScreen.shelfTileId(AndroidCollection.apps))), reason: 'with every console shown too');
     t.widget<ReorderableMenu>(find.byType(ReorderableMenu)).tiles.last.onTap();
     await t.pumpAndSettle();
     expect(find.byType(AndroidCollectionScreen), findsOneWidget);

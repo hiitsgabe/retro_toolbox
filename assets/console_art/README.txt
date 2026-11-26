@@ -15,6 +15,8 @@ Art credits / licenses (non-commercial use):
   logo.svg") and ps5 ("PlayStation 5 logo and wordmark.svg"): Wikimedia
   Commons, public domain.
 - xboxone wordmark: "Art Book Next" theme (as above), CC-BY-NC-SA.
+- android_games/android_apps: drawn for this app (a gamepad or an app grid
+  over block letters), no third-party mark.
 - xboxseries: the XBOX letters of the xboxone wordmark plus "SERIES" set in
   Selawik Semilight (Microsoft, SIL OFL 1.1), converted to outlines.
 

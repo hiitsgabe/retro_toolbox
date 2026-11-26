@@ -52,12 +52,11 @@ class ConsoleGridScreen extends ConsumerWidget {
     final homeMode = ref.watch(homeModeProvider);
     void openApps() => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AppDrawerScreen()));
     final apps = homeMode ? KitAction('Apps', openApps, icon: Icons.apps) : null;
-    // A shelf shows once it has an app, or with every console shown, where it
-    // is found to fill it.
+    // A shelf shows once it has an app; Settings > Launcher fills it.
     final shelves = [
       if (ref.watch(androidShelvesProvider))
         for (final kind in AndroidCollection.values)
-          if (!ownedOnly || ref.watch(launchConfigProvider.select((c) => c.collection(kind).isNotEmpty))) kind,
+          if (ref.watch(launchConfigProvider.select((c) => c.collection(kind).isNotEmpty))) kind,
     ];
     // The check wizard step 2 makes. A console still being checked shows, so
     // the list only ever shrinks while it settles.
@@ -93,13 +92,17 @@ class ConsoleGridScreen extends ConsumerWidget {
       final k = StyleTokens.of(context);
       final tiles = [
         for (final (i, console) in consoles.indexed) _consoleTile(context, ref, console, k.paletteAt(i)),
-        for (final kind in shelves)
+        for (final (i, kind) in shelves.indexed)
           MenuTile(
             id: shelfTileId(kind),
             label: kind.label,
             area: AppArea.games,
+            tint: k.paletteAt(consoles.length + i),
             pixelIcon: kind == AndroidCollection.games ? PixelIcons.games : PixelIcons.tools,
             icon: kind == AndroidCollection.games ? Icons.android : Icons.apps_outlined,
+            assetPath: 'assets/console_art/android_${kind.name}_logo.svg',
+            accentColor: const Color(0xFF2E9E4F),
+            brandLogo: true,
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AndroidCollectionScreen(kind: kind))),
           ),
         if (homeMode) MenuTile(id: appsTileId, label: 'Apps', area: AppArea.games, pixelIcon: PixelIcons.tools, icon: Icons.apps, onTap: openApps),

@@ -72,8 +72,8 @@ void main() {
 
   final usa = psxGame('Tekken 3 (USA)'), eu = psxGame('Tekken 3 (Europe, Australia)'), crash = psxGame('Crash Bandicoot (USA)');
 
-  Future<(ProviderContainer, CatalogNotifier)> setUpCatalog({required bool launcher, List<Game>? games}) async {
-    SharedPreferences.setMockInitialValues({});
+  Future<(ProviderContainer, CatalogNotifier)> setUpCatalog({required bool launcher, List<Game>? games, bool keepPrefs = false}) async {
+    if (!keepPrefs) SharedPreferences.setMockInitialValues({});
     final c = ProviderContainer(overrides: [
       appStateProvider.overrideWith((ref) => _FakeApp(const AppState(consoles: {'psx': _psx}))),
       catalogProvider.overrideWith((ref) => CatalogNotifier(ref, _FakeCatalogService(games ?? [usa, eu, crash]))),
@@ -149,5 +149,38 @@ void main() {
     expect(shown(c), isNotEmpty);
     catalog.toggleOwnedOnly();
     expect(c.read(catalogProvider).filter.ownedOnly, isTrue);
+  });
+
+  test('the owned view, filters and sort carry over to the next console load; the search does not', () async {
+    final (c, catalog) = await setUpCatalog(launcher: true);
+    await catalog.loadCatalog(_psx);
+    catalog.toggleOwnedOnly();
+    catalog.setSort(CatalogSort.popular);
+    catalog.updateFilter(c.read(catalogProvider).filter.copyWith(showFavoritesOnly: true));
+    catalog.updateFilterText('crash');
+    await catalog.loadCatalog(_psx);
+    final state = c.read(catalogProvider);
+    expect(state.filter.ownedOnly, isFalse);
+    expect(state.filter.sort, CatalogSort.popular);
+    expect(state.filter.showFavoritesOnly, isTrue);
+    expect(state.filterText, isEmpty);
+  });
+
+  test('the filters, sort and owned view are kept across app starts; the search is not', () async {
+    final (c, catalog) = await setUpCatalog(launcher: true);
+    await catalog.loadCatalog(_psx);
+    catalog.toggleOwnedOnly();
+    catalog.setSort(CatalogSort.popular);
+    catalog.updateFilter(c.read(catalogProvider).filter.copyWith(regions: {'Europe'}));
+    catalog.updateFilterText('tekken');
+    await pumpEventQueue();
+
+    final (c2, catalog2) = await setUpCatalog(launcher: true, keepPrefs: true);
+    await catalog2.loadCatalog(_psx);
+    final state = c2.read(catalogProvider);
+    expect(state.filter.ownedOnly, isFalse);
+    expect(state.filter.sort, CatalogSort.popular);
+    expect(state.filter.regions, {'Europe'});
+    expect(state.filterText, isEmpty);
   });
 }

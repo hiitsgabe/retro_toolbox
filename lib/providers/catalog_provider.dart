@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:retro_toolbox/models/catalog_model.dart';
 import 'package:retro_toolbox/models/catalog_filter_model.dart';
 import 'package:retro_toolbox/models/console_model.dart';
@@ -83,6 +85,35 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   // What the load would have said had launcher mode's loose games not stood
   // in for a failed or empty catalog: said again once none of them is left.
   String? _catalogFailure;
+  // The owned view as the user last left it: a console opens on it, not on
+  // the launcher default, which is only the first one's.
+  bool _ownedChoice = true;
+
+  /// The filters, sort and owned view as last set, kept across app starts.
+  /// The search is not one of them.
+  static const savedFilterKey = 'catalog_filter_v1';
+  late final Future<void> _restored = _restoreFilter();
+
+  Future<void> _restoreFilter() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(savedFilterKey);
+      if (raw == null || !mounted) return;
+      final saved = CatalogFilter.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      _ownedChoice = saved.ownedOnly;
+      state = state.copyWith(filter: saved);
+    } catch (e) {
+      debugPrint('Error restoring the catalog filter: $e');
+    }
+  }
+
+  Future<void> _saveFilter() async {
+    try {
+      final json = state.filter.copyWith(ownedOnly: _ownedChoice).toJson();
+      await (await SharedPreferences.getInstance()).setString(savedFilterKey, jsonEncode(json));
+    } catch (e) {
+      debugPrint('Error saving the catalog filter: $e');
+    }
+  }
 
   Future<List<GameGroup>> _groupsOf(List<Game> games) {
     if (!identical(_groupsSource, games)) {
@@ -132,6 +163,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       loading: true,
       loadingStatus: '',
       errorMessage: '',
+      // A search is for one console; the filters and sort carry over.
+      filterText: '',
       games: [],
       selectedGames: {},
       // Drop the previous console's list too, or a failed/empty load keeps
@@ -140,6 +173,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       cachedTotalCount: 0,
       cachedHasMore: false,
     );
+    await _restored;
+    if (gen != _loadGeneration || !mounted) return;
 
     try {
       final settings = _ref.read(settingsProvider);
@@ -265,7 +300,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       );
       // Launcher mode opens a console on what is on disk. Off, the owned view
       // is off too: only launcher mode shows its button.
-      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcherNow));
+      state = loaded.copyWith(filter: _offeredOnly(loaded).copyWith(ownedOnly: launcherNow && _ownedChoice));
 
       await updateFilteredGames(immediate: true);
       _refocus(enriched);
@@ -273,7 +308,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       // The default filter (USA / normal / good-dump) hides whole catalogs like
       // homebrew or non-USA sets. If it emptied a catalog that actually has
       // games, drop the filter so the user sees something instead of "0 games".
-      if (gen == _loadGeneration && mounted &&
+      // A filter the user set is theirs: it carries over, and empty is its answer.
+      if (gen == _loadGeneration && mounted && !state.filter.differsFromDefault &&
           enriched.isNotEmpty && state.filteredGamesCount == 0) {
         state = state.copyWith(
           filter: CatalogFilter(
@@ -659,6 +695,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   void updateFilter(CatalogFilter filter) {
     state = state.copyWith(filter: filter);
     updateFilteredGames();
+    unawaited(_saveFilter());
   }
 
   void toggleRegionFilter(String region) async {
@@ -762,7 +799,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   /// Launcher mode's owned view on or off.
-  void toggleOwnedOnly() => updateFilter(state.filter.copyWith(ownedOnly: !state.filter.ownedOnly));
+  void toggleOwnedOnly() {
+    _ownedChoice = !state.filter.ownedOnly;
+    updateFilter(state.filter.copyWith(ownedOnly: _ownedChoice));
+  }
 
   void toggleLibraryOnly() async {
     final newFilter = state.filter.copyWith(

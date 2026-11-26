@@ -83,6 +83,48 @@ class CatalogFilter {
     );
   }
 
+  Map<String, dynamic> toJson() => {
+        'regions': [...regions],
+        'languages': [...languages],
+        'categories': [...categories],
+        'mediaTypes': [...mediaTypes],
+        'dumpQualities': [...dumpQualities],
+        'romTypes': [...romTypes],
+        'modifications': [...modifications],
+        'distributionTypes': [...distributionTypes],
+        'showFavoritesOnly': showFavoritesOnly,
+        'showInLibraryOnly': showInLibraryOnly,
+        'ownedOnly': ownedOnly,
+        'sort': sort.name,
+        'genres': [...genres],
+        'players': [...players],
+        'minRating': minRating,
+      };
+
+  /// A saved filter; a field missing or of the wrong type keeps its default.
+  factory CatalogFilter.fromJson(Map<String, dynamic> j) {
+    const d = CatalogFilter();
+    Set<String>? strings(Object? v) => v is List ? {for (final e in v) if (e is String) e} : null;
+    final sort = j['sort'];
+    return d.copyWith(
+      regions: strings(j['regions']),
+      languages: strings(j['languages']),
+      categories: strings(j['categories']),
+      mediaTypes: strings(j['mediaTypes']),
+      dumpQualities: strings(j['dumpQualities']),
+      romTypes: strings(j['romTypes']),
+      modifications: strings(j['modifications']),
+      distributionTypes: strings(j['distributionTypes']),
+      showFavoritesOnly: j['showFavoritesOnly'] is bool ? j['showFavoritesOnly'] as bool : null,
+      showInLibraryOnly: j['showInLibraryOnly'] is bool ? j['showInLibraryOnly'] as bool : null,
+      ownedOnly: j['ownedOnly'] is bool ? j['ownedOnly'] as bool : null,
+      sort: CatalogSort.values.where((s) => s.name == sort).firstOrNull,
+      genres: strings(j['genres']),
+      players: strings(j['players']),
+      minRating: j['minRating'] is num ? (j['minRating'] as num).toDouble() : null,
+    );
+  }
+
   /// Whether any filter is off its default. [isActive] is true on a fresh
   /// install (the default hides bad dumps and non-USA sets), so the header icon
   /// asks this instead. Sort is not a filter.
