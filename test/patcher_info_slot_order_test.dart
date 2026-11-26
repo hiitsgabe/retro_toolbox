@@ -77,4 +77,22 @@ void main() {
     expect(old.leftSlotsJob(LeftSlots.fill, fillNations: false), {'fill_nations': true});
     expect(old.leftSlotsJob(LeftSlots.clear, fillNations: true), {'blank_unused': true});
   });
+
+  test('the Champions League fill and the Copa box: sent only where the library has them', () {
+    final pes = PatcherInfo.fromJson({
+      'game_id': 'pes2013-ps2',
+      'supports_club_fill': true,
+      'supports_nation_fill': true,
+      'supports_champions': true,
+      'supports_libertadores': true,
+    });
+    expect(pes.supportsChampions && pes.supportsLibertadores, isTrue);
+    expect(pes.leftSlotsJob(LeftSlots.champions, fillNations: true, libertadores: true),
+        {'fill_clubs': 'champions', 'fill_nations': true, 'libertadores': true});
+    expect(pes.leftSlotsJob(LeftSlots.fill), {'fill_clubs': true});
+    expect(pes.leftSlotsJob(LeftSlots.keep, libertadores: true), {'libertadores': true});
+    final old = PatcherInfo.fromJson({'game_id': 'pes2013-ps2', 'supports_club_fill': true, 'supports_nation_fill': true});
+    expect(old.supportsChampions || old.supportsLibertadores, isFalse);
+    expect(old.leftSlotsJob(LeftSlots.fill, libertadores: true), {'fill_clubs': true});
+  });
 }

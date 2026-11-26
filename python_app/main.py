@@ -355,6 +355,12 @@ def _capabilities(cls, base):
         # PES 2013: fill the club slots the leagues leave with today's best
         # European clubs; same rule.
         'supports_club_fill': bool(getattr(cls, 'supports_club_fill', False)) and _top_clubs() is not None,
+        # The club fill can put this season's Champions League clubs first and
+        # have the mode draw them; same rule.
+        'supports_champions': bool(getattr(cls, 'supports_club_fill', False)) and _top_clubs() is not None
+        and _champions_order() is not None,
+        # PES 2013: this season's Copa Libertadores clubs in the Copa's own; same rule.
+        'supports_libertadores': bool(getattr(cls, 'supports_libertadores', False)) and _libertadores() is not None,
         'national_slot_base': getattr(cls, 'national_slot_base', None),
         # The order to fill slots in when the teams map in sequence (ISS
         # Deluxe keeps the nations its stadiums are named after for last).
@@ -386,6 +392,24 @@ def _top_clubs():
     except ImportError:
         return None
     return fetch_top_clubs
+
+
+def _champions_order():
+    """The library's champions_order, or None on a library older than it."""
+    try:
+        from retro_roster_patcher.sports.clubs import champions_order
+    except ImportError:
+        return None
+    return champions_order
+
+
+def _libertadores():
+    """The library's fetch_libertadores, or None on a library older than it."""
+    try:
+        from retro_roster_patcher.sports.clubs import fetch_libertadores
+    except ImportError:
+        return None
+    return fetch_libertadores
 
 
 def _overrides(cls, name, base):
@@ -984,6 +1008,9 @@ def run_sports(job):
             fill = _top_nations() if job.get('fill_nations') and getattr(patcher, 'supports_nation_fill', False) else None
             # PES 2013: today's best European clubs fill the club slots the leagues leave.
             club_fill = _top_clubs() if job.get('fill_clubs') and getattr(patcher, 'supports_club_fill', False) else None
+            # "champions": this season's Champions League clubs first, and the mode draws them.
+            champions = _champions_order() if club_fill and job.get('fill_clubs') == 'champions' else None
+            copa = _libertadores() if job.get('libertadores') and getattr(patcher, 'supports_libertadores', False) else None
             # A fill answers for its own kind of slot: clearing keeps only the other kind.
             blank = options.get('blank_unused')
             if (club_fill and blank != 'nations') or (fill and blank != 'clubs'):
@@ -1020,12 +1047,26 @@ def run_sports(job):
                 if club_fill:
                     # As the nation fill below: "Skipped <club>" lines via live,
                     # an outage keeps the original teams, progress stays at 0.
+                    ucl = _league_season(None, 'uefa.champions')
                     try:
-                        data, mapping = club_fill(patcher, Path(rom), _league_season(None, 'uefa.champions'),
+                        data, mapping = club_fill(patcher, Path(rom), ucl,
                                                   set(merged.teams), on_progress and (lambda _f, m: on_progress(0, m)),
-                                                  exclude_ids=league_ids)
+                                                  exclude_ids=league_ids, **({'mode': 'champions'} if champions else {}))
+                        if champions:
+                            # rosters_for runs before patch unpacks the options.
+                            options['champions'] = champions(patcher, ucl)
                     except rrp.ApiError as exc:
                         notes.append(f'Club fill skipped, the original teams stay: {exc}')
+                    else:
+                        if mapping:
+                            merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))
+                if copa:
+                    # The Copa mode's own clubs, as the club fill: an outage keeps the disc's.
+                    try:
+                        data, mapping = copa(patcher, Path(rom), _league_season(None, 'conmebol.libertadores'),
+                                             on_progress and (lambda _f, m: on_progress(0, m)))
+                    except rrp.ApiError as exc:
+                        notes.append(f'Copa Libertadores skipped, its original clubs stay: {exc}')
                     else:
                         if mapping:
                             merged = merged.merge(noted(_map_rosters, patcher, data, mapping, rom))

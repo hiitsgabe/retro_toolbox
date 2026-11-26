@@ -219,4 +219,52 @@ void main() {
     expect(t.widget<CheckboxListTile>(box).value, isFalse);
     expect(find.text('National teams'), findsNothing);
   });
+
+  testWidgets('PES with the modes: a Champions League fill and a Copa Libertadores box', (t) async {
+    const pes = PatcherInfo(
+      gameId: 'pes2013-ps2',
+      platform: 'ps2',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsBlankUnused: true,
+      supportsNationFill: true,
+      supportsClubFill: true,
+      supportsChampions: true,
+      supportsLibertadores: true,
+      slotGroups: [SlotGroup('England', 0, 20), SlotGroup('France', 20, 2)],
+      maxLeagues: 2,
+    );
+    await pump(t, game: pes);
+    expect(find.byType(RadioListTile<LeftSlots>), findsNWidgets(4));
+    expect(t.widget<RadioGroup<LeftSlots>>(find.byType(RadioGroup<LeftSlots>)).groupValue, LeftSlots.fill);
+    await t.ensureVisible(find.text("Fill with this season's Champions League clubs"));
+    await t.pumpAndSettle();
+    await t.tap(find.text("Fill with this season's Champions League clubs"));
+    await t.pumpAndSettle();
+    expect(t.widget<RadioGroup<LeftSlots>>(find.byType(RadioGroup<LeftSlots>)).groupValue, LeftSlots.champions);
+    final copa = find.widgetWithText(CheckboxListTile, "Copa Libertadores with this season's clubs");
+    expect(t.getTopLeft(copa).dy, lessThan(t.getTopLeft(find.text('Club slots the leagues leave')).dy));
+    expect(t.widget<CheckboxListTile>(copa).value, isTrue);
+    await t.tap(copa);
+    await t.pumpAndSettle();
+    expect(t.widget<CheckboxListTile>(copa).value, isFalse);
+  });
+
+  testWidgets('PES from a library without the modes: neither is offered', (t) async {
+    const pes = PatcherInfo(
+      gameId: 'pes2013-ps2',
+      platform: 'ps2',
+      sport: 'soccer',
+      requiresSlotMapping: true,
+      providers: ['espn'],
+      supportsNationFill: true,
+      supportsClubFill: true,
+      slotGroups: [SlotGroup('England', 0, 20), SlotGroup('France', 20, 2)],
+      maxLeagues: 2,
+    );
+    await pump(t, game: pes);
+    expect(find.text("Fill with this season's Champions League clubs"), findsNothing);
+    expect(find.text("Copa Libertadores with this season's clubs"), findsNothing);
+  });
 }

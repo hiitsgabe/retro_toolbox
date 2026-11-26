@@ -183,6 +183,7 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
         supports_nationals = True
         supports_nation_fill = True
         supports_club_fill = True
+        supports_libertadores = True
         national_slot_base = 1000
         slot_order = (3, 1, 2)
         team_slots = 36
@@ -200,25 +201,25 @@ def test_list_patchers_payload_reads_the_capabilities_with_defaults():
     class SlotsOnly(Base):  # groups that describe the slots (WE2002): one league
         slot_groups = (('Master League', 0, 32), ('National only', 32, 31))
 
-    saved = main._top_nations, main._top_clubs
-    main._top_nations = main._top_clubs = lambda: print
+    saved = main._top_nations, main._top_clubs, main._champions_order, main._libertadores
+    main._top_nations = main._top_clubs = main._champions_order = main._libertadores = lambda: print
     try:
         full = main._capabilities(Full, Base)
     finally:
-        main._top_nations, main._top_clubs = saved
+        main._top_nations, main._top_clubs, main._champions_order, main._libertadores = saved
     assert full == {
         'languages': ['en'], 'supports_logos': True, 'supports_blank_unused': True, 'supports_looks': True,
-        'image_slots': ['title'],
+        'fixes': [], 'image_slots': ['title'],
         'supports_kits': True, 'kit_templates': True, 'supports_nationals': True, 'supports_nation_fill': True,
-        'supports_club_fill': True, 'national_slot_base': 1000,
+        'supports_club_fill': True, 'supports_champions': True, 'supports_libertadores': True, 'national_slot_base': 1000,
         'team_slots': 36, 'slot_order': [3, 1, 2],
         'slot_groups': [{'name': 'english', 'first': 0, 'count': 20}, {'name': 'other', 'first': 98, 'count': 36}],
         'max_leagues': 2, 'multi_league': True, 'writes_formation': True, 'formations': ['4-4-2', '4-3-3']}
     assert main._capabilities(Old, Base) == {
         'languages': [], 'supports_logos': True, 'supports_blank_unused': False, 'supports_looks': False,
-        'image_slots': [],
+        'fixes': [], 'image_slots': [],
         'supports_kits': False, 'kit_templates': False, 'supports_nationals': False, 'supports_nation_fill': False,
-        'supports_club_fill': False, 'national_slot_base': None, 'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
+        'supports_club_fill': False, 'supports_champions': False, 'supports_libertadores': False, 'national_slot_base': None, 'team_slots': None, 'slot_order': [], 'slot_groups': [], 'max_leagues': 1, 'multi_league': False,
         'writes_formation': False, 'formations': []}
     slots_only = main._capabilities(SlotsOnly, Base)
     assert (slots_only['max_leagues'], slots_only['multi_league']) == (1, False)
@@ -1203,17 +1204,12 @@ def test_soccer_photos_are_filled_only_for_soccer_and_only_when_the_library_can(
     assert main._fill_soccer_photos(Soccer(), 'd', '/c', RrpBroken) == 0
 
 
-if __name__ == '__main__':
-    for name, fn in list(globals().items()):
-        if name.startswith('test_'):
-            fn()
-            print('ok', name)
-
-
-def _club_fill_job(job, down=False, club_fill=True):
+def _club_fill_job(job, down=False, club_fill=True, modes=True, copa_down=False):
     """(progress lines, emitted result, fetch calls, mapped tags, patch options) of a PES
     patch with a slot map (league slots 3 and 5) and the job's keys; with down, the club
-    fill raises ApiError as an ESPN outage would; without club_fill, the library predates it."""
+    fill raises ApiError as an ESPN outage would, with copa_down the Copa fetch; without
+    club_fill, the library predates it; without modes, it predates the Champions League and
+    Copa Libertadores modes."""
     import json
     import types
 
@@ -1229,13 +1225,15 @@ def _club_fill_job(job, down=False, club_fill=True):
     class P:
         supports_nation_fill = supports_blank_unused = True
         supports_club_fill = club_fill
+        supports_libertadores = True
 
         def __init__(self, **kw):
             self.on_status = None
 
         def map_rosters(self, data, slot_mapping):
             mapped.append(data.tag)
-            return Mapped({'league': {3: 'club', 5: 'club'}, 'clubs': {98: 'club'}, 'nations': {1000: 'nation'}}[data.tag])
+            return Mapped({'league': {3: 'club', 5: 'club'}, 'clubs': {98: 'club'}, 'nations': {1000: 'nation'},
+                           'copa': {900: 'club'}}[data.tag])
 
         def patch(self, rom_path, output_path, rosters, on_progress, **options):
             patched.update(options, slots=sorted(rosters.teams))
@@ -1243,12 +1241,22 @@ def _club_fill_job(job, down=False, club_fill=True):
             return types.SimpleNamespace(output_path=str(output_path),
                                          to_dict=lambda: {'output_path': str(output_path)})
 
-    def clubs(patcher, rom, season, taken, on_progress=None, *, exclude_ids=(), mode='ranking'):
-        calls.append(('clubs', rom.name, season, set(taken), set(exclude_ids)))
+    def clubs(patcher, rom, season, taken, on_progress=None, *, exclude_ids=(), **mode):
+        calls.append(('clubs', rom.name, season, set(taken), set(exclude_ids), *mode.values()))
         if down:
             raise FakeRrp.ApiError('ESPN down')
         patcher.status('Skipped Qarabag: ESPN has no team for it')
         return types.SimpleNamespace(tag='clubs'), [object()]
+
+    def champions(patcher, season):
+        calls.append(('champions', season))
+        return [360, 86]
+
+    def libertadores(patcher, rom, season, on_progress=None):
+        calls.append(('copa', rom.name, season))
+        if copa_down:
+            raise FakeRrp.ApiError('ESPN down')
+        return types.SimpleNamespace(tag='copa'), [object()]
 
     def nations(patcher, rom, season, taken, on_progress=None, *, exclude_ids=()):
         calls.append(('nations', rom.name, set(taken), set(exclude_ids)))
@@ -1270,17 +1278,18 @@ def _club_fill_job(job, down=False, club_fill=True):
     rom, rosters = os.path.join(src, 'PES.iso'), os.path.join(src, 'rosters.json')
     open(rom, 'wb').write(b'rom')
     json.dump({}, open(rosters, 'w'))
-    saved = main._top_nations, main._top_clubs, main._league_season
+    saved = main._top_nations, main._top_clubs, main._league_season, main._champions_order, main._libertadores
     main._top_nations, main._top_clubs = (lambda: nations), (lambda: clubs if club_fill else None)
-    # Today's Champions League season, whatever season the leagues are.
-    main._league_season = lambda league_id, code=None: {'uefa.champions': 2026}[code]
+    main._champions_order, main._libertadores = (lambda: champions if modes else None), (lambda: libertadores if modes else None)
+    # Today's Champions League and Copa seasons, whatever season the leagues are.
+    main._league_season = lambda league_id, code=None: {'uefa.champions': 2026, 'conmebol.libertadores': 2027}[code]
     try:
         lines, sent = _with_rrp(rrp, {'type': 'sports_patch', 'game_id': 'pes2013-ps2', 'rom_path': rom,
                                       'output_dir': out, 'label': 'EPL', 'rosters_file': rosters, 'season': 2025,
                                       'slot_mapping': [{'slot_index': 3, 'team_id': '359'},
                                                        {'slot_index': 5, 'team_id': '360'}], **job})
     finally:
-        main._top_nations, main._top_clubs, main._league_season = saved
+        main._top_nations, main._top_clubs, main._league_season, main._champions_order, main._libertadores = saved
     return lines, sent, calls, mapped, patched
 
 
@@ -1316,3 +1325,60 @@ def test_an_older_library_patches_pes_as_before():
     assert lines[-1] == 'DONE', lines
     # No club fill; the nation fill wins over clearing, as today.
     assert [c[0] for c in calls] == ['nations'] and mapped == ['league', 'nations'] and 'blank_unused' not in patched
+
+
+def test_fill_clubs_champions_puts_this_seasons_clubs_first_and_the_mode_draws_them():
+    lines, _sent, calls, mapped, patched = _club_fill_job({'fill_clubs': 'champions'})
+    assert lines[-1] == 'DONE', lines
+    assert calls == [('clubs', 'PES.iso', 2026, {3, 5}, {'359', '360'}, 'champions'), ('champions', 2026)]
+    assert patched['champions'] == [360, 86] and mapped == ['league', 'clubs']
+    # The ranking fill keeps the library's default mode and the mode's own clubs.
+    _lines, _sent, calls, _mapped, patched = _club_fill_job({'fill_clubs': True})
+    assert calls == [('clubs', 'PES.iso', 2026, {3, 5}, {'359', '360'})] and 'champions' not in patched
+    # An outage keeps the original teams and the mode's clubs.
+    _lines, sent, calls, mapped, patched = _club_fill_job({'fill_clubs': 'champions'}, down=True)
+    assert mapped == ['league'] and 'champions' not in patched
+    assert sent['notes'] == ['Club fill skipped, the original teams stay: ESPN down']
+
+
+def test_libertadores_fills_the_copas_own_clubs_after_the_club_fill():
+    lines, _sent, calls, mapped, patched = _club_fill_job({'fill_clubs': True, 'libertadores': True, 'fill_nations': True})
+    assert lines[-1] == 'DONE', lines
+    assert [c[0] for c in calls] == ['clubs', 'copa', 'nations'] and calls[1] == ('copa', 'PES.iso', 2027)
+    assert mapped == ['league', 'clubs', 'copa', 'nations'] and patched['slots'] == [3, 5, 98, 900, 1000]
+    _lines, sent, _calls, mapped, _patched = _club_fill_job({'libertadores': True}, copa_down=True)
+    assert mapped == ['league']
+    assert sent['notes'] == ['Copa Libertadores skipped, its original clubs stay: ESPN down']
+
+
+def test_a_library_without_the_modes_patches_pes_as_before():
+    lines, _sent, calls, mapped, patched = _club_fill_job({'fill_clubs': 'champions', 'libertadores': True}, modes=False)
+    assert lines[-1] == 'DONE', lines
+    # The ranking fill, called as an older library takes it; no Copa.
+    assert calls == [('clubs', 'PES.iso', 2026, {3, 5}, {'359', '360'})] and mapped == ['league', 'clubs']
+    assert 'champions' not in patched
+
+
+def test_the_modes_are_offered_only_where_the_library_and_the_game_have_them():
+    class Pes:
+        supports_club_fill = supports_libertadores = True
+
+    saved = main._top_clubs, main._champions_order, main._libertadores
+    try:
+        main._top_clubs = main._champions_order = main._libertadores = lambda: print
+        caps = main._capabilities(Pes, object)
+        assert (caps['supports_champions'], caps['supports_libertadores']) == (True, True)
+        caps = main._capabilities(type('Other', (), {}), object)
+        assert (caps['supports_champions'], caps['supports_libertadores']) == (False, False)
+        main._champions_order = main._libertadores = lambda: None
+        caps = main._capabilities(Pes, object)
+        assert (caps['supports_champions'], caps['supports_libertadores']) == (False, False)
+    finally:
+        main._top_clubs, main._champions_order, main._libertadores = saved
+
+
+if __name__ == '__main__':
+    for name, fn in list(globals().items()):
+        if name.startswith('test_'):
+            fn()
+            print('ok', name)

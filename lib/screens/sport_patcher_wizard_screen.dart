@@ -144,6 +144,9 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
 
   /// With the club fill (PES 2013): update the national teams too.
   bool _fillNations = true;
+
+  /// PES 2013: this season's Copa Libertadores clubs in the Copa mode.
+  bool _libertadores = true;
   // One node for the ROM step's pick control, whether the full row's Choose
   // or the small link a found card collapses it to: a card arriving while
   // the user sits on Choose keeps the focus on the link.
@@ -767,7 +770,7 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
         logos: info.supportsLogos ? _useLogos : null,
         looks: info.supportsLooks ? _matchLooks : null,
         fixes: [for (final f in info.fixes) if (_fixes.contains(f)) f],
-        leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals, fillNations: _fillNations),
+        leftSlots: info.leftSlotsJob(_leftSlots, blankUnused: _blankUnused, nationals: _nationals, fillNations: _fillNations, libertadores: _libertadores),
         images: {for (final e in _imagePicks.entries) e.key: e.value.path},
         teamLogos: info.supportsLogos && _useLogos ? _teamLogos : const {},
         onProgress: (v) => setState(() => _progress = v),
@@ -1128,6 +1131,15 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                 value: _fillNations,
                 onChanged: (v) => setState(() => _fillNations = v ?? _fillNations),
               ),
+            if (info.supportsLibertadores)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: const Text('Copa Libertadores with this season\'s clubs'),
+                subtitle: const Text('The Copa mode\'s clubs become this season\'s, with their current squads.'),
+                value: _libertadores,
+                onChanged: (v) => setState(() => _libertadores = v ?? _libertadores),
+              ),
             Text(info.supportsClubFill ? 'Club slots the leagues leave' : 'Slots the league leaves',
                 style: theme.textTheme.labelLarge),
             RadioGroup<LeftSlots>(
@@ -1160,6 +1172,13 @@ class _WizardState extends ConsumerState<SportPatcherWizardScreen> {
                           title: Text('Fill with today\'s top national teams'),
                           subtitle: Text('The best of the FIFA ranking, with their current squads.'),
                         ),
+                  if (info.supportsChampions)
+                    const RadioListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: LeftSlots.champions,
+                      title: Text('Fill with this season\'s Champions League clubs'),
+                      subtitle: Text('Its clubs first, then the UEFA club ranking; the Champions League mode plays them.'),
+                    ),
                 ],
               ),
             ),
