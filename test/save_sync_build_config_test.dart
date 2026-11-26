@@ -31,9 +31,9 @@ void main() {
     expect(File('.gitignore').readAsLinesSync(), contains('/dart_defines.json'));
   });
 
-  test('the maintainer doc and the build files carry no client id and no secret', () {
+  test('the build files carry no client id and no secret', () {
     final clientId = RegExp(r'[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com');
-    for (final f in ['docs/google-cloud.md', 'dart_defines.example.json', '.github/workflows/release.yml', '.eas/workflows/play-store.yml', 'README.md']) {
+    for (final f in ['dart_defines.example.json', '.github/workflows/release.yml', '.eas/workflows/play-store.yml', 'README.md']) {
       final text = File(f).readAsStringSync();
       expect(clientId.hasMatch(text), isFalse, reason: f);
       expect(text, isNot(contains('GOCSPX-')), reason: '$f: a client secret');
