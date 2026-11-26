@@ -310,7 +310,6 @@ class _MenuScreenState extends ConsumerState<MenuScreen> {
         pixelIcon: PixelIcons.sports,
         icon: Icons.sports_esports,
         accentColor: const Color(0xFF2E9E4F),
-        badge: 'ALPHA',
         onTap: () => _push(const SportsGridScreen()),
       ),
       MenuTile(
